@@ -14,24 +14,23 @@
 import 'dart:async';
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/view/review/review_copy.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-/// How long the ground stays empty before `Loading…` appears.
-const kSrsLoadingLabelDelay = Duration(milliseconds: 250);
+/// The quiet label shown once the wait becomes noticeable. Demo: `#loadingLabel`.
+const kSrsLoadingLabel = 'Loading…';
 
-/// The one sentence the review error state shows.
-///
-/// The demo's error scene is written for a *save* failure ("The last review couldn't be
-/// saved. Your place is kept; nothing was lost."). This build has no separate save-failure
-/// state, so the sentence describes what actually happened and promises nothing: the
-/// technical truth is one tap away under `Copy details`.
-const kSrsReviewLoadFailedDetail =
-    'Reviews could not be loaded. Try again, or copy the details to report this.';
+/// How long the ground stays empty before the label appears.
+const kSrsLoadingLabelDelay = Duration(milliseconds: 250);
 
 /// The empty ground, with a quiet label once the wait becomes noticeable.
 class SrsLoadingView extends StatefulWidget {
-  const SrsLoadingView({super.key, this.label = 'Loading…', this.delay = kSrsLoadingLabelDelay});
+  const SrsLoadingView({
+    super.key,
+    this.label = kSrsLoadingLabel,
+    this.delay = kSrsLoadingLabelDelay,
+  });
 
   final String label;
   final Duration delay;
@@ -106,7 +105,7 @@ class SrsErrorView extends StatelessWidget {
     required this.detail,
     this.onRetry,
     this.onCopyDetails,
-    this.title = 'Something went wrong.',
+    this.title = kSrsErrorTitle,
   });
 
   /// One `ink2` sentence saying what happened, in the user's terms.
@@ -138,9 +137,9 @@ class SrsErrorView extends StatelessWidget {
                 runSpacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  if (onRetry != null) SrsPillButton(label: 'Try again', onPressed: onRetry),
+                  if (onRetry != null) SrsPillButton(label: kSrsRetryLabel, onPressed: onRetry),
                   if (onCopyDetails != null)
-                    SrsTextButton(label: 'Copy details', onPressed: onCopyDetails),
+                    SrsTextButton(label: kSrsCopyDetailsLabel, onPressed: onCopyDetails),
                 ],
               ),
             ],

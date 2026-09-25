@@ -178,10 +178,13 @@ void main() {
       await pumpAsync(tester, 100);
 
       // Shows lapse feedback banner
+      // The design's answer help carries no parenthetical: the correct move is
+      // already set large above it, and the demo's copy does not repeat it inline.
       expect(
         find.text('Play this move to continue. The position will come back soon.'),
         findsOneWidget,
       );
+      expect(find.textContaining('Repertoire was'), findsNothing);
       expect(find.text('Skip'), findsOneWidget);
 
       // Reguess on the board by playing the correct repertoire move d2 -> d4
@@ -1112,7 +1115,7 @@ void main() {
     });
 
     testWidgets(
-      'displays daily limit reached view and navigates to SrsSettingsScreen on Change daily limit',
+      'displays daily limit reached view and navigates to SrsSettingsScreen on Adjust limit',
       (tester) async {
         final study = importPgn(
           '1. e4 e5 *',
@@ -1157,11 +1160,14 @@ void main() {
 
         // Daily limit reached view is now shown!
         expect(find.text('Daily limit reached.'), findsOneWidget);
-        expect(find.textContaining('positions today.'), findsOneWidget);
+        expect(
+          find.text('Daily review limit reached (1/1 positions reviewed today).'),
+          findsOneWidget,
+        );
 
-        // Tap Change daily limit button
-        expect(find.text('Change daily limit'), findsOneWidget);
-        await tester.tap(find.text('Change daily limit'));
+        // Tap the Adjust limit link
+        expect(find.text('Adjust limit'), findsOneWidget);
+        await tester.tap(find.text('Adjust limit'));
         await tester.pumpAndSettle();
 
         // Navigates to SrsSettingsScreen

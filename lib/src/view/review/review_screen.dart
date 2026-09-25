@@ -11,6 +11,7 @@ import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
+import 'package:chess_srs/src/view/review/review_copy.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_states.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -90,7 +91,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 32.0),
           Text(
-            'Bring your repertoire.',
+            kSrsBringYourRepertoire,
             style: TextStyle(
               fontFamily: SrsText.ui,
               fontSize: headlineSize,
@@ -102,7 +103,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 16.0),
           Text(
-            'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.',
+            kSrsFirstLaunchLede,
             style: TextStyle(fontFamily: SrsText.ui, fontSize: 17, height: 1.45, color: c.ink2),
           ),
           const SizedBox(height: 28.0),
@@ -115,7 +116,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Drop a PGN file here',
+                    kSrsDropPgnHere,
                     style: TextStyle(fontFamily: SrsText.ui, fontSize: 15.5, color: c.ink),
                   ),
                   const SizedBox(height: 16.0),
@@ -306,7 +307,9 @@ class _NothingDueView extends ConsumerWidget {
     final learning = dueDecisions;
     final fresh = (totalDecisions - learnedDecisions).clamp(0, totalDecisions);
 
-    final displayTitle = state.isDailyLimitReached ? 'Daily limit reached.' : 'Nothing due.';
+    final displayTitle = state.isDailyLimitReached
+        ? kSrsDailyLimitReachedTitle
+        : kSrsNothingDueTitle;
     final headlineSize = math.max(44.0, math.min(mediaQuery.size.width * 0.09, 72.0));
 
     return CallbackShortcuts(
@@ -383,7 +386,10 @@ class _NothingDueView extends ConsumerWidget {
                             TextSpan(
                               style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                               children: [
-                                const TextSpan(text: 'Next review '),
+                                // `timeUntilNextReview` already carries its own
+                                // "in ..." prefix (see review_controller.dart), so
+                                // this renders the demo's `Next review in {x}.`
+                                const TextSpan(text: kSrsNextReviewPrefix),
                                 TextSpan(
                                   text: state.timeUntilNextReview,
                                   style: TextStyle(
@@ -398,7 +404,7 @@ class _NothingDueView extends ConsumerWidget {
                           )
                         else
                           Text(
-                            'Next review will appear automatically.',
+                            kSrsNoNextReview,
                             style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           ),
                         const SizedBox(height: 38.0),
@@ -479,7 +485,7 @@ class _NothingDueView extends ConsumerWidget {
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
-                                label: 'Change daily limit',
+                                label: kSrsAdjustLimitLabel,
                                 onPressed: () => Navigator.push(
                                   context,
                                   MaterialPageRoute<void>(
@@ -491,9 +497,7 @@ class _NothingDueView extends ConsumerWidget {
                         ),
                         const SizedBox(height: 18.0),
                         Text(
-                          state.isDailyLimitReached
-                              ? 'Practice is still available and does not change your schedule.'
-                              : 'Practice never changes your schedule.',
+                          kSrsPracticeFootnote,
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],
@@ -880,10 +884,7 @@ class _AnswerSlot extends StatelessWidget {
       children: [
         SrsSan(san, style: SrsText.answerMove(wide, c.accent)),
         const SizedBox(height: 8),
-        Text(
-          'Play this move to continue. The position will come back soon.',
-          style: SrsText.answerHelp(wide, c.ink2),
-        ),
+        Text(kSrsAnswerHelpText, style: SrsText.answerHelp(wide, c.ink2)),
       ],
     );
   }
@@ -909,7 +910,7 @@ class _NoteSlot extends StatelessWidget {
         children: [
           Text(comment, style: SrsText.note(c.ink)),
           const SizedBox(height: 10),
-          Text('From your study', style: SrsText.noteSource(c.ink3)),
+          Text(kSrsNoteAttribution, style: SrsText.noteSource(c.ink3)),
         ],
       ),
     );
