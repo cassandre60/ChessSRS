@@ -79,3 +79,28 @@ const kSrsRetryLabel = 'Try again';
 
 /// The `Copy details` action on the error screen. Demo: `#errorCopyBtn`.
 const kSrsCopyDetailsLabel = 'Copy details';
+
+/// The library sheet's name, and the back label on the scenes it opens.
+///
+/// The demo writes it in English in both places (`#sheetLib`'s rows, and the `‹ Library`
+/// sub-head on analysis, explorer and board editor) and the sheet has no l10n string of
+/// its own, so it is hardcoded here too — consistently, rather than in three files.
+const kSrsLibraryLabel = 'Library';
+
+/// The library sheet's first row. Demo: `#sheetLib` group 1.
+const kSrsImportLabel = 'Import PGN';
+
+/// The library sheet's analysis row. Demo: `#sheetLib` → Explore.
+const kSrsAnalysisBoardLabel = 'Analysis board';
+
+/// The library sheet's explorer row. Demo: `#sheetLib` → Explore.
+const kSrsOpeningExplorerLabel = 'Opening explorer';
+
+/// The library sheet's board-editor row. Demo: `#sheetLib` → Explore.
+const kSrsBoardEditorLabel = 'Board editor';
+
+/// The library sheet's settings row. Demo: `#sheetLib` group 3.
+const kSrsSettingsLabel = 'Settings';
+
+/// The library sheet's about row. Demo: `#sheetLib` group 3.
+const kSrsAboutLabel = 'About and licences';
