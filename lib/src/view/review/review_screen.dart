@@ -12,6 +12,7 @@ import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
+import 'package:chess_srs/src/view/review/review_states.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
@@ -44,52 +45,11 @@ class ReviewScreen extends ConsumerWidget {
             }
             return _ActiveReviewView(state: state, prompt: state.currentPrompt!);
           },
-          loading: () => Center(
-            child: Text(
-              'Loading…',
-              style: TextStyle(fontFamily: SrsText.ui, fontSize: 15, color: c.ink2),
-            ),
-          ),
-          error: (err, stack) => Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Something went wrong.', style: SrsText.title(c.ink)),
-                    const SizedBox(height: 12.0),
-                    Text(
-                      '$err',
-                      style: TextStyle(
-                        fontFamily: SrsText.ui,
-                        fontSize: 15,
-                        height: 1.45,
-                        color: c.ink2,
-                      ),
-                    ),
-                    const SizedBox(height: 24.0),
-                    Wrap(
-                      spacing: 18.0,
-                      runSpacing: 10.0,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        SrsPillButton(
-                          label: 'Try again',
-                          onPressed: () => ref.invalidate(reviewControllerProvider),
-                        ),
-                        SrsTextButton(
-                          label: 'Copy details',
-                          onPressed: () => Clipboard.setData(ClipboardData(text: '$err')),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          loading: () => const SrsLoadingView(),
+          error: (err, stack) => SrsErrorView(
+            detail: kSrsReviewLoadFailedDetail,
+            onRetry: () => ref.invalidate(reviewControllerProvider),
+            onCopyDetails: () => copySrsErrorDetails('${err.runtimeType}: $err\n\n$stack'),
           ),
         ),
       ),
