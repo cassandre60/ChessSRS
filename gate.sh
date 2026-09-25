@@ -21,7 +21,10 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 if [[ "${1:-}" == "--all" ]]; then
-  ANALYZE_PATHS=(lib test)
+  # Matches CI's own scope, not the whole tree. Analyzing `lib` wholesale pulls in
+  # lib/l10n, which is generated and has never been formatted: the format step below
+  # then reports 52 changed files that CI never looks at and no human ever wrote.
+  ANALYZE_PATHS=(lib/src test)
 elif [[ $# -gt 0 ]]; then
   ANALYZE_PATHS=("$@")
 else
