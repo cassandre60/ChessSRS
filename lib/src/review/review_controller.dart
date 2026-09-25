@@ -276,6 +276,24 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
+    // `design/docs/02-tokens.md` §6: play `done` when reaching "Nothing due".
+    //
+    // [ReviewScreenState.isComplete] is a derived getter, not a field, so there is no
+    // assignment site to hang this on — a session can run out through the queue draining,
+    // the daily quota, or a study being deactivated. Listening to our own state catches all
+    // three from one place, and the rising edge matters: the state is re-emitted constantly
+    // while a session is finished, and `done` should sound once when it arrives, not on
+    // every subsequent rebuild.
+    listenSelf((previous, next) {
+      final wasComplete = previous?.value?.isComplete ?? false;
+      final isComplete = next.value?.isComplete ?? false;
+      if (isComplete && !wasComplete) {
+        try {
+          ref.read(moveFeedbackServiceProvider).doneFeedback();
+        } catch (_) {}
+      }
+    });
+
     // Wait for repository provider to be ready if needed
     final repoAsync = ref.watch(srsStudyRepositoryProvider);
     final repo = repoAsync.asData?.value;
@@ -935,6 +953,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         );
       } else {
         // Lapse: show expected move banner, allow user to reguess on board
+        // `design/docs/02-tokens.md` §6: play `wrong` on a rejected move. Fired before the
+        // state assignment so the sound lands with the correction rather than after it.
+        try {
+          ref.read(moveFeedbackServiceProvider).wrongFeedback();
+        } catch (_) {}
         state = AsyncData(
           currentState.copyWith(
             feedback: ReviewFeedback.incorrect,

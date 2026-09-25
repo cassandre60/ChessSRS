@@ -91,6 +91,9 @@ class _RecordingSoundService implements SoundService {
   Future<void> playCaptureSound(dynamic variant, {double? volume}) async {}
 
   @override
+  Future<void> playReviewSound(ReviewSound sound, {double volume = 1.0}) async {}
+
+  @override
   Future<void> changeTheme(SoundTheme theme, {bool playSound = false}) async {}
 
   @override

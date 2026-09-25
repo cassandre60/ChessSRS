@@ -51,6 +51,7 @@ void main() {
     ProviderContainer createContainer({
       List<Override> extraOverrides = const [],
       StudyRepository? repository,
+      FakeSoundService? soundService,
     }) {
       // The service and the repository provider must be handed the same instance: the service
       // reads through whatever repository it was built with, and a test that gates one but not
@@ -60,7 +61,7 @@ void main() {
         overrides: [
           srsStudyRepositoryProvider.overrideWith((ref) => store),
           clockProvider.overrideWithValue(clock),
-          soundServiceProvider.overrideWithValue(FakeSoundService()),
+          soundServiceProvider.overrideWithValue(soundService ?? FakeSoundService()),
           reviewServiceProvider.overrideWith(
             (ref) => ReviewService(
               repository: store,
@@ -319,6 +320,79 @@ void main() {
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.feedback, ReviewFeedback.none);
       expect(state.expectedMove, isNull);
+    });
+
+    // `design/docs/02-tokens.md` §6: "Play ... `wrong` on a rejected move."
+    test('a rejected move plays the wrong sound', () async {
+      final sound = FakeSoundService();
+      final container = createContainer(soundService: sound);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await container.read(reviewControllerProvider.future);
+
+      expect(
+        sound.reviewSounds,
+        isEmpty,
+        reason: 'nothing has been rejected yet, so nothing should sound',
+      );
+
+      // 1. e4 where the repertoire has 1. d4.
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result!.isCorrect, isFalse);
+
+      expect(sound.countOf(ReviewSound.wrong), 1);
+    });
+
+    // `design/docs/02-tokens.md` §6: "`done` when reaching 'Nothing due'."
+    test('running the queue out plays the done sound exactly once', () async {
+      final sound = FakeSoundService();
+      final container = createContainer(soundService: sound);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      // One decision only, so reviewing it empties the queue.
+      await controller.importPgnText(
+        pgnText: '1. d4 *',
+        title: 'One move',
+        repertoireSide: Side.white,
+      );
+      await container.read(reviewControllerProvider.future);
+
+      expect(
+        container.read(reviewControllerProvider).requireValue.isComplete,
+        isFalse,
+        reason: 'there is still a due position, so the session is not over',
+      );
+      expect(sound.countOf(ReviewSound.done), 0);
+
+      await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+
+      expect(container.read(reviewControllerProvider).requireValue.isComplete, isTrue);
+      expect(
+        sound.countOf(ReviewSound.done),
+        1,
+        reason:
+            'the state is re-emitted while the session stays finished; done is the edge, '
+            'not the level, so it must not repeat',
+      );
+    });
+
+    // A cold start with nothing in the database must stay quiet. `isComplete` already
+    // requires studies to exist, so this guards the guard: without that conjunct the first
+    // emission of an empty app would satisfy isComplete and sound done on launch.
+    test('an empty app does not play the done sound on startup', () async {
+      final sound = FakeSoundService();
+      final container = createContainer(soundService: sound);
+
+      await container.read(reviewControllerProvider.future);
+
+      expect(container.read(reviewControllerProvider).requireValue.isComplete, isFalse);
+      expect(sound.reviewSounds, isEmpty);
     });
 
     test(

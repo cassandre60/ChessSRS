@@ -39,4 +39,14 @@ class MoveFeedbackService {
       }
     }
   }
+
+  /// A move was rejected: the two lower knocks from `design/docs/02-tokens.md` §6.
+  ///
+  /// The review flow was silent here before. Nothing else in the app plays on a rejected
+  /// move — [Sound.error] is declared but has no call site anywhere — so this is the only
+  /// signal the user gets that the move was not the repertoire's.
+  Future<void> wrongFeedback() => _soundService.playReviewSound(ReviewSound.wrong);
+
+  /// The session ran out: the two gentle notes from `design/docs/02-tokens.md` §6.
+  Future<void> doneFeedback() => _soundService.playReviewSound(ReviewSound.done);
 }
