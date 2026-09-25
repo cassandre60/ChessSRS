@@ -23,8 +23,9 @@ from the demo author.**
 | C8 | `Enter` continues; `S`/`Space` actually delivered | **fixed**: the focused node was *outside* `CallbackShortcuts`, so **no keyboard shortcut worked at all** |
 | C9 | Settings: `Advanced` disclosure, no section headers, design labels | done |
 | C10 | `SrsDisclosure` primitive | new primitive |
-| C11 | Analysis / Explorer / Board editor repaint | pending |
-| C12 | Delete dead tab-navigation code | pending |
+| C11 | Analysis / Explorer repaint (frame only, all features kept) | done |
+| C11b | Board editor repaint | deferred — file dirty in the main worktree |
+| C12 | Delete dead tab-navigation code, fix the dead root navigator | done |
 
 ## Real bugs found (not cosmetic)
 
@@ -58,7 +59,23 @@ from the demo author.**
 - Replacing Lichess `showSnackBar` with `showSrsToast` at the ~30 call sites. C3 ships the
   primitive and the helper; the sweep is mechanical.
 
+## Verification state
+
+- `./gate.sh` (analyze + format) green, including `--all`.
+- `flutter test` is **not** run locally, by design: it saturates this machine. CI is the
+  authority. The one fix proven non-vacuous by a deliberate pre/post run is the keyboard
+  shortcut fix (C8).
+- **Runtime validation is still owed.** No commit on this branch has been launched. Every
+  visual claim rests on reading the demo HTML and `design/docs/`, never on running pixels.
+  Per `AGENTS.md` §4 this must happen before the branch is called done.
+- Branch was rebased onto `main` after the work landed; the only conflict was two import
+  lines in `test/view/explorer/opening_explorer_screen_test.dart`, resolved by keeping both.
+  `main`'s inline-move-list test (584e6d590) and the `index - 1` conversion it pins both
+  survive.
+
 ## Known pre-existing failure (not ours)
 
 `test/app_test.dart: App will delete a stored authUser on startup if one request return 401`
-fails on the base commit too — reproduced with the work stacked away.
+fails on the base commit too — reproduced with the work stacked away, and it is one of the
+11 failures on `main`. It is an auth-path assertion (`Expected: <1> Actual: <0>`), unrelated
+to anything on this branch.
