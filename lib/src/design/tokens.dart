@@ -195,6 +195,8 @@ abstract final class SrsLayout {
   static const EdgeInsets reviewPaddingWide = EdgeInsets.fromLTRB(28, 0, 34, 28);
   static const double topbarPadLeftWide = 50;
   static const double minTouchTarget = 44;
+  static const double pillHeight = 46;
+  static const double pillPaddingH = 22;
 
   /// [content] = area below the top bar and inside safe areas.
   static double boardSize(Size content) {

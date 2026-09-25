@@ -50,6 +50,13 @@ class _SrsPressableState extends State<SrsPressable> {
       enabled: enabled,
       toggled: widget.semanticsToggled,
       label: widget.semanticLabel,
+      // The tap action and the label are declared here rather than inherited, so the
+      // node this control exposes is exactly one: a button whose label is announced
+      // once. Without [excludeSemantics] the builder's own `Text` labels the node a
+      // second time ("Continue, Continue") and the inner [GestureDetector] adds a
+      // duplicate tap action.
+      onTap: enabled ? widget.onPressed : null,
+      excludeSemantics: true,
       child: FocusableActionDetector(
         enabled: enabled,
         mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
@@ -118,7 +125,9 @@ class SrsPillButton extends StatelessWidget {
       semanticLabel: label,
       pressScale: SrsMotion.pressScale,
       builder: (_, _, _) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 22),
+        height: SrsLayout.pillHeight,
+        padding: const EdgeInsets.symmetric(horizontal: SrsLayout.pillPaddingH),
+        alignment: Alignment.center,
         decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(999)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
