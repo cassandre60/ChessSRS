@@ -4,6 +4,7 @@
 library;
 
 export 'board_background.dart';
+export 'disclosure.dart';
 export 'hatch.dart';
 export 'live_region.dart';
 export 'memory_bar.dart';
