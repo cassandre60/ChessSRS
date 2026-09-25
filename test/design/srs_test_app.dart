@@ -39,7 +39,8 @@ void srsDesktopTestWidgets(
 }) => testWidgets(description, body, variant: variant ?? kSrsDesktopPlatform);
 
 /// Pumps [child] inside the minimum tree the design system needs: `SrsTheme` above
-/// `WidgetsApp` (for `DefaultTextStyle`, `Directionality` and an `Overlay`).
+/// `WidgetsApp` (for `DefaultTextStyle`, `Directionality`) and an [Overlay] (for [showSrsToast]
+/// and anything else that inserts an overlay entry).
 ///
 /// Design widgets are deliberately built on `package:flutter/widgets.dart` only, so this
 /// harness never installs a `Material` ancestor: if a design widget reaches for one, that is
@@ -61,7 +62,10 @@ Future<void> pumpSrs(
         color: const Color(0xFF000000),
         builder: (context, _) => MediaQuery(
           data: MediaQueryData(size: surface),
-          child: Directionality(textDirection: TextDirection.ltr, child: child),
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Overlay(initialEntries: [OverlayEntry(builder: (_) => child)]),
+          ),
         ),
       ),
     ),

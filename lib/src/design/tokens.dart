@@ -269,4 +269,5 @@ abstract final class SrsText {
   static TextStyle body(bool wide, Color c) =>
       _ui(wide ? 18 : 17, FontWeight.w400, c, height: 1.45);
   static TextStyle wordmark(Color c) => _ui(16, FontWeight.w600, c);
+  static TextStyle toast(Color c) => _ui(14, FontWeight.w500, c);
 }
