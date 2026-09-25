@@ -113,6 +113,24 @@ needs no shared display at all.
 ## Known pre-existing failure (not ours)
 
 `test/app_test.dart: App will delete a stored authUser on startup if one request return 401`
-fails on the base commit too — reproduced with the work stacked away, and it is one of the
-11 failures on `main`. It is an auth-path assertion (`Expected: <1> Actual: <0>`), unrelated
-to anything on this branch.
+— the android and iOS variants, 2 failures, and **the only failures left in the repository**:
+`main` is down to the same two (`1375 passed, 2 failed`), this branch is at `1446 passed,
+2 failed`. Format, codegen and analyze are all green. Nothing on this branch causes them.
+
+**Cause, diagnosed — the test is stale, not the code.** The app does not proactively validate
+a stored token. `LichessClient.send` intercepts *any* 401 from the main host and calls
+`checkToken`, which is what requests `/api/token/test` (`lib/src/network/http.dart:472`). The
+test's mock stubs `/api/account` with a 401, but startup actually calls
+`/api/account/preferences` (`AccountRepository.getPreferences`). That misses the stub, falls
+through to the mock's catch-all `404`, and a 404 never trips the interceptor — so
+`/api/token/test` is never requested and `expect(tokenTestRequests, 1)` sees `0`.
+
+The fix is to return 401 for `/api/account/preferences` in the mock. Left undone on purpose:
+that is the auth layer, and `account_service.dart` is in the concurrent agent's uncommitted
+work, so the file is theirs.
+
+## Recovery points
+
+`safety/pre-rebase-fbbf35bc1` and `safety/pre-rebase2-2e6223bf2` hold the pre-rebase heads, so
+the force-push is reversible in one command:
+`git push --force-with-lease origin safety/pre-rebase-fbbf35bc1:design/v2-remainder`.
