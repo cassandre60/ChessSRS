@@ -61,17 +61,54 @@ from the demo author.**
 
 ## Verification state
 
-- `./gate.sh` (analyze + format) green, including `--all`.
+- `./gate.sh` green, including `--all`.
 - `flutter test` is **not** run locally, by design: it saturates this machine. CI is the
   authority. The one fix proven non-vacuous by a deliberate pre/post run is the keyboard
   shortcut fix (C8).
-- **Runtime validation is still owed.** No commit on this branch has been launched. Every
-  visual claim rests on reading the demo HTML and `design/docs/`, never on running pixels.
-  Per `AGENTS.md` §4 this must happen before the branch is called done.
+- **Runtime: the review screen is validated** against the demo, in both themes. See below.
+- **Runtime: still unvalidated** — the interactive flow (wrong move → correction → note →
+  Continue), the keyboard shortcuts actually firing, the Settings `Advanced` disclosure, the
+  Analysis/Explorer sub-heads, and phone/tablet widths. See "Why" below.
 - Branch was rebased onto `main` after the work landed; the only conflict was two import
   lines in `test/view/explorer/opening_explorer_screen_test.dart`, resolved by keeping both.
   `main`'s inline-move-list test (584e6d590) and the `index - 1` conversion it pins both
   survive.
+
+### What the runtime pass established
+
+Built `flutter build linux --debug` and ran it against an isolated copy of the database
+(`XDG_DATA_HOME` pointed at a copy, so the owner's beta data was never written to — verified
+by mtime: the real `chess_srs.db` main file stayed at 21:50 while only the copy changed).
+
+- Launches with **zero errors** in the log, in both themes.
+- Loads real data: 8 studies, queue truncated to the 100/day quota.
+- The review screen **matches the demo's review scene**, element for element: `.topbar` with
+  the scope button + `<b>dueN</b> due` + the `moreBtn` dots; `#boardHost` beside `.side`;
+  `.meta` with `#ctx` and the `#turnDot`/`#turnTxt` turn line; the `h2.line` move heading;
+  and `Skip` with the `S` kbd hint. The large move text is the design's `#line` heading, not
+  a leftover — it reads like a bug until you open the demo.
+- SRS and the lapse path work end to end at runtime (`FsrsScheduler` scheduling, `Lapse on
+  decision …`, regueue after a lapse).
+
+Evidence: `docs/design_v2_review_dark.png`, `docs/design_v2_review_light.png`.
+
+### Why the rest is unvalidated
+
+This is a Wayland session and the Flutter window is a Wayland client, so `xdotool`,
+`wmctrl` and `xwininfo` cannot see or target it. Input can only be injected blindly into
+whatever holds focus — and at the time of this pass **a second agent was driving the same
+desktop, with its own ChessSRS instance open on its own data**. Typing blind would have sent
+keystrokes into that agent's session, or into the owner's browser and terminals, to satisfy
+a checklist. Not a trade worth making, so the interactive checks were left undone rather than
+faked.
+
+Faking the input layer was rejected too. Patching the isolated copy's
+`shared_preferences.json` is how the light-mode capture was produced; the same trick cannot
+synthesise a keypress.
+
+To close this out, one of: pause the other agent and validate on an exclusive desktop; or
+drive the remaining flows through `integration_test`, which owns its own widget tree and
+needs no shared display at all.
 
 ## Known pre-existing failure (not ours)
 
