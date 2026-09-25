@@ -4,9 +4,9 @@ import 'dart:isolate';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/opponent_level.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/widgets/platform_alert_dialog.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -178,7 +178,7 @@ class StockfishNnueService {
         if (inBackground) {
           throw Exception('Cannot download in background on mobile data.');
         } else {
-          final context = _ref.read(currentNavigatorKeyProvider).currentContext;
+          final context = _ref.read(rootNavigatorKeyProvider).currentContext;
           if (context == null || !context.mounted) return false;
           final isOk = await showAdaptiveDialog<bool>(
             context: context,

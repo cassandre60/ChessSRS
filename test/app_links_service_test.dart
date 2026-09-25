@@ -11,8 +11,8 @@ import 'package:chess_srs/src/model/game/game_status.dart';
 import 'package:chess_srs/src/model/game/player.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/model/user/user_repository.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
@@ -480,7 +480,7 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         overrides: {
-          currentNavigatorKeyProvider: currentNavigatorKeyProvider.overrideWithValue(navigatorKey),
+          rootNavigatorKeyProvider: rootNavigatorKeyProvider.overrideWithValue(navigatorKey),
           appLinksServiceProvider: appLinksServiceProvider.overrideWith((ref) {
             final service = AppLinksService(ref, appLinks: mockAppLinks);
             ref.onDispose(service.dispose);

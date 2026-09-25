@@ -8,7 +8,7 @@ import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/game/game_repository.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/model/user/user_repository.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
@@ -85,7 +85,7 @@ class AppLinksService {
       _handleOpenWebLink(uri);
       return;
     }
-    final context = ref.read(currentNavigatorKeyProvider).currentContext;
+    final context = ref.read(rootNavigatorKeyProvider).currentContext;
     if (context != null && context.mounted) {
       // For app deep links, we don't want to allow falling back to the browser as it might trigger an infinite loop if the app isn't properly handling the link
       await handleAppLink(context, uri, animated: animated, allowBrowserFallback: false);

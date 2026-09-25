@@ -6,8 +6,10 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
+import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
+import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_copy.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
@@ -182,6 +184,24 @@ class SrsLibrarySheet extends ConsumerWidget {
               Navigator.of(context, rootNavigator: true).push(
                 AnalysisScreen.buildRoute(
                   const AnalysisOptions.standalone(variant: Variant.standard),
+                ),
+              );
+            },
+          ),
+          _buildRow(
+            c: c,
+            title: kSrsOpeningExplorerLabel,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).push(
+                OpeningExplorerScreen.buildRoute(
+                  const AnalysisOptions.pgn(
+                    id: StringId('standalone_opening_explorer'),
+                    orientation: Side.white,
+                    pgn: '',
+                    isComputerAnalysisAllowed: false,
+                    variant: Variant.standard,
+                  ),
                 ),
               );
             },

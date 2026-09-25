@@ -15,9 +15,9 @@ import 'package:chess_srs/src/model/notifications/notification_service.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/quick_actions.dart';
 import 'package:chess_srs/src/shared_pgn_service.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:chess_srs/src/utils/screen.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -65,8 +65,6 @@ class Application extends ConsumerStatefulWidget {
 }
 
 class _AppState extends ConsumerState<Application> {
-  final _navigatorKey = GlobalKey<NavigatorState>();
-
   // Adjusts some settings for small screens based on the MediaQuery data.
   Future<void> _screenSizeBasedInitialization(WidgetRef ref) async {
     // Bump version here in case we adjust the thresholds for screen size based initialization
@@ -169,10 +167,14 @@ class _AppState extends ConsumerState<Application> {
 
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
 
+    // The same key services read to push routes: deep links, quick actions, share
+    // intents, engine errors and the weights download. See lib/src/navigation.dart.
+    final navigatorKey = ref.watch(rootNavigatorKeyProvider);
+
     return SrsTheme(
       colors: srsColors,
       child: MaterialApp(
-        navigatorKey: _navigatorKey,
+        navigatorKey: navigatorKey,
         localizationsDelegates: const [
           AppLocalizations.delegate,
           ...GlobalMaterialLocalizations.delegates,

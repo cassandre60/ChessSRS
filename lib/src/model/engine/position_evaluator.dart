@@ -17,7 +17,7 @@ import 'package:chess_srs/src/model/engine/evaluation_context.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
 import 'package:chess_srs/src/model/engine/work.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
@@ -742,7 +742,7 @@ class PositionEvaluator extends Notifier<EngineEvaluationState> {
     }
 
     try {
-      final navigatorContext = ref.read(currentNavigatorKeyProvider).currentContext;
+      final navigatorContext = ref.read(rootNavigatorKeyProvider).currentContext;
       if (navigatorContext == null || !navigatorContext.mounted) return;
 
       showSnackBar(navigatorContext, _kUnrecoverableEngineMessage, type: SnackBarType.error);

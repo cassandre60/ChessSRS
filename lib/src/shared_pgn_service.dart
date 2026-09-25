@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:chess_srs/src/tab_navigation.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -58,7 +58,7 @@ class SharedPgnService {
   }
 
   void _handlePgn(String pgnText) {
-    final context = ref.read(currentNavigatorKeyProvider).currentContext;
+    final context = ref.read(rootNavigatorKeyProvider).currentContext;
     if (context == null || !context.mounted) return;
     ImportPgnScreen.handlePgnText(context, pgnText);
   }

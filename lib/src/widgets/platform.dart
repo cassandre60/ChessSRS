@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:chess_srs/src/constants.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A simple widget that builds different things on different platforms.
@@ -79,29 +78,20 @@ class PlatformScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Check if a parent Scaffold has extendBody set to true.
-    // This is the case if this scaffold is built inside a root tab where the main scaffold holds
-    // the bottom navigation bar.
-    final hasExtendedBodyParentScaffold = MainTabScaffoldProperties.hasExtendedBody(context);
-
+    // There is no longer a parent tab scaffold holding a bottom navigation bar: the visual
+    // identity removed the navigation bar, and `MainTabScaffold` is gone. So `extendBody`
+    // is exactly what the caller asked for, and the transparent spacer that used to stand in
+    // for the home indicator is no longer needed.
     return Scaffold(
       extendBodyBehindAppBar: Theme.of(context).platform == TargetPlatform.iOS,
-      extendBody: extendBody ?? hasExtendedBodyParentScaffold,
+      extendBody: extendBody ?? false,
       appBar: appBar,
       body: body,
       drawer: drawer,
       persistentFooterButtons: persistentFooterButtons,
       floatingActionButton: floatingActionButton,
       bottomSheet: bottomSheet,
-      bottomNavigationBar:
-          bottomNavigationBar ??
-          (hasExtendedBodyParentScaffold
-              ? Container(
-                  color: Colors.transparent,
-                  height: MediaQuery.paddingOf(context).bottom,
-                  width: double.infinity,
-                )
-              : null),
+      bottomNavigationBar: bottomNavigationBar,
     );
   }
 }

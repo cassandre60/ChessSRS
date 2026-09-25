@@ -1,6 +1,6 @@
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/localizations.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
+import 'package:chess_srs/src/navigation.dart';
 import 'package:chess_srs/src/view/offline_computer/offline_computer_game_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +30,7 @@ class QuickActionService {
     }
 
     quickActions.initialize((String shortcutType) {
-      final context = ref.read(currentNavigatorKeyProvider).currentContext;
+      final context = ref.read(rootNavigatorKeyProvider).currentContext;
       if (context == null || !context.mounted) return;
 
       if (shortcutType == 'play_computer') {
