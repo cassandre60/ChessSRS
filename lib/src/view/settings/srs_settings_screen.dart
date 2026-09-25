@@ -13,6 +13,7 @@ import 'package:chess_srs/src/view/settings/board_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/engine_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/http_log_screen.dart';
 import 'package:chess_srs/src/view/settings/sound_settings_screen.dart';
+import 'package:chess_srs/src/view/settings/srs_settings_copy.dart';
 import 'package:chess_srs/src/view/settings/theme_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -31,22 +32,6 @@ class SrsSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
-  Widget _buildSectionHeader(String title, SrsColors c) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 28, bottom: 8),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontFamily: SrsText.ui,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.1,
-          color: c.ink3,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
@@ -133,17 +118,19 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // 1. Section: Review & Spaced Repetition
-                          _buildSectionHeader('Review & Spaced Repetition', c),
-                          Container(
+                          // The design has one continuous group of rows under the title,
+                          // separated by hairlines, with no section headers: see
+                          // design/docs/03-components.md §11 and the demo's
+                          // `#viewSettings`. The rows below follow that order.
+                          DecoratedBox(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
                             ),
                             child: Column(
                               children: [
                                 _SettingRow(
-                                  label: 'Daily limit',
-                                  help: 'Positions reviewed per day.',
+                                  label: kSrsSettingDailyLimit,
+                                  help: kSrsSettingDailyLimitHelp,
                                   control: SrsSegmented<int>(
                                     options: const {
                                       25: '25',
@@ -158,11 +145,10 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Target retention',
-                                  help:
-                                      'Higher means more reviews. 88% suits most players; 95% is for tournament preparation.',
+                                  label: kSrsSettingTargetRetention,
+                                  help: kSrsSettingTargetRetentionHelp,
                                   control: SrsSegmented<double>(
-                                    options: {
+                                    options: <double, String>{
                                       0.80: '80%',
                                       0.85: '85%',
                                       0.88: '88%',
@@ -174,91 +160,44 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Scheduling algorithm',
-                                  help: 'FSRS adapts to how well you remember each position.',
-                                  control: SrsSegmented<SchedulerType>(
-                                    options: const {
-                                      SchedulerType.fsrs: 'FSRS',
-                                      SchedulerType.simple: 'Simple',
-                                      SchedulerType.easeScaling: 'Ease',
-                                    },
-                                    value: studyPrefs.schedulerType,
-                                    onChanged: (algo) => studyNotifier.setSchedulerType(algo),
-                                  ),
-                                ),
-                                if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
-                                  _SettingRow(
-                                    label: 'Initial ease factor',
-                                    help: 'Multiplier applied on first success.',
-                                    control: SrsSegmented<double>(
-                                      options: {2.0: '2.0', 2.5: '2.5', 3.0: '3.0'},
-                                      value: studyPrefs.schedulerEase,
-                                      onChanged: (val) => studyNotifier.setSchedulerEase(val),
-                                    ),
-                                  ),
-                                  _SettingRow(
-                                    label: 'Interval scaling',
-                                    help: 'Growth multiplier for subsequent reviews.',
-                                    control: SrsSegmented<double>(
-                                      options: {1.3: '1.3x', 1.5: '1.5x', 1.8: '1.8x'},
-                                      value: studyPrefs.schedulerScaling,
-                                      onChanged: (val) => studyNotifier.setSchedulerScaling(val),
-                                    ),
-                                  ),
-                                ],
-                                _SettingRow(
-                                  label: 'Show move notation',
-                                  help:
-                                      'Display preceding moves (e.g. 1. e4 e5) in the review screen.',
+                                  label: kSrsSettingShowNotation,
+                                  help: kSrsSettingShowNotationHelp,
                                   control: SrsSwitch(
                                     value: studyPrefs.showMoveHistory,
-                                    semanticLabel: 'Show move notation',
+                                    semanticLabel: kSrsSettingShowNotation,
                                     onChanged: (_) => studyNotifier.toggleShowMoveHistory(),
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Show board annotations',
-                                  help:
-                                      'Draw arrows and highlighted squares from your study after answering.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.showAnnotations,
-                                    semanticLabel: 'Show board annotations',
-                                    onChanged: (_) => studyNotifier.toggleAnnotations(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Show notes after a move',
-                                  help: 'Comments from your study appear once you have answered.',
+                                  label: kSrsSettingShowNotes,
+                                  help: kSrsSettingShowNotesHelp,
                                   control: SrsSwitch(
                                     value: studyPrefs.showPgnComments,
-                                    semanticLabel: 'Show notes after a move',
+                                    semanticLabel: kSrsSettingShowNotes,
                                     onChanged: (_) => studyNotifier.togglePgnComments(),
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Review Diagnostics HUD',
-                                  help:
-                                      'Show real-time FSRS retrievability, stability, and difficulty HUD in review.',
+                                  label: kSrsSettingShowAnnotations,
+                                  help: kSrsSettingShowAnnotationsHelp,
                                   control: SrsSwitch(
-                                    value: studyPrefs.srsDiagnostics,
-                                    semanticLabel: 'Review Diagnostics HUD',
-                                    onChanged: (_) => studyNotifier.toggleSrsDiagnostics(),
+                                    value: studyPrefs.showAnnotations,
+                                    semanticLabel: kSrsSettingShowAnnotations,
+                                    onChanged: (_) => studyNotifier.toggleAnnotations(),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // 2. Section: Appearance & Theme
-                          _buildSectionHeader('Appearance & Theme', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
                                 _SettingRow(
-                                  label: 'Theme',
+                                  label: kSrsSettingAccent,
+                                  help: kSrsSettingAccentHelp,
+                                  control: SrsAccentDots(
+                                    value: accent,
+                                    onChanged: (newAccent) {
+                                      ref.read(srsAccentProvider.notifier).accent = newAccent;
+                                    },
+                                  ),
+                                ),
+                                _SettingRow(
+                                  label: kSrsSettingTheme,
                                   control: SrsSegmented<bool>(
                                     options: const {false: 'Light', true: 'Dark'},
                                     value: isDark,
@@ -268,15 +207,93 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Accent',
-                                  help: 'Colour of the correct move arrow and selection.',
-                                  control: SrsAccentDots(
-                                    value: accent,
-                                    onChanged: (newAccent) {
-                                      ref.read(srsAccentProvider.notifier).accent = newAccent;
-                                    },
+                                  label: kSrsSettingSound,
+                                  help: kSrsSettingSoundHelp,
+                                  control: SrsSwitch(
+                                    value: isSoundOn,
+                                    semanticLabel: kSrsSettingSound,
+                                    onChanged: (_) => generalNotifier.toggleSoundEnabled(),
                                   ),
                                 ),
+
+                                // The design hides the algorithm and the diagnostics switch
+                                // behind one collapsed disclosure, so the default view stays
+                                // to eight rows.
+                                SrsDisclosure(
+                                  title: kSrsSettingAdvanced,
+                                  child: Column(
+                                    children: [
+                                      _SettingRow(
+                                        label: kSrsSettingScheduler,
+                                        help: kSrsSettingSchedulerHelp,
+                                        control: SrsSegmented<SchedulerType>(
+                                          options: const {
+                                            SchedulerType.fsrs: 'FSRS',
+                                            SchedulerType.simple: 'Simple',
+                                            SchedulerType.easeScaling: 'Ease',
+                                          },
+                                          value: studyPrefs.schedulerType,
+                                          onChanged: (algo) => studyNotifier.setSchedulerType(algo),
+                                        ),
+                                      ),
+                                      if (studyPrefs.schedulerType ==
+                                          SchedulerType.easeScaling) ...[
+                                        _SettingRow(
+                                          label: 'Initial ease factor',
+                                          help: 'Multiplier applied on first success.',
+                                          control: SrsSegmented<double>(
+                                            options: <double, String>{
+                                              2.0: '2.0',
+                                              2.5: '2.5',
+                                              3.0: '3.0',
+                                            },
+                                            value: studyPrefs.schedulerEase,
+                                            onChanged: (val) => studyNotifier.setSchedulerEase(val),
+                                          ),
+                                        ),
+                                        _SettingRow(
+                                          label: 'Interval scaling',
+                                          help: 'Growth multiplier for subsequent reviews.',
+                                          control: SrsSegmented<double>(
+                                            options: <double, String>{
+                                              1.3: '1.3x',
+                                              1.5: '1.5x',
+                                              1.8: '1.8x',
+                                            },
+                                            value: studyPrefs.schedulerScaling,
+                                            onChanged: (val) =>
+                                                studyNotifier.setSchedulerScaling(val),
+                                          ),
+                                        ),
+                                      ],
+                                      _SettingRow(
+                                        label: kSrsSettingDiagnostics,
+                                        help: kSrsSettingDiagnosticsHelp,
+                                        control: SrsSwitch(
+                                          value: studyPrefs.srsDiagnostics,
+                                          semanticLabel: kSrsSettingDiagnostics,
+                                          onChanged: (_) => studyNotifier.toggleSrsDiagnostics(),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // Settings the design does not cover. They are kept, because
+                          // removing them would strand real features; design/docs/03 §12
+                          // says to keep anything outside the prototype in the same family
+                          // and ask the owner. This group is that open question.
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: Border(top: BorderSide(color: c.hairline)),
+                            ),
+                            child: Column(
+                              children: [
                                 _NavRow(
                                   label: 'Theme & appearance',
                                   help: 'Background wallpaper, AMOLED, board brightness, and hue.',
@@ -290,18 +307,6 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   onTap: () =>
                                       Navigator.of(context).push(ThemeSettingsScreen.buildRoute()),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // 3. Section: Board & Pieces
-                          _buildSectionHeader('Board & Pieces', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
                                 _NavRow(
                                   label: 'Board & pieces',
                                   help: 'Board themes, piece sets, and move coordinates.',
@@ -309,26 +314,6 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                       '${boardPrefs.boardTheme.label} / ${boardPrefs.pieceSet.label}',
                                   onTap: () =>
                                       Navigator.of(context).push(BoardSettingsScreen.buildRoute()),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // 4. Section: Sound & Audio
-                          _buildSectionHeader('Sound & Audio', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _SettingRow(
-                                  label: 'Sound',
-                                  control: SrsSwitch(
-                                    value: isSoundOn,
-                                    semanticLabel: 'Sound',
-                                    onChanged: (_) => generalNotifier.toggleSoundEnabled(),
-                                  ),
                                 ),
                                 _NavRow(
                                   label: 'Sound & audio details',
@@ -338,36 +323,12 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   onTap: () =>
                                       Navigator.of(context).push(SoundSettingsScreen.buildRoute()),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // 5. Section: Chess Engine
-                          _buildSectionHeader('Chess Engine', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
                                 _NavRow(
                                   label: 'Chess engine',
                                   help: 'Threads, hash memory, search time, and multi-PV lines.',
                                   onTap: () =>
                                       Navigator.of(context).push(EngineSettingsScreen.buildRoute()),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // 6. Section: Data & Diagnostics
-                          _buildSectionHeader('Data & Diagnostics', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
                                 _SettingRow(
                                   label: 'Local database size',
                                   help: 'Storage used by local database files.',
@@ -377,7 +338,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                         : '...',
                                     style: TextStyle(
                                       fontFamily: SrsText.ui,
-                                      fontSize: 14,
+                                      fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                       color: c.ink2,
                                     ),
@@ -395,18 +356,6 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   onTap: () =>
                                       Navigator.of(context).push(AppLogSettingsScreen.buildRoute()),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          // 7. Section: About & Licences
-                          _buildSectionHeader('About', c),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
                                 _NavRow(
                                   label: 'Licences & open source',
                                   help: 'GPL-3.0, chessground, dartchess, and third-party notices.',
