@@ -5,6 +5,7 @@ library;
 
 export 'board_background.dart';
 export 'hatch.dart';
+export 'live_region.dart';
 export 'memory_bar.dart';
 export 'move_arrow.dart';
 export 'notation_line.dart';

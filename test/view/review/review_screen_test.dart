@@ -15,6 +15,7 @@ import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -709,6 +710,208 @@ void main() {
         expect(find.text('Nothing due.'), findsOneWidget);
       },
     );
+
+    testWidgets('Enter continues past a note, as Space does', (tester) async {
+      // design/docs/04-screens-and-flows.md §4: "Space or Enter: Continue, when a note
+      // is showing." Only Space was bound.
+      final importResult = importPgn(
+        '1. e4 {Important center move} *',
+        studyTitle: 'King Pawn Enter Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+
+      // The note is showing, so Continue is the only action.
+      expect(find.widgetWithText(SrsPillButton, 'Continue'), findsOneWidget);
+      expect(find.text('Nothing due.'), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await pumpAsync(tester, 700);
+
+      expect(find.text('Nothing due.'), findsOneWidget);
+    });
+
+    testWidgets('announces the outcome in a polite live region', (tester) async {
+      // design/docs/04 §6 and the demo's `say()`: a screen-reader-only status region that
+      // speaks "Correct. {san}." or "Not this move. The repertoire move is {san}.".
+      // Without it the board changes silently and the correction arrow is invisible to a
+      // screen-reader user, who is told only that something was wrong.
+      final handle = tester.ensureSemantics();
+      final importResult = importPgn(
+        '1. d4 d5 *',
+        studyTitle: 'Announcement Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Nothing has been answered yet, so nothing is announced.
+      expect(find.bySemanticsLabel('Not this move. The repertoire move is d4.'), findsNothing);
+
+      // Play a move that is not the repertoire move (the repertoire wants 1. d4).
+      await playMove(tester, 'g1', 'f3');
+      await pumpAsync(tester, 100);
+
+      final node = tester.getSemantics(find.byType(SrsLiveRegion));
+      expect(node.label, 'Not this move. The repertoire move is d4.');
+      expect(node.flagsCollection.isLiveRegion, isTrue);
+      handle.dispose();
+    });
+
+    testWidgets('Space continues past a note too', (tester) async {
+      // Guards the focus ordering. CallbackShortcuts installs its key handler as a
+      // descendant of whatever wraps it, and the focus manager only dispatches to the
+      // primary focus and then its *ancestors* — so if the focus sits outside the
+      // shortcuts, neither Space nor S is ever delivered and the demo's keyboard
+      // shortcuts silently do nothing.
+      final importResult = importPgn(
+        '1. e4 {Important center move} *',
+        studyTitle: 'King Pawn Space Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.widgetWithText(SrsPillButton, 'Continue'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await pumpAsync(tester, 700);
+      expect(find.text('Nothing due.'), findsOneWidget);
+    });
+
+    testWidgets('S reaches the skip binding', (tester) async {
+      // Pins delivery of the `S` shortcut, which the focus-ordering bug silently broke.
+      //
+      // The *semantics* deliberately differ from the demo. The prototype's `skip()`
+      // reveals the answer (prompt -> correction -> plays the move), but
+      // design/docs/04 §3 says to "keep that logic and only change how it looks" when
+      // the domain layer disagrees — and ReviewController.skip() advances the queue
+      // without scoring, which is what a skipped card should do. So this asserts the key
+      // arrives, not which of the two meanings it has.
+      final importResult = importPgn(
+        '1. e4 * 1... e5 2. Nf3 *',
+        studyTitle: 'Skip Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // The first prompt is 1. e4, so the board is still the start position. Skipping it
+      // must move the session on to 1... e5, which is after 1. e4.
+      String boardFen() => tester.widget<BoardWidget>(find.byType(BoardWidget)).controller.game.fen;
+
+      expect(boardFen(), startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await pumpAsync(tester, 200);
+
+      expect(boardFen(), isNot(startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')));
+    });
+
+    testWidgets('Enter does not skip past a prompt that has no note', (tester) async {
+      // Enter is Continue, not Skip: pressing it before answering must leave the
+      // position alone. (Skip is `S`, and the two must not be aliased.)
+      final importResult = importPgn(
+        '1. e4 * 1... e5 2. Nf3 *',
+        studyTitle: 'Two Move Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      expect(find.text('Skip'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await pumpAsync(tester, 700);
+
+      // Still on the first position: nothing was answered.
+      expect(find.text('Skip'), findsOneWidget);
+      expect(find.text('Nothing due.'), findsNothing);
+    });
 
     testWidgets('tapping the board overlay while awaiting advance continues advancement', (
       tester,

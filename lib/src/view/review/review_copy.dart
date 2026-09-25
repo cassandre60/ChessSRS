@@ -54,6 +54,16 @@ const kSrsErrorTitle = 'Something went wrong.';
 const kSrsReviewLoadFailedDetail =
     'Reviews could not be loaded. Try again, or copy the details to report this.';
 
+/// Spoken after a correct answer. Demo prototype `say()`: `Correct. {san}.`
+String srsCorrectAnnouncement(String san) => 'Correct. $san.';
+
+/// Spoken after any other move. Demo prototype `say()`:
+/// `Not this move. The repertoire move is {san}.`
+///
+/// design/docs/04 §6 also requires that "legal but not the repertoire move" and
+/// "illegal" produce the same feedback, which is why there is no second phrasing.
+String srsNotThisMoveAnnouncement(String san) => 'Not this move. The repertoire move is $san.';
+
 /// The first-launch headline. Demo: `.first h1`.
 const kSrsBringYourRepertoire = 'Bring your repertoire.';
 

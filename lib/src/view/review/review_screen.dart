@@ -659,18 +659,38 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
 
     void onSkip() => ref.read(reviewControllerProvider.notifier).skip();
 
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.space): () {
-            if (state.isAwaitingAdvance) onContinue();
-          },
-          const SingleActivator(LogicalKeyboardKey.keyS): () {
-            if (!state.isAwaitingAdvance) onSkip();
-          },
+    // design/docs/04 §6: announce the outcome politely, exactly as the demo's
+    // `<div role="status" aria-live="polite">` does. The move the user *should* have
+    // played is named in both sentences, so a correction is actionable without sight.
+    final expectedSan = prompt.expectedMoves.firstOrNull?.san ?? state.expectedMove?.san;
+    final announcement = switch (state.feedback) {
+      ReviewFeedback.incorrect when expectedSan != null => srsNotThisMoveAnnouncement(expectedSan),
+      ReviewFeedback.correct when expectedSan != null => srsCorrectAnnouncement(expectedSan),
+      _ => '',
+    };
+
+    void continueIfShown() {
+      if (state.isAwaitingAdvance) onContinue();
+    }
+
+    // The focused node has to sit *inside* CallbackShortcuts. CallbackShortcuts installs
+    // its own `Focus(canRequestFocus: false, onKeyEvent: …)` as a descendant of whatever
+    // wraps it, and the focus manager only dispatches a key event to the primary focus and
+    // then to that node's *ancestors*. With the focus outside, Space and S never reached
+    // the bindings at all.
+    return CallbackShortcuts(
+      bindings: {
+        // design/docs/04 §4: Space *or* Enter continues while a note is showing.
+        const SingleActivator(LogicalKeyboardKey.space): continueIfShown,
+        const SingleActivator(LogicalKeyboardKey.enter): continueIfShown,
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): continueIfShown,
+        const SingleActivator(LogicalKeyboardKey.keyS): () {
+          if (!state.isAwaitingAdvance) onSkip();
         },
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
         child: SrsReviewLayout(
           whiteAtBottom: state.boardOrientation == Side.white,
           topBar: SrsTopBar(
@@ -744,6 +764,9 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
               onSkip: onSkip,
               onContinue: onContinue,
             ),
+            // Last in the column, so the spoken sentence follows the board and the
+            // controls rather than preceding them.
+            announcement: SrsLiveRegion(announcement),
           ),
         ),
       ),

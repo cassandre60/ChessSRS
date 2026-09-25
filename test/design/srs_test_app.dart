@@ -39,8 +39,12 @@ void srsDesktopTestWidgets(
 }) => testWidgets(description, body, variant: variant ?? kSrsDesktopPlatform);
 
 /// Pumps [child] inside the minimum tree the design system needs: `SrsTheme` above
-/// `WidgetsApp` (for `DefaultTextStyle`, `Directionality`) and an [Overlay] (for [showSrsToast]
-/// and anything else that inserts an overlay entry).
+/// `WidgetsApp` (for `DefaultTextStyle`, `Directionality`) and an [Overlay] (for
+/// [showSrsToast] and anything else that inserts an overlay entry).
+///
+/// Calling it again with a different [child] swaps the child. A bare
+/// `Overlay(initialEntries: …)` cannot do that — it ignores `initialEntries` on rebuild —
+/// so the overlay lives inside [_SrsHost], which marks the entry dirty instead.
 ///
 /// Design widgets are deliberately built on `package:flutter/widgets.dart` only, so this
 /// harness never installs a `Material` ancestor: if a design widget reaches for one, that is
@@ -64,12 +68,35 @@ Future<void> pumpSrs(
           data: MediaQueryData(size: surface),
           child: Directionality(
             textDirection: TextDirection.ltr,
-            child: Overlay(initialEntries: [OverlayEntry(builder: (_) => child)]),
+            child: _SrsHost(child: child),
           ),
         ),
       ),
     ),
   );
+}
+
+/// Holds the single [Overlay] the design system inserts into, and can swap its child.
+class _SrsHost extends StatefulWidget {
+  const _SrsHost({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SrsHost> createState() => _SrsHostState();
+}
+
+class _SrsHostState extends State<_SrsHost> {
+  late final OverlayEntry _entry = OverlayEntry(builder: (_) => widget.child);
+
+  @override
+  void didUpdateWidget(_SrsHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.child != widget.child) _entry.markNeedsBuild();
+  }
+
+  @override
+  Widget build(BuildContext context) => Overlay(initialEntries: [_entry]);
 }
 
 /// The [SrsColors] a bare design widget resolves, for asserting token values.

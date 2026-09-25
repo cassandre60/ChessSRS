@@ -122,6 +122,7 @@ class SrsReviewSide extends StatelessWidget {
     this.line,
     required this.slot,
     required this.actions,
+    this.announcement,
   });
 
   final bool wide;
@@ -130,6 +131,10 @@ class SrsReviewSide extends StatelessWidget {
   final Widget? line; // SrsNotationLine or null if disabled
   final Widget slot; // answer OR note OR SizedBox.shrink()
   final Widget actions; // Skip on the left, Continue on the right; min height 56
+
+  /// Optional polite live region, laid out with no effect on the fixed regions.
+  /// See SrsLiveRegion and design/docs/04-screens-and-flows.md §6.
+  final Widget? announcement;
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +170,8 @@ class SrsReviewSide extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 56),
           child: Padding(padding: const EdgeInsets.fromLTRB(0, 6, 0, 4), child: actions),
         ),
+        // Zero-size: present for assistive technology, absent from the layout.
+        ?announcement,
       ],
     );
   }
