@@ -60,7 +60,9 @@ Every engineering task must follow:
 4. WRITE TESTS with the contract (dart test, widget test, or integration
    test as appropriate).
 5. IMPLEMENT minimally, following Lichess Mobile conventions (CLAUDE.md).
-6. TARGETED VERIFICATION: run the specific test file.
+6. TARGETED VERIFICATION: run the specific test file, appending `--no-pub`
+   when dependencies are already resolved (package config newer than the
+   pubspec files) to skip the redundant per-run resolution.
 7. STATIC CHECK: run the repo's local gate on the files you touched
    (e.g. `./gate.sh <files>` where a gate script exists, else
    `fvm flutter analyze` on those files).
