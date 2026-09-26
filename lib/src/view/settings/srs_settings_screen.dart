@@ -44,9 +44,22 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
     final dbSize = ref.watch(getDbSizeInBytesProvider);
     final accent = ref.watch(srsAccentProvider);
 
-    final isDark =
-        generalPrefs.themeMode == BackgroundThemeMode.dark ||
-        generalPrefs.themeMode == BackgroundThemeMode.amoled;
+    // Resolve `system` against the platform instead of treating it as light.
+    //
+    // This was `themeMode == dark || themeMode == amoled`, which is false for
+    // BackgroundThemeMode.system — the default. So anyone following their system on a dark
+    // desktop was told "Light" by the Theme row and by the Theme & appearance summary while
+    // the app around them was plainly dark. The setting is the one place that states the
+    // current theme, so it has to agree with what the rest of the app is doing.
+    //
+    // design/docs/01-identity.md §89 also wants a `System` option in this control. That is a
+    // change to the control's shape rather than a fix to a wrong value, so it is left for the
+    // owner; the row still must not misreport what is already selected.
+    final isDark = switch (generalPrefs.themeMode) {
+      BackgroundThemeMode.dark || BackgroundThemeMode.amoled => true,
+      BackgroundThemeMode.light => false,
+      BackgroundThemeMode.system => mediaQuery.platformBrightness == Brightness.dark,
+    };
     final isSoundOn = generalPrefs.isSoundEnabled;
 
     final headlineSize = math.max(38.0, math.min(mediaQuery.size.width * 0.08, 56.0));

@@ -1,9 +1,14 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:convert';
+
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/model/settings/general_preferences.dart';
+import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_copy.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../binding.dart';
@@ -45,6 +50,75 @@ void main() {
       expect(top, greaterThan(previousTop), reason: '$label is out of order');
       previousTop = top;
     }
+  });
+
+  // The Theme row is the one place the screen states the current theme, so it has to agree
+  // with the rest of the app. It used to read only the two explicit dark modes, which made
+  // `system` — the default — report Light on a dark desktop.
+  group('the Theme row reports the theme actually in use', () {
+    Future<bool> reportedIsDark(
+      WidgetTester tester, {
+      required String themeMode,
+      required Brightness platform,
+    }) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: Builder(
+          // Override the platform brightness on the screen's own MediaQuery rather than
+          // through the dispatcher: this is what the screen reads, and it makes the test
+          // independent of whether the binding plumbs a test value into MaterialApp's
+          // MediaQuery. Everything else about the MediaQuery is preserved, so the screen's
+          // size-driven layout is untouched.
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(platformBrightness: platform),
+            child: const SrsSettingsScreen(),
+          ),
+        ),
+        brightness: platform,
+        defaultPreferences: {
+          // The whole object, not a fragment: GeneralPrefs.fromJson declares most fields
+          // required, so a partial JSON fails to parse and the provider silently falls back
+          // to defaults — which is themeMode `system`, and made the explicit-mode cases
+          // below look like they had failed.
+          PrefCategory.general.storageKey: jsonEncode(
+            GeneralPrefs.defaults
+                .copyWith(themeMode: BackgroundThemeMode.values.byName(themeMode))
+                .toJson(),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The only SrsSegmented<bool> on the screen is the Theme row; the other segmented
+      // controls are <int>, <double> and <SchedulerType>.
+      final control = tester.widget<SrsSegmented<bool>>(find.byType(SrsSegmented<bool>));
+      return control.value;
+    }
+
+    testWidgets('system on a dark platform reports dark', (tester) async {
+      expect(await reportedIsDark(tester, themeMode: 'system', platform: Brightness.dark), isTrue);
+    });
+
+    testWidgets('system on a light platform reports light', (tester) async {
+      expect(
+        await reportedIsDark(tester, themeMode: 'system', platform: Brightness.light),
+        isFalse,
+      );
+    });
+
+    testWidgets('an explicit light mode beats a dark platform', (tester) async {
+      expect(
+        await reportedIsDark(tester, themeMode: 'light', platform: Brightness.dark),
+        isFalse,
+        reason: 'the user chose Light, so a dark system must not override them',
+      );
+    });
+
+    testWidgets('an explicit dark mode beats a light platform', (tester) async {
+      expect(await reportedIsDark(tester, themeMode: 'dark', platform: Brightness.light), isTrue);
+    });
   });
 
   testWidgets('uses the design labels, not the build-invented ones', (tester) async {
