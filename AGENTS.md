@@ -195,7 +195,9 @@ inner-loop step.**
 - **Per change:** the local gate on the files you touched (e.g.
   `./gate.sh <files>` plus the one test file covering the change), or
   `fvm flutter analyze` on those files where no gate script exists.
-  That is the loop.
+  That is the loop. The fastest per-edit signal is the IDE's Dart analysis
+  server (warm diagnostics as you type); gate and test runs confirm, they
+  don't discover.
 - **Per push / before declaring a milestone:** `./verify` once, or let
   GitHub Actions do it — CI runs `flutter test` on every push and is the
   authority on whether the suite is green.
