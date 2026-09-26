@@ -119,8 +119,8 @@ played them.
 
 | # | Contract | Result |
 |---|---|---|
-| C-S1 | `move` on a piece landing | already wired via `MoveFeedbackService`; not touched |
-| C-S2 | `wrong` on a rejected move | **added** — the branch was silent; `Sound.error` is declared with no call site anywhere |
+| C-S1 | `move` on a piece landing | **completed**: the opponent's auto-reply already sounded; the user's own landing was silent and is now wired in `_handleCorrectAdvancement` |
+| C-S2 | `wrong` on a rejected move | **added** — the branch was silent; `Sound.error` is declared with no call site anywhere. Both the first attempt and a failed reguess |
 | C-S3 | `done` on reaching "Nothing due" | **added** — the branch was silent |
 
 `ReviewSound` is deliberately kept out of the `SoundTheme` enum. The Lichess themes resolve by
@@ -136,22 +136,27 @@ a session is finished, and `done` must sound on arrival, not on every rebuild.
 
 **Open question for the owner.** `design/docs/07` §1 wants *all* move/capture/UI sounds replaced
 by this set, with `standard/futuristic/lisp/nes/piano/sfx` cut. That is a cut, so per `AGENTS.md`
-§9 it is not done unilaterally. As shipped, `move` in review still uses the user's chosen theme;
-only the two previously-missing moments speak. The same section says **default off**, while
+§9 it is not done unilaterally. A landing therefore still uses the user's chosen theme
+(`Sound.move`), matching the call sites that were already there; only the two previously-silent
+moments speak, and they speak the design's own set. The same section says **default off**, while
 `GeneralPrefs.defaults.isSoundEnabled` is `true` — also left alone.
-
-Also unresolved: the spec says play `move` for the user's landing too. `moveFeedback` fires for
-the repertoire's replies and the auto-applied move, but the user's own drag does not go through
-it, so the user's landing may still be silent. Not chased: it depends on the cut question above.
 
 ### Verification
 
-`fvm flutter test test/review/review_controller_test.dart` — **32/32 pass**, including the three
-new tests. Proven non-vacuous: with the two hook points reverted, `a rejected move plays the
-wrong sound` and `running the queue out plays the done sound exactly once` both fail with
-`Expected: <1> Actual: <0>`. The third test, `an empty app does not play the done sound on
-startup`, passes either way by design — it guards `isComplete`'s `hasStudies` conjunct against a
-future regression, and is not evidence of new behaviour.
+`fvm flutter test test/review/review_controller_test.dart` — **34/34 pass**. Every new assertion
+was checked non-vacuous by removing the hook and watching it fail with `Expected: <1>
+Actual: <0>`.
+
+Two of these were vacuous on the first attempt and are recorded because that is the failure mode
+worth remembering, not the fix:
+
+- `an empty app does not play the done sound on startup` passes either way by design. It guards
+  `isComplete`'s `hasStudies` conjunct against a future regression; it is not evidence of
+  anything new.
+- The first version of `a correct move by the user plays the move sound` genuinely passed with
+  the hook removed. It used a `1. d4 d5` line and asserted `count >= 1`, and the opponent's
+  reply also plays `Sound.move`, so the assertion could not tell the two apart. It now uses a
+  line with no reply, so exactly one move sound can only be the user's own landing.
 
 ## Known pre-existing failure (not ours, and not ours to fix)
 
