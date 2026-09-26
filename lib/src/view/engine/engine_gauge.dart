@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
@@ -128,8 +129,11 @@ class _EvalGaugeState extends State<_EvalGauge> {
         ? evalIntegerPart
         : evalDisplay;
 
+    // Contrast colors stay literal: the text sits on theme-derived gauge
+    // fills, so Srs ink would go invisible on one theme or the other.
     final evalStyle = TextStyle(
       color: toValue >= 0.5 ? Colors.black54 : Colors.white70,
+      fontFamily: SrsText.ui,
       fontSize: getEvalGaugeFontSize(context),
       letterSpacing: -0.8,
       fontWeight: FontWeight.bold,

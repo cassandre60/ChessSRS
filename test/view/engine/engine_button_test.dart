@@ -25,8 +25,6 @@ void main() {
     // there is a loading state, and it goes away once the game arrives -- it just no longer looks
     // for a widget the screen stopped rendering. Asserting on a string is more brittle than
     // asserting on a spinner type; recorded rather than glossed over.
-    //
-    // Branch-specific on purpose: main still renders a CircularProgressIndicator here.
     expect(find.text('Loading\u2026'), findsOne);
     // wait for the game to be loaded
     await tester.pump(const Duration(milliseconds: 50));
