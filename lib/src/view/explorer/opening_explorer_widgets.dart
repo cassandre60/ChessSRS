@@ -1,9 +1,9 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/explorer/opening_explorer.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/theme.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/explorer/explorer_view.dart';
@@ -110,123 +110,145 @@ class OpeningExplorerMoveTable extends ConsumerWidget {
       return loadingTable;
     }
 
+    final c = context.srs;
     final pieceNotation = ref
         .watch(pieceNotationProvider)
         .maybeWhen(data: (value) => value, orElse: () => defaultAccountPreferences.pieceNotation);
     final games = whiteWins + draws + blackWins;
 
-    return Table(
-      columnWidths: columnWidths,
-      children: [
-        TableRow(
-          decoration: BoxDecoration(color: ColorScheme.of(context).surfaceDim),
-          children: [
-            Padding(
-              padding: kExplorerTableRowPadding,
-              child: Text(context.l10n.move, style: kHeaderTextStyle),
-            ),
-            Padding(
-              padding: kExplorerTableRowPadding,
-              child: Text(context.l10n.games, style: kHeaderTextStyle),
-            ),
-            Padding(
-              padding: kExplorerTableRowPadding,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      context.l10n.whiteDrawBlack,
-                      style: kHeaderTextStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+    // Demo `.xh` header: quiet labels, hairline below.
+    final headerStyle = SrsText.groupTitle(c.ink3);
+    final header = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        children: [
+          SizedBox(width: 64, child: Text(context.l10n.move, style: headerStyle)),
+          Expanded(child: Text(context.l10n.games, style: headerStyle)),
+          SizedBox(
+            width: 128,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.whiteDrawBlack,
+                    style: headerStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (isIndexing) const IndexingIndicator(),
-                ],
-              ),
+                ),
+                if (isIndexing) const IndexingIndicator(),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+
+    Widget moveSan(OpeningMove move) {
+      if (pieceNotation == PieceNotation.symbol) {
+        return Text(move.san, style: const TextStyle(fontFamily: 'ChessFont'));
+      }
+      return SrsSan(
+        move.san,
+        style: TextStyle(
+          fontFamily: SrsText.ui,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: c.ink,
+          fontFeatures: SrsText.tabular,
         ),
+      );
+    }
+
+    Widget resultBar({required int white, required int draws, required int black}) {
+      // Reuses the memory-bar shapes for White/Draws/Black (demo legend),
+      // with a corrected screen-reader label.
+      return Semantics(
+        label: 'White $white, draws $draws, Black $black',
+        child: ExcludeSemantics(
+          child: SrsMemoryBar(
+            retained: white,
+            learning: draws,
+            fresh: black,
+            height: 6,
+            gap: 2,
+            radius: 1,
+            width: 128,
+          ),
+        ),
+      );
+    }
+
+    Widget rowButton({
+      required VoidCallback? onTap,
+      required String semanticLabel,
+      required List<Widget> cells,
+    }) {
+      return SrsPressable(
+        onPressed: onTap,
+        semanticLabel: semanticLabel,
+        radius: 8,
+        builder: (_, hover, _) => Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            color: hover ? c.hairlineSoft : const Color(0x00000000),
+            border: Border(bottom: BorderSide(color: c.hairline)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(width: 64, child: cells[0]),
+              Expanded(child: cells[1]),
+              SizedBox(width: 128, child: cells[2]),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final gamesStyle = TextStyle(
+      fontFamily: SrsText.ui,
+      fontSize: 14.5,
+      color: c.ink,
+      fontFeatures: SrsText.tabular,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        header,
         ...List.generate(moves.length, (int index) {
           final move = moves.get(index);
           final percentGames = ((move.games / games) * 100).round();
-          return TableRow(
-            decoration: BoxDecoration(
-              color: index.isEven ? context.lichessTheme.rowEven : context.lichessTheme.rowOdd,
-            ),
-            children: [
-              TableRowInkWell(
-                onTap: () => onMoveSelected?.call(Move.parse(move.uci)!),
-                child: Padding(
-                  padding: kExplorerTableRowPadding,
-                  child: Text(
-                    move.san,
-                    style: TextStyle(
-                      fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : null,
-                    ),
-                  ),
-                ),
-              ),
-              TableRowInkWell(
-                onTap: () => onMoveSelected?.call(Move.parse(move.uci)!),
-                child: Padding(
-                  padding: kExplorerTableRowPadding,
-                  child: Text('${formatNum(move.games)} ($percentGames%)'),
-                ),
-              ),
-              TableRowInkWell(
-                onTap: () => onMoveSelected?.call(Move.parse(move.uci)!),
-                child: Padding(
-                  padding: kExplorerTableRowPadding,
-                  child: _WinPercentageChart(
-                    whiteWins: move.white,
-                    draws: move.draws,
-                    blackWins: move.black,
-                  ),
-                ),
-              ),
+          return rowButton(
+            onTap: onMoveSelected == null ? null : () => onMoveSelected!(Move.parse(move.uci)!),
+            semanticLabel: '${move.san}, ${formatNum(move.games)} games',
+            cells: [
+              moveSan(move),
+              Text('${formatNum(move.games)} ($percentGames%)', style: gamesStyle),
+              resultBar(white: move.white, draws: move.draws, black: move.black),
             ],
           );
         }),
         if (moves.isNotEmpty)
-          TableRow(
-            decoration: BoxDecoration(
-              color: moves.length.isEven
-                  ? context.lichessTheme.rowEven
-                  : context.lichessTheme.rowOdd,
-            ),
-            children: [
-              Container(
-                padding: kExplorerTableRowPadding,
-                alignment: Alignment.centerLeft,
-                child: const Icon(Icons.functions),
-              ),
-              Padding(padding: kExplorerTableRowPadding, child: Text('${formatNum(games)} (100%)')),
-              Padding(
-                padding: kExplorerTableRowPadding,
-                child: _WinPercentageChart(
-                  whiteWins: whiteWins,
-                  draws: draws,
-                  blackWins: blackWins,
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(
+              children: [
+                SizedBox(width: 64, child: Text('Total', style: SrsText.rowSub(c.ink3))),
+                Expanded(child: Text('${formatNum(games)} (100%)', style: gamesStyle)),
+                SizedBox(
+                  width: 128,
+                  child: resultBar(white: whiteWins, draws: draws, black: blackWins),
                 ),
-              ),
-            ],
+              ],
+            ),
           )
         else
-          TableRow(
-            decoration: BoxDecoration(color: ColorScheme.of(context).surfaceContainerLow),
-            children: [
-              Padding(
-                padding: kExplorerTableRowPadding,
-                child: Text(
-                  String.fromCharCode(Icons.not_interested_outlined.codePoint),
-                  style: TextStyle(fontFamily: Icons.not_interested_outlined.fontFamily),
-                ),
-              ),
-              Padding(padding: kExplorerTableRowPadding, child: Text(context.l10n.noGameFound)),
-              const Padding(padding: kExplorerTableRowPadding, child: SizedBox.shrink()),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(
+              children: [Expanded(child: Text(context.l10n.noGameFound, style: gamesStyle))],
+            ),
           ),
       ],
     );
@@ -456,69 +478,6 @@ class _OpeningExplorerGameTileState extends ConsumerState<OpeningExplorerGameTil
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _WinPercentageChart extends StatelessWidget {
-  const _WinPercentageChart({
-    required this.whiteWins,
-    required this.draws,
-    required this.blackWins,
-  });
-
-  final int whiteWins;
-  final int draws;
-  final int blackWins;
-
-  int percentGames(int games) => ((games / (whiteWins + draws + blackWins)) * 100).round();
-  String label(int percent) => percent < 20 ? '' : '$percent%';
-
-  @override
-  Widget build(BuildContext context) {
-    final percentWhite = percentGames(whiteWins);
-    final percentDraws = percentGames(draws);
-    final percentBlack = percentGames(blackWins);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(5),
-      child: Row(
-        children: [
-          Expanded(
-            flex: percentWhite,
-            child: ColoredBox(
-              color: whiteBoxColor(context),
-              child: Text(
-                label(percentWhite),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: percentDraws,
-            child: ColoredBox(
-              color: Colors.grey,
-              child: Text(
-                label(percentDraws),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: percentBlack,
-            child: ColoredBox(
-              color: blackBoxColor(context),
-              child: Text(
-                label(percentBlack),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

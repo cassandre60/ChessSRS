@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/id.dart';
@@ -275,7 +276,10 @@ void main() {
       await tester.pump();
 
       expect(find.byType(OpeningExplorerView), findsOneWidget);
-      expect(find.widgetWithText(TableRowInkWell, 'e4'), findsOneWidget);
+      // The Diagram move table replaced the Material DataTable, so this asserts on the row we
+      // actually render rather than on DataTable's internal TableRowInkWell. A pawn move is the
+      // one SAN SrsSan does not split, so 'e4' is still a single Text.
+      expect(find.text('e4'), findsOneWidget);
       expect(
         find.text('A free Lichess account is required to query the online opening database.'),
         findsNothing,
@@ -423,11 +427,16 @@ void main() {
         await tester.pumpWidget(app);
         await tester.pump();
 
-        final moveText = tester.widget<Text>(find.text('Nf3'));
-        expect(
-          moveText.style?.fontFamily,
-          pieceNotation == PieceNotation.symbol ? 'ChessFont' : isNull,
-        );
+        if (pieceNotation == PieceNotation.symbol) {
+          // The whole SAN stays one string, set in the chess font.
+          final moveText = tester.widget<Text>(find.text('Nf3'));
+          expect(moveText.style?.fontFamily, 'ChessFont');
+        } else {
+          // Letter notation sets the piece as a figurine and the rest in the UI face, so there is
+          // no single Text('Nf3') left to inspect.
+          expect(find.byType(SrsFigurine), findsOneWidget);
+          expect(tester.widget<Text>(find.text('f3')).style?.fontFamily, SrsText.ui);
+        }
       });
     }
 
