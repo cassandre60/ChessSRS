@@ -10,6 +10,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
+import 'package:chess_srs/src/view/review/review_copy.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
@@ -1112,7 +1113,7 @@ void main() {
     });
 
     testWidgets(
-      'displays daily limit reached view and navigates to SrsSettingsScreen on Change daily limit',
+      'displays daily limit reached view and navigates to SrsSettingsScreen on Adjust limit',
       (tester) async {
         final study = importPgn(
           '1. e4 e5 *',
@@ -1156,12 +1157,14 @@ void main() {
         await pumpAsync(tester);
 
         // Daily limit reached view is now shown!
-        expect(find.text('Daily limit reached.'), findsOneWidget);
+        expect(find.text(kSrsDailyLimitReachedTitle), findsOneWidget);
         expect(find.textContaining('positions today.'), findsOneWidget);
 
-        // Tap Change daily limit button
-        expect(find.text('Change daily limit'), findsOneWidget);
-        await tester.tap(find.text('Change daily limit'));
+        // Tap the Adjust limit link. The label is the design's, single-sourced in
+        // review_copy.dart — it used to be the literal 'Change daily limit', and the rebase
+        // onto main left this test asserting a string the app no longer renders.
+        expect(find.text(kSrsAdjustLimitLabel), findsOneWidget);
+        await tester.tap(find.text(kSrsAdjustLimitLabel));
         await tester.pumpAndSettle();
 
         // Navigates to SrsSettingsScreen
