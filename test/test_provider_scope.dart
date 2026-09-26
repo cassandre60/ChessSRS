@@ -74,6 +74,7 @@ Future<Widget> makeTestProviderScopeApp(
   Map<ProviderOrFamily, Override>? overrides,
   AuthUser? authUser,
   Map<String, Object>? defaultPreferences,
+  Size surfaceSize = kTestSurfaceSize,
   Brightness brightness = Brightness.light,
 }) {
   return makeTestProviderScope(
@@ -82,6 +83,7 @@ Future<Widget> makeTestProviderScopeApp(
     overrides: overrides,
     authUser: authUser,
     defaultPreferences: defaultPreferences,
+    surfaceSize: surfaceSize,
     brightness: brightness,
   );
 }
