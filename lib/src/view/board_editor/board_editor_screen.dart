@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/constants.dart';
-import 'package:chess_srs/src/design/board_background.dart';
-import 'package:chess_srs/src/design/tokens.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/board_editor/board_editor_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -20,7 +19,6 @@ import 'package:chess_srs/src/view/board_editor/board_editor_positions.dart';
 import 'package:chess_srs/src/view/offline_computer/offline_computer_game_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
-import 'package:chess_srs/src/widgets/bottom_bar.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/platform.dart';
@@ -45,74 +43,104 @@ class BoardEditorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final boardEditorState = ref.watch(boardEditorControllerProvider(params));
+    final c = context.srs;
+
+    // Quiet scene-title line under the header (demo meta treatment).
+    // Carries the variant name the old app bar title showed as an icon.
+    final sceneTitle = boardEditorState.variant == Variant.standard
+        ? context.l10n.boardEditor
+        : '${boardEditorState.variant.label(context.l10n)} • ${context.l10n.boardEditor}';
 
     return Scaffold(
-      appBar: AppBar(
-        title: VariantAppBarTitle(
-          variant: boardEditorState.variant,
-          title: context.l10n.boardEditor,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            tooltip: 'FEN',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => _FenDialog(
-                onFenLoaded: (fen) =>
-                    ref.read(boardEditorControllerProvider(params).notifier).loadFen(fen),
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: 'Review',
+              onBack: () => Navigator.of(context).pop(),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    tooltip: 'FEN',
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _FenDialog(
+                        onFenLoaded: (fen) =>
+                            ref.read(boardEditorControllerProvider(params).notifier).loadFen(fen),
+                      ),
+                    ),
+                  ),
+                  SemanticIconButton(
+                    semanticsLabel: context.l10n.mobileSharePositionAsFEN,
+                    onPressed: () =>
+                        launchShareDialog(context, ShareParams(text: boardEditorState.fen)),
+                    icon: const PlatformShareIcon(),
+                  ),
+                ],
               ),
             ),
-          ),
-          SemanticIconButton(
-            semanticsLabel: context.l10n.mobileSharePositionAsFEN,
-            onPressed: () => launchShareDialog(context, ShareParams(text: boardEditorState.fen)),
-            icon: const PlatformShareIcon(),
-          ),
-        ],
-      ),
-      body: Center(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final aspectRatio = constraints.biggest.aspectRatio;
-
-            final defaultBoardSize = constraints.biggest.shortestSide;
-            final isTablet = isTabletOrLarger(context);
-            final boardSize = defaultBoardSize;
-
-            final direction = aspectRatio > 1 ? Axis.horizontal : Axis.vertical;
-
-            return Flex(
-              direction: direction,
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _PieceMenu(
-                  boardSize,
-                  params: params,
-                  direction: flipAxis(direction),
-                  side: boardEditorState.orientation.opposite,
-                  isTablet: isTablet,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
+                child: Text(
+                  sceneTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SrsText.meta(c.ink2),
                 ),
-                _BoardEditor(
-                  boardSize,
-                  params: params,
-                  orientation: boardEditorState.orientation,
-                  isTablet: isTablet,
-                  // unlockView is safe because chessground will never modify the pieces
-                  pieces: boardEditorState.pieces.unlockView,
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final aspectRatio = constraints.biggest.aspectRatio;
+
+                    final defaultBoardSize = constraints.biggest.shortestSide;
+                    final isTablet = isTabletOrLarger(context);
+                    final boardSize = defaultBoardSize;
+
+                    final direction = aspectRatio > 1 ? Axis.horizontal : Axis.vertical;
+
+                    return Flex(
+                      direction: direction,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      mainAxisSize: MainAxisSize.max,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _PieceMenu(
+                          boardSize,
+                          params: params,
+                          direction: flipAxis(direction),
+                          side: boardEditorState.orientation.opposite,
+                          isTablet: isTablet,
+                        ),
+                        _BoardEditor(
+                          boardSize,
+                          params: params,
+                          orientation: boardEditorState.orientation,
+                          isTablet: isTablet,
+                          // unlockView is safe because chessground will never modify the pieces
+                          pieces: boardEditorState.pieces.unlockView,
+                        ),
+                        _PieceMenu(
+                          boardSize,
+                          params: params,
+                          direction: flipAxis(direction),
+                          side: boardEditorState.orientation,
+                          isTablet: isTablet,
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                _PieceMenu(
-                  boardSize,
-                  params: params,
-                  direction: flipAxis(direction),
-                  side: boardEditorState.orientation,
-                  isTablet: isTablet,
-                ),
-              ],
-            );
-          },
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: _BottomBar(params),
@@ -316,122 +344,129 @@ class _BottomBar extends ConsumerWidget {
     final editorState = ref.watch(editorController);
     final pieceCount = editorState.pieces.length;
 
-    return BottomBar(
-      children: [
-        BottomBarButton(
-          icon: Icons.menu,
-          label: context.l10n.menu,
-          onTap: () => showAdaptiveActionSheet<void>(
-            context: context,
-            actions: [
-              if (editorState.variant != Variant.chess960 &&
-                  editorState.variant != Variant.fromPosition)
+    // Diagram actions replacing the legacy bottom bar: same features,
+    // plain text buttons. Menu sheet, Flip, Analyze and Filters all survive.
+    // Wrap mirrors the demo's wrapping editor rows on narrow screens.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 6,
+        children: [
+          SrsTextButton(
+            label: context.l10n.menu,
+            onPressed: () => showAdaptiveActionSheet<void>(
+              context: context,
+              actions: [
+                if (editorState.variant != Variant.chess960 &&
+                    editorState.variant != Variant.fromPosition)
+                  BottomSheetAction(
+                    makeLabel: (context) => Text(context.l10n.startPosition),
+                    onPressed: () {
+                      ref
+                          .read(editorController.notifier)
+                          .loadFen(editorState.variant.initialPosition.fen);
+                    },
+                  ),
+                if (editorState.variant == .chess960)
+                  BottomSheetAction(
+                    makeLabel: (context) => const Text('Chess960 Position'),
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => _Chess960PositionDialog(
+                          onFenLoaded: (fen) {
+                            ref.read(editorController.notifier).loadFen(fen);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                if (editorState.variant == .standard)
+                  BottomSheetAction(
+                    makeLabel: (context) => Text(context.l10n.loadPosition),
+                    onPressed: () {
+                      final notifier = ref.read(editorController.notifier);
+                      Navigator.of(context).push(
+                        BoardEditorPositionsScreen.buildRoute(
+                          onPositionSelected: (position) => {
+                            notifier.loadFen(position.fen),
+                            Navigator.of(context).pop(),
+                          },
+                        ),
+                      );
+                    },
+                  ),
                 BottomSheetAction(
-                  makeLabel: (context) => Text(context.l10n.startPosition),
+                  makeLabel: (context) => Text(context.l10n.variant),
+                  onPressed: () => showChoicePicker<Variant>(
+                    context,
+                    choices: readSupportedVariants
+                        .where((variant) => variant != .fromPosition)
+                        .toList(),
+                    selectedItem: editorState.variant,
+                    labelBuilder: (variant) => VariantLabel(variant),
+                    onSelectedItemChanged: (Variant variant) {
+                      if (variant != editorState.variant) {
+                        ref.read(editorController.notifier).setVariant(variant);
+                      }
+                    },
+                  ),
+                ),
+                if (editorState.pgn != null && pieceCount > 0 && pieceCount <= 32)
+                  BottomSheetAction(
+                    makeLabel: (context) => Text(context.l10n.continueFromHere),
+                    onPressed: () =>
+                        _showContinueFromHereMenu(context, editorState.variant, editorState.fen),
+                  ),
+                BottomSheetAction(
+                  makeLabel: (context) => Text(context.l10n.clearBoard),
                   onPressed: () {
-                    ref
-                        .read(editorController.notifier)
-                        .loadFen(editorState.variant.initialPosition.fen);
+                    ref.read(editorController.notifier).clearBoard();
                   },
                 ),
-              if (editorState.variant == .chess960)
-                BottomSheetAction(
-                  makeLabel: (context) => const Text('Chess960 Position'),
-                  onPressed: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => _Chess960PositionDialog(
-                        onFenLoaded: (fen) {
-                          ref.read(editorController.notifier).loadFen(fen);
-                        },
-                      ),
-                    );
-                  },
-                ),
-              if (editorState.variant == .standard)
-                BottomSheetAction(
-                  makeLabel: (context) => Text(context.l10n.loadPosition),
-                  onPressed: () {
-                    final notifier = ref.read(editorController.notifier);
+              ],
+            ),
+          ),
+          SrsTextButton(
+            key: const Key('flip-button'),
+            // Diagram's terse row labels, not the tooltip-length l10n strings. "Flip board" and
+            // "Analysis board" are 174px and 234px wide at 15px, which is what pushed this row
+            // onto three lines on a 390px phone and cost the board its height.
+            label: 'Flip',
+            onPressed: ref.read(boardEditorControllerProvider(params).notifier).flipBoard,
+          ),
+          SrsTextButton(
+            key: const Key('analysis-board-button'),
+            label: 'Analyse',
+            // The evaluator uses Fairy-Stockfish for nonstandard material.
+            onPressed: editorState.pgn != null && pieceCount > 0
+                ? () {
                     Navigator.of(context).push(
-                      BoardEditorPositionsScreen.buildRoute(
-                        onPositionSelected: (position) => {
-                          notifier.loadFen(position.fen),
-                          Navigator.of(context).pop(),
-                        },
+                      AnalysisScreen.buildRoute(
+                        AnalysisOptions.pgn(
+                          id: const StringId('board_editor_position'),
+                          orientation: editorState.orientation,
+                          pgn: editorState.pgn!,
+                          isComputerAnalysisAllowed: true,
+                          variant: editorState.variant,
+                        ),
                       ),
                     );
-                  },
-                ),
-              BottomSheetAction(
-                makeLabel: (context) => Text(context.l10n.variant),
-                onPressed: () => showChoicePicker<Variant>(
-                  context,
-                  choices: readSupportedVariants
-                      .where((variant) => variant != .fromPosition)
-                      .toList(),
-                  selectedItem: editorState.variant,
-                  labelBuilder: (variant) => VariantLabel(variant),
-                  onSelectedItemChanged: (Variant variant) {
-                    if (variant != editorState.variant) {
-                      ref.read(editorController.notifier).setVariant(variant);
-                    }
-                  },
-                ),
-              ),
-              if (editorState.pgn != null && pieceCount > 0 && pieceCount <= 32)
-                BottomSheetAction(
-                  makeLabel: (context) => Text(context.l10n.continueFromHere),
-                  onPressed: () =>
-                      _showContinueFromHereMenu(context, editorState.variant, editorState.fen),
-                ),
-              BottomSheetAction(
-                makeLabel: (context) => Text(context.l10n.clearBoard),
-                onPressed: () {
-                  ref.read(editorController.notifier).clearBoard();
-                },
-              ),
-            ],
+                  }
+                : null,
           ),
-        ),
-        BottomBarButton(
-          key: const Key('flip-button'),
-          label: context.l10n.flipBoard,
-          onTap: ref.read(boardEditorControllerProvider(params).notifier).flipBoard,
-          icon: CupertinoIcons.arrow_2_squarepath,
-        ),
-        BottomBarButton(
-          key: const Key('analysis-board-button'),
-          label: context.l10n.analysis,
-          // The evaluator uses Fairy-Stockfish for nonstandard material.
-          onTap: editorState.pgn != null && pieceCount > 0
-              ? () {
-                  Navigator.of(context).push(
-                    AnalysisScreen.buildRoute(
-                      AnalysisOptions.pgn(
-                        id: const StringId('board_editor_position'),
-                        orientation: editorState.orientation,
-                        pgn: editorState.pgn!,
-                        isComputerAnalysisAllowed: true,
-                        variant: editorState.variant,
-                      ),
-                    ),
-                  );
-                }
-              : null,
-          icon: Icons.biotech,
-        ),
-        BottomBarButton(
-          label: 'Filters',
-          onTap: () => showModalBottomSheet<void>(
-            context: context,
-            builder: (BuildContext context) => BoardEditorFilters(params: params),
-            showDragHandle: true,
-            constraints: BoxConstraints(minHeight: MediaQuery.heightOf(context) * 0.5),
+          SrsTextButton(
+            label: 'Filters',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              builder: (BuildContext context) => BoardEditorFilters(params: params),
+              showDragHandle: true,
+              constraints: BoxConstraints(minHeight: MediaQuery.heightOf(context) * 0.5),
+            ),
           ),
-          icon: Icons.tune,
-        ),
-      ],
+        ],
+      ),
     );
   }
 

@@ -1,10 +1,10 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/board_editor/board_editor_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/chess960.dart';
 import 'package:chess_srs/src/model/engine/engine_spec.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
-import 'package:chess_srs/src/widgets/bottom_bar.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +41,7 @@ void main() {
 
       // Legal position, so allowed to open analysis board
       expect(
-        tester.widget<BottomBarButton>(find.byKey(const Key('analysis-board-button'))).onTap,
+        tester.widget<SrsTextButton>(find.byKey(const Key('analysis-board-button'))).onPressed,
         isNotNull,
       );
     });
@@ -90,7 +90,7 @@ void main() {
 
       // Legal position, so allowed to open analysis board
       expect(
-        tester.widget<BottomBarButton>(find.byKey(const Key('analysis-board-button'))).onTap,
+        tester.widget<SrsTextButton>(find.byKey(const Key('analysis-board-button'))).onPressed,
         isNotNull,
       );
     });
@@ -338,7 +338,7 @@ void main() {
       const fen = 'rnbqkbnr/pppppppp/8/8/8/4N3/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
       expect(tester.widget<ChessboardEditor>(find.byType(ChessboardEditor)).pieces, readFen(fen));
       expect(
-        tester.widget<BottomBarButton>(find.byKey(const Key('analysis-board-button'))).onTap,
+        tester.widget<SrsTextButton>(find.byKey(const Key('analysis-board-button'))).onPressed,
         isNotNull,
       );
 
@@ -359,7 +359,7 @@ void main() {
       await dragFromTo(tester, 'd1', 'e1');
 
       expect(
-        tester.widget<BottomBarButton>(find.byKey(const Key('analysis-board-button'))).onTap,
+        tester.widget<SrsTextButton>(find.byKey(const Key('analysis-board-button'))).onPressed,
         isNull,
       );
     });

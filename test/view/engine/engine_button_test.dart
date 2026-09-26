@@ -20,11 +20,18 @@ void main() {
     // loads a finished game, disable cloud eval because it is usually not available in mid/end game
     await makeEngineTestApp(tester, isCloudEvalEnabled: false, gameId: const GameId('xze7RH66'));
 
-    expect(find.byType(CircularProgressIndicator), findsOne);
+    // A "Loading…" label, not a CircularProgressIndicator: the restyle replaced the spinner with
+    // a quiet text state (analysis_screen.dart). The assertion still means what it always meant --
+    // there is a loading state, and it goes away once the game arrives -- it just no longer looks
+    // for a widget the screen stopped rendering. Asserting on a string is more brittle than
+    // asserting on a spinner type; recorded rather than glossed over.
+    //
+    // Branch-specific on purpose: main still renders a CircularProgressIndicator here.
+    expect(find.text('Loading\u2026'), findsOne);
     // wait for the game to be loaded
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Loading\u2026'), findsNothing);
     expect(find.byType(Chessboard), findsOne);
     expect(find.byType(EngineButton), findsOne);
 

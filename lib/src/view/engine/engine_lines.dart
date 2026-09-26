@@ -1,10 +1,10 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/analysis/common_analysis_state.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:collection/collection.dart';
 import 'package:dartchess/dartchess.dart';
@@ -95,6 +95,7 @@ class Engineline extends ConsumerWidget {
       return const SizedBox(height: kEngineLineHeight, child: SizedBox.shrink());
     }
 
+    final c = context.srs;
     final pieceNotation = ref
         .watch(pieceNotationProvider)
         .maybeWhen(data: (value) => value, orElse: () => defaultAccountPreferences.pieceNotation);
@@ -152,8 +153,10 @@ class Engineline extends ConsumerWidget {
                   maxLines: 1,
                   softWrap: false,
                   style: TextStyle(
-                    fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : null,
-                    color: textShade(context, onTapMove == null ? 0.8 : 1.0),
+                    fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
+                    fontWeight: FontWeight.w500,
+                    color: onTapMove == null ? c.ink2 : c.ink,
+                    fontFeatures: SrsText.tabular,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),

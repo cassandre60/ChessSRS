@@ -506,13 +506,13 @@ class _AnalysisTabView extends StatelessWidget {
               labelColor: srs?.ground ?? ColorScheme.of(context).onPrimary,
               unselectedLabelColor: srs?.ink2 ?? ColorScheme.of(context).onSurfaceVariant,
               labelStyle: const TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: SrsText.ui,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.1,
               ),
               unselectedLabelStyle: const TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: SrsText.ui,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 letterSpacing: -0.1,
