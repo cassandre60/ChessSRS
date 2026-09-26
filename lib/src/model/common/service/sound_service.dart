@@ -33,16 +33,16 @@ enum Sound {
 
 /// The design's own feedback set, per `design/docs/02-tokens.md` §6.
 ///
-/// Deliberately not a [SoundTheme] and not part of [Sound]. The Lichess themes ship as
-/// .mp3/.aifc inside their own folders and are resolved by name with a fallback to
-/// `standard/`; these ship as .wav under `assets/sounds/diagram/`. Folding them into
-/// [Sound] would make every theme switch try to resolve `wrong` and `done`, neither of
-/// which exists in any Lichess theme, and the loader's fallback would hand the plugin a
-/// path that is not there.
+/// Only the two moments [Sound] has no slot for. A piece landing is [Sound.move], which
+/// resolves through [SoundTheme] and is the design's own knock by default — declaring a
+/// `move` here as well would register the same plugin id twice, and whichever loaded last
+/// would win, so picking a theme would silently do nothing.
+///
+/// `wrong` and `done` stay out of [Sound] on purpose. The Lichess themes resolve by name with
+/// a fallback to `standard/`, and neither of these exists in any of them, so the loader would
+/// hand the plugin a path that is not there. They ship as .wav under
+/// `assets/sounds/diagram/`, which both `SoundPool` and `AVAudioPlayer` read natively.
 enum ReviewSound {
-  /// ~120 ms soft knock. A piece landing, whether the user's or the repertoire's.
-  move,
-
   /// ~300 ms, two lower knocks. A move that was rejected.
   wrong,
 
@@ -62,7 +62,15 @@ final soundServiceProvider = Provider<SoundService>((Ref ref) {
   return service;
 }, name: 'SoundServiceProvider');
 
-final _extension = defaultTargetPlatform == TargetPlatform.iOS ? 'aifc' : 'mp3';
+/// The extension the bundled Lichess themes use: .aifc on iOS, .mp3 everywhere else.
+final _standardExtension = defaultTargetPlatform == TargetPlatform.iOS ? 'aifc' : 'mp3';
+
+/// The extension a theme's own assets use.
+///
+/// The Lichess sets ship .mp3 with an .aifc variant for iOS. [SoundTheme.diagram] ships .wav,
+/// which SoundPool and AVAudioPlayer both read natively, so it has no per-platform variant and
+/// no second file to keep in step.
+String _extensionFor(SoundTheme theme) => theme == SoundTheme.diagram ? 'wav' : _standardExtension;
 
 const Set<Sound> _emtpySet = {};
 
@@ -75,16 +83,18 @@ Future<void> _loadAllSounds(SoundTheme soundTheme, {Set<Sound> excluded = _emtpy
 
 /// Loads a single sound from the given [SoundTheme].
 Future<void> _loadSound(SoundTheme theme, Sound sound) async {
-  final themePath = 'assets/sounds/${theme.name}';
   const standardPath = 'assets/sounds/standard';
   final soundId = sound.name;
-  final file = '$soundId.$_extension';
-  String fullPath = '$themePath/$file';
-  // If the sound file is not found in the theme, fallback to the standard theme.
+  // Each side builds its own file name, because the two use different extensions. A shared
+  // name would send the diagram theme's fallback to standard/move.mp3 and silently lose the
+  // design's knock.
+  var fullPath = 'assets/sounds/${theme.name}/$soundId.${_extensionFor(theme)}';
   try {
     await rootBundle.load(fullPath);
   } catch (_) {
-    fullPath = '$standardPath/$file';
+    // Not in this theme. The diagram set has one sound and [Sound] has eleven, so this is
+    // the normal path for it rather than an error.
+    fullPath = '$standardPath/$soundId.$_standardExtension';
   }
   await _soundEffectPlugin.load(soundId, fullPath);
 }

@@ -128,8 +128,8 @@ sealed class GeneralPrefs with _$GeneralPrefs implements Serializable {
 
   static const defaults = GeneralPrefs(
     themeMode: BackgroundThemeMode.system,
-    isSoundEnabled: true,
-    soundTheme: SoundTheme.standard,
+    isSoundEnabled: false,
+    soundTheme: SoundTheme.diagram,
     masterVolume: 0.8,
     systemColors: true,
     appThemeSeed: AppThemeSeed.board,
@@ -180,6 +180,14 @@ enum BackgroundThemeMode {
 }
 
 enum SoundTheme {
+  /// The design's own set: `assets/sounds/diagram/`, three original recordings. It carries a
+  /// move sound and nothing else, so the rest falls back to [standard] — see
+  /// `design/docs/07` §1, which wants this set everywhere while admitting the bundled themes
+  /// are placeholders. Default, so a fresh install gets the design's identity for the one
+  /// sound the design specifies, without taking the Lichess sets away from anyone who wants
+  /// them.
+  diagram('Diagram'),
+
   standard('Standard'),
   piano('Piano'),
   nes('NES'),
