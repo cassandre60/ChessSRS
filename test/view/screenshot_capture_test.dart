@@ -59,11 +59,17 @@ final bool _enabled = switch (Platform.environment['SRS_CAPTURE_SCREENSHOTS']) {
 // The golden comparator owns the output path now (see `capture`), so there is no output
 // directory constant here to redirect.
 
-/// Widths to capture. Phone and desktop are the demo's own frame sizes widened to a
-/// realistic aspect; the tablet width is the portrait iPad logical size, which is the
-/// awkward middle this layout has to survive.
+/// Widths to capture.
+///
+/// Three of these are demo frames or obvious device sizes. The other two are here because
+/// "does it adapt" is otherwise an opinion: 360 is the narrowest Android phone still sold and
+/// the first width where a fixed side-by-side layout has to give up, and landscape phone is the
+/// one shape where the tall-column review layout has the least vertical room to work with.
+/// A layout that only ever gets checked at 390 wide has not been checked.
 const List<(String, Size)> _surfaces = [
+  ('small', Size(360, 780)),
   ('phone', Size(390, 844)),
+  ('phone-landscape', Size(844, 390)),
   ('tablet', Size(834, 1112)),
   ('desktop', Size(1440, 900)),
 ];
@@ -159,6 +165,7 @@ void main() {
   Future<void> capture(
     WidgetTester tester, {
     required String screen,
+    required String label,
     required Widget home,
     required Size surface,
     required Brightness brightness,
@@ -224,11 +231,11 @@ void main() {
     // evidence in docs/ rather than in test/.
     await expectLater(
       find.byKey(_captureKey),
-      matchesGoldenFile('../../docs/screenshots/$screen-${surface.width.round()}-$theme.png'),
+      matchesGoldenFile('../../docs/screenshots/$screen-$label-$theme.png'),
     );
 
     // ignore: avoid_print
-    print('captured $screen ${surface.width.round()} $theme');
+    print('captured $screen $label ($theme, ${surface.width.round()}x${surface.height.round()})');
   }
 
   for (final (label, surface) in _surfaces) {
@@ -237,6 +244,7 @@ void main() {
         await capture(
           tester,
           screen: 'review-empty',
+          label: label,
           home: const ReviewScreen(),
           surface: surface,
           brightness: brightness,
@@ -250,6 +258,7 @@ void main() {
         await capture(
           tester,
           screen: 'review-prompt',
+          label: label,
           home: const ReviewScreen(),
           surface: surface,
           brightness: brightness,
@@ -274,6 +283,7 @@ void main() {
         await capture(
           tester,
           screen: 'review-answered',
+          label: label,
           // The notation line is off by default in the build, so without this the capture
           // would not show the thing design/docs/03-components.md §111 calls "the headline".
           // It is captured here rather than turned on in the app: study_preferences.dart is
@@ -312,6 +322,7 @@ void main() {
         await capture(
           tester,
           screen: 'settings',
+          label: label,
           home: const SrsSettingsScreen(),
           surface: surface,
           brightness: brightness,
@@ -322,6 +333,7 @@ void main() {
         await capture(
           tester,
           screen: 'analysis',
+          label: label,
           home: const AnalysisScreen(options: _analysisOptions),
           surface: surface,
           brightness: brightness,
