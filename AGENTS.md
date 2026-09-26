@@ -61,7 +61,9 @@ Every engineering task must follow:
    test as appropriate).
 5. IMPLEMENT minimally, following Lichess Mobile conventions (CLAUDE.md).
 6. TARGETED VERIFICATION: run the specific test file.
-7. STATIC CHECK: `flutter analyze` on the files you touched.
+7. STATIC CHECK: run the repo's local gate on the files you touched
+   (e.g. `./gate.sh <files>` where a gate script exists, else
+   `fvm flutter analyze` on those files).
    The full suite is CI's job — see the note on ./verify below. Do not run
    `./verify` as part of the inner loop.
 8. RUNTIME VALIDATION (see §4) for anything user-visible.
@@ -139,7 +141,9 @@ you have one.
   annotations). Prefer HTTP-layer mocking over provider overrides in tests.
 - Freezed + fast_immutable_collections for data classes; generated files are
   never committed; run `dart run build_runner build` after model changes.
-- `flutter analyze` on every edited file (including tests) — zero warnings.
+- Analyze every edited file (including tests) through the repo's local gate
+  when one exists (`./gate.sh <files>`), else `fvm flutter analyze` — zero
+  warnings.
 - `dart format` every edited file (page width 100).
 - Package imports, single quotes, strict-casts/inference/raw-types.
 - Translations: hardcoded English first; l10n pipeline only after stability.
@@ -186,8 +190,10 @@ suite — around 1400 tests, with no path filter. That saturates the machine
 and takes minutes, so it is a **pre-push and milestone gate, not an
 inner-loop step.**
 
-- **Per change:** `flutter analyze` on the files you touched, plus the one
-  test file covering the change. That is the loop.
+- **Per change:** the local gate on the files you touched (e.g.
+  `./gate.sh <files>` plus the one test file covering the change), or
+  `fvm flutter analyze` on those files where no gate script exists.
+  That is the loop.
 - **Per push / before declaring a milestone:** `./verify` once, or let
   GitHub Actions do it — CI runs `flutter test` on every push and is the
   authority on whether the suite is green.
