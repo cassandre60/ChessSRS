@@ -571,6 +571,26 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   void initState() {
     super.initState();
     _initController();
+    _ensureShortcutFocus();
+  }
+
+  /// Makes sure this view's node actually holds focus, so its shortcuts are reachable.
+  ///
+  /// `Focus(autofocus: true)` gets exactly one attempt, made in a post-frame callback, and
+  /// it only succeeds if nothing else in the route's focus scope holds focus by then. When
+  /// that race is lost the node never receives focus, and `FocusNode.autofocus` does not
+  /// try again. Key events only reach the primary focus and then its *ancestors*, so a node
+  /// that never gains focus means no shortcut in this view is ever delivered — which is
+  /// exactly the reported symptom: `S` does nothing here, while `P` works on the idle
+  /// screen, whose bare `Focus(autofocus: true)` mounts a fresh node and wins the race.
+  ///
+  /// Asking again is safe: nothing in the review tree wants focus. chessground registers no
+  /// `Focus` nodes at all, so clicking the board cannot take it, and the top-bar buttons
+  /// are the only other candidates. Guarded so it costs one no-op check per build.
+  void _ensureShortcutFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_focusNode.hasFocus) _focusNode.requestFocus();
+    });
   }
 
   void _initController() {
@@ -678,6 +698,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     // wraps it, and the focus manager only dispatches a key event to the primary focus and
     // then to that node's *ancestors*. With the focus outside, Space and S never reached
     // the bindings at all.
+    //
+    // Focus is re-asserted on every build because the one-shot autofocus above is not
+    // reliable here; see _ensureShortcutFocus.
+    _ensureShortcutFocus();
     return CallbackShortcuts(
       bindings: {
         // design/docs/04 §4: Space *or* Enter continues while a note is showing.

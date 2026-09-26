@@ -16,6 +16,7 @@ import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -1170,6 +1171,49 @@ void main() {
         expect(find.text('Daily limit'), findsOneWidget);
       },
     );
+
+    // The shortcut bug, pinned directly. `S` did nothing in the shipped app while `P` worked
+    // on the idle screen: the review view reuses one FocusNode and relies on a one-shot
+    // `autofocus`, which silently loses the race for the route's focus scope and is never
+    // retried. Key events only reach the primary focus and its ancestors, so a node that
+    // never gains focus means every binding in the view is dead.
+    //
+    // A test that just sends the key cannot catch this — the fake app harness always grants
+    // focus, which is exactly why the old shortcut tests passed against a broken build and
+    // have since disappeared from the tree. Assert the precondition the keys depend on.
+    testWidgets('the shortcut node actually holds focus', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 2. Nf3 Nc6 *',
+        studyTitle: 'Shortcut Focus',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() => repo.saveImportResult(study));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester, 700);
+
+      final shortcutFocus = tester
+          .widgetList<Focus>(find.byType(Focus))
+          .firstWhere((f) => f.autofocus && f.focusNode != null);
+
+      expect(
+        shortcutFocus.focusNode!.hasFocus,
+        isTrue,
+        reason: 'if this node does not hold focus, S/Space/Enter can never be delivered',
+      );
+    });
 
     testWidgets(
       'renders narrow layout without overflow and displays board with side column below',
