@@ -110,24 +110,70 @@ To close this out, one of: pause the other agent and validate on an exclusive de
 drive the remaining flows through `integration_test`, which owns its own widget tree and
 needs no shared display at all.
 
-## Known pre-existing failure (not ours)
+## Sound: C-S1..C-S3
 
-`test/app_test.dart: App will delete a stored authUser on startup if one request return 401`
-— the android and iOS variants, 2 failures, and **the only failures left in the repository**:
-`main` is down to the same two (`1375 passed, 2 failed`), this branch is at `1446 passed,
-2 failed`. Format, codegen and analyze are all green. Nothing on this branch causes them.
+`design/docs/02-tokens.md` §6 specifies three sounds — a soft knock as a piece lands, two
+lower knocks on a rejected move, two gentle notes on reaching "Nothing due". The `.wav` files
+ship in `assets/sounds/diagram/` and are declared in `pubspec.yaml`, but nothing loaded or
+played them.
 
-**Cause, diagnosed — the test is stale, not the code.** The app does not proactively validate
-a stored token. `LichessClient.send` intercepts *any* 401 from the main host and calls
-`checkToken`, which is what requests `/api/token/test` (`lib/src/network/http.dart:472`). The
-test's mock stubs `/api/account` with a 401, but startup actually calls
-`/api/account/preferences` (`AccountRepository.getPreferences`). That misses the stub, falls
-through to the mock's catch-all `404`, and a 404 never trips the interceptor — so
-`/api/token/test` is never requested and `expect(tokenTestRequests, 1)` sees `0`.
+| # | Contract | Result |
+|---|---|---|
+| C-S1 | `move` on a piece landing | already wired via `MoveFeedbackService`; not touched |
+| C-S2 | `wrong` on a rejected move | **added** — the branch was silent; `Sound.error` is declared with no call site anywhere |
+| C-S3 | `done` on reaching "Nothing due" | **added** — the branch was silent |
 
-The fix is to return 401 for `/api/account/preferences` in the mock. Left undone on purpose:
-that is the auth layer, and `account_service.dart` is in the concurrent agent's uncommitted
-work, so the file is theirs.
+`ReviewSound` is deliberately kept out of the `SoundTheme` enum. The Lichess themes resolve by
+name with a fallback to `standard/` and ship as `.mp3`/`.aifc`; these are `.wav` under a fixed
+path. Folding them into `Sound` would make every theme switch try to resolve `wrong` and
+`done`, which exist in no theme, and hand the plugin a path that is not there. `SoundPool` and
+`AVAudioPlayer` both read `.wav` natively, so there is nothing to transcode.
+
+`done` hangs off `listenSelf` rather than a field. `ReviewScreenState.isComplete` is a derived
+getter and a session can end three ways — queue drained, daily quota, study deactivated — with
+no single assignment site. The rising edge is the point: the state is re-emitted constantly once
+a session is finished, and `done` must sound on arrival, not on every rebuild.
+
+**Open question for the owner.** `design/docs/07` §1 wants *all* move/capture/UI sounds replaced
+by this set, with `standard/futuristic/lisp/nes/piano/sfx` cut. That is a cut, so per `AGENTS.md`
+§9 it is not done unilaterally. As shipped, `move` in review still uses the user's chosen theme;
+only the two previously-missing moments speak. The same section says **default off**, while
+`GeneralPrefs.defaults.isSoundEnabled` is `true` — also left alone.
+
+Also unresolved: the spec says play `move` for the user's landing too. `moveFeedback` fires for
+the repertoire's replies and the auto-applied move, but the user's own drag does not go through
+it, so the user's landing may still be silent. Not chased: it depends on the cut question above.
+
+### Verification
+
+`fvm flutter test test/review/review_controller_test.dart` — **32/32 pass**, including the three
+new tests. Proven non-vacuous: with the two hook points reverted, `a rejected move plays the
+wrong sound` and `running the queue out plays the done sound exactly once` both fail with
+`Expected: <1> Actual: <0>`. The third test, `an empty app does not play the done sound on
+startup`, passes either way by design — it guards `isComplete`'s `hasStudies` conjunct against a
+future regression, and is not evidence of new behaviour.
+
+## Known pre-existing failure (not ours, and not ours to fix)
+
+`test/app_test.dart: App will delete a stored authUser on startup if one request return 401` —
+android and iOS. **This branch no longer touches that file.** An earlier attempt here pointed
+the 401 stub at `/api/account/preferences`; it was wrong, and the concurrent agent landed two
+commits on the same failure, one of them a diagnostic. Two agents in one file is the collision
+worth avoiding, so that change was reverted in `revert(test): drop my app_test change`.
+
+What reading it established, offered to whoever picks it up: both halves of the test's premise
+have to be set up before the assertion can hold, and neither currently is.
+
+- The startup token check at `preloaded_data.dart:51` only fires when `authStorage.read()` yields
+  a token, and `makeTestProviderScope(authUser: …)` injects the auth **controller** state rather
+  than seeding secure **storage**. So there is no startup request.
+- Nothing on the review screen issues a main-host request in this scenario either, so there is no
+  401 to intercept. `accountPreferencesProvider` is read only by the four derived providers
+  (`showRatingsPrefProvider`, `clockSoundProvider`, `pieceNotationProvider`,
+  `clockTenthsProvider` — all game-related) and by the two settings screens, none of which is
+  mounted over an empty database.
+
+That accounts for `expect(tokenTestRequests, 1)` seeing `0`.
 
 ## Recovery points
 
