@@ -693,6 +693,14 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final comment = _resolveComment(currentState.currentPrompt, result.expectedMoves.firstOrNull);
 
     // 1. Immediately show user's move on the board
+    // `design/docs/02-tokens.md` §6: "Play `move` for both the user's and the opponent's
+    // piece landing." The opponent's reply already sounds, in _executeAdvancement; the user's
+    // own landing did not, because the board is silent and onUserMove used to go straight
+    // from submitMove to this state assignment. Fired here, beside the board update it
+    // belongs to, rather than after the auto-advance delay.
+    try {
+      ref.read(moveFeedbackServiceProvider).moveFeedback();
+    } catch (_) {}
     state = AsyncData(
       currentState.copyWith(
         boardPosition: posAfterUser ?? currentState.boardPosition,
@@ -926,6 +934,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             isFirstAttempt: false,
           );
         } else {
+          // A reguess that is still wrong is another rejected move, so it gets the same
+          // sound as the first one. Left silent before, which made the second and later
+          // wrong attempts feel unacknowledged.
+          try {
+            ref.read(moveFeedbackServiceProvider).wrongFeedback();
+          } catch (_) {}
           state = AsyncData(
             currentState.copyWith(
               feedback: ReviewFeedback.incorrect,

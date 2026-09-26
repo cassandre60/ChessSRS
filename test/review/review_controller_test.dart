@@ -322,6 +322,66 @@ void main() {
       expect(state.expectedMove, isNull);
     });
 
+    // `design/docs/02-tokens.md` §6: "Play `move` for both the user's and the opponent's
+    // piece landing." The opponent's reply already sounded; the user's own landing did not.
+    //
+    // The line deliberately ends after 1. d4 so there is no opponent reply. An earlier
+    // version of this test used "1. d4 d5" and asserted `>= 1`, which passed even with the
+    // hook removed: the reply sounds too, so the assertion could not tell the two apart.
+    // With no reply, exactly one move sound can only be the user's own landing.
+    test('a correct move by the user plays the move sound', () async {
+      final sound = FakeSoundService();
+      final container = createContainer(soundService: sound);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 *',
+        title: 'One move',
+        repertoireSide: Side.white,
+      );
+      await container.read(reviewControllerProvider.future);
+
+      expect(sound.themeSounds, isEmpty, reason: 'nothing has been played yet');
+
+      await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+
+      expect(
+        sound.countTheme(Sound.move),
+        1,
+        reason:
+            "the line has no opponent reply, so the only move sound can be the user's "
+            'own landing',
+      );
+    });
+
+    // A second wrong attempt is still a rejected move, and used to pass unacknowledged
+    // because only the first attempt's rejection was wired.
+    test('a failed reguess plays the wrong sound again', () async {
+      final sound = FakeSoundService();
+      final container = createContainer(soundService: sound);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await container.read(reviewControllerProvider.future);
+
+      // Wrong, then wrong again.
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(sound.countOf(ReviewSound.wrong), 1);
+
+      await controller.onUserMove(const NormalMove(from: Square.c7, to: Square.c6));
+
+      expect(
+        sound.countOf(ReviewSound.wrong),
+        2,
+        reason: 'the reguess was rejected too, so it should be heard',
+      );
+    });
+
     // `design/docs/02-tokens.md` §6: "Play ... `wrong` on a rejected move."
     test('a rejected move plays the wrong sound', () async {
       final sound = FakeSoundService();
