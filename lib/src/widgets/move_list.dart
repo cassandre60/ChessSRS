@@ -1,12 +1,11 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/rate_limit.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 const _scrollAnimationDuration = Duration(milliseconds: 200);
-const _moveListOpacity = 0.8;
 
 const _kMoveListHeight = 40.0;
 
@@ -161,13 +160,16 @@ class InlineMoveCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Container(
       margin: const EdgeInsets.only(right: 3),
       child: Text(
         '$count.',
         style: TextStyle(
+          fontFamily: SrsText.ui,
           fontWeight: FontWeight.w500,
-          color: color?.withValues(alpha: _moveListOpacity) ?? textShade(context, _moveListOpacity),
+          color: color ?? c.ink3,
+          fontFeatures: SrsText.tabular,
         ),
       ),
     );
@@ -193,6 +195,7 @@ class InlineMoveItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return GestureDetector(
       onTap: onSelectMove != null ? () => onSelectMove!(move.key + 1) : null,
       child: Container(
@@ -200,13 +203,10 @@ class InlineMoveItem extends StatelessWidget {
         child: Text(
           move.value,
           style: TextStyle(
-            fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : null,
-            fontWeight: current == true ? FontWeight.bold : FontWeight.w500,
-            color: current != true
-                ? color != null
-                      ? color!.withValues(alpha: _moveListOpacity)
-                      : textShade(context, _moveListOpacity)
-                : ColorScheme.of(context).primary,
+            fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
+            fontWeight: FontWeight.w600,
+            color: current == true ? c.accent : (color ?? c.ink),
+            fontFeatures: SrsText.tabular,
           ),
         ),
       ),
@@ -221,11 +221,17 @@ class StackedMoveCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return SizedBox(
       width: 40.0,
       child: Text(
         '$count.',
-        style: TextStyle(fontWeight: FontWeight.w600, color: textShade(context, _moveListOpacity)),
+        style: TextStyle(
+          fontFamily: SrsText.ui,
+          fontWeight: FontWeight.w600,
+          color: c.ink3,
+          fontFeatures: SrsText.tabular,
+        ),
       ),
     );
   }
@@ -247,6 +253,7 @@ class StackedMoveItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return GestureDetector(
       onTap: onSelectMove != null ? () => onSelectMove!(move.key + 1) : null,
       child: Container(
@@ -254,9 +261,10 @@ class StackedMoveItem extends StatelessWidget {
         child: Text(
           move.value,
           style: TextStyle(
-            fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : null,
-            fontWeight: current == true ? FontWeight.bold : null,
-            color: current != true ? textShade(context, 0.8) : null,
+            fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
+            fontWeight: FontWeight.w600,
+            color: current == true ? c.accent : c.ink,
+            fontFeatures: SrsText.tabular,
           ),
         ),
       ),

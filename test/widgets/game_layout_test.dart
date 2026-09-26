@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/game/game_board_params.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
@@ -19,6 +20,13 @@ import '../test_helpers.dart';
 import '../test_provider_scope.dart';
 
 void main() {
+  // `makeTestProviderScopeApp` supplies [SrsTheme] because it builds its own `MaterialApp`; a test
+  // that passes its own `child` gets no theme. The design tokens are documented as provided once
+  // near the root and the real app always has them, so a test that builds its own tree has to
+  // supply them too — otherwise `context.srs` asserts as soon as a reskinned widget is built.
+  Widget srsThemed(Widget child) =>
+      SrsTheme(colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent), child: child);
+
   testWidgets('board background size should match board size on all surfaces', (
     WidgetTester tester,
   ) async {
@@ -75,23 +83,25 @@ void main() {
       final app = await makeTestProviderScope(
         key: ValueKey(boardPosition),
         tester,
-        child: const MaterialApp(
-          home: GameLayout(
-            orientation: Side.white,
-            boardParams: GameBoardParams.readonly(
-              variant: Variant.standard,
-              position: Chess.initial,
-            ),
-            moves: ['e4', 'e5'],
-            topTable: Row(
-              mainAxisSize: MainAxisSize.max,
-              key: ValueKey('top_table'),
-              children: [Text('Top table')],
-            ),
-            bottomTable: Row(
-              mainAxisSize: MainAxisSize.max,
-              key: ValueKey('bottom_table'),
-              children: [Text('Bottom table')],
+        child: srsThemed(
+          const MaterialApp(
+            home: GameLayout(
+              orientation: Side.white,
+              boardParams: GameBoardParams.readonly(
+                variant: Variant.standard,
+                position: Chess.initial,
+              ),
+              moves: ['e4', 'e5'],
+              topTable: Row(
+                mainAxisSize: MainAxisSize.max,
+                key: ValueKey('top_table'),
+                children: [Text('Top table')],
+              ),
+              bottomTable: Row(
+                mainAxisSize: MainAxisSize.max,
+                key: ValueKey('bottom_table'),
+                children: [Text('Bottom table')],
+              ),
             ),
           ),
         ),
@@ -123,22 +133,24 @@ void main() {
       final app = await makeTestProviderScope(
         key: ValueKey(surface),
         tester,
-        child: const MaterialApp(
-          home: GameLayout(
-            orientation: Side.white,
-            boardParams: GameBoardParams.readonly(
-              variant: Variant.standard,
-              position: Chess.initial,
-            ),
-            topTable: Row(
-              mainAxisSize: MainAxisSize.max,
-              key: ValueKey('top_table'),
-              children: [Text('Top table')],
-            ),
-            bottomTable: Row(
-              mainAxisSize: MainAxisSize.max,
-              key: ValueKey('bottom_table'),
-              children: [Text('Bottom table')],
+        child: srsThemed(
+          const MaterialApp(
+            home: GameLayout(
+              orientation: Side.white,
+              boardParams: GameBoardParams.readonly(
+                variant: Variant.standard,
+                position: Chess.initial,
+              ),
+              topTable: Row(
+                mainAxisSize: MainAxisSize.max,
+                key: ValueKey('top_table'),
+                children: [Text('Top table')],
+              ),
+              bottomTable: Row(
+                mainAxisSize: MainAxisSize.max,
+                key: ValueKey('bottom_table'),
+                children: [Text('Bottom table')],
+              ),
             ),
           ),
         ),
