@@ -31,7 +31,9 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
+import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
@@ -39,6 +41,7 @@ import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override, ProviderOrFamily;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart' show Scaffold;
@@ -80,12 +83,19 @@ const _analysisOptions = AnalysisOptions.pgn(
 ///
 /// `flutter test` ships no fonts, so every glyph falls back to a filled box. That is fine
 /// for a layout assertion and useless for a design review: you cannot judge a type scale,
-/// a line height or a truncation from rectangles. These are the two families the app
-/// actually declares in pubspec, registered under the same family names the styles use.
+/// a line height, a truncation, or whether an icon is the right icon. These are the
+/// families the app declares in pubspec, registered under the same names its styles use.
 Future<void> _loadDesignFonts() async {
+  // The icon faces matter as much as the text ones: without them every glyph in the
+  // analysis bottom bar and the engine panel renders as a filled box, which is precisely
+  // the kind of thing a capture is supposed to be checking.
   for (final (family, path) in const [
     ('InstrumentSans', 'assets/fonts/InstrumentSans[wdth,wght].ttf'),
     ('Newsreader', 'assets/fonts/Newsreader[opsz,wght].ttf'),
+    ('LichessIcons', 'assets/fonts/LichessIcons.ttf'),
+    ('SocialIcons', 'assets/fonts/SocialIcons.ttf'),
+    ('ChessFont', 'assets/fonts/ChessSansPiratf.ttf'),
+    ('LichessPuzzleIcons', 'assets/fonts/PuzzleIcons.ttf'),
   ]) {
     final loader = FontLoader(family)..addFont(rootBundle.load(path));
     await loader.load();
@@ -154,6 +164,8 @@ void main() {
     required Brightness brightness,
     Map<ProviderOrFamily, Override> overrides = const {},
     Future<void> Function(WidgetTester tester)? seed,
+    Future<void> Function(WidgetTester tester)? afterSettle,
+    bool showMoveHistory = false,
   }) async {
     final theme = brightness == Brightness.dark ? 'dark' : 'light';
 
@@ -165,6 +177,10 @@ void main() {
       brightness: brightness,
       overrides: overrides,
       defaultPreferences: {
+        if (showMoveHistory)
+          PrefCategory.study.storageKey: jsonEncode(
+            StudyPrefs.defaults.copyWith(showMoveHistory: true).toJson(),
+          ),
         PrefCategory.general.storageKey: jsonEncode(
           GeneralPrefs.defaults
               .copyWith(
@@ -181,6 +197,11 @@ void main() {
 
     await tester.pumpWidget(app);
     await settle(tester);
+
+    if (afterSettle != null) {
+      await afterSettle(tester);
+      await settle(tester);
+    }
 
     // A capture that silently produced an empty frame would be worse than no capture: a
     // white PNG sitting in a directory of design evidence reads as "checked, fine". So the
@@ -240,6 +261,49 @@ void main() {
               repertoireSide: Side.white,
             );
             await t.runAsync(() => repo.saveImportResult(result));
+          },
+        );
+      }, skip: !_enabled);
+
+      // The state the design spends most of its detail on: the answer, the note, the
+      // Continue affordance and its keyboard hint. It has never been seen, because
+      // reaching it means playing a move.
+      testWidgets('capture: review after a correct move, $label, ${brightness.name}', (
+        tester,
+      ) async {
+        await capture(
+          tester,
+          screen: 'review-answered',
+          // The notation line is off by default in the build, so without this the capture
+          // would not show the thing design/docs/03-components.md §111 calls "the headline".
+          // It is captured here rather than turned on in the app: study_preferences.dart is
+          // another agent's file and the default is a product decision, not a capture's.
+          showMoveHistory: true,
+          home: const ReviewScreen(),
+          surface: surface,
+          brightness: brightness,
+          overrides: repoOverrides(),
+          seed: (t) async {
+            final result = importPgn(
+              // A comment, so the note block the design specifies is actually populated.
+              '1. d4 {The Queen Pawn Game} d5 2. c4 e6 3. Nc3 Nf6 *',
+              studyTitle: 'Queen Pawn',
+              repertoireSide: Side.white,
+            );
+            await t.runAsync(() => repo.saveImportResult(result));
+          },
+          afterSettle: (t) async {
+            // Inside runAsync: the controller's futures need real async to complete, and
+            // calling it straight from the fake-async zone deadlocks the test.
+            await t.runAsync(() async {
+              final container = ProviderScope.containerOf(
+                t.element(find.byType(ReviewScreen)),
+                listen: false,
+              );
+              await container
+                  .read(reviewControllerProvider.notifier)
+                  .onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+            });
           },
         );
       }, skip: !_enabled);

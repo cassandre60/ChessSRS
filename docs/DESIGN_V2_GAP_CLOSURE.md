@@ -158,6 +158,63 @@ worth remembering, not the fix:
   reply also plays `Sound.move`, so the assertion could not tell the two apart. It now uses a
   line with no reply, so exactly one move sound can only be the user's own landing.
 
+## What the screenshots found
+
+`test/view/screenshot_capture_test.dart` renders the real screens through the real provider
+scope and writes PNGs — 30 of them, at 390/834/1440 in light and dark, in about 16 seconds,
+with no display involved:
+
+```bash
+SRS_CAPTURE_SCREENSHOTS=1 fvm flutter test --update-goldens test/view/screenshot_capture_test.dart
+```
+
+It is skipped unless that variable is set, so CI neither writes nor compares, and it writes
+rather than asserts because pixel comparison across font stacks is too brittle to be a gate.
+The output is reproducible: a second run without `--update-goldens` passes.
+
+Two things it needed that the suite did not have. The real typefaces — `flutter test` ships no
+fonts, so every glyph was a filled box, fine for layout assertions and useless for judging a
+type scale. And a dark palette at all: `makeTestProviderScopeApp` hardcoded
+`SrsColors.forBrightness(Brightness.light)`, so no test in the repository had ever rendered the
+dark theme.
+
+It also caught its own failure mode. The first version wrote pure-white PNGs, because the review
+controller's database futures never complete under the fake-async test zone and every screen sat
+on its deliberately-empty loading state. There is now a guard that refuses to write a blank
+frame, because a white file sitting in a directory of design evidence reads as "checked, fine".
+
+### Three real findings
+
+1. **The Theme row reported Light on a dark system.** `isDark` in `srs_settings_screen.dart` was
+   `themeMode == dark || themeMode == amoled`, which is false for `BackgroundThemeMode.system` —
+   the default. Fixed and covered for all three modes. *This branch.*
+2. **The notation line is off by default, and the design calls it the headline.**
+   `design/docs/03-components.md` §111: "the line is the headline", with a `3. ____` placeholder
+   that fills in `accent` on answer; `01-identity.md` §7 says typography "treats the line of
+   moves as the headline". But `showMoveHistory` defaults to `false`, both in the field and in
+   its `@JsonKey`, so a first-run user sees no headline at all. Both defaults were set in the
+   same bulk redesign commit (`a1c8452c9`), which reads as incidental rather than considered.
+   **Not changed here:** `study_preferences.dart` is one of the concurrent agent's dirty files
+   and this is a product default, not a rendering fix. The capture turns it on so the evidence
+   shows the designed state, and the committed screenshot is what it looks like with the line
+   present — meta, notation line, note, Continue, in the demo's order.
+3. **Keyboard hints are absent from every capture.** The design specifies `Skip <kbd>S</kbd>` and
+   `Continue <kbd>Space</kbd>`; the running app shows them, the captures do not, because the
+   design system gates them on platform and the capture does not pin a `TargetPlatformVariant`.
+   So the hint *placement* is still unverified by screenshot. Cosmetic to fix, but it means a
+   capture cannot be used to check the one thing the demo is most specific about here.
+
+Also worth a look, not a bug: at 390 the review side panel collapses to a single row and leaves
+a large void above `Skip`.
+
+### Known limits of the captures
+
+- Icon glyphs still render as filled boxes, including the analysis bottom bar and the share
+  action. The icon faces are loaded, so this is a `fontPackage`/codepoint mapping problem rather
+  than a missing font. Icon choice and the engine panel's typography are therefore unchecked.
+- The Opening Explorer is not captured: it needs the opening-explorer HTTP fixtures that live in
+  its own test file. Its sub-head is the same `SrsSubHead` the analysis capture does show.
+
 ## Known pre-existing failure (not ours, and not ours to fix)
 
 `test/app_test.dart: App will delete a stored authUser on startup if one request return 401` —
