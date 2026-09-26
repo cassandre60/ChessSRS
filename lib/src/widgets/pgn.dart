@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/common/node.dart';
 import 'package:chess_srs/src/model/common/uci.dart';
@@ -1207,9 +1208,12 @@ class _IndentedSideLinesState extends State<_IndentedSideLines> {
 }
 
 Color? _textColor(BuildContext context, double opacity, {int? nag}) {
-  final defaultColor = TextTheme.of(context).bodyLarge?.color?.withValues(alpha: opacity);
-
-  return nag != null && nag > 0 ? _nagColor(context, nag) : defaultColor;
+  if (nag != null && nag > 0) return _nagColor(context, nag);
+  // Opacity ladder maps onto ink roles; NAG colors above stay functional.
+  final c = context.srs;
+  if (opacity >= 0.9) return c.ink;
+  if (opacity >= 0.5) return c.ink2;
+  return c.ink3;
 }
 
 /// A widget that displays a single move in the tree view.
@@ -1256,14 +1260,16 @@ class InlineMove extends ConsumerWidget {
   bool get isLiveMove => params.pathToLiveMove == path;
 
   BoxDecoration? _boxDecoration(BuildContext context, bool isCurrentMove, bool isLiveMove) {
-    return (isCurrentMove || isLiveMove)
-        ? BoxDecoration(
-            color: isCurrentMove ? Theme.of(context).focusColor : null,
-            shape: BoxShape.rectangle,
-            borderRadius: borderRadius,
-            border: isLiveMove ? Border.all(width: 2, color: Colors.orange) : null,
-          )
-        : null;
+    if (!(isCurrentMove || isLiveMove)) return null;
+    final c = context.srs;
+    // Demo selection language: accentSoft fill for current, accent outline
+    // for live. Shape-differentiated, never bare color.
+    return BoxDecoration(
+      color: isCurrentMove ? c.accentSoft : null,
+      shape: BoxShape.rectangle,
+      borderRadius: borderRadius,
+      border: isLiveMove ? Border.all(width: 2, color: c.accent) : null,
+    );
   }
 
   @override
@@ -1271,14 +1277,19 @@ class InlineMove extends ConsumerWidget {
     final pieceNotation = ref
         .watch(pieceNotationProvider)
         .maybeWhen(data: (value) => value, orElse: () => defaultAccountPreferences.pieceNotation);
-    final moveFontFamily = pieceNotation == PieceNotation.symbol ? 'ChessFont' : null;
+    final moveFontFamily = pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui;
     final moveTextStyle = textStyle.copyWith(
       fontFamily: moveFontFamily,
       fontWeight: lineInfo.type == _LineType.inlineSideline ? FontWeight.normal : FontWeight.w600,
       fontStyle: branch.isUserAdded ? FontStyle.italic : FontStyle.normal,
+      fontFeatures: SrsText.tabular,
     );
 
-    final indexTextStyle = textStyle.copyWith(color: _textColor(context, kIndexOpacity));
+    final indexTextStyle = textStyle.copyWith(
+      color: _textColor(context, kIndexOpacity),
+      fontFamily: SrsText.ui,
+      fontFeatures: SrsText.tabular,
+    );
     final indexText = showIndex
         ? branch.position.ply.isOdd
               ? TextSpan(text: '${(branch.position.ply / 2).ceil()}. ', style: indexTextStyle)
