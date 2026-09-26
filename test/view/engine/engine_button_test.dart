@@ -5,7 +5,6 @@ import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chessground/chessground.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 
 import '../../model/engine/fake_engine.dart';
 import 'test_engine_app.dart';
@@ -68,10 +67,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The popup lists the engine in a ListTile, which needs a Material ancestor.
-    expect(
-      find.descendant(of: find.byType(ListTile), matching: find.textContaining('Stockfish')),
-      findsOne,
-    );
+    // The popup lists the engine name in a Diagram row.
+    expect(find.textContaining('Stockfish'), findsOneWidget);
   });
 }

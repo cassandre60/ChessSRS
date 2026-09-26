@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:chess_srs/src/design/tokens.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
@@ -295,19 +295,45 @@ class _EnginePopup extends ConsumerWidget {
         goDeeper != null && !isComputing && (work == null || work.isDeeper != true);
 
     final currentEval = engine?.hasValue == true ? evalStateEval : null;
+    final c = context.srs;
+
+    Widget row({Widget? leading, required String title, String? subtitle}) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+        child: Row(
+          children: [
+            if (leading != null) ...[leading, const SizedBox(width: 14)],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(title, style: SrsText.settingLabel(c.ink)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontFamily: SrsText.ui,
+                        fontSize: 14,
+                        color: c.ink2,
+                        fontFeatures: SrsText.tabular,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (canGoDeeper) SrsTextButton(label: context.l10n.goDeeper, onPressed: goDeeper),
+          ],
+        ),
+      );
+    }
 
     if (currentEval is CloudEval) {
-      return ListTile(
-        contentPadding: const EdgeInsets.only(left: 16.0),
-        title: Text(context.l10n.cloudAnalysis),
-        subtitle: Text(context.l10n.depthX('${currentEval!.depth}')),
-        trailing: canGoDeeper
-            ? IconButton(
-                icon: const Icon(Icons.add_circle_outlined),
-                onPressed: goDeeper,
-                tooltip: context.l10n.goDeeper,
-              )
-            : null,
+      return row(
+        title: context.l10n.cloudAnalysis,
+        subtitle: context.l10n.depthX('${currentEval!.depth}'),
       );
     }
 
@@ -315,18 +341,10 @@ class _EnginePopup extends ConsumerWidget {
 
     final displayName = engineDisplayName(engine?.value, spec: engineSpec);
 
-    return ListTile(
-      contentPadding: const EdgeInsets.only(left: 16.0),
+    return row(
       leading: Image.asset('assets/images/stockfish/icon.webp', width: 44, height: 44),
-      title: Text(displayName),
-      subtitle: currentEval != null ? Text(context.l10n.depthX('${currentEval.depth}$knps')) : null,
-      trailing: canGoDeeper
-          ? IconButton(
-              icon: const Icon(Icons.add_circle_outlined),
-              onPressed: goDeeper,
-              tooltip: context.l10n.goDeeper,
-            )
-          : null,
+      title: displayName,
+      subtitle: currentEval != null ? context.l10n.depthX('${currentEval.depth}$knps') : null,
     );
   }
 }
