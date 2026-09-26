@@ -242,3 +242,69 @@ That accounts for `expect(tokenTestRequests, 1)` seeing `0`.
 `safety/pre-rebase-fbbf35bc1` and `safety/pre-rebase2-2e6223bf2` hold the pre-rebase heads, so
 the force-push is reversible in one command:
 `git push --force-with-lease origin safety/pre-rebase-fbbf35bc1:design/v2-remainder`.
+
+## Open bug: the review screen's keyboard shortcuts do not work
+
+**Status: open, not fixed. Not a regression — these never worked.** Severity: low. The
+equivalent actions are all reachable with the mouse.
+
+`S` (skip), `Space` and `Enter` (continue) do nothing on the review screen. Confirmed by the
+owner on the live Linux desktop build, repeatedly, with the window focused.
+
+### What is established
+
+- **The action works.** Tapping `Skip` with the mouse skips. So `onSkip`, the session advance and
+  the handler itself are all fine — this is key *delivery*, not the binding.
+- **`P` works on the "Nothing due" screen**, so key events do reach the app, and something in
+  the tree does receive them.
+- **`Space`/`Enter` doing nothing at a prompt is correct** and not part of this bug. They are
+  bound to `continueIfShown`, which only acts while `state.isAwaitingAdvance` — i.e. while a
+  note is showing. `design/docs/04` §4 says "Space or Enter: Continue, when a note is showing."
+  At a prompt, before answering, silence is the designed behaviour.
+- Both `S` and `Space` remain dead *after a move, with a note showing*, which is the part that
+  is a real defect.
+
+### Ruled out
+
+- **chessground** (the board) registers no `Focus` nodes and no key handling at all, so it is
+  neither holding focus nor consuming keys.
+- **`_focusNode` lifecycle** is fine: a State field, disposed in `dispose()`, not recreated per
+  build.
+- **Nothing above the screen eats keys.** `app.dart`'s root is a plain `MaterialApp` with no
+  root `Shortcuts`, `Actions`, `Listener` or key handler.
+- **Nothing steals focus.** Only two `Focus` widgets exist in the whole app, mutually exclusive
+  (idle view and review view); the design layer and `board.dart` contain none.
+- **It is not the one-shot `autofocus` race.** Two fixes were built on that theory, both tested
+  on the live app by the owner, and **both failed**: (1) re-asserting focus in a post-frame
+  callback, (2) deleting the long-lived `_focusNode` so the review view's focus setup became
+  byte-identical to the idle view's, which is the one configuration known to work. Both were
+  reverted. Do not retry either.
+
+### Where to start next
+
+Not from reading the source again — that has now produced two confident wrong answers. Add a
+runtime diagnostic and let the live app answer:
+
+1. Log every `KeyEvent` the review screen receives (`Focus.onKeyEvent` on a node wrapping the
+   `CallbackShortcuts`, or a `HardwareKeyboard` listener), with `event.logicalKey` and whether
+   the handler ran. If no event arrives, the problem is platform/window level — the window is
+   not receiving keys — not Flutter's focus tree, and the whole focus line of enquiry is wrong.
+2. If events do arrive, log `FocusManager.instance.primaryFocus` and its widget ancestry at the
+   moment `S` is pressed. That says directly whether the `CallbackShortcuts` node is an ancestor
+   of the primary focus, which is the only condition under which `Shortcuts` can fire.
+3. If it *is* an ancestor and the handler still does not run, the problem is the activator
+   matching. `SingleActivator(LogicalKeyboardKey.keyS)` matches the logical key regardless of
+   shift, so a modifier or keyboard-layout difference is worth logging
+   (`HardwareKeyboard.instance.logicalKeysPressed`).
+
+### Why no test caught it
+
+`makeTestProviderScopeApp` builds `_FakeApp`, a bare `MaterialApp`, and the widget-test binding
+**always grants focus**. So `tester.sendKeyEvent` exercises a focus configuration the real app
+never has, and any test written that way passes against a completely broken build. The tests
+that briefly covered this have since disappeared from the tree, which is how the bug survived
+untested for so long. **A shortcut test in this harness cannot be trusted**; it needs a test that
+asserts the focus precondition, or a real device.
+
+Recorded by the owner's live testing, 2026-09-26. Two failed fixes reverted: `77a3e0efd` and
+`af209c955` (the latter reverted by `00883b067`).
