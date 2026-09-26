@@ -237,16 +237,16 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
         .pieceAssets;
 
     final squareSize = widget.boardSize / 8;
-    final srs = SrsTheme.maybeOf(context);
+    final c = context.srs;
     final isDragActive = editorState.editorPointerMode == EditorPointerMode.drag;
     final isDeleteActive = editorState.deletePiecesActive;
 
     return Container(
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
-        color: srs?.surface ?? Theme.of(context).colorScheme.surface,
+        color: c.surface,
         borderRadius: widget.isTablet ? BorderRadius.circular(12) : BorderRadius.circular(8),
-        border: Border.all(color: srs?.hairline ?? Theme.of(context).dividerColor),
+        border: Border.all(color: c.hairline),
         boxShadow: widget.isTablet ? boardShadows : const <BoxShadow>[],
       ),
       child: Flex(
@@ -259,17 +259,13 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
             height: squareSize,
             child: ColoredBox(
               key: Key('drag-button-${widget.side.name}'),
-              color: isDragActive
-                  ? (srs?.accentSoft ?? Theme.of(context).colorScheme.primaryContainer)
-                  : Colors.transparent,
+              color: isDragActive ? c.accentSoft : Colors.transparent,
               child: GestureDetector(
                 onTap: () => ref.read(editorController.notifier).updateMode(EditorPointerMode.drag),
                 child: Icon(
                   CupertinoIcons.hand_draw,
                   size: 0.8 * squareSize,
-                  color: isDragActive
-                      ? (srs?.accent ?? Theme.of(context).colorScheme.primary)
-                      : (srs?.ink2 ?? Theme.of(context).colorScheme.onSurfaceVariant),
+                  color: isDragActive ? c.accent : c.ink2,
                 ),
               ),
             ),
@@ -286,9 +282,7 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
 
             return ColoredBox(
               key: Key('piece-button-${piece.color.name}-${piece.role.name}'),
-              color: isPieceActive
-                  ? (srs?.accentSoft ?? Theme.of(context).colorScheme.primaryContainer)
-                  : Colors.transparent,
+              color: isPieceActive ? c.accentSoft : Colors.transparent,
               child: GestureDetector(
                 child: Draggable(
                   data: Piece(role: role, color: widget.side),
@@ -311,18 +305,15 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
             width: squareSize,
             height: squareSize,
             child: ColoredBox(
-              color: isDeleteActive
-                  ? Theme.of(context).colorScheme.error.withValues(alpha: 0.15)
-                  : Colors.transparent,
+              // Demo erase tool: active state is accent, never red.
+              color: isDeleteActive ? c.accentSoft : Colors.transparent,
               child: GestureDetector(
                 onTap: () =>
                     ref.read(editorController.notifier).updateMode(EditorPointerMode.edit, null),
                 child: Icon(
                   CupertinoIcons.delete,
                   size: 0.75 * squareSize,
-                  color: isDeleteActive
-                      ? Theme.of(context).colorScheme.error
-                      : (srs?.ink3 ?? Theme.of(context).colorScheme.onSurfaceVariant),
+                  color: isDeleteActive ? c.accent : c.ink3,
                 ),
               ),
             ),
