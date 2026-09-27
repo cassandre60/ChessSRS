@@ -139,8 +139,16 @@ class _EngineButtonState extends ConsumerState<EngineButton> {
             ),
           ),
         ),
+        // The readout is a `Positioned` child, so it never contributes to this Stack's size --
+        // the 48px chip does. Offsetting it by -6 therefore painted it *outside* the box, on top
+        // of whatever sits below. That was harmless when the button sat at the foot of a column
+        // with empty space beneath, but the Diagram action row puts a second row directly under
+        // it. Sitting it at bottom: 0 keeps the same visual (it still tucks under the icon, in
+        // the clear space at the foot of the 48px box) while moving it inside the button's own
+        // bounds -- and costs no layout, which matters because the action row in the archived
+        // game is already three lines tall and six extra pixels tips it.
         Positioned(
-          bottom: -6,
+          bottom: 0,
           child: Text(
             engineShortLabel(engine?.value, spec: engineSpec) ?? prefs.enginePref.shortLabel,
             style: TextStyle(
