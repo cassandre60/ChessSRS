@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/model/game/player.dart';
-import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/styles/styles.dart';
@@ -45,12 +44,6 @@ class GameSummaryTable extends ConsumerWidget {
 
     final whiteAnalysis = playersAnalysis.white;
     final blackAnalysis = playersAnalysis.black;
-
-    final bool usingCustomBackground = ref.watch(
-      generalPreferencesProvider.select(
-        (prefs) => prefs.backgroundImage != null || prefs.backgroundColor != null,
-      ),
-    );
 
     return Center(
       child: SizedBox(
@@ -141,9 +134,9 @@ class GameSummaryTable extends ConsumerWidget {
               ])
                 TableRow(
                   children: [
-                    _SummaryNumber(whiteText, color: usingCustomBackground ? null : whiteTextColor),
+                    _SummaryNumber(whiteText, color: whiteTextColor),
                     Center(heightFactor: 1.2, child: Text(label, softWrap: true)),
-                    _SummaryNumber(blackText, color: usingCustomBackground ? null : blackTextColor),
+                    _SummaryNumber(blackText, color: blackTextColor),
                   ],
                 ),
               for (final (whiteText, label, blackText, color) in [
@@ -168,9 +161,9 @@ class GameSummaryTable extends ConsumerWidget {
               ])
                 TableRow(
                   children: [
-                    _SummaryNumber(whiteText, color: usingCustomBackground ? null : color),
+                    _SummaryNumber(whiteText, color: color),
                     Center(heightFactor: 1.2, child: Text(label, softWrap: true)),
-                    _SummaryNumber(blackText, color: usingCustomBackground ? null : color),
+                    _SummaryNumber(blackText, color: color),
                   ],
                 ),
               if (whiteAnalysis.acpl != null && blackAnalysis.acpl != null)

@@ -281,12 +281,8 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                 ),
                                 _NavRow(
                                   label: 'Theme & appearance',
-                                  help: 'Background wallpaper, AMOLED, board brightness, and hue.',
-                                  value: generalPrefs.backgroundColor != null
-                                      ? generalPrefs.backgroundColor!.$1.label
-                                      : generalPrefs.backgroundImage != null
-                                      ? 'Custom image'
-                                      : generalPrefs.systemColors
+                                  help: 'AMOLED, board brightness, and hue.',
+                                  value: generalPrefs.systemColors
                                       ? 'System'
                                       : (isDark ? 'Dark' : 'Light'),
                                   onTap: () =>

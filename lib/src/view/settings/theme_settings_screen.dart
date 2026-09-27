@@ -8,7 +8,6 @@ import 'package:chess_srs/src/utils/color_palette.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/utils/screen.dart';
-import 'package:chess_srs/src/view/settings/background_theme_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/board_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/piece_set_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
@@ -98,24 +97,6 @@ class _BodyState extends ConsumerState<_Body> {
                         ref.read(generalPreferencesProvider.notifier).toggleSystemColors();
                       },
                     ),
-                  ),
-                SrsSettingsRow(
-                  label: context.l10n.background,
-                  value: generalPrefs.backgroundColor != null
-                      ? generalPrefs.backgroundColor!.$1.label
-                      : (generalPrefs.backgroundImage != null ? 'Image' : 'Default'),
-                  onTap: () {
-                    Navigator.of(context).push(BackgroundChoiceScreen.buildRoute());
-                  },
-                ),
-                if (generalPrefs.backgroundColor != null || generalPrefs.backgroundImage != null)
-                  SrsSettingsRow(
-                    label: 'Reset background',
-                    onTap: () {
-                      ref
-                          .read(generalPreferencesProvider.notifier)
-                          .setBackground(backgroundColor: null, backgroundImage: null);
-                    },
                   ),
                 SrsSettingsRow(
                   label: context.l10n.board,

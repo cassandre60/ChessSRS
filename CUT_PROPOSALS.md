@@ -54,12 +54,49 @@ These are the authoritative decisions from the owner. Do not override them.
 | UI-C "Lichess is a free…" message (LichessMessage widget) | `[x]` DONE | Removed (commit 1af79eab3) |
 | UI-D "Welcome to the Lichess app" card | `[x]` DONE | Removed (commit 1af79eab3) |
 | UI-E "Not all features available" text | `[x]` DONE | Removed (commit 1af79eab3) |
+| UI-F App background theming | `[x]` DONE | Removed 2026-09-27 — see the note below |
 
 **C8 Social note**: Friends list, inbox, player search, and relations navigation
 entries were removed from the More tab and Account menu; the Home screen friends
 carousel was removed; the background message service was silenced; and the relation
 repository, following_user model, and follow/block actions were pruned in Step 15.
 Base user/account models remain for C3 (auth).
+
+
+**UI-F App background note**: The setting was removed because it could not work, not
+because it was judged unimportant. Two independent facts, each verified in the code:
+
+1. **Its only consumer was unreachable.** `makeAppTheme` in `lib/src/theme.dart` was
+   defined and never called — `app.dart` builds the Diagram theme through
+   `srsThemeData(srsColors)`. The background fed `_makeBackgroundImageTheme`, a
+   translucent-surface theme whose whole purpose was letting a background show through,
+   and that in turn was reachable only from `makeAppTheme`. The preference was stored
+   and read by nothing that ran. Separately, `scaffoldBackgroundColor: c.ground` is
+   opaque in `theme_bridge.dart`, so even the dead path could not have shown through.
+2. **The Diagram palette is specified against a fixed `ground`.**
+   `design/docs/02-tokens.md` tabulates "Contrast on ground (light / dark)" and
+   `tokens.dart` states "Every value passes 4.5:1 against ground and surface in its own
+   theme". `ground` is `#F1F3F4` / `#0D0F13`, defined as "App background". A
+   user-chosen image behind `ink` text invalidates the one guarantee the token system
+   rests on, and nothing tests it against an arbitrary background.
+
+Making the feature work was therefore not a small fix: it meant either dropping that
+contrast guarantee or building image-luminance sampling to pick light or dark per
+picture, which is feature creep the feature policy forbids by default. Leaving a picker
+that visibly selects a background and changes nothing was the worst of the three
+options, so it went.
+
+Reversal, if the owner disagrees: do not set `scaffoldBackgroundColor` in
+`theme_bridge.dart` and restore `FullScreenBackground` in `buildScreenRoute`. The
+deleted code is in this branch's parent commits.
+
+Removed with it: `lib/src/widgets/background.dart`,
+`lib/src/view/settings/background_theme_choice_screen.dart`, the `BackgroundColor`
+enum, the `BackgroundImage` sealed class and its JSON converter, `setBackground`, the
+`isForcedDarkMode` forced-dark escape hatch in `app.dart`, and the
+`usingCustomBackground` branch in `game_summary_table.dart`. `lib/src/theme.dart`
+survives at 50 lines holding only `CustomTheme`, which two explorer views read through
+`context.lichessTheme`.
 
 ---
 

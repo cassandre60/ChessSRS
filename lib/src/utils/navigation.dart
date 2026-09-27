@@ -1,4 +1,3 @@
-import 'package:chess_srs/src/widgets/background.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A page route that always builds the same screen widget.
@@ -10,9 +9,6 @@ abstract class ScreenRoute<T extends Object?> extends PageRoute<T> {
 }
 
 /// A [MaterialPageRoute] that always builds the same screen widget.
-///
-/// This route wraps the [screen] with a [FullScreenBackground] to ensure that the background
-/// is always filled with the configured app's background color or image.
 class MaterialScreenRoute<T extends Object?> extends MaterialPageRoute<T>
     implements ScreenRoute<T> {
   MaterialScreenRoute({
@@ -22,7 +18,7 @@ class MaterialScreenRoute<T extends Object?> extends MaterialPageRoute<T>
     super.fullscreenDialog,
     super.allowSnapshotting,
     this.overrideTransitionDuration,
-  }) : super(builder: (_) => FullScreenBackground(child: screen));
+  }) : super(builder: (_) => screen);
 
   @override
   final Widget screen;
@@ -34,9 +30,6 @@ class MaterialScreenRoute<T extends Object?> extends MaterialPageRoute<T>
 }
 
 /// Builds a new route for the [screen].
-///
-/// This route wraps the [screen] with a [FullScreenBackground] to ensure that the background
-/// is always filled with the configured app's background color or image.
 Route<T> buildScreenRoute<T>({
   required Widget screen,
   bool fullscreenDialog = false,

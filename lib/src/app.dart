@@ -152,14 +152,15 @@ class _AppState extends ConsumerState<Application> {
   Widget build(BuildContext context) {
     final generalPrefs = ref.watch(generalPreferencesProvider);
 
-    // Resolve brightness: system, forced, or explicit.
-    final brightness = generalPrefs.isForcedDarkMode
-        ? Brightness.dark
-        : switch (generalPrefs.themeMode) {
-            BackgroundThemeMode.light => Brightness.light,
-            BackgroundThemeMode.dark || BackgroundThemeMode.amoled => Brightness.dark,
-            BackgroundThemeMode.system => MediaQuery.platformBrightnessOf(context),
-          };
+    // Brightness is the theme mode and nothing else. It used to also be forced dark whenever a
+    // background colour or image was set, which is gone with the background setting: the
+    // Diagram palette is light or dark by choice, and every token's contrast is specified
+    // against the matching `ground`.
+    final brightness = switch (generalPrefs.themeMode) {
+      BackgroundThemeMode.light => Brightness.light,
+      BackgroundThemeMode.dark || BackgroundThemeMode.amoled => Brightness.dark,
+      BackgroundThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    };
 
     final accent = ref.watch(srsAccentProvider);
     final srsColors = SrsColors.forBrightness(brightness, accent);
