@@ -466,8 +466,9 @@ void main() {
 
   group('start (deep link subscription)', () {
     testWidgets('a cold-start link is handled exactly once', (tester) async {
-      // An invalid-FEN editor link shows a snackbar, and snackbars queue rather
-      // than dedup, so a double-handled link surfaces as a duplicate.
+      // An invalid-FEN editor link shows a toast. Toasts replace rather than queue, so a
+      // double-handled link cannot leave two on screen: the guarantee to assert is that
+      // exactly one appears and it goes away on the design's 2.4 s dwell.
       final coldStartUri = Uri.parse('https://lichess.org/editor/not-a-valid-fen');
       final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -505,17 +506,17 @@ void main() {
         ),
       );
       await tester.pumpWidget(app);
-      await tester.pumpAndSettle();
+      // Bounded pumps, not pumpAndSettle: the toast's dwell is 2.4 s by design where a
+      // SnackBar defaulted to 4 s, so settling to quiescence runs past its lifetime and the
+      // assertion below would be looking for something already gone.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(BoardEditorScreen), findsOneWidget);
       expect(find.textContaining('Invalid FEN'), findsOneWidget);
       verifyNever(() => mockAppLinks.getInitialLink());
 
-      // Dismiss the current snackbar; a duplicate would surface behind it.
-      tester
-          .firstState<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
-          .removeCurrentSnackBar();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 2500));
       expect(find.textContaining('Invalid FEN'), findsNothing);
     });
   });

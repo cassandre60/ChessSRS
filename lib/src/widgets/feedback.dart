@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/socket.dart';
@@ -336,17 +337,26 @@ class FeedbackTile extends StatelessWidget {
   }
 }
 
-/// Shows a snackbar with the given message.
+/// Shows a toast with the given message.
+///
+/// The name is the inherited one and stays, because 53 call sites across 29 files use it and
+/// renaming would be a diff with no user-visible effect. What it draws is the Diagram toast
+/// (`design/docs/03-components.md` §12) rather than a Material `SnackBar`.
+///
+/// [type] is accepted and deliberately not rendered: the design specifies one toast
+/// appearance, and gives errors a screen state instead. See [SrsToastTone].
 void showSnackBar(BuildContext context, String message, {SnackBarType type = SnackBarType.info}) {
+  // Kept inside a try, as before: this is called from async gaps and from error paths where
+  // the context may already be defunct, and a toast must never be the thing that throws.
   try {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: type == SnackBarType.error ? const TextStyle(color: Colors.white) : null,
-        ),
-        backgroundColor: type == SnackBarType.error ? context.lichessColors.error : null,
-      ),
+    showSrsToast(
+      context,
+      message,
+      tone: switch (type) {
+        SnackBarType.error => SrsToastTone.error,
+        SnackBarType.success => SrsToastTone.success,
+        SnackBarType.info => SrsToastTone.info,
+      },
     );
   } catch (_) {}
 }
