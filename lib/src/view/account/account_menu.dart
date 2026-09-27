@@ -14,7 +14,7 @@ import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/account/profile_screen.dart';
 import 'package:chess_srs/src/view/auth/sign_in_error.dart';
 import 'package:chess_srs/src/view/auth/sign_in_options.dart';
-import 'package:chess_srs/src/view/settings/settings_screen.dart';
+import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
@@ -183,7 +183,7 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                     : null,
                 title: Text(context.l10n.settingsSettings),
                 onTap: () {
-                  _navigate(context, SettingsScreen.buildRoute());
+                  _navigate(context, SrsSettingsScreen.buildRoute());
                 },
               ),
               if (user != null)

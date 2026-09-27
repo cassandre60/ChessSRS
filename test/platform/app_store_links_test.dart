@@ -79,20 +79,36 @@ void main() {
       // The build-time assertions above cannot see a link written straight into a widget, which
       // is exactly how the upstream listing got here: three string literals in the tile's onTap.
       // This reads the source so that shape cannot come back unnoticed.
-      final source = File('lib/src/view/settings/settings_screen.dart').readAsStringSync();
+      //
+      // Scans the settings screen the app actually shows. This was `settings_screen.dart` until
+      // that file went as dead code — its buildRoute forwarded to SrsSettingsScreen, so nothing
+      // could reach it, and its "rate this app" row moved to SrsSettingsScreen rather than being
+      // dropped. The scan follows the row, and now covers every settings entry point.
+      const sources = [
+        'lib/src/view/settings/srs_settings_screen.dart',
+        'lib/src/view/settings/account_preferences_screen.dart',
+        'lib/src/view/more/more_tab_screen.dart',
+        'lib/src/view/account/account_menu.dart',
+      ];
 
-      for (final pattern in [
-        RegExp(r'market://details\?id='),
-        RegExp(r'play\.google\.com/store/apps/details'),
-        RegExp(r'apps\.apple\.com'),
-      ]) {
-        expect(
-          source,
-          isNot(matches(pattern)),
-          reason:
-              'a store URL is built inline again; build it from constants.dart so it cannot name '
-              'an app this project does not own',
-        );
+      for (final path in sources) {
+        final file = File(path);
+        if (!file.existsSync()) continue;
+        final source = file.readAsStringSync();
+
+        for (final pattern in [
+          RegExp(r'market://details\?id='),
+          RegExp(r'play\.google\.com/store/apps/details'),
+          RegExp(r'apps\.apple\.com'),
+        ]) {
+          expect(
+            source,
+            isNot(matches(pattern)),
+            reason:
+                '$path builds a store URL inline; build it from constants.dart so it cannot '
+                'name an app this project does not own',
+          );
+        }
       }
     });
   });

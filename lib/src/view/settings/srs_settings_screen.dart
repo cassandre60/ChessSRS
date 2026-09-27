@@ -3,6 +3,7 @@
 
 import 'dart:math' as math;
 
+import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
@@ -16,6 +17,7 @@ import 'package:chess_srs/src/view/settings/sound_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/theme_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Diagram visual settings screen with unified daily limits, target retention,
 /// study display toggles, theme, accent swatches, and advanced FSRS algorithms.
@@ -407,6 +409,32 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                             child: Column(
                               children: [
+                                // Was on the legacy settings screen, which no user could reach
+                                // because its buildRoute forwarded here. Restored rather than
+                                // dropped: the capability is worth having, and this is the screen
+                                // the app actually shows. The store ids come from constants.dart,
+                                // which app_store_links_test guards.
+                                SrsSettingsRow(
+                                  label: 'Rate this app',
+                                  help: 'Open the store listing for Chess Repertoire SRS.',
+                                  onTap: () async {
+                                    final isAndroid =
+                                        Theme.of(context).platform == TargetPlatform.android;
+                                    final links = androidAppStoreLinks();
+                                    final launched = await launchUrl(
+                                      isAndroid
+                                          ? links.native
+                                          : appStoreListingUrl(isAndroid: false),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                    if (!launched && isAndroid) {
+                                      await launchUrl(
+                                        links.web,
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  },
+                                ),
                                 _NavRow(
                                   label: 'Licences & open source',
                                   help: 'GPL-3.0, chessground, dartchess, and third-party notices.',

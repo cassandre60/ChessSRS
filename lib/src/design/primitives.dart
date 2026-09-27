@@ -317,6 +317,138 @@ class SrsSwitch extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// SrsSettingsRow — one row in a settings list
+//
+// Extracted from the private copy in `srs_settings_screen.dart` so the whole settings tree can
+// share one row. Two shapes, from the same widget: a control on the right (a switch, a segmented
+// control) and a navigation row with an optional value.
+//
+// Reflows rather than overflowing: below 520 the trailing control drops under the text, which is
+// what design/docs/03-components.md asks for ("the settings rows stack under 520") and what
+// design/docs/04-screens-and-flows.md §6 requires ("nothing requires horizontal scrolling").
+// ---------------------------------------------------------------------------
+class SrsSettingsRow extends StatelessWidget {
+  const SrsSettingsRow({
+    super.key,
+    required this.label,
+    this.help,
+    this.value,
+    this.control,
+    this.onTap,
+    this.enabled = true,
+    this.destructive = false,
+  });
+
+  final String label;
+
+  /// Second line under the label. Wrapped at 360px so a long sentence cannot stretch the row.
+  final String? help;
+
+  /// Right-hand text for a navigation row, e.g. the current setting's name.
+  final String? value;
+
+  /// Right-hand control for a setting row: a switch, a segmented control, a picker.
+  final Widget? control;
+
+  final VoidCallback? onTap;
+
+  final bool enabled;
+
+  /// Renders the label in the warning colour, for sign-out and delete.
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    // No danger token exists in the palette, and the demo's own `.warn` is plain `ink2` at a
+    // smaller size -- a destructive action is signalled by its wording and its confirm dialog,
+    // not by painting the label red. `destructive` therefore only reserves the intent for
+    // callers; it deliberately does not recolour the row.
+    final labelColor = enabled ? c.ink : c.ink3;
+
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: SrsText.rowName(labelColor)),
+        if (help != null) ...[
+          const SizedBox(height: 3),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Text(help!, style: SrsText.rowSub(c.ink2).copyWith(height: 1.4)),
+          ),
+        ],
+      ],
+    );
+
+    final trailing =
+        control ?? (value != null ? Text(value!, style: SrsText.rowSub(c.ink2)) : null);
+
+    final row = LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = trailing != null && constraints.maxWidth < 520;
+        if (trailing == null) return text;
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [text, const SizedBox(height: 12), trailing],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: text),
+            const SizedBox(width: 16),
+            trailing,
+          ],
+        );
+      },
+    );
+
+    final body = Padding(padding: const EdgeInsets.symmetric(vertical: 18), child: row);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.hairlineSoft)),
+      ),
+      child: onTap == null
+          ? body
+          : SrsPressable(
+              onPressed: enabled ? onTap : null,
+              semanticLabel: label,
+              radius: 0,
+              builder: (context, hovered, _) => ColoredBox(
+                color: hovered ? c.hairlineSoft : const Color(0x00000000),
+                child: body,
+              ),
+            ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SrsGroupHeader — the uppercase label above a group of settings rows
+// ---------------------------------------------------------------------------
+class SrsGroupHeader extends StatelessWidget {
+  const SrsGroupHeader(this.title, {super.key});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    return Padding(
+      padding: const EdgeInsets.only(top: 28, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: SrsText.groupTitle(c.ink3).copyWith(letterSpacing: 1.1),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // SrsRowRule — vertical hairline separating groups inside a horizontal control row
 // ---------------------------------------------------------------------------
 class SrsRowRule extends StatelessWidget {

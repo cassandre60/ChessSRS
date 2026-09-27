@@ -12,7 +12,7 @@ import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
 import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
-import 'package:chess_srs/src/view/settings/settings_screen.dart';
+import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/misc.dart';
 import 'package:chess_srs/src/widgets/platform.dart';
@@ -164,7 +164,7 @@ class _AccountSection extends ConsumerWidget {
           title: Text(context.l10n.settingsSettings),
           trailing: isIOS ? const CupertinoListTileChevron() : null,
           onTap: () {
-            Navigator.of(context).push(SettingsScreen.buildRoute());
+            Navigator.of(context).push(SrsSettingsScreen.buildRoute());
           },
         ),
       ],
