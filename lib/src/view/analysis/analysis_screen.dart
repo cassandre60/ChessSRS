@@ -487,10 +487,9 @@ class _BottomBar extends ConsumerWidget {
     final engineControls = <Widget>[];
     if (analysisState.isComputerAnalysisAllowed) {
       final filters = (context: analysisState.evaluationContext, path: analysisState.currentPath);
-      final EngineEvaluationState(:isComputing, currentWork: work) = ref.watch(
-        engineEvaluationProvider(filters),
-      );
-      final canGoDeeper = !isComputing && (work == null || work.isDeeper != true);
+      // Whether a deeper search is offered is decided inside _EnginePopup, which owns the action
+      // now; the row only supplies the callback.
+      ref.watch(engineEvaluationProvider(filters));
       engineControls.addAll([
         const SrsRowRule(),
         Text('Engine', style: SrsText.settingLabel(c.ink)),
@@ -521,12 +520,16 @@ class _BottomBar extends ConsumerWidget {
             );
           },
         ),
-        if (canGoDeeper)
-          SrsTextButton(
-            // Terse row label; "Go deeper" is 159px at 15px and pushed the row to a third line.
-            label: 'Deeper',
-            onPressed: () => notifier.requestEval(goDeeper: true),
-          ),
+        // No "Deeper" button here. _EnginePopup already offers it (engine_button.dart), and
+        // long-pressing the engine button is the gesture that opens it -- so a second copy in
+        // this row duplicated the same action.
+        //
+        // The width mattered: this row's items totalled 669px plus 90px of spacing against 360px
+        // available, so it needed three lines at 390px wide, which left the tab viewport 93px for
+        // a 143px move-times chart. The chart then overflowed its clipping viewport and taps below
+        // the fold were dropped -- the same failure mode as the viewport crush fixed in #15, still
+        // live for archived games. Removing the duplicate takes the row to 635px, inside the 720px
+        // two lines allow.
         SrsSwitch(
           value: evalPrefs.isEnabled,
           semanticLabel: context.l10n.toggleLocalEvaluation,
