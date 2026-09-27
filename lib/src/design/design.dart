@@ -12,6 +12,7 @@ export 'piece_set.dart';
 export 'primitives.dart';
 export 'review_layout.dart';
 export 'srs_board_color_scheme.dart';
+export 'srs_dialog.dart';
 export 'theme_bridge.dart';
 export 'tokens.dart';
 export 'top_bar.dart';
