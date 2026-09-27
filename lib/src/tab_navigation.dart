@@ -1,59 +1,14 @@
-import 'package:chess_srs/l10n/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
-enum BottomTab {
-  review,
-  more;
-
-  String label(AppLocalizations strings) {
-    switch (this) {
-      case BottomTab.review:
-        return 'Review';
-      case BottomTab.more:
-        return strings.more;
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case BottomTab.review:
-        return Symbols.school_rounded;
-      case BottomTab.more:
-        return Symbols.menu_rounded;
-    }
-  }
-}
-
-final currentBottomTabProvider = StateProvider<BottomTab>((ref) => BottomTab.review);
-
-final currentNavigatorKeyProvider = Provider<GlobalKey<NavigatorState>>((ref) {
-  final currentTab = ref.watch(currentBottomTabProvider);
-  switch (currentTab) {
-    case BottomTab.review:
-      return reviewNavigatorKey;
-    case BottomTab.more:
-      return moreNavigatorKey;
-  }
-});
-
-final currentRootScrollControllerProvider = Provider<ScrollController>((ref) {
-  final currentTab = ref.watch(currentBottomTabProvider);
-  switch (currentTab) {
-    case BottomTab.review:
-      return reviewScrollController;
-    case BottomTab.more:
-      return moreScrollController;
-  }
-});
-
 final reviewNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'review');
-final moreNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'more');
 
-final reviewScrollController = ScrollController(debugLabel: 'ReviewScroll');
-final moreScrollController = ScrollController(debugLabel: 'MoreScroll');
+/// The app's only navigator. Four call sites resolve a navigator through this provider rather
+/// than reaching for [reviewNavigatorKey] directly, which keeps them working if the key ever
+/// moves.
+final currentNavigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
+  (ref) => reviewNavigatorKey,
+);
 
 /// A [NavigatorObserver] that keeps track of the routes currently on the
 /// navigator it observes, so that code can query whether a named route is
@@ -107,31 +62,3 @@ class RouteStackObserver extends NavigatorObserver {
 final RouteStackObserver rootNavRouteStackObserver = RouteStackObserver();
 
 final RouteObserver<PageRoute<void>> rootNavPageRouteObserver = RouteObserver<PageRoute<void>>();
-
-class BottomTabInteraction extends ChangeNotifier {
-  void notifyItemTapped() {
-    notifyListeners();
-  }
-}
-
-final reviewTabInteraction = BottomTabInteraction();
-final moreTabInteraction = BottomTabInteraction();
-
-class MainTabScaffoldProperties extends InheritedWidget {
-  const MainTabScaffoldProperties({required super.child, required this.extendBody, super.key});
-
-  final bool extendBody;
-
-  @override
-  bool updateShouldNotify(MainTabScaffoldProperties oldWidget) {
-    return extendBody != oldWidget.extendBody;
-  }
-
-  static MainTabScaffoldProperties? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<MainTabScaffoldProperties>();
-  }
-
-  static bool hasExtendedBody(BuildContext context) {
-    return maybeOf(context)?.extendBody ?? false;
-  }
-}

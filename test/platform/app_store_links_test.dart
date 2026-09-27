@@ -87,7 +87,6 @@ void main() {
       const sources = [
         'lib/src/view/settings/srs_settings_screen.dart',
         'lib/src/view/settings/account_preferences_screen.dart',
-        'lib/src/view/more/more_tab_screen.dart',
         'lib/src/view/account/account_menu.dart',
       ];
 

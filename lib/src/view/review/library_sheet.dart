@@ -6,8 +6,10 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
+import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
+import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -187,6 +189,24 @@ class SrsLibrarySheet extends ConsumerWidget {
           ),
           _buildRow(
             c: c,
+            title: 'Opening explorer',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).push(
+                OpeningExplorerScreen.buildRoute(
+                  const AnalysisOptions.pgn(
+                    id: StringId('standalone_opening_explorer'),
+                    orientation: Side.white,
+                    pgn: '',
+                    isComputerAnalysisAllowed: false,
+                    variant: Variant.standard,
+                  ),
+                ),
+              );
+            },
+          ),
+          _buildRow(
+            c: c,
             title: 'Board editor',
             onTap: () {
               Navigator.pop(context);
@@ -296,7 +316,7 @@ class SrsLibrarySheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 12),
-            trailing ?? Icon(Symbols.chevron_right_rounded, size: 16, color: c.ink3),
+            trailing ?? Icon(Symbols.chevron_right_rounded, size: 14, color: c.ink3),
           ],
         ),
       ),

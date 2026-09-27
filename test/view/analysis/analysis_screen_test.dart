@@ -18,7 +18,6 @@ import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:chess_srs/src/view/engine/engine_lines.dart';
-import 'package:chess_srs/src/view/more/more_tab_screen.dart';
 import 'package:chess_srs/src/widgets/move_times_chart.dart';
 import 'package:chess_srs/src/widgets/pgn.dart';
 import 'package:chess_srs/src/widgets/pockets.dart';
@@ -29,6 +28,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
+import '../../helpers/explore_hub.dart';
 
 import '../../model/engine/fake_engine.dart';
 import '../../network/fake_websocket_channel.dart';
@@ -1407,10 +1407,10 @@ void main() {
       }
     });
     testWidgets('saves and restores root and path when navigating away and back', (tester) async {
-      // open from More tab and navigate to board analysis
+      // reach the board analysis through the Explore hub
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const MoreTabScreen(),
+        home: const ExploreHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1420,7 +1420,7 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      // Tap on "Analysis" button in More tab
+      // The Explore group
       await tester.tap(find.text('Analysis board'));
       await tester.pumpAndSettle();
 
@@ -1452,14 +1452,14 @@ void main() {
       expect(boardHasPiece(tester, Square.a3, Piece.blackKing), isTrue);
       expect(boardHasPiece(tester, Square.g3, Piece.whiteKing), isFalse);
 
-      // Navigate back to More tab
+      // Navigate back to the hub
       await tester.tap(
         find.descendant(of: find.byType(SrsPageHead), matching: find.text('Review')),
       );
       await tester.pumpAndSettle();
 
-      // Verify we're back at More tab
-      expect(find.text('Tools'), findsOneWidget);
+      // Verify we're back at the hub
+      expect(find.text('Explore'), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1479,7 +1479,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const MoreTabScreen(),
+        home: const ExploreHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1518,14 +1518,14 @@ void main() {
       expect(find.textContaining('e4'), findsNothing);
       expect(boardHasPiece(tester, Square.e4, Piece.whitePawn), isFalse);
 
-      // Navigate back to More tab
+      // Navigate back to the hub
       await tester.tap(
         find.descendant(of: find.byType(SrsPageHead), matching: find.text('Review')),
       );
       await tester.pumpAndSettle();
 
-      // Verify we're back at More tab
-      expect(find.text('Tools'), findsOneWidget);
+      // Verify we're back at the hub
+      expect(find.text('Explore'), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1542,7 +1542,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const MoreTabScreen(),
+        home: const ExploreHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1565,14 +1565,14 @@ void main() {
       expect(find.textContaining('f4'), findsOneWidget);
       expect(boardHasPiece(tester, Square.f4, Piece.whitePawn), isTrue);
 
-      // Navigate back to More tab
+      // Navigate back to the hub
       await tester.tap(
         find.descendant(of: find.byType(SrsPageHead), matching: find.text('Review')),
       );
       await tester.pumpAndSettle();
 
-      // Verify we're back at More tab
-      expect(find.text('Tools'), findsOneWidget);
+      // Verify we're back at the hub
+      expect(find.text('Explore'), findsOneWidget);
 
       // Navigate to board editor
       await tester.tap(find.text('Board editor'));

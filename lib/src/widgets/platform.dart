@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:chess_srs/src/constants.dart';
-import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// A simple widget that builds different things on different platforms.
@@ -79,29 +78,19 @@ class PlatformScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Check if a parent Scaffold has extendBody set to true.
-    // This is the case if this scaffold is built inside a root tab where the main scaffold holds
-    // the bottom navigation bar.
-    final hasExtendedBodyParentScaffold = MainTabScaffoldProperties.hasExtendedBody(context);
-
+    // The bottom-navigation-bar overlap this used to inherit from the root tab scaffold is
+    // gone with the tab switcher, so there is nothing to consult and nothing to reserve space
+    // for: `extendBody` is now only ever what the caller asks for.
     return Scaffold(
       extendBodyBehindAppBar: Theme.of(context).platform == TargetPlatform.iOS,
-      extendBody: extendBody ?? hasExtendedBodyParentScaffold,
+      extendBody: extendBody ?? false,
       appBar: appBar,
       body: body,
       drawer: drawer,
       persistentFooterButtons: persistentFooterButtons,
       floatingActionButton: floatingActionButton,
       bottomSheet: bottomSheet,
-      bottomNavigationBar:
-          bottomNavigationBar ??
-          (hasExtendedBodyParentScaffold
-              ? Container(
-                  color: Colors.transparent,
-                  height: MediaQuery.paddingOf(context).bottom,
-                  width: double.infinity,
-                )
-              : null),
+      bottomNavigationBar: bottomNavigationBar,
     );
   }
 }

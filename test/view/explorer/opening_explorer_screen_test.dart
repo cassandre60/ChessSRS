@@ -12,13 +12,13 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
-import 'package:chess_srs/src/view/more/more_tab_screen.dart';
 import 'package:chess_srs/src/widgets/move_list.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
+import '../../helpers/explore_hub.dart';
 
 import '../../network/fake_http_client_factory.dart';
 import '../../test_helpers.dart';
@@ -245,7 +245,7 @@ void main() {
     testWidgets('opening explorer does not use standalone analysis', (WidgetTester tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const MoreTabScreen(),
+        home: const ExploreHubScreen(),
         overrides: {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
             return FakeHttpClientFactory(() => mockClient);
@@ -261,7 +261,7 @@ void main() {
       await playMove(tester, 'e2', 'e4');
       expect(boardHasPiece(tester, Square.e4, Piece.whitePawn), isTrue);
 
-      // Go back to "more" screen and open opening explorer
+      // Go back to the hub and open the opening explorer
       await tester.tap(
         find.descendant(of: find.byType(SrsPageHead), matching: find.text('Review')),
       );
