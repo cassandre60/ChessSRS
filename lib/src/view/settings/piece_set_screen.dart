@@ -1,9 +1,8 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/utils/chessboard.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,44 +54,66 @@ class _PieceSetScreenState extends ConsumerState<PieceSetScreen> {
   @override
   Widget build(BuildContext context) {
     final boardPrefs = ref.watch(boardPreferencesProvider);
+    final c = context.srs;
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: Text(context.l10n.pieceSet),
-        actions: [if (isLoading) const PlatformAppBarLoadingIndicator()],
-      ),
+    return Scaffold(
+      backgroundColor: c.ground,
       body: SafeArea(
-        child: ListView.separated(
-          itemCount: PieceSet.values.length,
-          separatorBuilder: (_, _) => Theme.of(context).platform == TargetPlatform.iOS
-              ? const PlatformDivider()
-              : const SizedBox.shrink(),
-          itemBuilder: (context, index) {
-            final pieceSet = PieceSet.values[index];
-            return ListTile(
-              trailing: boardPrefs.pieceSet == pieceSet ? const Icon(Icons.check) : null,
-              title: Text(pieceSet.label),
-              subtitle: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 264),
-                child: Stack(
-                  children: [
-                    BrightnessHueFilter(
-                      brightness: boardPrefs.brightness,
-                      hue: boardPrefs.hue,
-                      child: boardPrefs.boardTheme.thumbnail,
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.pieceSet,
+              onBack: () => Navigator.of(context).maybePop(),
+              // Precaching a piece set takes a moment, so the head carries the progress rather
+              // than the screen showing a spinner with nothing to attach it to.
+              trailing: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                itemCount: PieceSet.values.length,
+                itemBuilder: (context, index) {
+                  final pieceSet = PieceSet.values[index];
+                  return SrsSettingsRow(
+                    label: pieceSet.label,
+                    selected: boardPrefs.pieceSet == pieceSet,
+                    enabled: !isLoading,
+                    onTap: () => onChanged(pieceSet),
+                    preview: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 264),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(border: Border.all(color: c.hairline)),
+                          child: Stack(
+                            children: [
+                              BrightnessHueFilter(
+                                brightness: boardPrefs.brightness,
+                                hue: boardPrefs.hue,
+                                child: boardPrefs.boardTheme.thumbnail,
+                              ),
+                              Row(
+                                children: [
+                                  for (final img in getPieceImages(pieceSet))
+                                    Image(image: img, height: 44),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    Row(
-                      children: [
-                        for (final img in getPieceImages(pieceSet)) Image(image: img, height: 44),
-                      ],
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
-              onTap: isLoading ? null : () => onChanged(pieceSet),
-              selected: boardPrefs.pieceSet == pieceSet,
-            );
-          },
+            ),
+          ],
         ),
       ),
     );

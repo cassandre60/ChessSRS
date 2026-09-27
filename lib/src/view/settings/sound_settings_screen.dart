@@ -1,10 +1,8 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -19,9 +17,16 @@ class SoundSettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformScaffold(
-      appBar: PlatformAppBar(title: Text(context.l10n.sound)),
-      body: _Body(),
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(label: context.l10n.sound, onBack: () => Navigator.of(context).maybePop()),
+            Expanded(child: _Body()),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -44,26 +49,30 @@ class _Body extends ConsumerWidget {
     }
 
     return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       children: [
-        ListSection(
-          children: [
-            SliderSettingsTile(
-              icon: const Icon(Icons.volume_up),
-              value: generalPrefs.masterVolume,
-              values: kMasterVolumeValues,
-              onChangeEnd: (value) {
-                ref.read(generalPreferencesProvider.notifier).setMasterVolume(value);
-              },
-              labelBuilder: volumeLabel,
-            ),
-          ],
+        const SrsGroupHeader('Volume'),
+        SrsSettingsRow(
+          label: 'Master volume',
+          value: volumeLabel(generalPrefs.masterVolume),
+          preview: Slider(
+            value: generalPrefs.masterVolume,
+            max: 1,
+            // Discrete notches at 10%, so the percentage in the row is not a rounding of a
+            // continuous value the user cannot actually land on.
+            divisions: 10,
+            label: volumeLabel(generalPrefs.masterVolume),
+            onChanged: (value) =>
+                ref.read(generalPreferencesProvider.notifier).setMasterVolume(value),
+          ),
         ),
-        ChoicePicker(
-          notchedTile: true,
-          choices: SoundTheme.values,
-          selectedItem: generalPrefs.soundTheme,
-          titleBuilder: (t) => Text(soundThemeL10n(context, t)),
-          onSelectedItemChanged: onChanged,
+        const SrsGroupHeader('Theme'),
+        SrsSegmented<String>(
+          value: generalPrefs.soundTheme.name,
+          options: {
+            for (final theme in SoundTheme.values) theme.name: soundThemeL10n(context, theme),
+          },
+          onChanged: (name) => onChanged(SoundTheme.values.byName(name)),
         ),
       ],
     );

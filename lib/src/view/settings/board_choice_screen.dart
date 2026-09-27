@@ -1,9 +1,8 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/utils/color_palette.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -16,9 +15,19 @@ class BoardChoiceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformScaffold(
-      appBar: PlatformAppBar(title: Text(context.l10n.board)),
-      body: const _Body(),
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.mobileBoardSettings,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            const Expanded(child: _Body()),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -39,25 +48,28 @@ class _Body extends ConsumerWidget {
     void onChanged(BoardTheme? value) =>
         ref.read(boardPreferencesProvider.notifier).setBoardTheme(value ?? BoardTheme.brown);
 
-    const checkedIcon = Icon(Icons.check);
-
-    return SafeArea(
-      child: ListView.separated(
-        itemBuilder: (context, index) {
-          final t = choices[index];
-          return ListTile(
-            selected: t == boardTheme,
-            trailing: t == boardTheme ? checkedIcon : null,
-            title: Text(t.label),
-            subtitle: Align(alignment: Alignment.topLeft, child: t.thumbnail),
-            onTap: () => onChanged(t),
-          );
-        },
-        separatorBuilder: (_, _) => Theme.of(context).platform == TargetPlatform.iOS
-            ? const PlatformDivider()
-            : const SizedBox.shrink(),
-        itemCount: choices.length,
-      ),
+    final c = context.srs;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      itemCount: choices.length,
+      itemBuilder: (context, index) {
+        final t = choices[index];
+        return SrsSettingsRow(
+          label: t.label,
+          selected: t == boardTheme,
+          onTap: () => onChanged(t),
+          preview: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 264),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: DecoratedBox(
+                decoration: BoxDecoration(border: Border.all(color: c.hairline)),
+                child: t.thumbnail,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

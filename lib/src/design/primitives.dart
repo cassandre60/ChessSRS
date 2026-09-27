@@ -334,6 +334,8 @@ class SrsSettingsRow extends StatelessWidget {
     this.help,
     this.value,
     this.control,
+    this.preview,
+    this.selected,
     this.onTap,
     this.enabled = true,
     this.destructive = false,
@@ -349,6 +351,13 @@ class SrsSettingsRow extends StatelessWidget {
 
   /// Right-hand control for a setting row: a switch, a segmented control, a picker.
   final Widget? control;
+
+  /// Rendered under the label, full width. For the choice rows that show what an option looks
+  /// like -- a board thumbnail, a piece set.
+  final Widget? preview;
+
+  /// Draws the selected marker on a choice row. Null leaves the row unmarked.
+  final bool? selected;
 
   final VoidCallback? onTap;
 
@@ -370,7 +379,21 @@ class SrsSettingsRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: SrsText.rowName(labelColor)),
+        Row(
+          children: [
+            Expanded(child: Text(label, style: SrsText.rowName(labelColor))),
+            if (selected ?? false) ...[
+              const SizedBox(width: 12),
+              // A filled dot rather than a tick: the design marks selection with the accent, and
+              // a tick next to a switch reads as "enabled" rather than "chosen".
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: c.accent, shape: BoxShape.circle),
+              ),
+            ],
+          ],
+        ),
         if (help != null) ...[
           const SizedBox(height: 3),
           ConstrainedBox(
@@ -378,6 +401,7 @@ class SrsSettingsRow extends StatelessWidget {
             child: Text(help!, style: SrsText.rowSub(c.ink2).copyWith(height: 1.4)),
           ),
         ],
+        if (preview != null) ...[const SizedBox(height: 12), preview!],
       ],
     );
 
