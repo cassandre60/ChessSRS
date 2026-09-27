@@ -70,10 +70,21 @@ Future<Widget> makeTestProviderScopeApp(
   Map<ProviderOrFamily, Override>? overrides,
   AuthUser? authUser,
   Map<String, Object>? defaultPreferences,
+
+  /// Size of the test surface, in logical pixels. Defaults to [kTestSurfaceSize], which is
+  /// what every test that did not care was already getting.
+  Size surfaceSize = kTestSurfaceSize,
+
+  /// [brightness] pins the surface palette as well as the platform brightness, so code that
+  /// resolves its theme from the platform and code that reads `context.srs` agree. It defaults
+  /// to light, which is what every test that did not care was already getting.
+  Brightness brightness = Brightness.light,
 }) {
   return makeTestProviderScope(
     tester,
-    child: _FakeApp(home: home),
+    surfaceSize: surfaceSize,
+    brightness: brightness,
+    child: _FakeApp(home: home, brightness: brightness),
     overrides: overrides,
     authUser: authUser,
     defaultPreferences: defaultPreferences,
@@ -81,9 +92,10 @@ Future<Widget> makeTestProviderScopeApp(
 }
 
 class _FakeApp extends ConsumerStatefulWidget {
-  const _FakeApp({required this.home});
+  const _FakeApp({required this.home, this.brightness = Brightness.light});
 
   final Widget home;
+  final Brightness brightness;
 
   @override
   ConsumerState<_FakeApp> createState() => _FakeAppState();
@@ -100,7 +112,7 @@ class _FakeAppState extends ConsumerState<_FakeApp> {
   @override
   Widget build(BuildContext context) {
     return SrsTheme(
-      colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent),
+      colors: SrsColors.forBrightness(widget.brightness, kSrsDefaultAccent),
       child: MaterialApp(
         // Mirror production (see app.dart): [AppLocalizations.localizationsDelegates] would pull in
         // the `flutter_localizations` delegates, which localize the Flutter material and cupertino
@@ -160,6 +172,11 @@ Future<Widget> makeTestProviderScope(
   AuthUser? authUser,
   Map<String, Object>? defaultPreferences,
   Size surfaceSize = kTestSurfaceSize,
+
+  /// [brightness] pins the platform brightness as well as the surface palette, so code that
+  /// resolves its theme from the platform and code that reads `context.srs` agree. It defaults
+  /// to light, which is what every test that did not care was already getting.
+  Brightness brightness = Brightness.light,
   Key? key,
 }) async {
   final binding = TestLichessBinding.ensureInitialized();
@@ -170,6 +187,12 @@ Future<Widget> makeTestProviderScope(
   addTearDown(rootNavRouteStackObserver.clear);
 
   await tester.binding.setSurfaceSize(surfaceSize);
+
+  // The app resolves BackgroundThemeMode.system against MediaQuery.platformBrightnessOf, so
+  // pinning the surface palette without this leaves the two disagreeing — the Theme row would
+  // report dark while everything around it rendered light.
+  tester.platformDispatcher.platformBrightnessTestValue = brightness;
+  addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
   addTearDown(() {
     tester.binding.setSurfaceSize(null);
   });
