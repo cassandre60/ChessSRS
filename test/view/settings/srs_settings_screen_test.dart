@@ -30,7 +30,8 @@ void main() {
     expect(find.text('Daily limit'), findsOneWidget);
     expect(find.text('Target retention'), findsOneWidget);
     expect(find.text('Show notes after a move'), findsOneWidget);
-    expect(find.text('Show board annotations'), findsOneWidget);
+    // The design's words (01-identity.md:89); the row gates studyPrefs.showAnnotations.
+    expect(find.text('Show arrows and circles'), findsOneWidget);
     expect(find.text('Theme'), findsOneWidget);
     expect(find.text('Accent'), findsOneWidget);
     expect(find.text('Sound'), findsOneWidget);
@@ -51,14 +52,16 @@ void main() {
     await tester.tap(find.text('95%'));
     await tester.pumpAndSettle();
 
-    // Toggle notes
-    await tester.ensureVisible(find.text('Show notes after a move'));
+    // Toggle notes. Scrolled to rather than assumed present: the settings list is long and
+    // which rows a ListView has built depends on the height of the rows above them, so
+    // `ensureVisible` on a not-yet-built row throws instead of scrolling to it.
+    await tester.scrollUntilVisible(find.text('Show notes after a move'), 200);
     await tester.tap(find.text('Show notes after a move'));
     await tester.pumpAndSettle();
 
-    // Toggle arrows
-    await tester.ensureVisible(find.text('Show board annotations'));
-    await tester.tap(find.text('Show board annotations'));
+    // Toggle arrows -- the design's label for the row that gates showAnnotations.
+    await tester.scrollUntilVisible(find.text('Show arrows and circles'), 200);
+    await tester.tap(find.text('Show arrows and circles'));
     await tester.pumpAndSettle();
 
     // Toggle theme to Dark

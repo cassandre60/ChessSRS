@@ -1097,7 +1097,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('No repertoires matching "Nonexistent"'), findsOneWidget);
+      expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
       expect(find.text('Sicilian Dragon Repertoire'), findsNothing);
 

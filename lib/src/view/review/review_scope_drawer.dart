@@ -213,7 +213,8 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                               child: Padding(
                                 padding: const EdgeInsets.all(28.0),
                                 child: Text(
-                                  'No repertoires matching "$_searchQuery"',
+                                  // design/docs/01-identity.md: `Nothing matches "{query}".`
+                                  'Nothing matches \u201c$_searchQuery\u201d.',
                                   style: TextStyle(
                                     fontFamily: SrsText.ui,
                                     fontSize: 15,

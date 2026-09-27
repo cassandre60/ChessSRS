@@ -219,12 +219,13 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Show board annotations',
-                                  help:
-                                      'Draw arrows and highlighted squares from your study after answering.',
+                                  // The design's words, verbatim (01-identity.md). The row
+                                  // gates studyPrefs.showAnnotations, inherited from Lichess.
+                                  label: 'Show arrows and circles',
+                                  help: 'Drawn from your study, only after you answer.',
                                   control: SrsSwitch(
                                     value: studyPrefs.showAnnotations,
-                                    semanticLabel: 'Show board annotations',
+                                    semanticLabel: 'Show arrows and circles',
                                     onChanged: (_) => studyNotifier.toggleAnnotations(),
                                   ),
                                 ),
