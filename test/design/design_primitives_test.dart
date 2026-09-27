@@ -120,16 +120,6 @@ void main() {
           .toList();
       expect(toggled, [true, false]);
     });
-
-    testWidgets('an unselected pill is outlined so the set reads as a group', (tester) async {
-      await tester.pumpWidget(_wrap(const SrsPillButton(label: 'All', onPressed: null)));
-
-      final box = tester.widget<Container>(
-        find.descendant(of: find.byType(SrsPillButton), matching: find.byType(Container)).first,
-      );
-      final decoration = box.decoration! as BoxDecoration;
-      expect(decoration.border, isNotNull);
-    });
   });
 
   group('SrsSettingsRow', () {

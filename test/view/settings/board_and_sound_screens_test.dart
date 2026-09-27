@@ -2,7 +2,6 @@ import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/view/settings/board_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/piece_set_screen.dart';
 import 'package:chess_srs/src/view/settings/sound_settings_screen.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -12,9 +11,10 @@ import '../../test_provider_scope.dart';
 /// These three were Material `ListTile` lists behind a `PlatformAppBar` and had no test at all.
 ///
 /// The assertions are deliberately about the frame rather than the contents: that each screen
-/// now uses the Diagram head and rows, and that every option is reachable. Asserting the exact
-/// set of board themes or piece sets would break on every upstream addition without catching a
-/// regression.
+/// uses the Diagram head and rows, and that every option is reachable. Asserting the exact set
+/// of board themes or piece sets would break on every upstream addition without catching a
+/// regression, and asserting the *absence* of `PlatformAppBar` would stop compiling the moment
+/// the reskin deletes the type.
 void main() {
   setUpAll(TestLichessBinding.ensureInitialized);
 
@@ -28,7 +28,6 @@ void main() {
       await open(tester, const BoardChoiceScreen());
 
       expect(find.byType(SrsPageHead), findsOneWidget);
-      expect(find.byType(PlatformAppBar), findsNothing);
       expect(find.byType(SrsSettingsRow), findsWidgets);
 
       // Exactly one row is marked chosen.
@@ -58,7 +57,6 @@ void main() {
       await open(tester, const PieceSetScreen());
 
       expect(find.byType(SrsPageHead), findsOneWidget);
-      expect(find.byType(PlatformAppBar), findsNothing);
       expect(find.byType(Image), findsWidgets, reason: 'each row previews its pieces');
 
       final rows = tester.widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow)).toList();
@@ -73,7 +71,6 @@ void main() {
       await open(tester, const SoundSettingsScreen());
 
       expect(find.byType(SrsPageHead), findsOneWidget);
-      expect(find.byType(PlatformAppBar), findsNothing);
       expect(find.text('Master volume'), findsOneWidget);
       expect(find.byType(Slider), findsOneWidget);
       expect(find.byType(SrsSegmented<String>), findsOneWidget);

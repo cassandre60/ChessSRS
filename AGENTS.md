@@ -188,9 +188,11 @@ inner-loop step.**
 
 - **Per change:** `flutter analyze` on the files you touched, plus the one
   test file covering the change. That is the loop.
-- **Per push / before declaring a milestone:** `./verify` once, or let
-  GitHub Actions do it — CI runs `flutter test` on every push and is the
-  authority on whether the suite is green.
+- **Per push / before declaring a milestone:** let GitHub Actions do it. CI
+  runs `flutter test` on every push and is the authority on whether the suite
+  is green, so a local full-suite run before that push is duplicate work, not
+  extra safety. Run `./verify` locally only when CI is unavailable or you
+  specifically need the answer before pushing.
 
 Say plainly in the commit message when a change was verified only by
 targeted tests, so nobody mistakes it for a full-suite result.
@@ -283,3 +285,15 @@ foundation already contains study-tree and game-tree prior art.
   replaced the provider that makes it. Verified by: counting HTTP client
   constructions in the test — the app built one, for FCM, and none for the token
   check. Full account in `docs/audit-disposition.md`.
+- [2026-09-27, Space Bunny Free] A test earns its place only if it fails when the
+  code is **wrong**, not when it is merely **different**. The qualifying cases
+  are: a defect just fixed, a contract that has already bitten us (44px targets,
+  a tap actually reaching its row, a viewport not clipping its content), or an
+  invariant in `QUALITY.md`. Of 18 tests added across the four settings
+  reskin batches, 5 met that bar, 4 were reasonable, and 3 asserted only that a
+  widget was absent -- so they would fail once the reskin deleted the type and
+  would have to be deleted by hand. Mechanical renames get no per-item test: a
+  reskin PR tests the defects it finds, not one assertion per file it converts.
+  Verified by: removing the row count and the value text from the engine slider
+  and watching both new tests fail, then pruning the three absent-type asserts
+  and finding the suite unchanged.
