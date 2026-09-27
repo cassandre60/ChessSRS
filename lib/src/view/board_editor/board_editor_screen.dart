@@ -108,7 +108,13 @@ class BoardEditorScreen extends ConsumerWidget {
 
                     return Flex(
                       direction: direction,
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      // `spaceEvenly` spread the leftover height into four *equal* ~51px gaps on a
+                      // 390x844 phone, so the tool palettes floated as far from the board they act
+                      // on as they did from the screen edge. A square board is width-bound and
+                      // cannot claim the slack, so centre the block and keep the palette-to-board
+                      // gap tight instead of equal.
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      spacing: 8,
                       mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [

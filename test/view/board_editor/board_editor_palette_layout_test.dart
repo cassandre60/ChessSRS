@@ -88,5 +88,58 @@ void main() {
       await tester.tap(erase);
       await tester.pumpAndSettle();
     });
+
+    // Regression: the palette/board/palette column used `MainAxisAlignment.spaceEvenly`, which
+    // spread the leftover height into four *equal* ~51px gaps on a 390x844 phone. The tool
+    // palettes therefore floated as far from the board they act on as they did from the screen
+    // edge. A square board is width-bound and cannot claim that height, so the block is centred
+    // and the palette-to-board gap is kept tight instead of equal.
+    testWidgets('palettes sit next to the board, not adrift in equal gaps', (tester) async {
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        await makeTestProviderScopeApp(tester, home: const BoardEditorScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      // The three column children: palette, board, palette.
+      final column = find.byType(Flex).first;
+      final boxes = <Rect>[];
+      tester.element(column).visitChildren((child) {
+        final ro = child.renderObject;
+        if (ro is RenderBox && ro.hasSize) {
+          boxes.add(ro.localToGlobal(Offset.zero) & ro.size);
+        }
+      });
+      expect(boxes.length, 3, reason: 'palette, board, palette');
+
+      final topPalette = boxes[0];
+      final board = boxes[1];
+      final bottomPalette = boxes[2];
+      final slot = tester.getRect(column);
+
+      expect(
+        board.top - topPalette.bottom,
+        lessThanOrEqualTo(16),
+        reason: 'top palette must hug the board',
+      );
+      expect(
+        bottomPalette.top - board.bottom,
+        lessThanOrEqualTo(16),
+        reason: 'bottom palette must hug the board',
+      );
+
+      // ...while the block as a whole stays centred, so the slack becomes margin rather than a
+      // gap between a control and the thing it controls.
+      final above = topPalette.top - slot.top;
+      final below = slot.bottom - bottomPalette.bottom;
+      expect((above - below).abs(), lessThanOrEqualTo(1), reason: 'block must be centred');
+      expect(above, greaterThan(16), reason: 'slack becomes margin, not a gap');
+    });
   });
 }
