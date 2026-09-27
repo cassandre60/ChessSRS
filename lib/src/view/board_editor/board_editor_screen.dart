@@ -118,6 +118,9 @@ class BoardEditorScreen extends ConsumerWidget {
                           direction: flipAxis(direction),
                           side: boardEditorState.orientation.opposite,
                           isTablet: isTablet,
+                          maxPaletteWidth: direction == Axis.horizontal
+                              ? constraints.maxHeight
+                              : constraints.maxWidth,
                         ),
                         _BoardEditor(
                           boardSize,
@@ -133,6 +136,9 @@ class BoardEditorScreen extends ConsumerWidget {
                           direction: flipAxis(direction),
                           side: boardEditorState.orientation,
                           isTablet: isTablet,
+                          maxPaletteWidth: direction == Axis.horizontal
+                              ? constraints.maxHeight
+                              : constraints.maxWidth,
                         ),
                       ],
                     );
@@ -209,11 +215,17 @@ class _PieceMenu extends ConsumerStatefulWidget {
     required this.direction,
     required this.side,
     required this.isTablet,
+    required this.maxPaletteWidth,
   });
 
   final BoardEditorControllerParams? params;
 
   final double boardSize;
+
+  /// Width the palette may occupy along [direction]. The palette is a row of square tools rather
+  /// than a view of the board, so it is sized to the space it is actually given instead of to
+  /// the board -- that is what keeps the erase button from being clipped off the end.
+  final double maxPaletteWidth;
 
   final Axis direction;
 
@@ -236,10 +248,19 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
         .toBoardSettings(Variant.standard, srsColors: srsColors)
         .pieceAssets;
 
-    final squareSize = widget.boardSize / 8;
     final c = context.srs;
     final isDragActive = editorState.editorPointerMode == EditorPointerMode.drag;
     final isDeleteActive = editorState.deletePiecesActive;
+
+    // The palette draws a 1px border inside its own box, so its eight children have to fit the
+    // *inner* width. Sizing them from the outer width overflowed by 2px and the ancestor's
+    // Clip.hardEdge silently ate the erase button -- no overflow error, no test failure, and the
+    // control was simply unreachable on a phone.
+    const borderWidth = 1.0;
+    final paletteItemCount = Role.values.length + 2; // drag toggle, one per role, erase
+    final itemSize =
+        math.min(widget.boardSize, math.max(0.0, widget.maxPaletteWidth - 2 * borderWidth)) /
+        paletteItemCount;
 
     return Container(
       clipBehavior: Clip.hardEdge,
@@ -255,8 +276,8 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: squareSize,
-            height: squareSize,
+            width: itemSize,
+            height: itemSize,
             child: ColoredBox(
               key: Key('drag-button-${widget.side.name}'),
               color: isDragActive ? c.accentSoft : Colors.transparent,
@@ -264,7 +285,7 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
                 onTap: () => ref.read(editorController.notifier).updateMode(EditorPointerMode.drag),
                 child: Icon(
                   CupertinoIcons.hand_draw,
-                  size: 0.8 * squareSize,
+                  size: 0.8 * itemSize,
                   color: isDragActive ? c.accent : c.ink2,
                 ),
               ),
@@ -274,11 +295,7 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
             final piece = Piece(role: role, color: widget.side);
             final isPieceActive =
                 ref.read(boardEditorControllerProvider(widget.params)).activePieceOnEdit == piece;
-            final pieceWidget = PieceWidget(
-              piece: piece,
-              size: squareSize,
-              pieceAssets: pieceAssets,
-            );
+            final pieceWidget = PieceWidget(piece: piece, size: itemSize, pieceAssets: pieceAssets);
 
             return ColoredBox(
               key: Key('piece-button-${piece.color.name}-${piece.role.name}'),
@@ -288,7 +305,7 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
                   data: Piece(role: role, color: widget.side),
                   feedback: PieceDragFeedback(
                     piece: piece,
-                    squareSize: squareSize,
+                    squareSize: itemSize,
                     pieceAssets: pieceAssets,
                   ),
                   child: pieceWidget,
@@ -302,8 +319,8 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
           }),
           SizedBox(
             key: Key('delete-button-${widget.side.name}'),
-            width: squareSize,
-            height: squareSize,
+            width: itemSize,
+            height: itemSize,
             child: ColoredBox(
               // Demo erase tool: active state is accent, never red.
               color: isDeleteActive ? c.accentSoft : Colors.transparent,
@@ -312,7 +329,7 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
                     ref.read(editorController.notifier).updateMode(EditorPointerMode.edit, null),
                 child: Icon(
                   CupertinoIcons.delete,
-                  size: 0.75 * squareSize,
+                  size: 0.75 * itemSize,
                   color: isDeleteActive ? c.accent : c.ink3,
                 ),
               ),
