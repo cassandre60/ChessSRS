@@ -144,20 +144,25 @@ class OpeningExplorerMoveTable extends ConsumerWidget {
       ),
     );
 
+    // The piece-notation setting promises letters or symbols, so it has to be able to render both
+    // differently: symbol draws the whole SAN in the chess font, letter keeps it as text.
+    //
+    // Deliberately not `SrsSan`, which substitutes a figurine for a leading KQRBN and would make
+    // both settings look the same. Figurines belong to the Review side column's notation line
+    // (design/docs/03-components.md, "Notation line"); nothing in the design package specifies them
+    // for this table, and a setting that inverts its own promise is worse than a plainer table.
     Widget moveSan(OpeningMove move) {
-      if (pieceNotation == PieceNotation.symbol) {
-        return Text(move.san, style: const TextStyle(fontFamily: 'ChessFont'));
-      }
-      return SrsSan(
-        move.san,
-        style: TextStyle(
-          fontFamily: SrsText.ui,
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: c.ink,
-          fontFeatures: SrsText.tabular,
-        ),
+      final style = TextStyle(
+        fontFamily: SrsText.ui,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: c.ink,
+        fontFeatures: SrsText.tabular,
       );
+      if (pieceNotation == PieceNotation.symbol) {
+        return Text(move.san, style: style.copyWith(fontFamily: 'ChessFont'));
+      }
+      return Text(move.san, style: style);
     }
 
     Widget resultBar({required int white, required int draws, required int black}) {

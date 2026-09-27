@@ -427,16 +427,17 @@ void main() {
         await tester.pumpWidget(app);
         await tester.pump();
 
-        if (pieceNotation == PieceNotation.symbol) {
-          // The whole SAN stays one string, set in the chess font.
-          final moveText = tester.widget<Text>(find.text('Nf3'));
-          expect(moveText.style?.fontFamily, 'ChessFont');
-        } else {
-          // Letter notation sets the piece as a figurine and the rest in the UI face, so there is
-          // no single Text('Nf3') left to inspect.
-          expect(find.byType(SrsFigurine), findsOneWidget);
-          expect(tester.widget<Text>(find.text('f3')).style?.fontFamily, SrsText.ui);
-        }
+        // Guards that the setting can still tell the two notations apart. A previous version of
+        // this test was rewritten to accept a figurine under letter notation, which is what let
+        // the setting become inert: `SrsSan` substitutes a figurine for a leading KQRBN, so both
+        // notations rendered the same and `find.text('Nf3')` stopped matching.
+        expect(find.byType(SrsFigurine), findsNothing);
+
+        final moveText = tester.widget<Text>(find.text('Nf3'));
+        expect(
+          moveText.style?.fontFamily,
+          pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
+        );
       });
     }
 
