@@ -144,7 +144,13 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: false) required bool inlineNotation,
     @JsonKey(defaultValue: false) required bool smallBoard,
     @JsonKey(defaultValue: false) required bool srsDiagnostics,
-    @JsonKey(defaultValue: false) required bool showMoveHistory,
+    // The notation line is the headline of the review screen
+    // (design/docs/03-components.md: "the line is the headline"), and with it off by default the
+    // primary screen rendered a board above an empty column. Every sibling display preference --
+    // showEvaluationGauge, showEngineLines, showAnnotations, showPgnComments -- already defaults
+    // to true; this was the lone false. It stays user-settable in the SRS settings screen, so
+    // only users who never touched it are affected.
+    @JsonKey(defaultValue: true) required bool showMoveHistory,
     @JsonKey(defaultValue: StudyListOrder.hot) required StudyListOrder listOrder,
     @JsonKey(defaultValue: SchedulerType.simple) required SchedulerType schedulerType,
     @JsonKey(defaultValue: 0.88) required double targetRetention,
@@ -164,7 +170,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     inlineNotation: false,
     smallBoard: false,
     srsDiagnostics: false,
-    showMoveHistory: false,
+    showMoveHistory: true,
     listOrder: StudyListOrder.hot,
     schedulerType: SchedulerType.simple,
     targetRetention: 0.88,

@@ -1208,14 +1208,18 @@ void main() {
         expect(find.byType(SrsReviewLayout), findsOneWidget);
         expect(find.byType(Chessboard), findsOneWidget);
         expect(find.text('White to play'), findsOneWidget);
-        // By default, showMoveHistory is false
-        expect(find.byType(SrsNotationLine), findsNothing);
 
-        // Enabling showMoveHistory shows the notation line
-        final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
-        await container.read(studyPreferencesProvider.notifier).setShowMoveHistory(true);
-        await tester.pumpAndSettle();
+        // The notation line is the headline of this screen
+        // (design/docs/03-components.md: "the line is the headline"), so it is on by default.
+        // It used to default off, which left the primary screen as a board above an empty
+        // column; every sibling display preference already defaulted on.
         expect(find.byType(SrsNotationLine), findsOneWidget);
+
+        // ...and it is still a setting.
+        final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
+        await container.read(studyPreferencesProvider.notifier).setShowMoveHistory(false);
+        await tester.pumpAndSettle();
+        expect(find.byType(SrsNotationLine), findsNothing);
 
         expect(find.widgetWithText(SrsTextButton, 'Skip'), findsOneWidget);
 
