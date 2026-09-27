@@ -1,4 +1,5 @@
 import 'package:chess_srs/l10n/l10n.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
@@ -11,9 +12,6 @@ import 'package:chess_srs/src/view/settings/board_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/piece_set_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:chessground/chessground.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -82,433 +80,469 @@ class _BoardSettingsScreenState extends ConsumerState<BoardSettingsScreen> {
     final submitMove = authUser == null
         ? SubmitMove(accountPrefs.submitMove.choices.where(submitMoveChoices.contains))
         : accountPrefs.submitMove;
+    final c = context.srs;
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: Text(context.l10n.mobileBoardSettings),
-        actions: [if (isLoading) const PlatformAppBarLoadingIndicator()],
-      ),
-      body: ListView(
-        children: [
-          ListSection(
-            header: SettingsSectionTitle(context.l10n.preferencesDisplay),
-            hasLeading: false,
-            children: [
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.board),
-                settingsValue: boardPrefs.boardTheme.label,
-                onTap: () {
-                  Navigator.of(context).push(BoardChoiceScreen.buildRoute());
-                },
-              ),
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.pieceSet),
-                settingsValue: boardPrefs.pieceSet.label,
-                onTap: () {
-                  Navigator.of(context).push(PieceSetScreen.buildRoute());
-                },
-              ),
-              SettingsListTile(
-                enabled: accountPrefsEnabled,
-                settingsLabel: Text(context.l10n.preferencesZenMode),
-                settingsValue: accountPrefs.zenMode.label(context.l10n),
-                onTap: accountPrefsEnabled
-                    ? () {
-                        showChoicePicker(
-                          context,
-                          choices: Zen.values,
-                          selectedItem: accountPrefs.zenMode,
-                          labelBuilder: (t) => Text(t.label(context.l10n)),
-                          onSelectedItemChanged: (Zen? value) {
-                            _setAccountPref((prefs) => prefs.setZen(value ?? accountPrefs.zenMode));
-                          },
-                        );
-                      }
-                    : null,
-              ),
-              SettingsListTile(
-                enabled: accountPrefsEnabled,
-                settingsLabel: Text(context.l10n.preferencesPgnPieceNotation),
-                settingsValue: accountPrefs.pieceNotation.label(context.l10n),
-                onTap: accountPrefsEnabled
-                    ? () {
-                        showChoicePicker(
-                          context,
-                          choices: PieceNotation.values,
-                          selectedItem: accountPrefs.pieceNotation,
-                          labelBuilder: (t) => Text(t.label(context.l10n)),
-                          onSelectedItemChanged: (PieceNotation? value) {
-                            _setAccountPref(
-                              (prefs) =>
-                                  prefs.setPieceNotation(value ?? accountPrefs.pieceNotation),
-                            );
-                          },
-                        );
-                      }
-                    : null,
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesBoardCoordinates),
-                value: boardPrefs.coordinates,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleCoordinates();
-                },
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.mobilePrefMagnifyDraggedPiece),
-                value: boardPrefs.magnifyDraggedPiece,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleMagnifyDraggedPiece();
-                },
-              ),
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.mobileSettingsDraggedPieceTarget),
-                settingsValue: dragTargetKindLabel(context.l10n, boardPrefs.dragTargetKind),
-                onTap: () {
-                  showChoicePicker(
-                    context,
-                    choices: DragTargetKind.values,
-                    selectedItem: boardPrefs.dragTargetKind,
-                    labelBuilder: (t) => Text(dragTargetKindLabel(context.l10n, t)),
-                    onSelectedItemChanged: (DragTargetKind? value) {
-                      ref
-                          .read(boardPreferencesProvider.notifier)
-                          .setDragTargetKind(value ?? DragTargetKind.circle);
+    return Scaffold(
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.mobileBoardSettings,
+              onBack: () => Navigator.of(context).maybePop(),
+              // Every account preference on this screen round-trips to the server, so the
+              // progress belongs on the head rather than on one row.
+              trailing: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                children: [
+                  const SrsGroupHeader('Display'),
+                  SrsSettingsRow(
+                    label: context.l10n.board,
+                    value: boardPrefs.boardTheme.label,
+                    onTap: () {
+                      Navigator.of(context).push(BoardChoiceScreen.buildRoute());
                     },
-                  );
-                },
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesPieceAnimation),
-                value: boardPrefs.pieceAnimation,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).togglePieceAnimation();
-                },
-              ),
-              if (Theme.of(context).platform == TargetPlatform.android &&
-                  !isTabletOrLarger(context))
-                androidVersionAsync.maybeWhen(
-                  data: (version) => version != null && version.sdkInt >= 29
-                      ? SwitchSettingTile(
-                          title: Text(context.l10n.mobileSettingsImmersiveMode),
-                          subtitle: Text(
-                            context.l10n.mobileSettingsImmersiveModeSubtitle,
-                            maxLines: 5,
-                          ),
-                          value: boardPrefs.immersiveModeWhilePlaying ?? false,
-                          onChanged: (value) {
-                            ref
-                                .read(boardPreferencesProvider.notifier)
-                                .toggleImmersiveModeWhilePlaying();
-                          },
-                        )
-                      : const SizedBox.shrink(),
-                  orElse: () => const SizedBox.shrink(),
-                ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesPieceDestinations),
-                value: boardPrefs.showLegalMoves,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleShowLegalMoves();
-                },
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesBoardHighlights),
-                value: boardPrefs.boardHighlights,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleBoardHighlights();
-                },
-              ),
-              if (!isShortVerticalScreen(context))
-                SwitchSettingTile(
-                  title: Text(context.l10n.preferencesMoveListWhilePlaying),
-                  value: boardPrefs.moveListDisplay,
-                  onChanged: (value) {
-                    ref.read(boardPreferencesProvider.notifier).toggleMoveListDisplay();
-                  },
-                ),
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.preferencesMaterialDifference),
-                settingsValue: boardPrefs.materialDifferenceFormat.l10n(
-                  AppLocalizations.of(context),
-                ),
-                onTap: () {
-                  showChoicePicker(
-                    context,
-                    choices: MaterialDifferenceFormat.values,
-                    selectedItem: boardPrefs.materialDifferenceFormat,
-                    labelBuilder: (t) => Text(t.l10n(context.l10n)),
-                    onSelectedItemChanged: (MaterialDifferenceFormat? value) => ref
-                        .read(boardPreferencesProvider.notifier)
-                        .setMaterialDifferenceFormat(
-                          value ?? MaterialDifferenceFormat.materialDifference,
-                        ),
-                  );
-                },
-              ),
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.mobileSettingsClockPosition),
-                settingsValue: boardPrefs.clockPosition.label(context.l10n),
-                onTap: () {
-                  showChoicePicker(
-                    context,
-                    choices: ClockPosition.values,
-                    selectedItem: boardPrefs.clockPosition,
-                    labelBuilder: (t) => Text(t.label(context.l10n)),
-                    onSelectedItemChanged: (ClockPosition? value) => ref
-                        .read(boardPreferencesProvider.notifier)
-                        .setClockPosition(value ?? ClockPosition.right),
-                  );
-                },
-              ),
-              if (isTabletOrLarger(context))
-                SettingsListTile(
-                  settingsLabel: const Text('Board position in landscape mode'), // TODO l10n
-                  settingsValue: boardPrefs.landscapeBoardPosition.label(context.l10n),
-                  onTap: () {
-                    showChoicePicker(
-                      context,
-                      choices: LandscapeBoardPosition.values,
-                      selectedItem: boardPrefs.landscapeBoardPosition,
-                      labelBuilder: (t) => Text(t.label(context.l10n)),
-                      onSelectedItemChanged: (LandscapeBoardPosition? value) => ref
-                          .read(boardPreferencesProvider.notifier)
-                          .setLandscapeBoardPosition(value ?? LandscapeBoardPosition.left),
-                    );
-                  },
-                ),
-            ],
-          ),
-          ListSection(
-            header: SettingsSectionTitle(context.l10n.preferencesGameBehavior),
-            hasLeading: false,
-            children: [
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesPremovesPlayingDuringOpponentTurn),
-                value: boardPrefs.premoves,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).togglePremoves();
-                },
-              ),
-              // takebacks are always enabled for anonymous players, so hide the setting.
-              if (authUser != null)
-                SettingsListTile(
-                  enabled: accountPrefsEnabled,
-                  settingsLabel: Text(context.l10n.preferencesTakebacksWithOpponentApproval),
-                  settingsValue: accountPrefs.takeback.label(context.l10n),
-                  onTap: accountPrefsEnabled
-                      ? () {
-                          showChoicePicker(
-                            context,
-                            choices: Takeback.values,
-                            selectedItem: accountPrefs.takeback,
-                            labelBuilder: (t) => Text(t.label(context.l10n)),
-                            onSelectedItemChanged: (Takeback? value) {
-                              _setAccountPref(
-                                (prefs) => prefs.setTakeback(value ?? accountPrefs.takeback),
-                              );
-                            },
-                          );
-                        }
-                      : null,
-                ),
-              SettingsListTile(
-                enabled: accountPrefsEnabled,
-                settingsLabel: Text(context.l10n.preferencesPromoteToQueenAutomatically),
-                settingsValue: accountPrefs.autoQueen.label(context.l10n),
-                onTap: accountPrefsEnabled
-                    ? () {
-                        showChoicePicker(
-                          context,
-                          choices: AutoQueen.values,
-                          selectedItem: accountPrefs.autoQueen,
-                          labelBuilder: (t) => Text(t.label(context.l10n)),
-                          onSelectedItemChanged: (AutoQueen? value) {
-                            _setAccountPref(
-                              (prefs) => prefs.setAutoQueen(value ?? accountPrefs.autoQueen),
-                            );
-                          },
-                        );
-                      }
-                    : null,
-              ),
-              // Auto threefold is decided server side, so hide the setting for anonymous players.
-              if (authUser != null)
-                SettingsListTile(
-                  enabled: accountPrefsEnabled,
-                  settingsLabel: Text(
-                    context.l10n.preferencesClaimDrawOnThreefoldRepetitionAutomatically,
                   ),
-                  settingsValue: accountPrefs.autoThreefold.label(context.l10n),
-                  onTap: accountPrefsEnabled
-                      ? () {
-                          showChoicePicker(
-                            context,
-                            choices: AutoThreefold.values,
-                            selectedItem: accountPrefs.autoThreefold,
-                            labelBuilder: (t) => Text(t.label(context.l10n)),
-                            onSelectedItemChanged: (AutoThreefold? value) {
-                              _setAccountPref(
-                                (prefs) =>
-                                    prefs.setAutoThreefold(value ?? accountPrefs.autoThreefold),
-                              );
-                            },
-                          );
-                        }
-                      : null,
-                ),
-              SettingsListTile(
-                enabled: accountPrefsEnabled,
-                settingsLabel: Text(context.l10n.preferencesMoveConfirmation),
-                settingsValue: submitMove.label(context.l10n),
-                onTap: accountPrefsEnabled
-                    ? () {
-                        showMultipleChoicesPicker(
-                          context,
-                          choices: submitMoveChoices,
-                          selectedItems: submitMove.choices,
-                          labelBuilder: (t) => Text(t.label(context.l10n)),
-                        ).then((value) {
-                          if (value != null) {
-                            _setAccountPref((prefs) => prefs.setSubmitMove(SubmitMove(value)));
+                  SrsSettingsRow(
+                    label: context.l10n.pieceSet,
+                    value: boardPrefs.pieceSet.label,
+                    onTap: () {
+                      Navigator.of(context).push(PieceSetScreen.buildRoute());
+                    },
+                  ),
+                  SrsSettingsRow(
+                    enabled: accountPrefsEnabled,
+                    label: context.l10n.preferencesZenMode,
+                    value: accountPrefs.zenMode.label(context.l10n),
+                    onTap: accountPrefsEnabled
+                        ? () {
+                            showChoicePicker(
+                              context,
+                              choices: Zen.values,
+                              selectedItem: accountPrefs.zenMode,
+                              labelBuilder: (t) => Text(t.label(context.l10n)),
+                              onSelectedItemChanged: (Zen? value) {
+                                _setAccountPref(
+                                  (prefs) => prefs.setZen(value ?? accountPrefs.zenMode),
+                                );
+                              },
+                            );
                           }
-                        });
-                      }
-                    : null,
-                explanation: context.l10n.preferencesExplainCanThenBeTemporarilyDisabled,
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesConfirmResignationAndDrawOffers),
-                value: boardPrefs.confirmResignAndDraw,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleConfirmResignAndDraw();
-                },
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.mobileSettingsTouchFeedback),
-                value: boardPrefs.hapticFeedback,
-                subtitle: Text(context.l10n.mobileSettingsTouchFeedbackSubtitle, maxLines: 5),
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleHapticFeedback();
-                },
-              ),
-              SettingsListTile(
-                settingsLabel: Text(context.l10n.preferencesHowDoYouMovePieces),
-                settingsValue: pieceShiftMethodl10n(context, boardPrefs.pieceShiftMethod),
-                onTap: () {
-                  showChoicePicker(
-                    context,
-                    choices: PieceShiftMethod.values,
-                    selectedItem: boardPrefs.pieceShiftMethod,
-                    labelBuilder: (t) => Text(pieceShiftMethodl10n(context, t)),
-                    onSelectedItemChanged: (PieceShiftMethod? value) {
-                      ref
-                          .read(boardPreferencesProvider.notifier)
-                          .setPieceShiftMethod(value ?? PieceShiftMethod.either);
+                        : null,
+                  ),
+                  SrsSettingsRow(
+                    enabled: accountPrefsEnabled,
+                    label: context.l10n.preferencesPgnPieceNotation,
+                    value: accountPrefs.pieceNotation.label(context.l10n),
+                    onTap: accountPrefsEnabled
+                        ? () {
+                            showChoicePicker(
+                              context,
+                              choices: PieceNotation.values,
+                              selectedItem: accountPrefs.pieceNotation,
+                              labelBuilder: (t) => Text(t.label(context.l10n)),
+                              onSelectedItemChanged: (PieceNotation? value) {
+                                _setAccountPref(
+                                  (prefs) =>
+                                      prefs.setPieceNotation(value ?? accountPrefs.pieceNotation),
+                                );
+                              },
+                            );
+                          }
+                        : null,
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesBoardCoordinates,
+                    control: SrsSwitch(
+                      value: boardPrefs.coordinates,
+                      semanticLabel: context.l10n.preferencesBoardCoordinates,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleCoordinates();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.mobilePrefMagnifyDraggedPiece,
+                    control: SrsSwitch(
+                      value: boardPrefs.magnifyDraggedPiece,
+                      semanticLabel: context.l10n.mobilePrefMagnifyDraggedPiece,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleMagnifyDraggedPiece();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.mobileSettingsDraggedPieceTarget,
+                    value: dragTargetKindLabel(context.l10n, boardPrefs.dragTargetKind),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: DragTargetKind.values,
+                        selectedItem: boardPrefs.dragTargetKind,
+                        labelBuilder: (t) => Text(dragTargetKindLabel(context.l10n, t)),
+                        onSelectedItemChanged: (DragTargetKind? value) {
+                          ref
+                              .read(boardPreferencesProvider.notifier)
+                              .setDragTargetKind(value ?? DragTargetKind.circle);
+                        },
+                      );
                     },
-                  );
-                },
-              ),
-              SwitchSettingTile(
-                // TODO l10n
-                title: const Text('Move on release'),
-                subtitle: const Text(
-                  'When moving a piece by tapping, the move is made when you lift '
-                  'your finger, letting you slide to change the destination square.',
-                  maxLines: 5,
-                ),
-                value: boardPrefs.moveOnRelease,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleMoveOnRelease();
-                },
-              ),
-              SettingsListTile(
-                settingsLabel: Text(
-                  context.l10n.preferencesCastleByMovingTheKingTwoSquaresOrOntoTheRook,
-                ),
-                settingsValue: boardPrefs.castlingMethod.l10n(context.l10n),
-                onTap: () {
-                  showChoicePicker(
-                    context,
-                    choices: CastlingMethod.values,
-                    selectedItem: boardPrefs.castlingMethod,
-                    labelBuilder: (t) => Text(t.l10n(context.l10n)),
-                    onSelectedItemChanged: (CastlingMethod? value) {
-                      ref
-                          .read(boardPreferencesProvider.notifier)
-                          .setCastlingMethod(value ?? CastlingMethod.kingOverRook);
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesPieceAnimation,
+                    control: SrsSwitch(
+                      value: boardPrefs.pieceAnimation,
+                      semanticLabel: context.l10n.preferencesPieceAnimation,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).togglePieceAnimation();
+                      },
+                    ),
+                  ),
+                  if (Theme.of(context).platform == TargetPlatform.android &&
+                      !isTabletOrLarger(context))
+                    androidVersionAsync.maybeWhen(
+                      data: (version) => version != null && version.sdkInt >= 29
+                          ? SrsSettingsRow(
+                              label: context.l10n.mobileSettingsImmersiveMode,
+                              help: context.l10n.mobileSettingsImmersiveModeSubtitle,
+                              control: SrsSwitch(
+                                value: boardPrefs.immersiveModeWhilePlaying ?? false,
+                                semanticLabel: context.l10n.mobileSettingsImmersiveMode,
+                                onChanged: (value) {
+                                  ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .toggleImmersiveModeWhilePlaying();
+                                },
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                      orElse: () => const SizedBox.shrink(),
+                    ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesPieceDestinations,
+                    control: SrsSwitch(
+                      value: boardPrefs.showLegalMoves,
+                      semanticLabel: context.l10n.preferencesPieceDestinations,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleShowLegalMoves();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesBoardHighlights,
+                    control: SrsSwitch(
+                      value: boardPrefs.boardHighlights,
+                      semanticLabel: context.l10n.preferencesBoardHighlights,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleBoardHighlights();
+                      },
+                    ),
+                  ),
+                  if (!isShortVerticalScreen(context))
+                    SrsSettingsRow(
+                      label: context.l10n.preferencesMoveListWhilePlaying,
+                      control: SrsSwitch(
+                        value: boardPrefs.moveListDisplay,
+                        semanticLabel: context.l10n.preferencesMoveListWhilePlaying,
+                        onChanged: (value) {
+                          ref.read(boardPreferencesProvider.notifier).toggleMoveListDisplay();
+                        },
+                      ),
+                    ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesMaterialDifference,
+                    value: boardPrefs.materialDifferenceFormat.l10n(AppLocalizations.of(context)),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: MaterialDifferenceFormat.values,
+                        selectedItem: boardPrefs.materialDifferenceFormat,
+                        labelBuilder: (t) => Text(t.l10n(context.l10n)),
+                        onSelectedItemChanged: (MaterialDifferenceFormat? value) => ref
+                            .read(boardPreferencesProvider.notifier)
+                            .setMaterialDifferenceFormat(
+                              value ?? MaterialDifferenceFormat.materialDifference,
+                            ),
+                      );
                     },
-                  );
-                },
-              ),
-              SwitchSettingTile(
-                title: Text(context.l10n.mobileSettingsShapeDrawing),
-                subtitle: Text(context.l10n.mobileSettingsShapeDrawingSubtitle, maxLines: 5),
-                value: boardPrefs.enableShapeDrawings,
-                onChanged: (value) {
-                  ref.read(boardPreferencesProvider.notifier).toggleEnableShapeDrawings();
-                },
-              ),
-            ],
-          ),
-          ListSection(
-            header: SettingsSectionTitle(context.l10n.preferencesChessClock),
-            hasLeading: false,
-            children: [
-              // Give more time is always enabled for anonymous players, so hide the setting.
-              if (authUser != null)
-                SettingsListTile(
-                  enabled: accountPrefsEnabled,
-                  settingsLabel: Text(context.l10n.preferencesGiveMoreTime),
-                  settingsValue: accountPrefs.moretime.label(context.l10n),
-                  onTap: accountPrefsEnabled
-                      ? () {
-                          showChoicePicker(
-                            context,
-                            choices: Moretime.values,
-                            selectedItem: accountPrefs.moretime,
-                            labelBuilder: (t) => Text(t.label(context.l10n)),
-                            onSelectedItemChanged: (Moretime? value) {
-                              _setAccountPref(
-                                (prefs) => prefs.setMoretime(value ?? accountPrefs.moretime),
-                              );
-                            },
-                          );
-                        }
-                      : null,
-                ),
-              SwitchSettingTile(
-                title: Text(context.l10n.preferencesSoundWhenTimeGetsCritical),
-                value: accountPrefs.clockSound.value,
-                onChanged: accountPrefsEnabled
-                    ? (value) {
-                        _setAccountPref((prefs) => prefs.setClockSound(BooleanPref(value)));
-                      }
-                    : null,
-              ),
-              SettingsListTile(
-                enabled: accountPrefsEnabled,
-                settingsLabel: Text(context.l10n.preferencesTenthsOfSeconds),
-                settingsValue: accountPrefs.clockTenths.label(context.l10n),
-                onTap: accountPrefsEnabled
-                    ? () {
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.mobileSettingsClockPosition,
+                    value: boardPrefs.clockPosition.label(context.l10n),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: ClockPosition.values,
+                        selectedItem: boardPrefs.clockPosition,
+                        labelBuilder: (t) => Text(t.label(context.l10n)),
+                        onSelectedItemChanged: (ClockPosition? value) => ref
+                            .read(boardPreferencesProvider.notifier)
+                            .setClockPosition(value ?? ClockPosition.right),
+                      );
+                    },
+                  ),
+                  if (isTabletOrLarger(context))
+                    SrsSettingsRow(
+                      label: 'Board position in landscape mode',
+                      value: boardPrefs.landscapeBoardPosition.label(context.l10n),
+                      onTap: () {
                         showChoicePicker(
                           context,
-                          choices: ClockTenths.values,
-                          selectedItem: accountPrefs.clockTenths,
+                          choices: LandscapeBoardPosition.values,
+                          selectedItem: boardPrefs.landscapeBoardPosition,
                           labelBuilder: (t) => Text(t.label(context.l10n)),
-                          onSelectedItemChanged: (ClockTenths? value) {
-                            _setAccountPref(
-                              (prefs) => prefs.setClockTenths(value ?? accountPrefs.clockTenths),
-                            );
-                          },
+                          onSelectedItemChanged: (LandscapeBoardPosition? value) => ref
+                              .read(boardPreferencesProvider.notifier)
+                              .setLandscapeBoardPosition(value ?? LandscapeBoardPosition.left),
                         );
-                      }
-                    : null,
+                      },
+                    ),
+                  const SrsGroupHeader('Game behaviour'),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesPremovesPlayingDuringOpponentTurn,
+                    control: SrsSwitch(
+                      value: boardPrefs.premoves,
+                      semanticLabel: context.l10n.preferencesPremovesPlayingDuringOpponentTurn,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).togglePremoves();
+                      },
+                    ),
+                  ),
+                  // takebacks are always enabled for anonymous players, so hide the setting.
+                  if (authUser != null)
+                    SrsSettingsRow(
+                      enabled: accountPrefsEnabled,
+                      label: context.l10n.preferencesTakebacksWithOpponentApproval,
+                      value: accountPrefs.takeback.label(context.l10n),
+                      onTap: accountPrefsEnabled
+                          ? () {
+                              showChoicePicker(
+                                context,
+                                choices: Takeback.values,
+                                selectedItem: accountPrefs.takeback,
+                                labelBuilder: (t) => Text(t.label(context.l10n)),
+                                onSelectedItemChanged: (Takeback? value) {
+                                  _setAccountPref(
+                                    (prefs) => prefs.setTakeback(value ?? accountPrefs.takeback),
+                                  );
+                                },
+                              );
+                            }
+                          : null,
+                    ),
+                  SrsSettingsRow(
+                    enabled: accountPrefsEnabled,
+                    label: context.l10n.preferencesPromoteToQueenAutomatically,
+                    value: accountPrefs.autoQueen.label(context.l10n),
+                    onTap: accountPrefsEnabled
+                        ? () {
+                            showChoicePicker(
+                              context,
+                              choices: AutoQueen.values,
+                              selectedItem: accountPrefs.autoQueen,
+                              labelBuilder: (t) => Text(t.label(context.l10n)),
+                              onSelectedItemChanged: (AutoQueen? value) {
+                                _setAccountPref(
+                                  (prefs) => prefs.setAutoQueen(value ?? accountPrefs.autoQueen),
+                                );
+                              },
+                            );
+                          }
+                        : null,
+                  ),
+                  // Auto threefold is decided server side, so hide the setting for anonymous players.
+                  if (authUser != null)
+                    SrsSettingsRow(
+                      enabled: accountPrefsEnabled,
+                      label: context.l10n.preferencesClaimDrawOnThreefoldRepetitionAutomatically,
+                      value: accountPrefs.autoThreefold.label(context.l10n),
+                      onTap: accountPrefsEnabled
+                          ? () {
+                              showChoicePicker(
+                                context,
+                                choices: AutoThreefold.values,
+                                selectedItem: accountPrefs.autoThreefold,
+                                labelBuilder: (t) => Text(t.label(context.l10n)),
+                                onSelectedItemChanged: (AutoThreefold? value) {
+                                  _setAccountPref(
+                                    (prefs) =>
+                                        prefs.setAutoThreefold(value ?? accountPrefs.autoThreefold),
+                                  );
+                                },
+                              );
+                            }
+                          : null,
+                    ),
+                  SrsSettingsRow(
+                    enabled: accountPrefsEnabled,
+                    label: context.l10n.preferencesMoveConfirmation,
+                    value: submitMove.label(context.l10n),
+                    onTap: accountPrefsEnabled
+                        ? () {
+                            showMultipleChoicesPicker(
+                              context,
+                              choices: submitMoveChoices,
+                              selectedItems: submitMove.choices,
+                              labelBuilder: (t) => Text(t.label(context.l10n)),
+                            ).then((value) {
+                              if (value != null) {
+                                _setAccountPref((prefs) => prefs.setSubmitMove(SubmitMove(value)));
+                              }
+                            });
+                          }
+                        : null,
+                    help: context.l10n.preferencesExplainCanThenBeTemporarilyDisabled,
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesConfirmResignationAndDrawOffers,
+                    control: SrsSwitch(
+                      value: boardPrefs.confirmResignAndDraw,
+                      semanticLabel: context.l10n.preferencesConfirmResignationAndDrawOffers,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleConfirmResignAndDraw();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.mobileSettingsTouchFeedback,
+                    help: context.l10n.mobileSettingsTouchFeedbackSubtitle,
+                    control: SrsSwitch(
+                      value: boardPrefs.hapticFeedback,
+                      semanticLabel: context.l10n.mobileSettingsTouchFeedback,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleHapticFeedback();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesHowDoYouMovePieces,
+                    value: pieceShiftMethodl10n(context, boardPrefs.pieceShiftMethod),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: PieceShiftMethod.values,
+                        selectedItem: boardPrefs.pieceShiftMethod,
+                        labelBuilder: (t) => Text(pieceShiftMethodl10n(context, t)),
+                        onSelectedItemChanged: (PieceShiftMethod? value) {
+                          ref
+                              .read(boardPreferencesProvider.notifier)
+                              .setPieceShiftMethod(value ?? PieceShiftMethod.either);
+                        },
+                      );
+                    },
+                  ),
+                  SrsSettingsRow(
+                    label: 'Move on release',
+                    // TODO l10n
+                    help:
+                        'When moving a piece by tapping, the move is made when you lift '
+                        'your finger, letting you slide to change the destination square.',
+                    control: SrsSwitch(
+                      value: boardPrefs.moveOnRelease,
+                      semanticLabel: 'Move on release',
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleMoveOnRelease();
+                      },
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesCastleByMovingTheKingTwoSquaresOrOntoTheRook,
+                    value: boardPrefs.castlingMethod.l10n(context.l10n),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: CastlingMethod.values,
+                        selectedItem: boardPrefs.castlingMethod,
+                        labelBuilder: (t) => Text(t.l10n(context.l10n)),
+                        onSelectedItemChanged: (CastlingMethod? value) {
+                          ref
+                              .read(boardPreferencesProvider.notifier)
+                              .setCastlingMethod(value ?? CastlingMethod.kingOverRook);
+                        },
+                      );
+                    },
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.mobileSettingsShapeDrawing,
+                    help: context.l10n.mobileSettingsShapeDrawingSubtitle,
+                    control: SrsSwitch(
+                      value: boardPrefs.enableShapeDrawings,
+                      semanticLabel: context.l10n.mobileSettingsShapeDrawing,
+                      onChanged: (value) {
+                        ref.read(boardPreferencesProvider.notifier).toggleEnableShapeDrawings();
+                      },
+                    ),
+                  ),
+                  const SrsGroupHeader('Chess clock'),
+                  // Give more time is always enabled for anonymous players, so hide the setting.
+                  if (authUser != null)
+                    SrsSettingsRow(
+                      enabled: accountPrefsEnabled,
+                      label: context.l10n.preferencesGiveMoreTime,
+                      value: accountPrefs.moretime.label(context.l10n),
+                      onTap: accountPrefsEnabled
+                          ? () {
+                              showChoicePicker(
+                                context,
+                                choices: Moretime.values,
+                                selectedItem: accountPrefs.moretime,
+                                labelBuilder: (t) => Text(t.label(context.l10n)),
+                                onSelectedItemChanged: (Moretime? value) {
+                                  _setAccountPref(
+                                    (prefs) => prefs.setMoretime(value ?? accountPrefs.moretime),
+                                  );
+                                },
+                              );
+                            }
+                          : null,
+                    ),
+                  SrsSettingsRow(
+                    label: context.l10n.preferencesSoundWhenTimeGetsCritical,
+                    control: SrsSwitch(
+                      value: accountPrefs.clockSound.value,
+                      semanticLabel: context.l10n.preferencesSoundWhenTimeGetsCritical,
+                      onChanged: accountPrefsEnabled
+                          ? (value) {
+                              _setAccountPref((prefs) => prefs.setClockSound(BooleanPref(value)));
+                            }
+                          : null,
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    enabled: accountPrefsEnabled,
+                    label: context.l10n.preferencesTenthsOfSeconds,
+                    value: accountPrefs.clockTenths.label(context.l10n),
+                    onTap: accountPrefsEnabled
+                        ? () {
+                            showChoicePicker(
+                              context,
+                              choices: ClockTenths.values,
+                              selectedItem: accountPrefs.clockTenths,
+                              labelBuilder: (t) => Text(t.label(context.l10n)),
+                              onSelectedItemChanged: (ClockTenths? value) {
+                                _setAccountPref(
+                                  (prefs) =>
+                                      prefs.setClockTenths(value ?? accountPrefs.clockTenths),
+                                );
+                              },
+                            );
+                          }
+                        : null,
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

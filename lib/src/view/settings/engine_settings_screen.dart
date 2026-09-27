@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/opponent_level.dart';
@@ -7,10 +8,6 @@ import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/engine_settings_widget.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/platform_alert_dialog.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:chess_srs/src/widgets/shimmer.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,142 +77,162 @@ class _EngineSettingsScreenState extends ConsumerState<EngineSettingsScreen> {
   Widget build(BuildContext context) {
     final prefs = ref.watch(engineEvaluationPreferencesProvider);
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(title: const Text('Chess engine')),
-      body: ListView(
-        children: [
-          if (_hasVerifiedNNUEFile == null)
-            Shimmer(
-              child: ShimmerLoading(isLoading: true, child: ListSection.loading(itemsNumber: 2)),
-            )
-          else
-            ListSection(
-              children: [
-                SettingsListTile(
-                  settingsLabel: const Text('Engine'),
-                  settingsValue: prefs.enginePref.label,
-                  onTap: () {
-                    showChoicePicker(
-                      context,
-                      choices: ChessEnginePref.values,
-                      selectedItem: prefs.enginePref,
-                      labelBuilder: (ChessEnginePref t) => Text(t.label),
-                      onSelectedItemChanged: (ChessEnginePref? value) {
-                        ref
-                            .read(engineEvaluationPreferencesProvider.notifier)
-                            .setEvaluationFunction(value ?? ChessEnginePref.sfLight);
-                        if (value == ChessEnginePref.sfLatest && _hasVerifiedNNUEFile == false) {
-                          _startDownload();
-                        }
-                      },
-                    );
-                  },
-                ),
-                if (prefs.enginePref == ChessEnginePref.sfLatest && _hasVerifiedNNUEFile == false)
-                  LoadingButtonBuilder(
-                    initialFuture: _downloadNNUEFileFuture,
-                    fetchData: () => ref
-                        .read(stockfishNnueServiceProvider)
-                        .downloadNNUEFile(inBackground: false),
-                    builder: (context, isLoading, fetchData) {
-                      return ListTile(
-                        trailing: isLoading
-                            ? AnimatedBuilder(
-                                animation: _downloadProgress,
-                                builder: (_, _) {
-                                  final progress = _downloadProgress.value;
-                                  return CircularProgressIndicator(
-                                    value: progress > 0.0 ? progress : null,
-                                  );
-                                },
-                              )
-                            : const Icon(Icons.download),
-                        title: Text(isLoading ? 'Downloading NNUE file' : 'Download NNUE file'),
-                        subtitle: const Text(nnueDownloadSizeMB),
-                        enabled: !isLoading,
-                        onTap: () async {
-                          final downloaded = await fetchData();
-                          if (context.mounted && downloaded) {
-                            setState(() {
-                              _hasVerifiedNNUEFile = true;
-                              _hasUnusableNNUEFiles = false;
-                            });
-                          }
-                        },
-                      );
-                    },
-                  )
-                else if (prefs.enginePref == ChessEnginePref.sfLatest &&
-                    _hasVerifiedNNUEFile == true)
-                  ListTile(
-                    trailing: const Icon(Icons.check),
-                    title: const Text('NNUE file downloaded'),
-                    subtitle: const Text('$nnueDownloadSizeMB (tap to delete)'),
-                    onTap: () async {
-                      final isOk = await showAdaptiveDialog<bool>(
-                        context: context,
-                        barrierDismissible: true,
-                        builder: (context) {
-                          return AlertDialog.adaptive(
-                            content: const Text('Do you want to delete the NNUE file?'),
-                            actions: [
-                              PlatformDialogAction(
-                                child: const Text('OK'),
-                                onPressed: () {
-                                  Navigator.of(context).pop(true);
-                                },
+    final c = context.srs;
+    return Scaffold(
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(label: 'Chess engine', onBack: () => Navigator.of(context).maybePop()),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                children: [
+                  if (_hasVerifiedNNUEFile == null)
+                    Shimmer(
+                      child: ShimmerLoading(
+                        isLoading: true,
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < 2; i++)
+                              Container(
+                                height: 56,
+                                margin: const EdgeInsets.only(bottom: 8),
+                                color: c.hairlineSoft,
                               ),
-                              PlatformDialogAction(
-                                child: Text(context.l10n.cancel),
-                                onPressed: () {
-                                  Navigator.of(context).pop(false);
-                                },
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    SrsSettingsRow(
+                      label: 'Engine',
+                      value: prefs.enginePref.label,
+                      onTap: () {
+                        showChoicePicker(
+                          context,
+                          choices: ChessEnginePref.values,
+                          selectedItem: prefs.enginePref,
+                          labelBuilder: (ChessEnginePref t) => Text(t.label),
+                          onSelectedItemChanged: (ChessEnginePref? value) {
+                            ref
+                                .read(engineEvaluationPreferencesProvider.notifier)
+                                .setEvaluationFunction(value ?? ChessEnginePref.sfLight);
+                            if (value == ChessEnginePref.sfLatest &&
+                                _hasVerifiedNNUEFile == false) {
+                              _startDownload();
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  if (prefs.enginePref == ChessEnginePref.sfLatest && _hasVerifiedNNUEFile == false)
+                    LoadingButtonBuilder(
+                      initialFuture: _downloadNNUEFileFuture,
+                      fetchData: () => ref
+                          .read(stockfishNnueServiceProvider)
+                          .downloadNNUEFile(inBackground: false),
+                      builder: (context, isLoading, fetchData) {
+                        return SrsSettingsRow(
+                          control: isLoading
+                              ? AnimatedBuilder(
+                                  animation: _downloadProgress,
+                                  builder: (_, _) {
+                                    final progress = _downloadProgress.value;
+                                    return SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        value: progress > 0.0 ? progress : null,
+                                        strokeWidth: 2,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : const Icon(Icons.download, size: 20),
+                          label: isLoading ? 'Downloading NNUE file' : 'Download NNUE file',
+                          help: nnueDownloadSizeMB,
+                          enabled: !isLoading,
+                          onTap: () async {
+                            final downloaded = await fetchData();
+                            if (context.mounted && downloaded) {
+                              setState(() {
+                                _hasVerifiedNNUEFile = true;
+                                _hasUnusableNNUEFiles = false;
+                              });
+                            }
+                          },
+                        );
+                      },
+                    )
+                  else if (prefs.enginePref == ChessEnginePref.sfLatest &&
+                      _hasVerifiedNNUEFile == true)
+                    SrsSettingsRow(
+                      control: const Icon(Icons.check, size: 20),
+                      label: 'NNUE file downloaded',
+                      help: '$nnueDownloadSizeMB (tap to delete)',
+                      onTap: () async {
+                        final isOk = await showAdaptiveDialog<bool>(
+                          context: context,
+                          barrierDismissible: true,
+                          builder: (context) => SrsDialog(
+                            body: 'Delete the NNUE file?',
+                            actions: [
+                              SrsTextButton(
+                                label: 'Delete',
+                                onPressed: () => Navigator.of(context).pop(true),
+                              ),
+                              SrsTextButton(
+                                label: context.l10n.cancel,
+                                onPressed: () => Navigator.of(context).pop(false),
                               ),
                             ],
-                          );
-                        },
-                      );
-                      if (isOk == true) {
+                          ),
+                        );
+                        if (isOk == true) {
+                          await ref.read(stockfishNnueServiceProvider).deleteNNUEFiles();
+                          if (!mounted) return;
+                          setState(() {
+                            _hasVerifiedNNUEFile = false;
+                            _hasUnusableNNUEFiles = false;
+                          });
+                        }
+                      },
+                    ),
+                  if (_hasVerifiedNNUEFile == false && _hasUnusableNNUEFiles)
+                    SrsSettingsRow(
+                      control: const Icon(Icons.delete_outline, size: 20),
+                      label: 'Delete unusable NNUE files',
+                      help:
+                          'Some NNUE files on this device cannot be used by the engine. Deleting '
+                          'them frees up space and lets you download them again.',
+                      onTap: () async {
                         await ref.read(stockfishNnueServiceProvider).deleteNNUEFiles();
                         if (!mounted) return;
                         setState(() {
-                          _hasVerifiedNNUEFile = false;
                           _hasUnusableNNUEFiles = false;
                         });
-                      }
-                    },
-                  ),
-                if (_hasVerifiedNNUEFile == false && _hasUnusableNNUEFiles)
-                  ListTile(
-                    trailing: const Icon(Icons.delete),
-                    title: const Text('Delete unusable NNUE files'),
-                    subtitle: const Text(
-                      'Some NNUE files on this device cannot be used by the engine. Deleting them '
-                      'frees up space and lets you download them again.',
+                      },
                     ),
-                    onTap: () async {
-                      await ref.read(stockfishNnueServiceProvider).deleteNNUEFiles();
-                      if (!mounted) return;
-                      setState(() {
-                        _hasUnusableNNUEFiles = false;
-                      });
+                  const _MaiaNetworksSection(),
+                  EngineSettingsWidget(
+                    onSetEngineSearchTime: (value) {
+                      ref
+                          .read(engineEvaluationPreferencesProvider.notifier)
+                          .setEngineSearchTime(value);
+                    },
+                    onSetEngineCores: (value) {
+                      ref.read(engineEvaluationPreferencesProvider.notifier).setEngineCores(value);
+                    },
+                    onSetNumEvalLines: (value) {
+                      ref.read(engineEvaluationPreferencesProvider.notifier).setNumEvalLines(value);
                     },
                   ),
-              ],
+                ],
+              ),
             ),
-          const _MaiaNetworksSection(),
-          EngineSettingsWidget(
-            onSetEngineSearchTime: (value) {
-              ref.read(engineEvaluationPreferencesProvider.notifier).setEngineSearchTime(value);
-            },
-            onSetEngineCores: (value) {
-              ref.read(engineEvaluationPreferencesProvider.notifier).setEngineCores(value);
-            },
-            onSetNumEvalLines: (value) {
-              ref.read(engineEvaluationPreferencesProvider.notifier).setNumEvalLines(value);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -268,33 +285,33 @@ class _MaiaNetworksSectionState extends ConsumerState<_MaiaNetworksSection> {
         .map((r) => r.rating.toString())
         .join(', ');
 
-    return ListSection(
-      header: const Text('Maia networks'),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SrsGroupHeader('Maia networks'),
         if (downloaded.isNotEmpty)
-          ListTile(
-            trailing: const Icon(Icons.delete_outline),
-            title: Text(ratings),
-            subtitle: Text('${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB (tap to delete)'),
+          SrsSettingsRow(
+            control: const Icon(Icons.delete_outline, size: 20),
+            label: ratings,
+            help: '${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB (tap to delete)',
             onTap: () async {
               final isOk = await showAdaptiveDialog<bool>(
                 context: context,
                 barrierDismissible: true,
-                builder: (context) {
-                  return AlertDialog.adaptive(
-                    content: const Text('Do you want to delete the downloaded Maia networks?'),
-                    actions: [
-                      PlatformDialogAction(
-                        child: const Text('OK'),
-                        onPressed: () => Navigator.of(context).pop(true),
-                      ),
-                      PlatformDialogAction(
-                        child: Text(context.l10n.cancel),
-                        onPressed: () => Navigator.of(context).pop(false),
-                      ),
-                    ],
-                  );
-                },
+                builder: (context) => SrsDialog(
+                  body: 'Delete the downloaded Maia networks?',
+                  actions: [
+                    SrsTextButton(
+                      label: 'Delete',
+                      onPressed: () => Navigator.of(context).pop(true),
+                    ),
+                    SrsTextButton(
+                      label: context.l10n.cancel,
+                      onPressed: () => Navigator.of(context).pop(false),
+                    ),
+                  ],
+                ),
               );
               if (isOk != true) return;
               await ref.read(maiaWeightsServiceProvider).deleteWeights();
@@ -302,13 +319,12 @@ class _MaiaNetworksSectionState extends ConsumerState<_MaiaNetworksSection> {
             },
           ),
         if (_unusable.count > 0)
-          ListTile(
-            trailing: const Icon(Icons.delete),
-            title: const Text('Delete unusable Maia networks'),
-            subtitle: Text(
-              '${(_unusable.bytes / (1024 * 1024)).toStringAsFixed(1)} MB of networks this version '
-              'of the app cannot use (tap to delete)',
-            ),
+          SrsSettingsRow(
+            control: const Icon(Icons.delete_outline, size: 20),
+            label: 'Delete unusable Maia networks',
+            help:
+                '${(_unusable.bytes / (1024 * 1024)).toStringAsFixed(1)} MB of networks this '
+                'version of the app cannot use (tap to delete)',
             onTap: () async {
               await ref.read(maiaWeightsServiceProvider).deleteUnusableWeights();
               if (mounted) await _refresh();
