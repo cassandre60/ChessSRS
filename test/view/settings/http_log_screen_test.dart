@@ -3,10 +3,9 @@
 
 import 'package:chess_srs/src/model/log/http_log_storage.dart';
 import 'package:chess_srs/src/view/settings/http_log_screen.dart';
-import 'package:chess_srs/src/widgets/platform_search_bar.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../binding.dart';
 import '../../test_provider_scope.dart';
@@ -96,7 +95,7 @@ void main() {
     expect(find.text('https://lichess.org/api/study/error999.pgn'), findsOneWidget);
     expect(find.text('Error Details'), findsOneWidget);
     expect(find.text('Copy URL'), findsOneWidget);
-    expect(find.text('Copy All'), findsOneWidget);
+    expect(find.text('Copy all'), findsOneWidget);
     expect(find.text('Close'), findsOneWidget);
 
     // Close the dialog
@@ -106,7 +105,7 @@ void main() {
     expect(find.text('Request URL'), findsNothing);
 
     // Search filtering
-    await tester.enterText(find.byType(PlatformSearchBar), 'error999');
+    await tester.enterText(find.byType(TextField), 'error999');
     await tester.pumpAndSettle();
 
     expect(find.text('/api/study/error999.pgn'), findsOneWidget);

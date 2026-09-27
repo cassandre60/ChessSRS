@@ -20,12 +20,16 @@ import 'package:material_ui/material_ui.dart';
 // between actions, 22px above them, and a 150ms fade with a 180ms rise.
 // ---------------------------------------------------------------------------
 class SrsDialog extends StatelessWidget {
-  const SrsDialog({super.key, this.title, this.body, this.content, this.actions});
+  const SrsDialog({super.key, this.title, this.titleWidget, this.body, this.content, this.actions});
 
   /// Addresses the card itself rather than the full-screen [Dialog] route.
   static const cardKey = ValueKey('srs-dialog-card');
 
   final String? title;
+
+  /// Richer title, for the cases a word cannot express -- a status badge beside a code. Takes
+  /// precedence over [title], which is then only the accessibility label.
+  final Widget? titleWidget;
 
   /// Plain-text body, set in 15px `ink2`. Ignored when [content] is given.
   final String? body;
@@ -73,7 +77,9 @@ class SrsDialog extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (title != null)
+                  if (titleWidget != null)
+                    titleWidget!
+                  else if (title != null)
                     Text(
                       title!,
                       style: SrsText.titleSmall(
@@ -81,7 +87,7 @@ class SrsDialog extends StatelessWidget {
                       ).copyWith(fontSize: 20, fontWeight: FontWeight.w600),
                     ),
                   if (content != null) ...[
-                    if (title != null) const SizedBox(height: 14),
+                    if (title != null || titleWidget != null) const SizedBox(height: 14),
                     content!,
                   ] else if (body != null) ...[
                     if (title != null) const SizedBox(height: 10),

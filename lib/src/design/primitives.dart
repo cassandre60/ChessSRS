@@ -105,10 +105,21 @@ class _SrsPressableState extends State<SrsPressable> {
 // SrsPillButton — filled ink pill, 46dp tall
 // ---------------------------------------------------------------------------
 class SrsPillButton extends StatelessWidget {
-  const SrsPillButton({super.key, required this.label, required this.onPressed, this.shortcut});
+  const SrsPillButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.shortcut,
+    this.selected = false,
+  });
   final String label;
   final VoidCallback? onPressed;
   final String? shortcut;
+
+  /// Marks the pill as the current one in a set of mutually exclusive options, and turns it from
+  /// a command into a toggle. Unselected pills go to a hairline outline so the set reads as a
+  /// group; a filled pill next to outlined ones would read as the only action.
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -116,15 +127,22 @@ class SrsPillButton extends StatelessWidget {
     return SrsPressable(
       onPressed: onPressed,
       semanticLabel: label,
+      semanticsToggled: selected,
       pressScale: SrsMotion.pressScale,
       builder: (_, _, _) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 22),
-        decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(999)),
+        decoration: BoxDecoration(
+          color: selected ? c.accent : c.ink,
+          borderRadius: BorderRadius.circular(999),
+          border: selected ? null : Border.all(color: c.hairline),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Excluded: SrsPressable already announces `label`.
-            ExcludeSemantics(child: Text(label, style: SrsText.button(c.ground))),
+            ExcludeSemantics(
+              child: Text(label, style: SrsText.button(selected ? c.ground : c.ink)),
+            ),
             if (shortcut != null && _isDesktopPlatform) ...[
               const SizedBox(width: 12),
               SrsKbd(shortcut!, onInk: true),
@@ -332,6 +350,7 @@ class SrsSettingsRow extends StatelessWidget {
     super.key,
     required this.label,
     this.labelWidget,
+    this.leading,
     this.help,
     this.value,
     this.control,
@@ -347,6 +366,10 @@ class SrsSettingsRow extends StatelessWidget {
   /// Richer label, for the rows whose label is not plain text -- a colour swatch beside a name,
   /// say. Takes precedence over [label], which is then only the accessibility label.
   final Widget? labelWidget;
+
+  /// Sits at the left of the row. Reserved for a mark that carries data -- a log entry's
+  /// severity -- rather than a category icon, which the design's text-led rows do not use.
+  final Widget? leading;
 
   /// Second line under the label. Wrapped at 360px so a long sentence cannot stretch the row.
   final String? help;
@@ -435,7 +458,18 @@ class SrsSettingsRow extends StatelessWidget {
       },
     );
 
-    final body = Padding(padding: const EdgeInsets.symmetric(vertical: 18), child: row);
+    final withLeading = leading == null
+        ? row
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              leading!,
+              const SizedBox(width: 14),
+              Expanded(child: row),
+            ],
+          );
+
+    final body = Padding(padding: const EdgeInsets.symmetric(vertical: 18), child: withLeading);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -717,4 +751,56 @@ class SrsBackChevronPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SrsBackChevronPainter old) => old.color != color;
+}
+
+// ---------------------------------------------------------------------------
+// SrsIconButton — a square action in a page head
+//
+// design/docs/03-components.md gives the size rule rather than a component: touch targets are
+// 44px (02 §6), so the box is `minTouchTarget` square with the icon centred and no visible
+// chrome until hover. It exists because the log screens need head actions and the only
+// alternative was a Material `IconButton` inside a Diagram head.
+// ---------------------------------------------------------------------------
+class SrsIconButton extends StatelessWidget {
+  const SrsIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.tint,
+  });
+
+  final IconData icon;
+
+  /// Doubles as the accessibility name: a bare icon button has nothing else to announce.
+  final String tooltip;
+
+  final VoidCallback? onPressed;
+
+  /// Overrides the icon colour, for a destructive action.
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    return SrsPressable(
+      onPressed: onPressed,
+      semanticLabel: tooltip,
+      radius: 10,
+      builder: (context, hovered, _) => Container(
+        constraints: const BoxConstraints(
+          minWidth: SrsLayout.minTouchTarget,
+          minHeight: SrsLayout.minTouchTarget,
+        ),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: hovered ? c.hairlineSoft : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: ExcludeSemantics(
+          child: Icon(icon, size: 20, color: tint ?? (hovered ? c.ink : c.ink2)),
+        ),
+      ),
+    );
+  }
 }

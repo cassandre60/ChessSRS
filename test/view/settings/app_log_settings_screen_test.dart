@@ -4,11 +4,10 @@
 import 'package:chess_srs/src/model/log/app_log_storage.dart';
 import 'package:chess_srs/src/model/settings/log_preferences.dart';
 import 'package:chess_srs/src/view/settings/app_log_settings_screen.dart';
-import 'package:chess_srs/src/widgets/platform_search_bar.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../binding.dart';
 import '../../test_provider_scope.dart';
@@ -30,7 +29,9 @@ void main() {
 
     expect(find.text('App Logs'), findsOneWidget);
     expect(find.text('No logs to show'), findsOneWidget);
-    expect(find.text('Tap to refresh'), findsOneWidget);
+    // "Refresh", not the old "Tap to refresh": the demo's voice is terse verbs, and every
+    // other action in the reskin is one.
+    expect(find.text('Refresh'), findsOneWidget);
 
     // Verify category chips are present
     expect(find.text('All'), findsOneWidget);
@@ -93,7 +94,7 @@ void main() {
       );
 
       // Refresh to load saved logs
-      await tester.tap(find.text('Tap to refresh'));
+      await tester.tap(find.text('Refresh'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
@@ -133,9 +134,9 @@ void main() {
       expect(find.text('Error'), findsOneWidget);
       expect(find.text('FormatException: Missing right bracket'), findsWidgets);
       expect(find.text('Stack Trace'), findsOneWidget);
-      expect(find.text('Copy Message'), findsOneWidget);
-      expect(find.text('Copy Error'), findsOneWidget);
-      expect(find.text('Copy All'), findsOneWidget);
+      expect(find.text('Copy message'), findsOneWidget);
+      expect(find.text('Copy error'), findsOneWidget);
+      expect(find.text('Copy all'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
 
       // Close details dialog
@@ -145,9 +146,6 @@ void main() {
       expect(find.text('Message'), findsNothing);
 
       // Scroll chips back to make All visible
-      await tester.drag(find.text('Import'), const Offset(150, 0));
-      await tester.pumpAndSettle();
-
       // Return to All
       await tester.tap(find.text('All'));
       await tester.pumpAndSettle();
@@ -157,7 +155,7 @@ void main() {
       expect(find.text('StudyRepository'), findsOneWidget);
 
       // Search bar filter
-      await tester.enterText(find.byType(PlatformSearchBar), '18ms');
+      await tester.enterText(find.byType(TextField), '18ms');
       await tester.pumpAndSettle();
 
       expect(find.text('Saved import result in 18ms'), findsOneWidget);

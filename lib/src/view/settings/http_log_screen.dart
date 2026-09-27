@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/log/http_log_paginator.dart';
 import 'package:chess_srs/src/model/log/http_log_storage.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/utils/share.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/haptic_refresh_indicator.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/platform_search_bar.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -67,41 +65,47 @@ class _HttpLogScreenState extends ConsumerState<HttpLogScreen> {
   Widget build(BuildContext context) {
     final asyncState = ref.watch(httpLogPaginatorProvider(_searchQuery));
     final logs = asyncState.value?.logs.toList() ?? [];
+    final c = context.srs;
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: const Text('HTTP logs'),
-        actions: [
-          if (logs.isNotEmpty)
-            IconButton(
-              tooltip: 'Export',
-              icon: const Icon(Icons.share),
-              onPressed: () => launchShareDialog(
-                context,
-                ShareParams(text: logs.map(_formatHttpLogEntry).join('\n\n---\n\n')),
+    return Scaffold(
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: 'HTTP logs',
+              onBack: () => Navigator.of(context).maybePop(),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (logs.isNotEmpty)
+                    SrsIconButton(
+                      icon: Icons.share,
+                      tooltip: 'Export logs',
+                      onPressed: () => launchShareDialog(
+                        context,
+                        ShareParams(text: logs.map(_formatHttpLogEntry).join('\n\n---\n\n')),
+                      ),
+                    ),
+                  if (asyncState.value?.isDeleteButtonVisible == true)
+                    SrsIconButton(
+                      icon: Icons.delete_sweep,
+                      tooltip: 'Clear all logs',
+                      onPressed: () {
+                        showConfirmDialog<dynamic>(
+                          context,
+                          title: const Text('Delete all logs'),
+                          onConfirm: () =>
+                              ref.read(httpLogPaginatorProvider(_searchQuery).notifier).deleteAll(),
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
-          if (asyncState.value?.isDeleteButtonVisible == true)
-            IconButton(
-              tooltip: 'Clear all logs',
-              icon: const Icon(Icons.delete_sweep),
-              onPressed: () {
-                showConfirmDialog<dynamic>(
-                  context,
-                  title: const Text('Delete all logs'),
-                  onConfirm: () =>
-                      ref.read(httpLogPaginatorProvider(_searchQuery).notifier).deleteAll(),
-                );
-              },
-            ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: PlatformSearchBar(
+            SrsSearchField(
               controller: _searchController,
-              hintText: 'Search logs...',
+              placeholder: 'Search logs',
               onChanged: (value) => setState(() {
                 _searchQuery = value.isEmpty ? null : value;
               }),
@@ -110,14 +114,16 @@ class _HttpLogScreenState extends ConsumerState<HttpLogScreen> {
                 _searchController.clear();
               }),
             ),
-          ),
+            Expanded(
+              child: _HttpLogList(
+                scrollController: _scrollController,
+                refreshIndicatorKey: _refreshIndicatorKey,
+                logs: logs,
+                onRefresh: _onRefresh,
+              ),
+            ),
+          ],
         ),
-      ),
-      body: _HttpLogList(
-        scrollController: _scrollController,
-        refreshIndicatorKey: _refreshIndicatorKey,
-        logs: logs,
-        onRefresh: _onRefresh,
       ),
     );
   }
@@ -209,106 +215,87 @@ class HttpLogTile extends StatelessWidget {
         httpLog.errorMessage != null ||
         (httpLog.responseCode != null && httpLog.responseCode! >= 400);
 
-    return ListTile(
-      dense: true,
-      onTap: () => _showHttpLogDetails(context, httpLog),
+    final c = context.srs;
+    final errorColor = isError ? _severe : c.ink;
+
+    // SrsSettingsRow has no long-press, and copy-URL-on-hold is the fastest way to get an
+    // endpoint out of this screen, so the gesture is kept on a wrapper rather than dropped.
+    return GestureDetector(
       onLongPress: () {
         Clipboard.setData(ClipboardData(text: httpLog.requestUrl.toString()));
         showSnackBar(context, 'URL copied to clipboard');
       },
-      leading: SizedBox(
-        width: 44,
-        child: httpLog.hasResponse
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    httpLog.responseCode!.toString(),
-                    style: TextStyle(
-                      color: isError ? context.lichessColors.error : null,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  if (httpLog.elapsed != null)
+      child: SrsSettingsRow(
+        leading: SizedBox(
+          width: 44,
+          child: httpLog.hasResponse
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      _formatElapsed(httpLog.elapsed!),
-                      maxLines: 1,
-                      style: TextStyle(
-                        color: textShade(context, 0.7),
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        fontSize: 10,
-                      ),
+                      httpLog.responseCode!.toString(),
+                      style: SrsText.rowName(
+                        errorColor,
+                      ).copyWith(fontFeatures: SrsText.tabular, fontWeight: FontWeight.w600),
                     ),
-                ],
-              )
-            : Icon(
-                isError ? Icons.error_outline : Icons.pending_outlined,
-                color: isError ? Colors.red : Colors.grey,
+                    const SizedBox(height: 2),
+                    if (httpLog.elapsed != null)
+                      Text(
+                        _formatElapsed(httpLog.elapsed!),
+                        maxLines: 1,
+                        style: SrsText.rowSub(
+                          c.ink3,
+                        ).copyWith(fontFeatures: SrsText.tabular, fontSize: 10),
+                      ),
+                  ],
+                )
+              : Icon(
+                  isError ? Icons.error_outline : Icons.pending_outlined,
+                  color: isError ? _severe : c.ink3,
+                ),
+        ),
+        label: endpoint,
+        // The method badge and the endpoint are one line, as in the app log: they are one fact.
+        labelWidget: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: isError ? _severe.withValues(alpha: 0.15) : c.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
               ),
-      ),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-            margin: const EdgeInsets.only(right: 6),
-            decoration: BoxDecoration(
-              color: isError
-                  ? Colors.red.withValues(alpha: 0.15)
-                  : Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              httpLog.requestMethod,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isError ? Colors.red : Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              endpoint,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                letterSpacing: -0.15,
-                color: isError ? context.lichessColors.error : null,
-              ),
-            ),
-          ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 2),
-          Text(
-            _logDateFormatter.format(httpLog.requestDateTime),
-            style: TextStyle(color: textShade(context, 0.7), fontSize: 11),
-          ),
-          if (httpLog.errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2.0),
               child: Text(
-                httpLog.errorMessage!,
+                httpLog.requestMethod,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isError ? _severe : c.accent,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                endpoint,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.red, fontSize: 11),
+                style: SrsText.rowName(errorColor),
               ),
             ),
-        ],
+          ],
+        ),
+        help: httpLog.errorMessage,
+        value: _logDateFormatter.format(httpLog.requestDateTime),
+        onTap: () => _showHttpLogDetails(context, httpLog),
       ),
-      trailing: const Icon(Icons.chevron_right, size: 16),
     );
   }
 }
+
+/// Severity colours, outside the Diagram palette on purpose: a 4xx or 5xx is the one thing on
+/// this screen that must not be mistaken for ordinary text.
+const _severe = Color(0xFFC0392B);
 
 void _showHttpLogDetails(BuildContext context, HttpLogEntry httpLog) {
   final statusText = httpLog.responseCode != null && httpLog.responseCode != 0
@@ -321,8 +308,8 @@ void _showHttpLogDetails(BuildContext context, HttpLogEntry httpLog) {
   showDialog<void>(
     context: context,
     builder: (dialogContext) {
-      return AlertDialog(
-        title: Row(
+      return SrsDialog(
+        titleWidget: Row(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -352,84 +339,87 @@ void _showHttpLogDetails(BuildContext context, HttpLogEntry httpLog) {
             ),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Request URL',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(httpLog.requestUrl.toString(), style: const TextStyle(fontSize: 13)),
-              const SizedBox(height: 12),
-              if (httpLog.elapsed != null) ...[
+        content: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.heightOf(context) * 0.6),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Request URL',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(httpLog.requestUrl.toString(), style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 12),
+                if (httpLog.elapsed != null) ...[
+                  Row(
+                    children: [
+                      const Text(
+                        'Duration: ',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      Text(_formatElapsed(httpLog.elapsed!), style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   children: [
                     const Text(
-                      'Duration: ',
+                      'Time: ',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
-                    Text(_formatElapsed(httpLog.elapsed!), style: const TextStyle(fontSize: 12)),
+                    Text(
+                      _logDateFormatter.format(httpLog.requestDateTime),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-              ],
-              Row(
-                children: [
-                  const Text('Time: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text(
-                    _logDateFormatter.format(httpLog.requestDateTime),
-                    style: const TextStyle(fontSize: 12),
+                if (httpLog.errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Error Details',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    ),
+                    child: SelectableText(
+                      httpLog.errorMessage!,
+                      style: const TextStyle(fontSize: 12, color: Colors.red),
+                    ),
                   ),
                 ],
-              ),
-              if (httpLog.errorMessage != null) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Error Details',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                  ),
-                  child: SelectableText(
-                    httpLog.errorMessage!,
-                    style: const TextStyle(fontSize: 12, color: Colors.red),
-                  ),
-                ),
               ],
-            ],
+            ),
           ),
         ),
         actions: [
-          TextButton(
+          SrsTextButton(
+            label: 'Copy URL',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: httpLog.requestUrl.toString()));
               Navigator.of(dialogContext).pop();
               showSnackBar(context, 'URL copied to clipboard');
             },
-            child: const Text('Copy URL'),
           ),
-          TextButton(
+          SrsTextButton(
+            label: 'Copy all',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _formatHttpLogEntry(httpLog)));
               Navigator.of(dialogContext).pop();
               showSnackBar(context, 'Details copied to clipboard');
             },
-            child: const Text('Copy All'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
-          ),
+          SrsTextButton(label: 'Close', onPressed: () => Navigator.of(dialogContext).pop()),
         ],
       );
     },
