@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
@@ -8,10 +9,8 @@ import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/misc.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -72,6 +71,7 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
     final authUser = ref.watch(authControllerProvider);
     final kidMode = ref.watch(kidModeProvider).value ?? false;
 
+    final c = context.srs;
     final content = accountPrefs.when(
       data: (data) {
         if (authUser == null) {
@@ -79,21 +79,20 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
         }
 
         return ListView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
           children: [
             Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                context.l10n.mobileAccountPreferencesHelp,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
+              child: Text(context.l10n.mobileAccountPreferencesHelp, style: SrsText.meta(c.ink2)),
             ),
             ListSection(
-              header: SettingsSectionTitle(context.l10n.preferencesDisplay),
+              header: const SrsGroupHeader('Display'),
               hasLeading: false,
               children: [
-                SettingsListTile(
-                  settingsLabel: Text(context.l10n.preferencesShowPlayerRatings),
-                  settingsValue: data.showRatings.label(context.l10n),
+                SrsSettingsRow(
+                  label: context.l10n.preferencesShowPlayerRatings,
+                  help: context.l10n.preferencesExplainShowPlayerRatings,
+                  value: data.showRatings.label(context.l10n),
                   onTap: () => showChoicePicker(
                     context,
                     choices: ShowRatings.values,
@@ -107,30 +106,34 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
                       );
                     },
                   ),
-                  explanation: context.l10n.preferencesExplainShowPlayerRatings,
                 ),
               ],
             ),
             ListSection(
-              header: SettingsSectionTitle(context.l10n.preferencesPrivacy),
+              header: const SrsGroupHeader('Privacy'),
               hasLeading: false,
               children: [
-                SwitchSettingTile(
-                  title: Text(context.l10n.letOtherPlayersFollowYou),
-                  value: data.follow.value,
-                  onChanged: isLoading
-                      ? null
-                      : (value) {
-                          _setPref(
-                            () => ref
-                                .read(accountPreferencesProvider.notifier)
-                                .setFollow(BooleanPref(value)),
-                          );
-                        },
+                SrsSettingsRow(
+                  label: context.l10n.letOtherPlayersFollowYou,
+                  enabled: !isLoading,
+                  control: SrsSwitch(
+                    value: data.follow.value,
+                    semanticLabel: context.l10n.letOtherPlayersFollowYou,
+                    onChanged: isLoading
+                        ? null
+                        : (value) {
+                            _setPref(
+                              () => ref
+                                  .read(accountPreferencesProvider.notifier)
+                                  .setFollow(BooleanPref(value)),
+                            );
+                          },
+                  ),
                 ),
-                SettingsListTile(
-                  settingsLabel: Text(context.l10n.letOtherPlayersChallengeYou),
-                  settingsValue: data.challenge.label(context.l10n),
+                SrsSettingsRow(
+                  label: context.l10n.letOtherPlayersChallengeYou,
+                  value: data.challenge.label(context.l10n),
+                  enabled: !isLoading,
                   onTap: () {
                     showChoicePicker(
                       context,
@@ -149,9 +152,10 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
                     );
                   },
                 ),
-                SettingsListTile(
-                  settingsLabel: Text(context.l10n.letOtherPlayersMessageYou),
-                  settingsValue: data.message.label(context.l10n),
+                SrsSettingsRow(
+                  label: context.l10n.letOtherPlayersMessageYou,
+                  value: data.message.label(context.l10n),
+                  enabled: !isLoading,
                   onTap: () {
                     showChoicePicker(
                       context,
@@ -187,10 +191,10 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
               ),
               hasLeading: true,
               children: [
-                ListTile(
-                  leading: const Icon(Symbols.sentiment_satisfied),
-                  title: Text(kidMode ? context.l10n.disableKidMode : context.l10n.enableKidMode),
-                  trailing: const OpenInNewIcon(),
+                SrsSettingsRow(
+                  label: kidMode ? context.l10n.disableKidMode : context.l10n.enableKidMode,
+                  help: context.l10n.kidModeExplanation,
+                  control: const OpenInNewIcon(),
                   onTap: () {
                     _pendingKidModeRefresh = true;
                     launchUrl(lichessUri('/account/kid'));
@@ -199,48 +203,40 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
               ],
             ),
             ListSection(
-              header: SettingsSectionTitle(context.l10n.security),
+              header: const SrsGroupHeader('Security'),
               hasLeading: true,
               children: [
-                ListTile(
-                  leading: const Icon(Symbols.lock),
-                  title: Text(context.l10n.changePassword),
-                  trailing: const OpenInNewIcon(),
-                  onTap: () {
-                    launchUrl(lichessUri('/account/passwd'));
-                  },
+                SrsSettingsRow(
+                  label: context.l10n.changePassword,
+                  control: const OpenInNewIcon(),
+                  onTap: () => launchUrl(lichessUri('/account/passwd')),
                 ),
-                ListTile(
-                  leading: const Icon(Symbols.security),
-                  title: Text(context.l10n.tfaTwoFactorAuth),
-                  trailing: const OpenInNewIcon(),
-                  onTap: () {
-                    launchUrl(lichessUri('/account/twofactor'));
-                  },
+                SrsSettingsRow(
+                  label: context.l10n.tfaTwoFactorAuth,
+                  control: const OpenInNewIcon(),
+                  onTap: () => launchUrl(lichessUri('/account/twofactor')),
                 ),
               ],
             ),
             ListSection(
-              header: const SettingsSectionTitle('Danger zone'),
+              header: const SrsGroupHeader('Danger zone'),
               hasLeading: true,
               children: [
+                // iOS deletes the account, everything else closes it. Kept as one row rather
+                // than two near-identical branches of a tile.
                 if (Theme.of(context).platform == TargetPlatform.iOS)
-                  ListTile(
-                    leading: const Icon(Symbols.dangerous),
-                    title: const Text('Delete your account'),
-                    trailing: const OpenInNewIcon(),
-                    onTap: () {
-                      launchUrl(lichessUri('/account/delete'));
-                    },
+                  SrsSettingsRow(
+                    label: 'Delete your account',
+                    destructive: true,
+                    control: const OpenInNewIcon(),
+                    onTap: () => launchUrl(lichessUri('/account/delete')),
                   )
                 else
-                  ListTile(
-                    leading: const Icon(Icons.dangerous_outlined),
-                    title: Text(context.l10n.settingsCloseAccount),
-                    trailing: const OpenInNewIcon(),
-                    onTap: () {
-                      launchUrl(lichessUri('/account/close'));
-                    },
+                  SrsSettingsRow(
+                    label: context.l10n.settingsCloseAccount,
+                    destructive: true,
+                    control: const OpenInNewIcon(),
+                    onTap: () => launchUrl(lichessUri('/account/close')),
                   ),
               ],
             ),
@@ -253,12 +249,28 @@ class _AccountPreferencesScreenState extends ConsumerState<AccountPreferencesScr
       },
     );
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: Text(context.l10n.mobileAccountPreferences),
-        actions: [if (isLoading) const PlatformAppBarLoadingIndicator()],
+    return Scaffold(
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.mobileAccountPreferences,
+              onBack: () => Navigator.of(context).maybePop(),
+              // The whole screen round-trips a preference to the account API, so the progress
+              // belongs on the head rather than on one row.
+              trailing: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+            Expanded(child: content),
+          ],
+        ),
       ),
-      body: content,
     );
   }
 }

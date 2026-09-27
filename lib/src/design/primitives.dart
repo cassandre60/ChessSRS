@@ -331,6 +331,7 @@ class SrsSettingsRow extends StatelessWidget {
   const SrsSettingsRow({
     super.key,
     required this.label,
+    this.labelWidget,
     this.help,
     this.value,
     this.control,
@@ -342,6 +343,10 @@ class SrsSettingsRow extends StatelessWidget {
   });
 
   final String label;
+
+  /// Richer label, for the rows whose label is not plain text -- a colour swatch beside a name,
+  /// say. Takes precedence over [label], which is then only the accessibility label.
+  final Widget? labelWidget;
 
   /// Second line under the label. Wrapped at 360px so a long sentence cannot stretch the row.
   final String? help;
@@ -381,7 +386,7 @@ class SrsSettingsRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(label, style: SrsText.rowName(labelColor))),
+            Expanded(child: labelWidget ?? Text(label, style: SrsText.rowName(labelColor))),
             if (selected ?? false) ...[
               const SizedBox(width: 12),
               // A filled dot rather than a tick: the design marks selection with the accent, and

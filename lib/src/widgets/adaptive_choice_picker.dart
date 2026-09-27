@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:material_ui/material_ui.dart';
@@ -77,42 +78,45 @@ Future<void> showChoicePicker<T>(
     case TargetPlatform.android:
     default:
       final deviceHeight = MediaQuery.heightOf(context);
+      // SrsDialog rather than a Material AlertDialog: this picker is opened from a settings row
+      // everywhere in the app, so converting it once reskins every caller instead of leaving
+      // each screen tapping into a Material dialog.
       return showDialog<void>(
         context: context,
         builder: (context) {
-          return AlertDialog(
-            title: title,
-            clipBehavior: Clip.hardEdge,
-            contentPadding: const EdgeInsets.only(top: 16.0, bottom: 24.0, left: 0, right: 0),
-            scrollable: true,
-            content: Builder(
-              builder: (context) {
-                final List<Widget> choiceWidgets = choices
-                    .map((value) {
-                      return RadioListTile<T>(title: labelBuilder(value), value: value);
-                    })
-                    .toList(growable: false);
-                return RadioGroup(
-                  groupValue: selectedItem,
-                  onChanged: (value) {
-                    if (value != null && onSelectedItemChanged != null) {
-                      onSelectedItemChanged(value);
-                      Navigator.of(context).pop();
-                    }
+          final choiceWidgets = choices
+              .map(
+                (value) => SrsSettingsRow(
+                  // Pass the caller's widget through rather than flattening it to a string: some
+                  // labels are rich text with a swatch in them, and reading `.data` off a
+                  // Text.rich yields null, which rendered the row blank.
+                  label: '',
+                  labelWidget: labelBuilder(value),
+                  selected: value == selectedItem,
+                  enabled: onSelectedItemChanged != null,
+                  onTap: () {
+                    onSelectedItemChanged?.call(value);
+                    Navigator.of(context).pop();
                   },
-                  child: choiceWidgets.length >= 10
-                      ? SizedBox(
-                          width: double.maxFinite,
-                          height: deviceHeight * 0.6,
-                          child: ListView(shrinkWrap: true, children: choiceWidgets),
-                        )
-                      : ListBody(children: choiceWidgets),
-                );
-              },
+                ),
+              )
+              .toList(growable: false);
+
+          return SrsDialog(
+            title: title == null ? null : _labelOf(context, title),
+            // Capped and scrollable for every list, not just long ones. The old code only
+            // constrained the >= 10 case, and a short list of tall labels -- the nine chess
+            // variants, each a name plus a description -- grew the card to the full screen
+            // height with no way to reach the last option.
+            content: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: deviceHeight * 0.6),
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: choiceWidgets),
+              ),
             ),
             actions: [
-              TextButton(
-                child: Text(context.l10n.cancel),
+              SrsTextButton(
+                label: context.l10n.cancel,
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -120,6 +124,13 @@ Future<void> showChoicePicker<T>(
         },
       );
   }
+}
+
+/// The picker's own title is caller-supplied and may be rich text; fall back to an empty title
+/// rather than flattening it, since only the rows above use [SrsSettingsRow.labelWidget].
+String _labelOf(BuildContext context, Widget? label) {
+  if (label is Text) return label.data ?? '';
+  return '';
 }
 
 Future<Set<T>?> showMultipleChoicesPicker<T extends Enum>(

@@ -2,20 +2,16 @@ import 'dart:io';
 import 'dart:math' show max;
 import 'dart:ui' as ui;
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/image.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/widgets/background.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:chessground/chessground.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:dartchess/dartchess.dart' show Side, kInitialFEN;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,9 +28,19 @@ class BackgroundChoiceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformScaffold(
-      appBar: PlatformAppBar(title: Text(context.l10n.background)),
-      body: _Body(),
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.background,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            Expanded(child: _Body()),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -50,141 +56,139 @@ class _Body extends ConsumerWidget {
         .requireValue
         .appDocumentsDirectory;
     final boardPrefs = ref.watch(boardPreferencesProvider);
+    final generalPrefs = ref.watch(generalPreferencesProvider);
+    final srs = context.srs;
 
     final viewport = MediaQuery.sizeOf(context);
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
     return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       children: [
         if (appDocumentsDirectory != null) ...[
-          ListSection(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.image_outlined),
-                title: Text(context.l10n.mobileSettingsPickAnImage),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
-                onTap: () async {
-                  final ImagePicker picker = ImagePicker();
-                  final maxDimension = max(viewport.width, viewport.height) * devicePixelRatio;
-                  final XFile? image = await picker.pickImage(
-                    source: ImageSource.gallery,
-                    maxWidth: maxDimension,
-                    maxHeight: maxDimension,
-                    imageQuality: 80,
-                    // We only need the pixels to build the background and extract its colors, so
-                    // skip the EXIF metadata. This avoids the iOS photo library permission prompt
-                    // entirely: the picker runs out of process and only hands back the chosen file.
-                    requestFullMetadata: false,
-                  );
+          SrsSettingsRow(
+            label: context.l10n.mobileSettingsPickAnImage,
+            onTap: () async {
+              final ImagePicker picker = ImagePicker();
+              final maxDimension = max(viewport.width, viewport.height) * devicePixelRatio;
+              final XFile? image = await picker.pickImage(
+                source: ImageSource.gallery,
+                maxWidth: maxDimension,
+                maxHeight: maxDimension,
+                imageQuality: 80,
+                // We only need the pixels to build the background and extract its colors, so
+                // skip the EXIF metadata. This avoids the iOS photo library permission prompt
+                // entirely: the picker runs out of process and only hands back the chosen file.
+                requestFullMetadata: false,
+              );
 
-                  if (image != null) {
-                    final decodedImage = await decodeImageFromList(await image.readAsBytes());
-                    final imageProvider = FileImage(File(image.path));
-                    final quantizerResult = await extractColorsFromImageProvider(imageProvider);
-                    final Map<int, int> colorToCount = quantizerResult.colorToCount.map(
-                      (int key, int value) => MapEntry<int, int>(getArgbFromAbgr(key), value),
+              if (image != null) {
+                final decodedImage = await decodeImageFromList(await image.readAsBytes());
+                final imageProvider = FileImage(File(image.path));
+                final quantizerResult = await extractColorsFromImageProvider(imageProvider);
+                final Map<int, int> colorToCount = quantizerResult.colorToCount.map(
+                  (int key, int value) => MapEntry<int, int>(getArgbFromAbgr(key), value),
+                );
+                // Score colors for color scheme suitability.
+                final List<int> scoredResults = Score.score(colorToCount, desired: 1);
+                final ui.Color baseColor = Color(scoredResults.first);
+                final meanLuminance =
+                    colorToCount.entries.fold<double>(
+                      0,
+                      (double previousValue, MapEntry<int, int> entry) =>
+                          previousValue + Color(entry.key).computeLuminance() * entry.value,
+                    ) /
+                    colorToCount.values.fold<int>(
+                      0,
+                      (int previousValue, int element) => previousValue + element,
                     );
-                    // Score colors for color scheme suitability.
-                    final List<int> scoredResults = Score.score(colorToCount, desired: 1);
-                    final ui.Color baseColor = Color(scoredResults.first);
-                    final meanLuminance =
-                        colorToCount.entries.fold<double>(
-                          0,
-                          (double previousValue, MapEntry<int, int> entry) =>
-                              previousValue + Color(entry.key).computeLuminance() * entry.value,
-                        ) /
-                        colorToCount.values.fold<int>(
-                          0,
-                          (int previousValue, int element) => previousValue + element,
-                        );
 
-                    if (context.mounted) {
-                      Navigator.of(context, rootNavigator: true)
-                          .push(
-                            MaterialPageRoute<BackgroundImage?>(
-                              builder: (_) => ConfirmImageBackgroundScreen(
-                                boardPrefs: boardPrefs,
-                                image: image,
-                                baseColor: baseColor,
-                                meanLuminance: meanLuminance,
-                                viewport: viewport,
-                                imageSize: Size(
-                                  decodedImage.width.toDouble(),
-                                  decodedImage.height.toDouble(),
-                                ),
-                                appDocumentsDirectory: appDocumentsDirectory,
-                              ),
-                              fullscreenDialog: true,
-                            ),
-                          )
-                          .then((value) {
-                            if (context.mounted && value != null) {
-                              ref
-                                  .read(generalPreferencesProvider.notifier)
-                                  .setBackground(backgroundImage: value);
-                              Navigator.pop(context);
-                            }
-                          });
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
-          Padding(
-            padding: Styles.horizontalBodyPadding,
-            child: Text(context.l10n.mobileSettingsPickAnImageHelp),
-          ),
-        ],
-        ListSection(
-          header: SettingsSectionTitle(context.l10n.mobileSettingsCustomBackgroundPresets),
-          backgroundColor: ColorScheme.of(context).surfaceContainerLowest,
-          children: [
-            GridView.builder(
-              primary: false,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16.0),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: itemsByRow,
-                crossAxisSpacing: 6.0,
-                mainAxisSpacing: 6.0,
-                childAspectRatio: 0.5,
-              ),
-              itemBuilder: (context, index) {
-                final t = colorChoices[index];
-
-                return GestureDetector(
-                  onTap: () => Navigator.of(context, rootNavigator: true)
+                if (context.mounted) {
+                  Navigator.of(context, rootNavigator: true)
                       .push(
-                        MaterialPageRoute<(int, bool)?>(
-                          builder: (_) => ConfirmColorBackgroundScreen(
+                        MaterialPageRoute<BackgroundImage?>(
+                          builder: (_) => ConfirmImageBackgroundScreen(
                             boardPrefs: boardPrefs,
-                            initialIndex: index,
+                            image: image,
+                            baseColor: baseColor,
+                            meanLuminance: meanLuminance,
+                            viewport: viewport,
+                            imageSize: Size(
+                              decodedImage.width.toDouble(),
+                              decodedImage.height.toDouble(),
+                            ),
+                            appDocumentsDirectory: appDocumentsDirectory,
                           ),
                           fullscreenDialog: true,
                         ),
                       )
                       .then((value) {
-                        if (context.mounted) {
-                          if (value != null) {
-                            final (index, _) = value;
-                            final selected = colorChoices[index];
-                            ref
-                                .read(generalPreferencesProvider.notifier)
-                                .setBackground(backgroundColor: (selected, true));
-                            Navigator.pop(context);
-                          }
+                        if (context.mounted && value != null) {
+                          ref
+                              .read(generalPreferencesProvider.notifier)
+                              .setBackground(backgroundImage: value);
+                          Navigator.pop(context);
                         }
-                      }),
-                  child: SizedBox.expand(child: ColoredBox(color: t.darker)),
-                );
-              },
-              itemCount: colorChoices.length,
-            ),
-          ],
+                      });
+                }
+              }
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 24),
+            child: Text(context.l10n.mobileSettingsPickAnImageHelp, style: SrsText.meta(srs.ink2)),
+          ),
+        ],
+        SrsGroupHeader(context.l10n.mobileSettingsCustomBackgroundPresets),
+        GridView.builder(
+          primary: false,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: itemsByRow,
+            crossAxisSpacing: 6.0,
+            mainAxisSpacing: 6.0,
+            childAspectRatio: 0.5,
+          ),
+          itemBuilder: (context, index) {
+            final t = colorChoices[index];
+
+            return GestureDetector(
+              onTap: () => Navigator.of(context, rootNavigator: true)
+                  .push(
+                    MaterialPageRoute<(int, bool)?>(
+                      builder: (_) =>
+                          ConfirmColorBackgroundScreen(boardPrefs: boardPrefs, initialIndex: index),
+                      fullscreenDialog: true,
+                    ),
+                  )
+                  .then((value) {
+                    if (context.mounted) {
+                      if (value != null) {
+                        final (index, _) = value;
+                        final selected = colorChoices[index];
+                        ref
+                            .read(generalPreferencesProvider.notifier)
+                            .setBackground(backgroundColor: (selected, true));
+                        Navigator.pop(context);
+                      }
+                    }
+                  }),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: t.darker,
+                  // The grid showed no indication of the current background: you opened the
+                  // screen to see what was chosen and got nine identical swatches.
+                  border: t == generalPrefs.backgroundColor?.$1
+                      ? Border.all(color: srs.accent, width: 3)
+                      : null,
+                ),
+                child: const SizedBox.expand(),
+              ),
+            );
+          },
+          itemCount: colorChoices.length,
         ),
       ],
     );

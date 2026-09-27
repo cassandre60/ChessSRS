@@ -1,8 +1,8 @@
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
-import 'package:chess_srs/src/styles/lichess_icons.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/color_palette.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -12,8 +12,6 @@ import 'package:chess_srs/src/view/settings/background_theme_choice_screen.dart'
 import 'package:chess_srs/src/view/settings/board_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/piece_set_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -78,7 +76,7 @@ class _BodyState extends ConsumerState<_Body> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 20),
             child: _BoardPreview(
               size: boardSize,
               boardPrefs: boardPrefs,
@@ -88,158 +86,151 @@ class _BodyState extends ConsumerState<_Body> {
           ),
           Expanded(
             child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               children: [
-                ListSection(
-                  hasLeading: true,
-                  children: [
-                    if (getSystemCorePalettes() != null)
-                      SwitchSettingTile(
-                        leading: const Icon(Icons.colorize_outlined),
-                        title: Text(context.l10n.mobileSystemColors),
-                        value: generalPrefs.systemColors,
-                        onChanged: (value) {
-                          ref.read(generalPreferencesProvider.notifier).toggleSystemColors();
-                        },
-                      ),
-                    SettingsListTile(
-                      icon: const Icon(Icons.wallpaper),
-                      settingsLabel: Text(context.l10n.background),
-                      settingsValue: generalPrefs.backgroundColor != null
-                          ? generalPrefs.backgroundColor!.$1.label
-                          : (generalPrefs.backgroundImage != null ? 'Image' : 'Default'),
-                      onTap: () {
-                        Navigator.of(context).push(BackgroundChoiceScreen.buildRoute());
-                      },
-                    ),
-                    if (generalPrefs.backgroundColor != null ||
-                        generalPrefs.backgroundImage != null)
-                      ListTile(
-                        leading: const Icon(Icons.cancel),
-                        title: const Text('Reset background'),
-                        onTap: () {
-                          ref
-                              .read(generalPreferencesProvider.notifier)
-                              .setBackground(backgroundColor: null, backgroundImage: null);
-                        },
-                      ),
-                    SettingsListTile(
-                      icon: const Icon(LichessIcons.chess_board),
-                      settingsLabel: Text(context.l10n.board),
-                      settingsValue: boardPrefs.boardTheme.label,
-                      onTap: () {
-                        Navigator.of(context).push(BoardChoiceScreen.buildRoute());
-                      },
-                    ),
-                    SettingsListTile(
-                      icon: const Icon(LichessIcons.chess_pawn),
-                      settingsLabel: Text(context.l10n.pieceSet),
-                      settingsValue: boardPrefs.pieceSet.label,
-                      onTap: () {
-                        Navigator.of(context).push(PieceSetScreen.buildRoute());
-                      },
-                    ),
-                    SettingsListTile(
-                      icon: const Icon(LichessIcons.arrow_full_upperright),
-                      settingsLabel: const Text('Drawn shape color'),
-                      explanation:
-                          'This color is only used for shapes drawn by hand using two fingers.',
-                      settingsValue: shapeColorL10n(boardPrefs.shapeColor),
-                      onTap: () {
-                        showChoicePicker(
-                          context,
-                          choices: ShapeColor.values,
-                          selectedItem: boardPrefs.shapeColor,
-                          labelBuilder: (t) => Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(text: shapeColorL10n(t)),
-                                const TextSpan(text: '   '),
-                                WidgetSpan(child: Container(width: 15, height: 15, color: t.color)),
-                              ],
-                            ),
-                          ),
-                          onSelectedItemChanged: (ShapeColor? value) {
-                            ref
-                                .read(boardPreferencesProvider.notifier)
-                                .setShapeColor(value ?? ShapeColor.green);
-                          },
-                        );
-                      },
-                    ),
-                    SwitchSettingTile(
-                      leading: const Icon(Icons.location_on),
-                      title: Text(context.l10n.preferencesBoardCoordinates),
-                      value: boardPrefs.coordinates,
+                if (getSystemCorePalettes() != null)
+                  SrsSettingsRow(
+                    label: context.l10n.mobileSystemColors,
+                    control: SrsSwitch(
+                      value: generalPrefs.systemColors,
+                      semanticLabel: context.l10n.mobileSystemColors,
                       onChanged: (value) {
-                        ref.read(boardPreferencesProvider.notifier).toggleCoordinates();
+                        ref.read(generalPreferencesProvider.notifier).toggleSystemColors();
                       },
                     ),
-                    SwitchSettingTile(
-                      // TODO translate
-                      leading: const Icon(Icons.border_outer),
-                      title: const Text('Show border'),
-                      value: boardPrefs.showBorder,
-                      onChanged: (value) {
-                        ref.read(boardPreferencesProvider.notifier).toggleBorder();
-                      },
-                    ),
-                  ],
+                  ),
+                SrsSettingsRow(
+                  label: context.l10n.background,
+                  value: generalPrefs.backgroundColor != null
+                      ? generalPrefs.backgroundColor!.$1.label
+                      : (generalPrefs.backgroundImage != null ? 'Image' : 'Default'),
+                  onTap: () {
+                    Navigator.of(context).push(BackgroundChoiceScreen.buildRoute());
+                  },
                 ),
-                ListSection(
-                  header: SettingsSectionTitle(context.l10n.advancedSettings),
-                  hasLeading: true,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.brightness_6),
-                      title: Slider.adaptive(
-                        min: 0.2,
-                        max: 1.4,
-                        value: brightness,
-                        onChanged: (value) {
+                if (generalPrefs.backgroundColor != null || generalPrefs.backgroundImage != null)
+                  SrsSettingsRow(
+                    label: 'Reset background',
+                    onTap: () {
+                      ref
+                          .read(generalPreferencesProvider.notifier)
+                          .setBackground(backgroundColor: null, backgroundImage: null);
+                    },
+                  ),
+                SrsSettingsRow(
+                  label: context.l10n.board,
+                  value: boardPrefs.boardTheme.label,
+                  onTap: () {
+                    Navigator.of(context).push(BoardChoiceScreen.buildRoute());
+                  },
+                ),
+                SrsSettingsRow(
+                  label: context.l10n.pieceSet,
+                  value: boardPrefs.pieceSet.label,
+                  onTap: () {
+                    Navigator.of(context).push(PieceSetScreen.buildRoute());
+                  },
+                ),
+                SrsSettingsRow(
+                  label: 'Drawn shape color',
+                  help: 'This color is only used for shapes drawn by hand using two fingers.',
+                  value: shapeColorL10n(boardPrefs.shapeColor),
+                  onTap: () {
+                    showChoicePicker(
+                      context,
+                      choices: ShapeColor.values,
+                      selectedItem: boardPrefs.shapeColor,
+                      labelBuilder: (t) => Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: shapeColorL10n(t)),
+                            const TextSpan(text: '   '),
+                            WidgetSpan(child: Container(width: 15, height: 15, color: t.color)),
+                          ],
+                        ),
+                      ),
+                      onSelectedItemChanged: (ShapeColor? value) {
+                        ref
+                            .read(boardPreferencesProvider.notifier)
+                            .setShapeColor(value ?? ShapeColor.green);
+                      },
+                    );
+                  },
+                ),
+                SrsSettingsRow(
+                  label: context.l10n.preferencesBoardCoordinates,
+                  control: SrsSwitch(
+                    value: boardPrefs.coordinates,
+                    semanticLabel: context.l10n.preferencesBoardCoordinates,
+                    onChanged: (value) {
+                      ref.read(boardPreferencesProvider.notifier).toggleCoordinates();
+                    },
+                  ),
+                ),
+                SrsSettingsRow(
+                  label: 'Show border',
+                  control: SrsSwitch(
+                    value: boardPrefs.showBorder,
+                    semanticLabel: 'Show border',
+                    onChanged: (value) {
+                      ref.read(boardPreferencesProvider.notifier).toggleBorder();
+                    },
+                  ),
+                ),
+                const SrsGroupHeader('Board colors'),
+                // The two sliders were bare `ListTile(title: Slider)` with an icon as the only
+                // label, so they reached a screen reader as an unnamed slider. Each now carries
+                // the name it adjusts and its current value.
+                SrsSettingsRow(
+                  label: 'Brightness',
+                  value: '${(brightness * 100).round()}%',
+                  preview: Slider(
+                    min: 0.2,
+                    max: 1.4,
+                    value: brightness,
+                    onChanged: (value) {
+                      setState(() {
+                        brightness = value;
+                      });
+                    },
+                    onChangeEnd: (value) {
+                      ref
+                          .read(boardPreferencesProvider.notifier)
+                          .adjustColors(brightness: brightness);
+                    },
+                  ),
+                ),
+                SrsSettingsRow(
+                  label: 'Hue',
+                  value: '${hue.round()}\u00b0',
+                  preview: Slider(
+                    min: 0.0,
+                    max: 360.0,
+                    value: hue,
+                    onChanged: (value) {
+                      setState(() {
+                        hue = value;
+                      });
+                    },
+                    onChangeEnd: (value) {
+                      ref.read(boardPreferencesProvider.notifier).adjustColors(hue: hue);
+                    },
+                  ),
+                ),
+                SrsSettingsRow(
+                  label: context.l10n.boardReset,
+                  enabled: hasAjustedColors,
+                  onTap: hasAjustedColors
+                      ? () {
                           setState(() {
-                            brightness = value;
+                            brightness = kBoardDefaultBrightnessFilter;
+                            hue = kBoardDefaultHueFilter;
                           });
-                        },
-                        onChangeEnd: (value) {
                           ref
                               .read(boardPreferencesProvider.notifier)
-                              .adjustColors(brightness: brightness);
-                        },
-                      ),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.invert_colors),
-                      title: Slider.adaptive(
-                        min: 0.0,
-                        max: 360.0,
-                        value: hue,
-                        onChanged: (value) {
-                          setState(() {
-                            hue = value;
-                          });
-                        },
-                        onChangeEnd: (value) {
-                          ref.read(boardPreferencesProvider.notifier).adjustColors(hue: hue);
-                        },
-                      ),
-                    ),
-                    ListTile(
-                      enabled: hasAjustedColors,
-                      leading: const Icon(Icons.cancel),
-                      title: Text(context.l10n.boardReset),
-                      onTap: hasAjustedColors
-                          ? () {
-                              setState(() {
-                                brightness = kBoardDefaultBrightnessFilter;
-                                hue = kBoardDefaultHueFilter;
-                              });
-                              ref
-                                  .read(boardPreferencesProvider.notifier)
-                                  .adjustColors(brightness: brightness, hue: hue);
-                            }
-                          : null,
-                    ),
-                  ],
+                              .adjustColors(brightness: brightness, hue: hue);
+                        }
+                      : null,
                 ),
               ],
             ),
