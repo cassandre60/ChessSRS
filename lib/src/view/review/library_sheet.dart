@@ -10,6 +10,7 @@ import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
+import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -240,7 +241,10 @@ class SrsLibrarySheet extends ConsumerWidget {
             title: 'About and licences',
             onTap: () {
               Navigator.pop(context);
-              showLicensePage(context: context, applicationName: 'Chess Repertoire SRS');
+              // AboutPage, not showLicensePage: the stock page lists package licences and
+              // says nothing about the fork. AGENTS.md §7 requires attributing the
+              // GPL-3.0 code this is built on, and AboutPage names it.
+              Navigator.of(context, rootNavigator: true).push(AboutPage.buildRoute());
             },
           ),
           const SizedBox(height: 8),
