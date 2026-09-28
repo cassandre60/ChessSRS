@@ -105,5 +105,36 @@ void main() {
       expect(exported, contains('[White "Repertoire"]'));
       expect(exported, contains('[Black "Opponent"]'));
     });
+
+    test('a chapter keeps its own title through an export and re-import', () {
+      // The exporter writes the real title to [Event], and also to a [Chapter] tag, but always
+      // writes the player tags as the placeholders "Repertoire"/"Opponent". An importer that
+      // reads White/Black first therefore names every exported chapter "Repertoire vs
+      // Opponent", which is what the review screen shows as the position's context and what
+      // the scope list shows as the row name.
+      const pgn = '[Event "Italian Game"]\n1. e4 e5 2. Nf3 Nc6 *';
+      final original = importPgn(pgn, studyTitle: 'Repertoires');
+      expect(original.chapters.first.title, 'Italian Game');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      final reimported = importPgn(exported, studyTitle: 'Repertoires');
+
+      expect(
+        reimported.chapters.first.title,
+        'Italian Game',
+        reason: 'the chapter title is what the exporter wrote and the user named',
+      );
+    });
+
+    test('multi-chapter export keeps the chapters distinguishable after re-import', () {
+      const pgn = '[Event "Italian Game"]\n1. e4 e5 *\n\n[Event "Sicilian"]\n1. e4 c5 *';
+      final original = importPgn(pgn, studyTitle: 'Openings');
+      expect(original.chapters.length, 2);
+
+      final exported = studyToPgn(original.study, original.chapters);
+      final reimported = importPgn(exported, studyTitle: 'Openings');
+
+      expect(reimported.chapters.map((c) => c.title).toList(), ['Italian Game', 'Sicilian']);
+    });
   });
 }
