@@ -297,3 +297,16 @@ foundation already contains study-tree and game-tree prior art.
   Verified by: removing the row count and the value text from the engine slider
   and watching both new tests fail, then pruning the three absent-type asserts
   and finding the suite unchanged.
+- [2026-09-28, Space Bunny Free] Several review tests are load-sensitive and will
+  flake in a large run, because `pumpAsync` waits a fixed 80ms of *real* time for
+  the controller's database futures and then pumps the fake clock by fixed amounts.
+  Under CPU contention less real work fits inside that window, so the controller has
+  not reloaded when the assertions run and they fail on absent data. `flutter test`
+  gives each file its own isolate, so this is timing and not shared state: the same
+  four directories failed three tests on one run and passed all 128 on the next,
+  unchanged. Before blaming a change for one of these, re-run the file alone, and
+  expect a large parallel run to be the trigger. The real fix is polling on a
+  condition instead of sleeping a fixed interval, across the shared helpers.
+  Verified by: `review_controller_test.dart` failing inside a 128-test run and
+  passing 30/30 in isolation, with `pumpAsync`'s `Future.delayed` as the only
+  wall-clock wait in the path.

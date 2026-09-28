@@ -24,6 +24,8 @@ class SrsPressable extends StatefulWidget {
     this.radius = 999,
     this.pressScale = 1,
     this.semanticsToggled,
+    this.onLongPress,
+    this.onSecondaryTap,
   });
   final VoidCallback? onPressed;
   final Widget Function(BuildContext context, bool hovered, bool pressed) builder;
@@ -31,6 +33,11 @@ class SrsPressable extends StatefulWidget {
   final double radius;
   final double pressScale;
   final bool? semanticsToggled;
+
+  /// Optional secondary entry points, for the rows that keep their actions off the row body
+  /// (design/docs/03-components.md §6.4: a long-press, or a secondary click on desktop).
+  final VoidCallback? onLongPress;
+  final VoidCallback? onSecondaryTap;
 
   @override
   State<SrsPressable> createState() => _SrsPressableState();
@@ -69,6 +76,11 @@ class _SrsPressableState extends State<SrsPressable> {
           onTapCancel: () => setState(() => _down = false),
           onTapUp: (_) => setState(() => _down = false),
           onTap: widget.onPressed,
+          // Both live on this one detector on purpose. Wrapping a separate GestureDetector around
+          // the pressable instead loses the gesture arena to [onTap], so a long-press arrives as a
+          // tap and selects the row instead of opening its actions.
+          onLongPress: widget.onLongPress,
+          onSecondaryTap: widget.onSecondaryTap,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -111,6 +123,7 @@ class SrsPillButton extends StatelessWidget {
     required this.onPressed,
     this.shortcut,
     this.selected = false,
+    this.expand = false,
   });
   final String label;
   final VoidCallback? onPressed;
@@ -121,6 +134,13 @@ class SrsPillButton extends StatelessWidget {
   /// group; a filled pill next to outlined ones would read as the only action.
   final bool selected;
 
+  /// Fills the width it is given, for the pill that is the only action on a sheet.
+  ///
+  /// Wrapping the pill in a `SizedBox(width: double.infinity)` does not achieve this: the pressable
+  /// builds its child inside a `Stack`, which hands it loose constraints, so the pill shrink-wraps
+  /// to its label however wide its parent is. The width has to be asked for here.
+  final bool expand;
+
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
@@ -130,6 +150,7 @@ class SrsPillButton extends StatelessWidget {
       semanticsToggled: selected,
       pressScale: SrsMotion.pressScale,
       builder: (_, _, _) => Container(
+        width: expand ? double.infinity : null,
         padding: const EdgeInsets.symmetric(horizontal: 22),
         decoration: BoxDecoration(
           color: selected ? c.accent : c.ink,
@@ -140,9 +161,11 @@ class SrsPillButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Excluded: SrsPressable already announces `label`.
-            ExcludeSemantics(
-              child: Text(label, style: SrsText.button(selected ? c.ground : c.ink)),
-            ),
+            //
+            // `ground` in both states, not `ink` when unselected: the background is `ink` (or
+            // `accent`) either way, so an `ink` label renders ink on ink and the button reads as
+            // an empty black pill.
+            ExcludeSemantics(child: Text(label, style: SrsText.button(c.ground))),
             if (shortcut != null && _isDesktopPlatform) ...[
               const SizedBox(width: 12),
               SrsKbd(shortcut!, onInk: true),

@@ -120,6 +120,50 @@ void main() {
           .toList();
       expect(toggled, [true, false]);
     });
+
+    testWidgets('the label never takes the background colour', (tester) async {
+      // The pill is the one filled button in the system, so its background is `ink` (or `accent`)
+      // in every state. A label that matched the background would render as an empty black pill:
+      // this shipped that way and no assertion noticed, because the label was still in the tree.
+      for (final selected in [false, true]) {
+        await tester.pumpWidget(
+          _wrap(SrsPillButton(label: 'Practice', onPressed: () {}, selected: selected)),
+        );
+
+        final label = tester.widget<Text>(find.text('Practice'));
+        final surface = tester.widget<Container>(
+          find.descendant(of: find.byType(SrsPillButton), matching: find.byType(Container)).first,
+        );
+        final background = (surface.decoration! as BoxDecoration).color!;
+
+        expect(label.style?.color, isNot(background), reason: 'selected: $selected');
+      }
+    });
+
+    testWidgets('expands to the width it is given when asked', (tester) async {
+      // A pill among others should shrink-wrap, so a set of them sits together. The one pill that
+      // is the only action on a sheet has to fill the sheet instead, and asking for that with a
+      // surrounding SizedBox does not work: the pressable's Stack passes loose constraints down,
+      // so the pill shrink-wraps to its label however wide its parent is. Measure the painted
+      // surface, not the widget, which comes out full width either way.
+      Finder paintedPill() =>
+          find.descendant(of: find.byType(SrsPillButton), matching: find.byType(Container)).first;
+
+      await tester.pumpWidget(
+        _wrap(const SizedBox(width: 300, child: SrsPillButton(label: 'Practice', onPressed: null))),
+      );
+      expect(tester.getSize(paintedPill()).width, lessThan(300));
+
+      await tester.pumpWidget(
+        _wrap(
+          const SizedBox(
+            width: 300,
+            child: SrsPillButton(label: 'Practice', onPressed: null, expand: true),
+          ),
+        ),
+      );
+      expect(tester.getSize(paintedPill()).width, 300);
+    });
   });
 
   group('SrsSettingsRow', () {

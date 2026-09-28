@@ -974,7 +974,9 @@ String _computeScopeTitle(ReviewScreenState state) {
     }
     return study.title;
   }
-  return 'All Studies';
+  // design/docs/01-identity.md names the everywhere scope `All repertoires`, and the demo's top bar
+  // shows the same string the scope list row uses.
+  return 'All repertoires';
 }
 
 class _SrsDiagnosticsOverlay extends StatelessWidget {

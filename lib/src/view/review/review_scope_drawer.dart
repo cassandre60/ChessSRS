@@ -98,7 +98,8 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         reviewState.scope.studyId == null && reviewState.scope.openingFamily == null;
 
     final query = _searchQuery.trim().toLowerCase();
-    final showAllStudies = query.isEmpty || 'all studies'.contains(query);
+    // The row is labelled `All repertoires` (design/docs/01-identity.md), so match that.
+    final showAllStudies = query.isEmpty || 'all repertoires'.contains(query);
 
     final filteredOpeningHubs = query.isEmpty
         ? reviewState.openingDueCounts.entries.toList()
@@ -177,7 +178,10 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 color: c.ink,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Search repertoires & hubs...',
+                                // design/docs/01-identity.md: the scope search placeholder is
+                                // `Search`, and the demo's longer string is the field's accessible
+                                // name rather than its visible hint.
+                                hintText: 'Search',
                                 hintStyle: TextStyle(
                                   fontFamily: SrsText.ui,
                                   fontSize: 15.5,
@@ -226,80 +230,18 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
-                                // Group: Everywhere (All Studies)
+                                // Group: Everywhere (All repertoires)
                                 if (showAllStudies) ...[
                                   _buildGroupHeader('Everywhere', c),
-                                  ListTile(
-                                    selected: isAllSelected,
-                                    selectedTileColor: c.accentSoft,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 18.0,
-                                      vertical: 2.0,
-                                    ),
-                                    leading: Icon(
-                                      Symbols.all_inclusive_rounded,
-                                      size: 20,
-                                      color: isAllSelected ? c.accent : c.ink,
-                                    ),
-                                    title: Text(
-                                      'All Studies',
-                                      style: TextStyle(
-                                        fontFamily: SrsText.ui,
-                                        fontSize: 15.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: c.ink,
-                                      ),
-                                    ),
-                                    subtitle: reviewState.totalProgress.totalDecisions > 0
-                                        ? Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                '${reviewState.totalProgress.learnedDecisions}/${reviewState.totalProgress.totalDecisions} learned (${reviewState.totalProgress.progressPercentage}%)',
-                                                style: TextStyle(
-                                                  fontFamily: SrsText.ui,
-                                                  fontSize: 12.0,
-                                                  color: c.ink3,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              SrsMemoryBar(
-                                                width: 96,
-                                                height: 5,
-                                                gap: 2,
-                                                radius: 1,
-                                                retained:
-                                                    (reviewState.totalProgress.learnedDecisions -
-                                                            reviewState.totalProgress.dueDecisions)
-                                                        .clamp(
-                                                          0,
-                                                          reviewState.totalProgress.totalDecisions,
-                                                        ),
-                                                learning: reviewState.totalProgress.dueDecisions,
-                                                fresh:
-                                                    (reviewState.totalProgress.totalDecisions -
-                                                            reviewState
-                                                                .totalProgress
-                                                                .learnedDecisions)
-                                                        .clamp(
-                                                          0,
-                                                          reviewState.totalProgress.totalDecisions,
-                                                        ),
-                                              ),
-                                            ],
-                                          )
-                                        : Text(
-                                            'Combined pool of all active repertoires',
-                                            style: TextStyle(
-                                              fontFamily: SrsText.ui,
-                                              fontSize: 12.5,
-                                              color: c.ink3,
-                                            ),
-                                          ),
-                                    trailing: _buildDueNumeral(reviewState.totalDueCount, true, c),
-                                    onTap: () {
+                                  _ScopeRow(
+                                    name: 'All repertoires',
+                                    semanticLabel:
+                                        'All repertoires, ${reviewState.totalDueCount} due',
+                                    dueCount: reviewState.totalDueCount,
+                                    isPaused: false,
+                                    isSelected: isAllSelected,
+                                    progress: reviewState.totalProgress,
+                                    onPressed: () {
                                       Navigator.of(context).pop();
                                       ref
                                           .read(reviewControllerProvider.notifier)
@@ -308,88 +250,29 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                   ),
                                 ],
 
-                                // Group: Opening Hubs
+                                // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
-                                  _buildGroupHeader('Opening Hubs', c),
+                                  _buildGroupHeader('Openings', c),
                                   for (final entry in filteredOpeningHubs)
-                                    ListTile(
-                                      selected: reviewState.scope.openingFamily == entry.key,
-                                      selectedTileColor: c.accentSoft,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 18.0,
-                                        vertical: 2.0,
-                                      ),
-                                      leading: Icon(
-                                        Symbols.category_rounded,
-                                        size: 20,
-                                        color: reviewState.scope.openingFamily == entry.key
-                                            ? c.accent
-                                            : c.ink2,
-                                      ),
-                                      title: Text(
-                                        entry.key,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontFamily: SrsText.ui,
-                                          fontSize: 15.5,
-                                          fontWeight: FontWeight.w500,
-                                          color: c.ink,
-                                        ),
-                                      ),
-                                      subtitle: Builder(
-                                        builder: (context) {
-                                          final progress = reviewState.openingProgress[entry.key];
-                                          return Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                'Opening Hub',
-                                                style: TextStyle(
-                                                  fontFamily: SrsText.ui,
-                                                  fontSize: 12.5,
-                                                  color: c.ink3,
-                                                ),
-                                              ),
-                                              if (progress != null &&
-                                                  progress.totalDecisions > 0) ...[
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '${progress.learnedDecisions}/${progress.totalDecisions} learned (${progress.progressPercentage}%)',
-                                                  style: TextStyle(
-                                                    fontFamily: SrsText.ui,
-                                                    fontSize: 12.0,
-                                                    color: c.ink3,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                SrsMemoryBar(
-                                                  width: 96,
-                                                  height: 5,
-                                                  gap: 2,
-                                                  radius: 1,
-                                                  retained:
-                                                      (progress.learnedDecisions -
-                                                              progress.dueDecisions)
-                                                          .clamp(0, progress.totalDecisions),
-                                                  learning: progress.dueDecisions,
-                                                  fresh:
-                                                      (progress.totalDecisions -
-                                                              progress.learnedDecisions)
-                                                          .clamp(0, progress.totalDecisions),
-                                                ),
-                                              ],
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                      trailing: _buildDueNumeral(entry.value, true, c),
-                                      onTap: () {
-                                        Navigator.of(context).pop();
-                                        ref
-                                            .read(reviewControllerProvider.notifier)
-                                            .changeScope(ReviewScope.opening(entry.key));
+                                    Builder(
+                                      builder: (context) {
+                                        final progress =
+                                            reviewState.openingProgress[entry.key] ??
+                                            RepertoireProgress.zero;
+                                        return _ScopeRow(
+                                          name: entry.key,
+                                          semanticLabel: '${entry.key} opening, ${entry.value} due',
+                                          dueCount: entry.value,
+                                          isPaused: false,
+                                          isSelected: reviewState.scope.openingFamily == entry.key,
+                                          progress: progress,
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                            ref
+                                                .read(reviewControllerProvider.notifier)
+                                                .changeScope(ReviewScope.opening(entry.key));
+                                          },
+                                        );
                                       },
                                     ),
                                 ],
@@ -401,107 +284,26 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     Builder(
                                       builder: (context) {
                                         final due = reviewState.studyDueCounts[study.id] ?? 0;
-                                        final progress = reviewState.studyProgress[study.id];
-                                        final isSelected = reviewState.scope.studyId == study.id;
-                                        return ListTile(
-                                          selected: isSelected,
-                                          selectedTileColor: c.accentSoft,
-                                          contentPadding: const EdgeInsets.symmetric(
-                                            horizontal: 18.0,
-                                            vertical: 2.0,
-                                          ),
-                                          leading: IconButton(
-                                            icon: Icon(
-                                              study.isActive
-                                                  ? Symbols.check_circle_rounded
-                                                  : Symbols.pause_circle_outline_rounded,
-                                              size: 20,
-                                              color: study.isActive ? c.accent : c.ink3,
-                                            ),
-                                            tooltip: study.isActive
-                                                ? 'Active in review pool (tap to suspend)'
-                                                : 'Suspended from review pool (tap to activate)',
-                                            onPressed: () {
-                                              ref
-                                                  .read(reviewControllerProvider.notifier)
-                                                  .toggleStudyActive(study.id, !study.isActive);
-                                            },
-                                          ),
-                                          title: Text(
-                                            study.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontFamily: SrsText.ui,
-                                              fontSize: 15.5,
-                                              fontWeight: FontWeight.w500,
-                                              color: study.isActive ? c.ink : c.ink3,
-                                            ),
-                                          ),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (progress != null &&
-                                                  progress.totalDecisions > 0) ...[
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '${progress.learnedDecisions}/${progress.totalDecisions} learned (${progress.progressPercentage}%)',
-                                                  style: TextStyle(
-                                                    fontFamily: SrsText.ui,
-                                                    fontSize: 12.0,
-                                                    color: c.ink3,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                SrsMemoryBar(
-                                                  width: 96,
-                                                  height: 5,
-                                                  gap: 2,
-                                                  radius: 1,
-                                                  retained:
-                                                      (progress.learnedDecisions -
-                                                              progress.dueDecisions)
-                                                          .clamp(0, progress.totalDecisions),
-                                                  learning: progress.dueDecisions,
-                                                  fresh:
-                                                      (progress.totalDecisions -
-                                                              progress.learnedDecisions)
-                                                          .clamp(0, progress.totalDecisions),
-                                                ),
-                                              ] else
-                                                Text(
-                                                  study.isActive ? 'No positions' : 'Paused',
-                                                  style: TextStyle(
-                                                    fontFamily: SrsText.ui,
-                                                    fontSize: 12.5,
-                                                    color: c.ink3,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          trailing: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              _buildDueNumeral(due, study.isActive, c),
-                                              IconButton(
-                                                icon: Icon(
-                                                  Symbols.more_vert_rounded,
-                                                  size: 20,
-                                                  color: c.ink2,
-                                                ),
-                                                tooltip: 'Study options',
-                                                onPressed: () =>
-                                                    _showStudyActionsSheet(context, ref, study),
-                                              ),
-                                            ],
-                                          ),
-                                          onTap: () {
+                                        final progress =
+                                            reviewState.studyProgress[study.id] ??
+                                            RepertoireProgress.zero;
+                                        return _ScopeRow(
+                                          name: study.title,
+                                          semanticLabel:
+                                              '${study.title}, $due due'
+                                              '${study.isActive ? '' : ', paused'}',
+                                          dueCount: due,
+                                          isPaused: !study.isActive,
+                                          isSelected: reviewState.scope.studyId == study.id,
+                                          progress: progress,
+                                          onPressed: () {
                                             Navigator.of(context).pop();
                                             ref
                                                 .read(reviewControllerProvider.notifier)
                                                 .changeScope(ReviewScope.study(study.id));
                                           },
+                                          onShowActions: () =>
+                                              _showStudyActionsSheet(context, ref, study),
                                         );
                                       },
                                     ),
@@ -518,6 +320,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                         width: double.infinity,
                         child: SrsPillButton(
                           label: 'Import PGN',
+                          expand: true,
                           onPressed: () {
                             Navigator.of(context).pop();
                             RepertoireImportDialog.show(context);
@@ -555,34 +358,12 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     );
   }
 
+  /// design/docs/03-components.md §6.2: group titles are `12.5/500 ink3`, padding 14/18/4.
   Widget _buildGroupHeader(String title, SrsColors c) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20.0, 14.0, 20.0, 6.0),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontFamily: SrsText.ui,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.9,
-          color: c.ink3,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDueNumeral(int count, bool isActive, SrsColors c) {
-    final isZero = count == 0;
-    return Text(
-      '$count',
-      style: TextStyle(
-        fontFamily: SrsText.ui,
-        fontSize: 15.0,
-        fontWeight: isZero || !isActive ? FontWeight.w400 : FontWeight.w600,
-        color: isZero || !isActive ? c.ink3 : c.ink,
-        fontFeatures: SrsText.tabular,
-      ),
+      padding: const EdgeInsets.fromLTRB(18.0, 14.0, 18.0, 4.0),
+      child: Text(title, style: SrsText.groupTitle(c.ink3)),
     );
   }
 
@@ -610,6 +391,33 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                 ),
               ),
               Container(height: 1, color: c.hairlineSoft),
+              // Pause moved here from the row itself: design/docs/03-components.md §6.4 keeps row
+              // actions out of the list row, and the row still shows the paused state.
+              ListTile(
+                dense: true,
+                leading: Icon(
+                  study.isActive
+                      ? Symbols.pause_circle_outline_rounded
+                      : Symbols.play_circle_rounded,
+                  color: c.ink,
+                ),
+                title: Text(
+                  study.isActive ? 'Pause Study' : 'Resume Study',
+                  style: SrsText.settingLabel(c.ink),
+                ),
+                subtitle: Text(
+                  study.isActive
+                      ? 'Remove from the review pool until you resume it'
+                      : 'Add back to the review pool',
+                  style: SrsText.settingHelp(c.ink3),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  ref
+                      .read(reviewControllerProvider.notifier)
+                      .toggleStudyActive(study.id, !study.isActive);
+                },
+              ),
               ListTile(
                 dense: true,
                 leading: Icon(Symbols.view_list_rounded, color: c.ink),
@@ -782,6 +590,176 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One row of the scope list, built to design/docs/03-components.md §6.3 and the demo's `.row`:
+/// a full-width button with 9/18 padding and a 14px gap, the name over a sub line on the left, and
+/// the due numeral on the right. Hover fills `hairlineSoft`; the current scope fills `accentSoft`
+/// and carries a 3px accent bar down its left edge.
+///
+/// §6.4 keeps row actions out of the row body. All three of the routes it offers are wired: a
+/// long-press, a secondary click, and the `…`. The `…` is left permanently visible rather than
+/// revealed on hover, because hover does not exist on the touch screens this app mostly runs on
+/// and a control that appears only under a pointer the device does not have is a control that is
+/// missing for most of the people using it.
+class _ScopeRow extends StatelessWidget {
+  const _ScopeRow({
+    required this.name,
+    required this.semanticLabel,
+    required this.dueCount,
+    required this.isPaused,
+    required this.isSelected,
+    required this.progress,
+    required this.onPressed,
+    this.onShowActions,
+  });
+
+  final String name;
+  final String semanticLabel;
+  final int dueCount;
+
+  /// A suspended study: `ink3` for the name and the numeral, and `Paused` instead of a count.
+  final bool isPaused;
+  final bool isSelected;
+
+  /// Drives both the `{n} positions` figure and the segments of the memory mini-bar.
+  final RepertoireProgress progress;
+
+  final VoidCallback onPressed;
+  final VoidCallback? onShowActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final actions = onShowActions;
+    return SrsPressable(
+      onPressed: onPressed,
+      onLongPress: actions,
+      onSecondaryTap: actions,
+      semanticLabel: semanticLabel,
+      radius: 8,
+      builder: (context, hovered, pressed) {
+        final label = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: SrsText.rowName(isPaused ? c.ink3 : c.ink),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                SrsMemoryBar(
+                  width: 96,
+                  height: 5,
+                  gap: 2,
+                  radius: 1,
+                  retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
+                    0,
+                    progress.totalDecisions,
+                  ),
+                  learning: progress.dueDecisions,
+                  fresh: progress.unlearnedDecisions.clamp(0, progress.totalDecisions),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    isPaused ? 'Paused' : '${progress.totalDecisions} positions',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SrsText.rowSub(c.ink3),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: isSelected
+                ? c.accentSoft
+                : hovered
+                ? c.hairlineSoft
+                : const Color(0x00000000),
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                child: Row(
+                  children: [
+                    Expanded(child: label),
+                    const SizedBox(width: 14),
+                    _DueCell(count: dueCount, isActive: !isPaused),
+                    if (actions != null) ...[
+                      const SizedBox(width: 2),
+                      SrsIconButton(
+                        icon: Symbols.more_vert_rounded,
+                        tooltip: 'Study options',
+                        onPressed: actions,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // The current scope carries a 3px accent bar, inset to the row's own padding.
+              if (isSelected)
+                Positioned(
+                  left: 0,
+                  top: 9,
+                  bottom: 9,
+                  width: 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: c.accent,
+                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(2)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The right-hand side of a scope row: the due numeral, then `due`, on a shared baseline.
+///
+/// design/docs/03-components.md §6.3, and the demo's `.row-due`: the numeral is `17/600` with
+/// tabular figures and `due` is `12.5 ink3`, 5px apart. Zero due drops the numeral to `ink3` at
+/// weight 500; a paused scope only recolours it.
+class _DueCell extends StatelessWidget {
+  const _DueCell({required this.count, required this.isActive});
+
+  final int count;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final isZero = count == 0;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          '$count',
+          style: SrsText.rowDue(
+            isZero || !isActive ? c.ink3 : c.ink,
+          ).copyWith(fontWeight: isZero ? FontWeight.w500 : FontWeight.w600),
+        ),
+        const SizedBox(width: 5),
+        // The demo sets tabular figures on `.row-sub` for the figure, not on the word beside it.
+        Text('due', style: SrsText.rowSub(c.ink3).copyWith(fontFeatures: null)),
+      ],
     );
   }
 }

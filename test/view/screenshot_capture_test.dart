@@ -36,6 +36,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:dartchess/dartchess.dart';
@@ -106,6 +107,13 @@ Future<void> _loadDesignFonts() async {
     final loader = FontLoader(family)..addFont(rootBundle.load(path));
     await loader.load();
   }
+
+  // Known gap: the `MaterialSymbolsRounded` family, which every `Symbols.*` icon in the app
+  // draws with, is not registered here, so those glyphs capture as filled boxes. The families
+  // above are app assets; this one lives in the `material_symbols_icons` package, so loading it
+  // means addressing a package asset. That is left alone on purpose: registering the family
+  // would redraw every icon in all fifty-odd existing captures, which is its own change with its
+  // own review. Judge these captures for text and layout, not for icon shapes.
 }
 
 void main() {
@@ -270,6 +278,37 @@ void main() {
               repertoireSide: Side.white,
             );
             await t.runAsync(() => repo.saveImportResult(result));
+          },
+        );
+      }, skip: !_enabled);
+
+      // The scope list, which design/docs/03-components.md §6 specifies row by row. It is
+      // mounted as the capture subject rather than opened with ReviewScopeDrawer.show, because a
+      // pushed dialog route is a sibling of the capture's RepaintBoundary and so falls outside
+      // the surface the golden is taken from. Two studies, so the capture shows a populated
+      // memory mini-bar next to the empty one every new study starts with.
+      testWidgets('capture: review scope list, $label, ${brightness.name}', (tester) async {
+        await capture(
+          tester,
+          screen: 'review-scope',
+          label: label,
+          // The capture harness rejects a frame with no Scaffold, and the drawer is dialog content
+          // that normally arrives inside one.
+          home: const Scaffold(body: ReviewScopeDrawer()),
+          surface: surface,
+          brightness: brightness,
+          overrides: repoOverrides(),
+          seed: (t) async {
+            for (final entry in [
+              (
+                'Sicilian Defense Repertoire',
+                '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 *',
+              ),
+              ('Queen Gambit Repertoire', '1. d4 d5 2. c4 e6 *'),
+            ]) {
+              final result = importPgn(entry.$2, studyTitle: entry.$1, repertoireSide: Side.white);
+              await t.runAsync(() => repo.saveImportResult(result));
+            }
           },
         );
       }, skip: !_enabled);

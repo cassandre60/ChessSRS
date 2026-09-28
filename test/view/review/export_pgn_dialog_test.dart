@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
@@ -155,8 +156,20 @@ void main() {
         findsNWidgets(2),
       );
 
-      // Tap study options icon
-      await tester.tap(find.byTooltip('Study options').first);
+      // Two rows are called `French Defense` — the opening hub and the study. Only the study
+      // carries actions, so its row is the one with a `…` on it.
+      final frenchRows = find.descendant(
+        of: find.byType(ReviewScopeDrawer),
+        matching: find.text('French Defense'),
+      );
+      expect(frenchRows, findsNWidgets(2));
+      final studyRow = find
+          .descendant(of: find.byType(ReviewScopeDrawer), matching: find.byType(SrsIconButton))
+          .first;
+
+      // design/docs/03-components.md §6.4 offers three routes to the actions sheet. This one is
+      // the `…`; the long-press route is covered in review_screen_test.dart.
+      await tester.tap(studyRow);
       await tester.pumpAndSettle();
 
       // Verify Export PGN option is present

@@ -126,7 +126,9 @@ void main() {
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
-        expect(find.text('All Studies'), findsOneWidget);
+        // design/docs/01-identity.md names the everywhere scope `All repertoires`; the top bar
+        // shows it, and the scope list's first row shows the same string when the drawer opens.
+        expect(find.text('All repertoires'), findsOneWidget);
         expect(find.text('Repertoire vs Opponent'), findsOneWidget);
         expect(find.text('White to play'), findsOneWidget);
 
