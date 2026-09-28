@@ -197,6 +197,13 @@ inner-loop step.**
 Say plainly in the commit message when a change was verified only by
 targeted tests, so nobody mistakes it for a full-suite result.
 
+**Release builds never run on a dev machine.** `flutter build appbundle/apk --release`
+(R8 + native engines) OOM-killed a 15GB desktop mid-build, and Gradle's Groovy compiler cannot
+run on that machine's Java 27 at all. Release artifacts come only from the `release-proof`
+workflow on GitHub runners (dispatch it, or touch its file in a PR). Never attempt a local
+release build to "prove" anything — the proof already has a home, and the crash it risks is the
+owner's working machine, not a throwaway VM.
+
 ## 5. Quality gates and invariants
 
 - `QUALITY.md` invariants are binding: pure domain layer, single chess
