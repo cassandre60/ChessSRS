@@ -1,14 +1,17 @@
 name: Release proof
 
-# Builds the signed-release app bundle the Play internal track needs, on GitHub
-# runners instead of a dev machine. Dispatch-only: it never runs on push or PR,
+# Builds the signed-release artifacts on GitHub runners instead of a dev
+# machine: the app bundle Play wants, plus an APK the owner can install
+# directly on a phone for testing. Dispatch-only: it never runs on push or PR,
 # so it costs nothing unless someone asks for proof.
 #
 # Signing uses a throwaway keystore generated inside the run. That proves the
 # whole pipeline (Dart release compile, R8/minify, native engines, packaging,
 # signing) without touching the real upload key, which lives with the owner and
-# must never enter this repo. The resulting AAB is NOT shippable — it is signed
-# with a key nobody will ever see again — and exists only to prove the build.
+# must never enter this repo. Both artifacts are NOT shippable — signed with a
+# key nobody will ever see again. The APK installs and runs, but an update to
+# a store-signed build later will require uninstalling first (different key =
+# different app identity to Android).
 #
 # To ship for real: generate the permanent keystore, add it plus key.properties
 # as action secrets, and extend this workflow (or fastlane) to use them.
@@ -74,4 +77,16 @@ jobs:
         with:
           name: app-release-throwaway-signed
           path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+      # An installable APK for on-phone testing. Same throwaway key as above:
+      # installs and runs fine, but cannot update to/from a store-signed build.
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: app-release-apk-throwaway-signed
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
