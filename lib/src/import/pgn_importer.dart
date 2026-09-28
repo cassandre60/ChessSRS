@@ -30,9 +30,21 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
     if (parsed.isNotEmpty) {
       final buffer = StringBuffer();
       for (final game in parsed) {
-        final fen = game.headers['FEN'];
-        if (fen != null && fen.trim().isNotEmpty) {
-          buffer.write('FEN:${fenKey(fen)};');
+        // The starting position is resolved exactly as importPgn resolves it, rather than read
+        // off the header. dartchess rewrites a legal FEN on the way in — an en-passant square no
+        // pawn can capture becomes '-', castling rights come back in canonical order — and a
+        // Chapter stores that normalised form as its startingFen. Hashing the raw header text
+        // instead gave this function a different answer from computeRepertoireTreeHash for
+        // every PGN that starts from a FEN, which is what stopped a backfilled study from ever
+        // being recognised as a duplicate of the file it came from.
+        if (game.headers['FEN'] != null && game.headers['FEN']!.trim().isNotEmpty) {
+          try {
+            buffer.write('FEN:${fenKey(PgnGame.startingPosition(game.headers).fen)};');
+          } catch (_) {
+            // An unusable FEN makes the whole chapter unimportable, so it contributes no moves
+            // either; hashing it here would make this fingerprint depend on bytes the import
+            // path ignores.
+          }
         }
         _appendPgnNodeMoves(game.moves, buffer);
         buffer.write('|');

@@ -1,9 +1,15 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:io';
+
+import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   // ---------------------------------------------------------------------------
@@ -506,6 +512,73 @@ void main() {
       final treeHash = computeRepertoireTreeHash(importResult.chapters);
       expect(treeHash, equals(computePgnHash(pgn)));
     });
+
+    test('the two hash functions agree on a PGN that starts from a FEN', () {
+      // The equivalence above is the whole reason computeRepertoireTreeHash exists: it
+      // backfills the hash of a study stored before pgnHash existed, so a re-import can still
+      // recognise it as a duplicate (sqlite_study_repository.dart:130). It only holds if the
+      // two functions derive the starting position the same way.
+      //
+      // Every case here is a legal FEN that dartchess rewrites on the way in: an en-passant
+      // square no pawn can capture, castling rights not in canonical order.
+      const cases = <String, String>{
+        'en passant no pawn can capture':
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *',
+        'castling rights out of canonical order':
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w kqKQ - 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *',
+      };
+
+      cases.forEach((why, pgn) {
+        final result = importPgn(pgn, studyTitle: 'From FEN');
+        expect(result.errors, isEmpty, reason: why);
+        expect(
+          computeRepertoireTreeHash(result.chapters),
+          equals(computePgnHash(pgn)),
+          reason: why,
+        );
+      });
+    });
+
+    test(
+      'a backfilled study is still recognised as a duplicate of the file it came from',
+      () async {
+        // The end of the equivalence above. A study whose pgnHash predates the column is given
+        // one by computeRepertoireTreeHash; if that value cannot equal what the import path
+        // computes, the study is imported a second time and the user has two copies to delete.
+        final dir = Directory.systemTemp.createTempSync('chess_srs_hash_dup_');
+        final db = await openAppDatabase(databaseFactoryFfi, p.join(dir.path, 'dup.db'));
+        final repo = SqliteStudyRepository(db);
+
+        const pgn =
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *';
+        final hash = computePgnHash(pgn);
+
+        try {
+          final result = importPgn(pgn, studyTitle: 'Sicilian', pgnHash: hash);
+          await repo.saveStudy(result.study);
+          for (final c in result.chapters) {
+            await repo.saveChapter(c);
+          }
+
+          // Before the backfill, the stored hash is the one the import path computes.
+          expect((await repo.getStudyByPgnHash(hash))?.id, result.study.id);
+
+          // Pretend it was stored before the column existed.
+          await db.update(kTableSrsStudy, {'pgnHash': null});
+          expect(
+            (await repo.getStudyByPgnHash(hash))?.id,
+            result.study.id,
+            reason: 'the backfilled hash must match the hash an import computes',
+          );
+        } finally {
+          await db.close();
+          dir.deleteSync(recursive: true);
+        }
+      },
+    );
 
     test('computePgnHashAsync and importPgnAsync work across isolate boundaries', () async {
       const pgn = '''
