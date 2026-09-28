@@ -223,7 +223,7 @@ class SqliteStudyRepository implements StudyRepository {
           // repertoires that share a line share its history too — and deleting one of them
           // must not take the other's review record with it. deleteChapter applies the same
           // rule one canonical id at a time (see the `ownedElsewhere` guard there).
-          final ownedElsewhere =
+          const ownedElsewhere =
               'SELECT canonicalStateId FROM $kTableSrsDecision '
               'WHERE canonicalStateId IS NOT NULL AND studyId != ?';
           final bothIds = <String>{

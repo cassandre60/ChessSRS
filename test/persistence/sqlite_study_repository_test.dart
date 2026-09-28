@@ -667,8 +667,7 @@ void main() {
           expect(
             await repo.getReviewEvents(shared),
             hasLength(2),
-            reason:
-                'study B still points at this position, so the reviews of it are not study A\'s',
+            reason: "study B still points at this position, so the reviews of it are not study A's",
           );
           expect(
             await repo.getReviewState(shared),
