@@ -36,6 +36,7 @@ import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_settings.dart';
@@ -417,6 +418,20 @@ void main() {
           screen: 'settings',
           label: label,
           home: const SrsSettingsScreen(),
+          surface: surface,
+          brightness: brightness,
+        );
+      }, skip: !_enabled);
+
+      // The Explore hub the Library sheet's single "Analysis" row opens. It lists the three tools
+      // plus a chapters entry, so the study list it can reach is visible as absent here -- which is
+      // also the state a new install is in, and the one worth having a picture of.
+      testWidgets('capture: analysis-hub, $label, ${brightness.name}', (tester) async {
+        await capture(
+          tester,
+          screen: 'analysis-hub',
+          label: label,
+          home: const AnalysisHubScreen(),
           surface: surface,
           brightness: brightness,
         );

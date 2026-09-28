@@ -83,7 +83,7 @@ Hard-coded English first (repo convention), then localise later. `{}` = dynamic.
 | Scope row sub | `{n} positions` or `Paused` |
 | Scope row due | `{n}` + `due` |
 | Scope empty | `Nothing matches “{query}”.` |
-| Library rows | `Import PGN` (sub: `From a file, pasted text or a Lichess study`), group `Explore`: `Analysis board`, `Opening explorer`, `Board editor`; `Settings`; `About and licences` |
+| Library rows | `Import PGN` (sub: `From a file, pasted text or a Lichess study`), group `Explore`: `Analysis` (sub: `Analysis board, explorer, editor, chapters`); `Settings`; `About and licences` |
 | First launch | wordmark `ChessSRS`; `Bring your repertoire.`; `Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.`; drop area `Drop a PGN file here`; button `Choose file`; links `Paste PGN text`, `Import a Lichess study`; `Train as` `Auto` `White` `Black` |
 | Import success toast | `Imported {n} positions from {file}.` |
 | Settings | title `Settings`; back `Review`; `Daily limit` (`Positions reviewed per day.`); `Target retention` (`Higher means more reviews. 88% suits most players; 95% is for tournament preparation.`); `Show notes after a move` (`Comments from your study appear once you have answered.`); `Show arrows and circles` (`Drawn from your study, only after you answer.`); `Accent` (`Used for the move you should play and for selection.`); `Theme` `Light`/`Dark` (add `System`); `Sound` (`Soft move and correction sounds.`); `Advanced`: `Scheduling algorithm` (`FSRS adapts to how well you remember each position.`), `Diagnostics` (`Show memory metrics during review.`) |

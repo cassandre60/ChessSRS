@@ -41,7 +41,8 @@ record findings at the top of your first PR description:
 5. The exact types in the installed `chessground` (`^10.1.1`) API: `ChessboardSettings`, `ChessboardColorScheme`,
    `ChessboardBackground`, piece asset types (`PieceAssets`), `StaticChessboard`, `ChessgroundImages`. Read the package
    source in the pub cache; do not rely on this package's assumptions about them.
-6. The Analysis, Opening explorer and Board editor screens (still Lichess-styled).
+6. The Analysis, Opening explorer and Board editor screens. (Reskinned in R12; since 2026-09-28 they are reached through
+   `AnalysisHubScreen` — see open decision 1 below.)
 7. Native shell: app name, bundle ids, splash (`flutter_native_splash` uses `logo-black/white.webp`), app icon, the iOS
    widget extension named `LichessWidgets`, `home_widget`, Firebase usage.
 
@@ -61,9 +62,13 @@ record findings at the top of your first PR description:
 
 ## Open decisions (ask the owner; do not assume)
 
-1. **Analysis board / Opening explorer / Board editor.** Keep (re-skin), fold into an "Explore" area, or cut? Until
-   decided, leave them untouched but unreachable from the new Library sheet's primary rows (the prototype shows them as
-   placeholder rows).
+1. ~~**Analysis board / Opening explorer / Board editor.** Keep (re-skin), fold into an "Explore" area, or cut?~~
+   **Resolved 2026-09-28: fold into one screen, called `Analysis`.** `AnalysisHubScreen` lists the three tools plus a
+   `Chapters of a study` entry, reached from a single `Analysis` row in the Library sheet. It replaced the three flat
+   Explore rows, which left the sheet doing two unrelated jobs. The study list stays owned by the scope drawer, so the
+   chapters entry opens a picker rather than inlining a second study list. The brief's premise — that these screens are
+   "still Lichess-styled" and unreachable from the Library sheet — was stale by then: R12 had already reskinned all three,
+   and they had been reachable since the Home-tab removal in #51.
 2. **Quick annotation toggle.** The current app bar has an eye toggle. The design removes it from the top bar; the
    preference lives in Settings ("Show notes after a move", "Show arrows and circles"). If the owner wants a quick
    toggle, add it as a switch row at the top of the Library sheet, not back in the top bar.

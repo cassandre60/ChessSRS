@@ -11,6 +11,7 @@ import 'package:chess_srs/src/model/explorer/opening_explorer_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
 import 'package:chess_srs/src/widgets/move_list.dart';
 import 'package:dartchess/dartchess.dart';
@@ -18,7 +19,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
-import '../../helpers/explore_hub.dart';
 
 import '../../network/fake_http_client_factory.dart';
 import '../../test_helpers.dart';
@@ -245,7 +245,7 @@ void main() {
     testWidgets('opening explorer does not use standalone analysis', (WidgetTester tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const ExploreHubScreen(),
+        home: const AnalysisHubScreen(),
         overrides: {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
             return FakeHttpClientFactory(() => mockClient);

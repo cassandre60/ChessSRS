@@ -1,22 +1,22 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../binding.dart';
-import '../../helpers/explore_hub.dart';
 import '../../test_provider_scope.dart';
 
-/// The Library sheet's Explore group, per design/docs/03-components.md §7: Analysis board,
-/// Opening explorer, Board editor.
+/// Where the Library sheet's Explore destinations live, per design/docs/03-components.md §7 and
+/// owner decision 2026-09-28 on `00-agent-brief.md` open decision 1.
 ///
-/// Four tests reach those destinations through [ExploreHubScreen] rather than the sheet,
-/// because the sheet pops itself before pushing and so cannot be mounted as a test's `home`.
-/// That makes the hub a copy of a piece of the product, and a copy can drift silently — the
-/// tests would go on passing while checking a route the app no longer offers. So the two are
-/// compared directly.
+/// This file used to mount a test-only `ExploreHubScreen` and compare it against the sheet, to stop
+/// the copy drifting from the product. `AnalysisHubScreen` is now real product code, so the copy is
+/// gone and with it the drift it was guarding against. What is worth pinning now is the move
+/// itself: the sheet must offer the hub, and must no longer offer the three tools directly —
+/// otherwise the destinations are reachable by two paths, or by none.
 void main() {
   setUpAll(TestLichessBinding.ensureInitialized);
 
@@ -30,17 +30,26 @@ void main() {
         .toList();
   }
 
-  testWidgets('the hub offers exactly the sheet Explore destinations', (tester) async {
-    final sheet = await rowLabels(tester, const SrsLibrarySheet());
-    final hub = await rowLabels(tester, const ExploreHubScreen());
+  const destinations = ['Analysis board', 'Opening explorer', 'Board editor'];
 
-    for (final destination in const ['Analysis board', 'Opening explorer', 'Board editor']) {
-      expect(sheet, contains(destination), reason: 'the sheet must offer $destination');
+  testWidgets('the sheet offers the hub, not the tools it now contains', (tester) async {
+    final sheet = await rowLabels(tester, const SrsLibrarySheet());
+
+    expect(sheet, contains('Analysis'), reason: 'the sheet must offer the hub');
+    for (final destination in destinations) {
+      expect(
+        sheet,
+        isNot(contains(destination)),
+        reason: '"$destination" moved into the hub; leaving it here gives two paths to one screen',
+      );
+    }
+  });
+
+  testWidgets('the hub offers each destination the sheet used to', (tester) async {
+    final hub = await rowLabels(tester, const AnalysisHubScreen());
+
+    for (final destination in destinations) {
       expect(hub, contains(destination), reason: 'the hub must reach $destination');
     }
-
-    // Nothing extra in the hub: every row it has is a destination the sheet also has.
-    final hubRows = hub.where((s) => s.endsWith('board') || s.contains('explorer')).toList();
-    expect(hubRows.toSet(), sheet.toSet().intersection(hubRows.toSet()));
   });
 }

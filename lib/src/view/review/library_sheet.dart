@@ -4,17 +4,11 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
-import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
-import 'package:chess_srs/src/model/common/chess.dart';
-import 'package:chess_srs/src/model/common/id.dart';
-import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
-import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
-import 'package:chess_srs/src/view/explorer/opening_explorer_screen.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
@@ -174,50 +168,20 @@ class SrsLibrarySheet extends ConsumerWidget {
 
           _buildDivider(c),
 
-          // Group 2: Explore
+          // Group 2: Explore.
+          //
+          // These were three flat rows here, which left this sheet doing two unrelated jobs:
+          // choosing a repertoire to review, and listing tools. They now live in one screen,
+          // `AnalysisHubScreen` (owner decision 2026-09-28 on `00-agent-brief.md` open decision
+          // 1), which also carries a study's chapters.
           _buildGroupHeader('Explore', c),
           _buildRow(
             c: c,
-            title: 'Analysis board',
+            title: 'Analysis',
+            subtitle: 'Analysis board, explorer, editor, chapters',
             onTap: () {
               Navigator.pop(context);
-              Navigator.of(context, rootNavigator: true).push(
-                AnalysisScreen.buildRoute(
-                  const AnalysisOptions.standalone(variant: Variant.standard),
-                ),
-              );
-            },
-          ),
-          _buildRow(
-            c: c,
-            title: 'Opening explorer',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context, rootNavigator: true).push(
-                OpeningExplorerScreen.buildRoute(
-                  const AnalysisOptions.pgn(
-                    id: StringId('standalone_opening_explorer'),
-                    orientation: Side.white,
-                    pgn: '',
-                    isComputerAnalysisAllowed: false,
-                    variant: Variant.standard,
-                  ),
-                ),
-              );
-            },
-          ),
-          _buildRow(
-            c: c,
-            title: 'Board editor',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context, rootNavigator: true).push(
-                BoardEditorScreen.buildRoute((
-                  initialVariant: Variant.standard,
-                  initialFen: null,
-                  initialOrientation: Side.white,
-                )),
-              );
+              Navigator.of(context, rootNavigator: true).push(AnalysisHubScreen.buildRoute());
             },
           ),
           _buildDivider(c),

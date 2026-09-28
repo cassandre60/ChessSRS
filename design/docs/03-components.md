@@ -159,9 +159,15 @@ Data order: Everywhere (All repertoires) → Openings (hubs) → Repertoires (st
 ## 7. Library sheet (replaces the "More" tab)
 
 Presentation like the scope list but **anchored top-right** on wide (right 20, top 56, width 310). Rows (16/500, padding 14/20, hairline between groups):
-group 1 `Import PGN` (sub 13 `ink3`: `From a file, pasted text or a Lichess study`); group 2 titled `Explore` (12.5 `ink3`, padding-left 20): `Analysis board`,
-`Opening explorer`, `Board editor` (see open decision 1 in `00`); group 3 `Settings`, `About and licences`. Each row ends with a 14px chevron-right (`ink3`).
+group 1 `Import PGN` (sub 13 `ink3`: `From a file, pasted text or a Lichess study`); group 2 titled `Explore` (12.5 `ink3`, padding-left 20): a single
+`Analysis` row (sub 13 `ink3`: `Analysis board, explorer, editor, chapters`); group 3 `Settings`, `About and licences`. Each row ends with a 14px chevron-right (`ink3`).
 No icons on rows, no account entry, no wordmark.
+
+**Resolved 2026-09-28 (open decision 1 in `00`):** the three Explore destinations were rows here and are now one screen,
+`AnalysisHubScreen`, which this row opens. The sheet was doing two unrelated jobs — choosing a repertoire to review, and listing
+tools. The hub lists `Analysis board`, `Opening explorer`, `Board editor` under a `REPERTOIRES` group with `Chapters of a study`,
+which opens a study picker and then the existing chapters screen. The picker is a sheet rather than a list on the hub on purpose:
+the scope drawer already owns the study list, and a second one beside it would be a competing home rather than a choice.
 
 ## 8. Memory bar (retained / learning / new)
 
@@ -213,6 +219,6 @@ Apply the system; keep them obviously the same family; **send screenshots to the
 - **Study chapters screen:** same layout as Settings (back button, big title = study name) with rows like scope rows (name, memory mini-bar, positions, due numeral).
 - **Study actions** (Chapters, Analyze, Practice, Export, Rename, Delete): a Library-style sheet of text rows (16/500, no icons), anchored to the row that opened it on wide layouts.
 - **Toast:** ink pill (`ink` bg, `ground` text 14/500), bottom 24, centered, padding 11/18, fades in 160 ms (translate 10px), visible 2.4 s. One line, no actions.
-- **Analysis / Explorer / Board editor:** reuse `SrsBoardBackground`, tokens and primitives; drop Lichess widgets and icons. Scope depends on open decision 1.
+- **Analysis / Explorer / Board editor:** reuse `SrsBoardBackground`, tokens and primitives; drop Lichess widgets and icons. Reached from the Library sheet's single `Analysis` row, which opens `AnalysisHubScreen` (open decision 1, resolved 2026-09-28).
 - **Practice mode banner:** none. The top bar shows `Practice` in the due-count slot (see `00` open decision 3).
 - **About and licences:** Settings-style page: wordmark, version, `Based on Lichess Mobile (GPL-3.0)` with links, then the standard licence list.

@@ -13,6 +13,7 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
@@ -28,7 +29,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
-import '../../helpers/explore_hub.dart';
 
 import '../../model/engine/fake_engine.dart';
 import '../../network/fake_websocket_channel.dart';
@@ -1410,7 +1410,7 @@ void main() {
       // reach the board analysis through the Explore hub
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const ExploreHubScreen(),
+        home: const AnalysisHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1459,7 +1459,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.text('Explore'), findsOneWidget);
+      expect(find.byType(AnalysisHubScreen), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1479,7 +1479,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const ExploreHubScreen(),
+        home: const AnalysisHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1525,7 +1525,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.text('Explore'), findsOneWidget);
+      expect(find.byType(AnalysisHubScreen), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1542,7 +1542,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const ExploreHubScreen(),
+        home: const AnalysisHubScreen(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1572,7 +1572,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.text('Explore'), findsOneWidget);
+      expect(find.byType(AnalysisHubScreen), findsOneWidget);
 
       // Navigate to board editor
       await tester.tap(find.text('Board editor'));
