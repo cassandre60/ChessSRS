@@ -253,6 +253,13 @@ remains a later option — never a redesign.
       7. Evidence: `flutter analyze` clean per touched file on every PR; 269 tests passing across the affected areas at the end. The full suite was never run locally — CI is the authority per §4. Runtime validation through `test/view/screenshot_capture_test.dart`, which grew to 30 captures over five widths in both themes, and which found three further defects.
       8. Prerelease: #44\u2013#58.
 
+- [x] **R13: Announce the review verdict to screen readers** *(done: 2026-09-28)*
+      1. Gap: `04-screens-and-flows.md` §6 requires position changes announced through a live region, and `01-identity.md` gives the wording — `Correct. {san}.` and `Not this move. The repertoire move is {san}.` The demo implements it via a visually hidden `aria-live` node. The app had no `liveRegion` anywhere, so nothing was announced.
+      2. Why it mattered most where it was least visible: a wrong answer already puts the repertoire move on screen in large letters, so a sighted player is told. A *correct* answer renders nothing at all, because the product is deliberately quiet on success. A screen-reader user therefore played a move and heard nothing, and could not tell a right answer from a wrong one.
+      3. Fix: a `_VerdictLiveRegion` in the answer slot, built on the demo's strings. Signalled by `lastStepResult` rather than `isAwaitingAdvance`, because a lapse waits to be acknowledged and never sets the latter; the controller clears `lastStepResult` on advancing, acknowledging and skipping alike, which is exactly the graded-and-not-yet-moved-past window.
+      4. On a correct answer it announces the move *played*, not the expected one: `expectedMoves` is a list, so a transposition can make an alternative equally correct, in which case the repertoire move is not what the player played.
+      5. Test covers both verdicts, the silent state before an answer, and that the announcement does not linger after Continue. Verified to fail on the pre-fix code.
+
 ### Future Horizon Tasks & Backlog
 - [ ] **F-AUTHTOKEN: Cover the startup token check**
       1. Why: when Lichess reports a stored token is no longer valid, the app deletes it (`preloaded_data.dart`, the `if (token != null)` branch). It is live — sign-in is reachable from the account menu, `LichessClient` attaches the bearer token automatically, and study import uses it — and it has no test. Deferred by owner decision 2026-09-26, to be done with the study-import work rather than ahead of it.

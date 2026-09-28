@@ -201,6 +201,69 @@ void main() {
       expect(find.text('Nothing due.'), findsOneWidget);
     });
 
+    testWidgets('a screen reader is told whether the answer was right', (tester) async {
+      // design/docs/04-screens-and-flows.md §6 requires the verdict announced through a live
+      // region, and this is the assertion that was missing. A wrong answer already puts the
+      // repertoire move on screen, so a sighted player is told; a *correct* one shows nothing at
+      // all, because the product is deliberately quiet on success. That left a screen-reader user
+      // with no confirmation, and no way to tell a right answer from a wrong one.
+      final sem = tester.ensureSemantics();
+
+      // The move carries a note, which is what pauses auto-advancement and so holds the verdict on
+      // screen long enough to read. Without a note a correct answer advances within a few
+      // milliseconds, and the announcement is deliberately transient -- which is exactly what a
+      // live region is for, and what makes it untestable in the un-commented case.
+      final importResult = importPgn(
+        '1. e4 {Attacks the centre} e5 2. Nf3 {Develops} Nc6 *',
+        studyTitle: 'Live Region Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // While the question is open there is no verdict to announce.
+      expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
+      expect(find.bySemanticsLabel(RegExp('Not this move')), findsNothing);
+
+      // The correct move, announced as the move that was played. Not the expected one: a
+      // transposition can make an alternative equally correct, in which case the repertoire move is
+      // not what the player actually played.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.bySemanticsLabel('Correct. e4.'), findsOneWidget);
+
+      // Past it, the next question is open and the verdict is gone rather than lingering.
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Continue'));
+      await pumpAsync(tester, 400);
+      expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
+
+      // A wrong move, announced with the repertoire move. The repertoire's second move is Nf3, so
+      // d4 is the mistake here and Nf3 is what should have been played.
+      await playMove(tester, 'd2', 'd4');
+      await pumpAsync(tester, 100);
+      expect(find.bySemanticsLabel('Not this move. The repertoire move is Nf3.'), findsOneWidget);
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
     testWidgets('study actions sheet opens AnalysisScreen via Analyze', (tester) async {
       final importResult = importPgn(
         '1. e4 e5 2. Nf3 Nc6 *',

@@ -813,6 +813,15 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
       content = _NoteSlot(comment: comment.trim(), wide: wide);
     }
 
+    final verdict = _verdictAnnouncement(state, isLapse: isLapse, expectedMoveSan: expectedMoveSan);
+    if (verdict != null) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [_VerdictLiveRegion(verdict), content],
+      );
+    }
+
     if (showDiagnostics) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -825,6 +834,43 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     }
 
     return content;
+  }
+
+  /// The sentence a screen reader hears after an answer, or null while the question is still open.
+  ///
+  /// design/docs/04-screens-and-flows.md §6 requires announcing position changes through a live
+  /// region, and design/docs/01-identity.md gives the wording: `Correct. {san}.` and `Not this
+  /// move. The repertoire move is {san}.` The demo does this through a visually hidden
+  /// `aria-live` node; this is the same thing.
+  ///
+  /// It matters most exactly where it is least visible. A wrong answer already puts the repertoire
+  /// move on screen in large letters, so a sighted player is told. A *correct* answer shows
+  /// nothing at all — the product is deliberately quiet on success — which left a screen-reader user
+  /// with no confirmation that they had got it right, and no way to tell a right answer from a
+  /// wrong one.
+  ///
+  /// On a correct answer this announces the move that was played rather than the expected one,
+  /// because `expectedMoves` is a list: a transposition can make an alternative equally correct, and
+  /// then the repertoire move is not the move the player made.
+  String? _verdictAnnouncement(
+    ReviewScreenState state, {
+    required bool isLapse,
+    required String? expectedMoveSan,
+  }) {
+    // `lastStepResult` is the signal, not `isAwaitingAdvance`. A lapse does not set the latter: the
+    // review is waiting for the mistake to be acknowledged, not for a Continue. The controller
+    // clears `lastStepResult` on advancing, acknowledging and skipping alike, so it is exactly the
+    // "the answer has been graded and not yet moved past" window.
+    final result = state.lastStepResult;
+    if (result == null) return null;
+    if (result.isCorrect) {
+      final played = result.movePlayed.san;
+      return played == null || played.isEmpty ? 'Correct.' : 'Correct. $played.';
+    }
+    if (expectedMoveSan == null || expectedMoveSan.isEmpty) {
+      return 'Not this move.';
+    }
+    return 'Not this move. The repertoire move is $expectedMoveSan.';
   }
 
   Widget _buildActions(
@@ -901,6 +947,28 @@ class _MetaView extends StatelessWidget {
         const SizedBox(width: 12),
         turnWidget,
       ],
+    );
+  }
+}
+
+/// Carries the answer's verdict to a screen reader, and nothing at all to the eye.
+///
+/// A live region announces when its label changes, which is the behaviour the design asks for: the
+/// verdict is spoken once, as it happens, rather than being something the user has to go and find.
+/// `container: true` forces the node to exist even though the child has no size, and `ExcludeSemantics`
+/// stops the visually identical text underneath being announced a second time.
+class _VerdictLiveRegion extends StatelessWidget {
+  const _VerdictLiveRegion(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: message,
+      child: const ExcludeSemantics(child: SizedBox.shrink()),
     );
   }
 }
