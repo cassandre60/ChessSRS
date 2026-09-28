@@ -146,3 +146,29 @@ class AuthController extends Notifier<AuthUser?> {
     }
   }
 }
+
+/// Validates the stored session token once, at startup.
+///
+/// This is the only startup token check. It delegates to [AuthController.checkToken] rather than
+/// reimplementing it, because that method already refuses to act on a stale result: it fences on
+/// both the controller's generation and the identity of the token it was asked about. The copy this
+/// replaces had no such fence and called `authStorage.delete()` directly, so it deleted whichever
+/// session was stored when the response arrived — including one established by a sign-in that
+/// happened while the request was in flight.
+///
+/// Not `autoDispose`, because it is a one-shot that must survive having no listener: it is read
+/// once from `Application.initState` and then nothing holds it.
+///
+/// A network error keeps the token. [AuthController.checkToken] rethrows, because `http.dart`
+/// relies on that when a request 401s, so the swallow has to live here — a launch that cannot reach
+/// lichess must not look like an invalid session.
+final startupTokenCheckProvider = FutureProvider<void>((Ref ref) async {
+  final authUser = ref.watch(preloadedDataProvider).value?.authUser;
+  if (authUser == null) return;
+
+  try {
+    await ref.read(authControllerProvider.notifier).checkToken(authUser);
+  } catch (_) {
+    // Network error: assume the session is still valid, as the check this replaced did.
+  }
+}, name: 'StartupTokenCheckProvider');

@@ -9,6 +9,7 @@ import 'package:chess_srs/src/design/theme_bridge.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:chess_srs/src/model/account/account_service.dart';
 import 'package:chess_srs/src/model/analysis/analysis_preferences.dart';
+import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/log/app_log_service.dart';
 import 'package:chess_srs/src/model/notifications/notification_service.dart';
@@ -112,6 +113,10 @@ class _AppState extends ConsumerState<Application> {
   @override
   void initState() {
     _screenSizeBasedInitialization(ref);
+
+    // Validate the stored session token, if there is one. Read once and left unawaited: the app is
+    // usable while it is in flight, and an invalid token signs the user out when it lands.
+    ref.read(startupTokenCheckProvider);
 
     // Start services
     ref.read(appLogServiceProvider).start();

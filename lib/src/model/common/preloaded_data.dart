@@ -6,7 +6,6 @@ import 'package:chess_srs/src/db/secure_storage.dart';
 import 'package:chess_srs/src/model/auth/auth_storage.dart';
 import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
-import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/utils/string.dart';
 import 'package:chess_srs/src/utils/system.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -27,6 +26,13 @@ typedef PreloadedData = ({
 });
 
 /// A provider that preloads various data needed throughout the app.
+///
+/// Deliberately does not validate the stored session token. It used to, as a fire-and-forget
+/// side effect of this provider, and that was wrong twice over: nothing could observe or await it,
+/// and its result was unscoped — `authStorage.delete()` removed whichever session happened to be
+/// stored when the response arrived, so an account that signed in during the request's five-second
+/// window was signed straight back out. Startup validation now goes through
+/// [startupTokenCheckProvider], which reuses the fenced, already-tested `AuthController.checkToken`.
 final preloadedDataProvider = FutureProvider<PreloadedData>((Ref ref) async {
   final authStorage = ref.read(authStorageProvider);
 
@@ -47,27 +53,6 @@ final preloadedDataProvider = FutureProvider<PreloadedData>((Ref ref) async {
     _getDirectoryOrNull(getApplicationDocumentsDirectory),
     _getDirectoryOrNull(getApplicationSupportDirectory),
   ).wait;
-
-  final token = authUser?.token;
-  if (token != null) {
-    final userAgent = makeUserAgent(pInfo, deviceInfo, sri, null);
-    final client = DefaultClient(ref.read(httpClientFactoryProvider)(), userAgent: userAgent);
-    client
-        .postReadJson(lichessUri('/api/token/test'), mapper: (json) => json, body: token)
-        .timeout(const Duration(seconds: 5))
-        .then((data) {
-          final isValid = data[token] != null;
-          if (!isValid) {
-            authStorage.delete();
-          }
-        })
-        .catchError((_) {
-          // in case of network error, assume the authUser is still valid
-        })
-        .whenComplete(() {
-          client.close();
-        });
-  }
 
   return (
     packageInfo: pInfo,
