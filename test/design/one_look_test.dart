@@ -86,8 +86,10 @@ void main() {
           // `CupertinoDatePicker` wheel on iOS and a Material calendar elsewhere. That is the same
           // control reached two different ways -- spin-and-stop against tap-a-day -- which is a
           // platform *behaviour* as much as an appearance, and open decision 4's own rule keeps
-          // behaviours. Whether iOS should get a calendar is an open question for the owner, not
-          // something to settle by editing a file. Remove this exception once they answer.
+          // behaviours. Owner decision 2026-09-28: keep the wheel. Replacing it with a Material
+          // calendar would impose Android UX on iOS users for a control reached while editing a PGN
+          // header date -- already the least-tapped corner of the app -- for no gain. This exception
+          // is permanent: remove it only if the decision is revisited, not as cleanup.
           if (file.path.endsWith('analysis_share_screen.dart')) {
             offenders.removeWhere((o) => o.startsWith('${file.path}: '));
           }

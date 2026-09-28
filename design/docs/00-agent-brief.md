@@ -86,7 +86,8 @@ record findings at the top of your first PR description:
    tap-a-day — which is a platform *behaviour* as much as an appearance, and this decision's own rule keeps
    behaviours. Whether iOS should get a calendar instead is still open and is not settled here.
    `test/design/one_look_test.dart` guards the rest and names this one exception in the code, so it cannot be
-   forgotten or quietly widened.
+   forgotten or quietly widened. Owner decision 2026-09-28: keep the wheel — it is a platform
+   behaviour, and replacing it would impose Android UX on iOS for the least-tapped corner of the app.
 5. ~~**Bespoke art.** Piece set, wordmark, icon and sounds here are placeholders. Ask before spending effort refining them.~~
    **Partially resolved 2026-09-28; sounds remain open.** Checking each item showed the sentence was half stale:
    the piece set is already bespoke (`lib/src/design/piece_set.dart`, wired as the default in
@@ -98,6 +99,9 @@ record findings at the top of your first PR description:
    `assets/brand/icon-1024.png`. Sounds stay Lichess: `assets/sounds/diagram/` holds only 3 wavs
    against the 10 sounds the service loads, `SoundTheme` has no diagram entry, and the service falls
    back to `standard` — wiring it is a sound-design task, not a file move, and was explicitly deferred.
+   Owner decision 2026-09-28: the app does not need much here. A review app needs move/right/wrong
+   feedback, which the standard set already covers; the `diagram` set stays unwired and the decision
+   is closed, to be revisited only if beta feedback asks for it.
 6. ~~**Fonts.** Instrument Sans + Newsreader are the design's fonts. If the owner prefers others, only `SrsText` changes.~~
    **Resolved 2026-09-28: confirmed as-is, no change.** Both families are declared in `pubspec.yaml`,
    bundled under `assets/fonts/`, and `SrsText` (`lib/src/design/tokens.dart`) is the single funnel —
