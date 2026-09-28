@@ -98,7 +98,11 @@ record findings at the top of your first PR description:
    `assets/brand/icon-1024.png`. Sounds stay Lichess: `assets/sounds/diagram/` holds only 3 wavs
    against the 10 sounds the service loads, `SoundTheme` has no diagram entry, and the service falls
    back to `standard` — wiring it is a sound-design task, not a file move, and was explicitly deferred.
-6. **Fonts.** Instrument Sans + Newsreader are the design's fonts. If the owner prefers others, only `SrsText` changes.
+6. ~~**Fonts.** Instrument Sans + Newsreader are the design's fonts. If the owner prefers others, only `SrsText` changes.~~
+   **Resolved 2026-09-28: confirmed as-is, no change.** Both families are declared in `pubspec.yaml`,
+   bundled under `assets/fonts/`, and `SrsText` (`lib/src/design/tokens.dart`) is the single funnel —
+   zero hardcoded font families outside `lib/src/design/`. The brief's conditional holds: preferring
+   others would touch only `SrsText`.
 
 ## When to stop and ask
 
