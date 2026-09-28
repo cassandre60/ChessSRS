@@ -243,6 +243,16 @@ remains a later option — never a redesign.
       2. Export Dialog UX: built `ExportPgnDialog` featuring clean monospace scrollable PGN text preview, one-tap "Copy to Clipboard", native "Save File" (.pgn file dialog via `FilePicker.saveFile`), and resilient "Share" with desktop clipboard fallback in `launchShareDialog`.
       3. Entry Points: integrated "Export PGN" action in `ReviewScopeDrawer` study options sheet, global study export in `StudyChaptersScreen`'s AppBar, and per-chapter export icon buttons on chapter list tiles. *(done: 2026-09-19)*
 
+- [x] **R12: Diagram visual-identity reskin** *(done: 2026-09-28)*
+      1. Scope: every surface `design/docs/04-screens-and-flows.md` §1 defines — Review, Nothing due, scope list, Library, first launch/import, Settings — plus Analysis, Explorer and Board Editor behind Library → Explore. That document states "No other top-level screens exist in this design", so the remaining legacy Material is inherited surface with no design behind it and is a cut question, not a reskin one.
+      2. Shared primitives: the `Srs*` set in `lib/src/design/` — pill/text/segmented/switch, settings and sheet rows, page head, dialog, search field, input, sheet surface, toast. Material-free in `primitives.dart`; the ones needing Material live in their own files.
+      3. Copy: brought to `design/docs/01-identity.md` verbatim — `All repertoires`, `Openings`, `Search`, `{n} positions`/`Paused`, `Show arrows and circles`, the settings rows and their help text. Each mismatch was a separate small PR so a copy fix could not hide behind a visual one.
+      4. Toast: `SrsToast` behind the existing `showSnackBar`, so all 53 call sites inherited it at once. Tone is accepted but not rendered — the design specifies one appearance — and that is recorded in the enum rather than papered over with an undescribed tint.
+      5. Cuts: `CUT_PROPOSALS.md` UI-A through UI-F, including the app-background setting, which could not have worked on any screen.
+      6. Defects the work surfaced, none of them in the reskin itself: `SrsPillButton` painted its label `ink` on its own `ink` background, so the one filled button in the system rendered as an empty black pill; a pill could not be made full width, because `SrsPressable` builds its child in a `Stack` that passes loose constraints down. Both found by looking at captures rather than by any assertion, and both now covered by tests verified to fail on the pre-fix code.
+      7. Evidence: `flutter analyze` clean per touched file on every PR; 269 tests passing across the affected areas at the end. The full suite was never run locally — CI is the authority per §4. Runtime validation through `test/view/screenshot_capture_test.dart`, which grew to 30 captures over five widths in both themes, and which found three further defects.
+      8. Prerelease: #44\u2013#58.
+
 ### Future Horizon Tasks & Backlog
 - [ ] **F-AUTHTOKEN: Cover the startup token check**
       1. Why: when Lichess reports a stored token is no longer valid, the app deletes it (`preloaded_data.dart`, the `if (token != null)` branch). It is live — sign-in is reachable from the account menu, `LichessClient` attaches the bearer token automatically, and study import uses it — and it has no test. Deferred by owner decision 2026-09-26, to be done with the study-import work rather than ahead of it.
