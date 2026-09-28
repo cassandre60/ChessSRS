@@ -1,0 +1,77 @@
+name: Release proof
+
+# Builds the signed-release app bundle the Play internal track needs, on GitHub
+# runners instead of a dev machine. Dispatch-only: it never runs on push or PR,
+# so it costs nothing unless someone asks for proof.
+#
+# Signing uses a throwaway keystore generated inside the run. That proves the
+# whole pipeline (Dart release compile, R8/minify, native engines, packaging,
+# signing) without touching the real upload key, which lives with the owner and
+# must never enter this repo. The resulting AAB is NOT shippable — it is signed
+# with a key nobody will ever see again — and exists only to prove the build.
+#
+# To ship for real: generate the permanent keystore, add it plus key.properties
+# as action secrets, and extend this workflow (or fastlane) to use them.
+
+on:
+  # Manual runs, any time after this file reaches main.
+  workflow_dispatch:
+  # Automatic proof for PRs that change this file itself: the run builds the
+  # release AAB, so the PR carries its own evidence. Nothing else triggers it.
+  pull_request:
+    paths:
+      - '.github/workflows/release-proof.yml'
+    branches:
+      - main
+
+# Declare default permissions as read only, plus artifact upload.
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build-aab:
+    name: Release app bundle (throwaway-signed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Gradle's Groovy compiler cannot run on the newest JDKs (verified locally:
+      # a 3-line Groovy script fails identically outside this project). Pin 17,
+      # which Gradle 9.x and AGP 9 both fully support.
+      - name: ☕ Install Java 17
+        uses: actions/setup-java@v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 🐦 Install flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          cache: true
+          flutter-version-file: pubspec.yaml
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Code generation
+        run: dart run build_runner build
+
+      - name: Throwaway signing key (NOT the upload key)
+        run: |
+          keytool -genkeypair -keystore /tmp/throwaway.keystore \
+            -alias upload -keyalg RSA -keysize 2048 -validity 30 \
+            -storepass throwaway -keypass throwaway \
+            -dname "CN=Throwaway, OU=CI, O=CI, L=CI, ST=CI, C=DE"
+          printf 'storePassword=throwaway\nkeyPassword=throwaway\nkeyAlias=upload\nstoreFile=/tmp/throwaway.keystore\n' \
+            > android/key.properties
+
+      - name: Build release app bundle
+        run: flutter build appbundle --release
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: app-release-throwaway-signed
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
