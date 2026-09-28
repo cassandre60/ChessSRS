@@ -282,48 +282,12 @@ class SrsLibrarySheet extends ConsumerWidget {
     Widget? trailing,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      splashColor: c.hairlineSoft,
-      highlightColor: c.hairlineSoft,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: SrsText.ui,
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w500,
-                      color: c.ink,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontFamily: SrsText.ui,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w400,
-                        color: c.ink3,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            trailing ?? Icon(Symbols.chevron_right_rounded, size: 14, color: c.ink3),
-          ],
-        ),
-      ),
+    return SrsSheetRow(
+      label: title,
+      subtitle: subtitle,
+      onPressed: onTap,
+      // §7: every Library row ends with a 14px chevron.
+      trailing: trailing ?? Icon(Symbols.chevron_right_rounded, size: 14, color: c.ink3),
     );
   }
 }

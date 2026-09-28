@@ -174,7 +174,7 @@ void main() {
 
       // Verify Export PGN option is present
       expect(find.text('Export PGN'), findsOneWidget);
-      expect(find.text('Share or copy standard PGN notation for this study'), findsOneWidget);
+      expect(find.text('Share or copy standard PGN notation'), findsOneWidget);
 
       // Tap Export PGN
       await tester.tap(find.text('Export PGN'));

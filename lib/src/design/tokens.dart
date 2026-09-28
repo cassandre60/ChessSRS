@@ -238,6 +238,9 @@ abstract final class SrsText {
   static TextStyle textButton(Color c) => _ui(15, FontWeight.w500, c);
   static TextStyle kbd(Color c) => _ui(11, FontWeight.w500, c, height: 1);
   static TextStyle groupTitle(Color c) => _ui(12.5, FontWeight.w500, c);
+
+  /// The sub line of a sheet row: the demo's `.lib-row small`, `13/400 ink3`.
+  static TextStyle sheetSub(Color c) => _ui(13, FontWeight.w400, c);
   static TextStyle rowName(Color c) => _ui(15.5, FontWeight.w500, c, em: -0.005);
   static TextStyle rowSub(Color c) => _ui(12.5, FontWeight.w400, c, tab: true);
   static TextStyle rowDue(Color c) => _ui(17, FontWeight.w600, c, tab: true);

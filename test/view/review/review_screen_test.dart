@@ -201,7 +201,7 @@ void main() {
       expect(find.text('Nothing due.'), findsOneWidget);
     });
 
-    testWidgets('study options sheet opens AnalysisScreen via Analyze Study', (tester) async {
+    testWidgets('study actions sheet opens AnalysisScreen via Analyze', (tester) async {
       final importResult = importPgn(
         '1. e4 e5 2. Nf3 Nc6 *',
         studyTitle: 'King Pawn Repertoire',
@@ -235,8 +235,8 @@ void main() {
       await tester.longPress(find.text('King Pawn Repertoire'));
       await pumpAsync(tester);
 
-      // Tap Analyze Study
-      await tester.tap(find.text('Analyze Study'));
+      // Tap Analyze
+      await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
       await tester.pumpAndSettle();
 
@@ -287,8 +287,8 @@ void main() {
       await tester.longPress(find.text('Multi Chapter Repertoire'));
       await pumpAsync(tester);
 
-      // Tap Analyze Study
-      await tester.tap(find.text('Analyze Study'));
+      // Tap Analyze
+      await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
       await tester.pumpAndSettle();
 
@@ -484,8 +484,8 @@ void main() {
       expect(find.text('Paused'), findsNothing);
       await tester.longPress(find.text('Active Study'));
       await pumpAsync(tester);
-      expect(find.text('Pause Study'), findsOneWidget);
-      await tester.tap(find.text('Pause Study'));
+      expect(find.text('Pause'), findsOneWidget);
+      await tester.tap(find.text('Pause'));
       await pumpAsync(tester);
 
       expect(find.text('Paused'), findsOneWidget);
@@ -493,8 +493,8 @@ void main() {
       // And it can be put back into the pool.
       await tester.longPress(find.text('Active Study'));
       await pumpAsync(tester);
-      expect(find.text('Resume Study'), findsOneWidget);
-      await tester.tap(find.text('Resume Study'));
+      expect(find.text('Resume'), findsOneWidget);
+      await tester.tap(find.text('Resume'));
       await pumpAsync(tester);
 
       expect(find.text('Paused'), findsNothing);
@@ -633,30 +633,43 @@ void main() {
       await tester.longPress(find.text('Old Title'));
       await pumpAsync(tester);
 
-      // Tap Rename Study
-      await tester.tap(find.text('Rename Study'));
+      // Tap Rename
+      await tester.tap(find.text('Rename'));
       await pumpAsync(tester);
 
       // Enter new title in dialog
       await tester.enterText(
-        find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+        find.descendant(of: find.byType(SrsDialog), matching: find.byType(TextField)),
         'Renamed Repertoire',
       );
-      await tester.tap(find.text('Rename'));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Rename'));
       await pumpAsync(tester);
 
       // Verify study title updated in drawer
       expect(find.text('Renamed Repertoire'), findsOneWidget);
 
-      // Open study options sheet again to delete
+      // Open study actions sheet again to delete
       await tester.longPress(find.text('Renamed Repertoire'));
       await pumpAsync(tester);
 
-      await tester.tap(find.text('Delete Study'));
+      await tester.tap(find.text('Delete'));
       await pumpAsync(tester);
 
+      // §12 names the item and its position count, and forbids red. The count is fixture
+      // data, so what is pinned here is the format rather than the number.
+      final copy = find.textContaining('positions? This cannot be undone.');
+      expect(copy, findsOneWidget);
+      expect(
+        tester.widget<Text>(copy).data,
+        matches(
+          RegExp(
+            r'^Delete \u201cRenamed Repertoire\u201d and its \d+ positions\? This cannot be undone\.$',
+          ),
+        ),
+      );
+
       // Tap Delete in confirmation dialog
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Delete'));
       await pumpAsync(tester);
 
       // Study is deleted -> empty state

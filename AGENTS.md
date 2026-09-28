@@ -310,3 +310,12 @@ foundation already contains study-tree and game-tree prior art.
   Verified by: `review_controller_test.dart` failing inside a 128-test run and
   passing 30/30 in isolation, with `pumpAsync`'s `Future.delayed` as the only
   wall-clock wait in the path.
+- [2026-09-28, Space Bunny Free] `build_runner` writes `lib/l10n/*.dart` with
+  different line wrapping than what is committed, so a fresh worktree shows 52
+  files and ~38,000 changed lines that are pure formatting. Run
+  `dart format lib/l10n/` after codegen and the diff disappears entirely.
+  Do not commit the churn, and do not read a non-empty `git status` as real
+  work: check whether `git diff lib/l10n/` is a formatting-only rewrite before
+  concluding anything about what a worktree has changed. Verified by: 52 files
+  / 13,844 insertions / 24,106 deletions before the format, empty after, with
+  the test suite green either way.

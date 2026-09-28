@@ -827,3 +827,64 @@ class SrsIconButton extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// SrsSheetRow — a text row for the Library and study-actions sheets
+// ---------------------------------------------------------------------------
+
+/// One text row of a sheet: a label, an optional sub line, an optional trailing widget.
+///
+/// design/docs/03-components.md §7 gives the Library sheet's rows as `16/500` with `14/20`
+/// padding, and §12 puts the study actions in "a Library-style sheet of text rows (16/500, no
+/// icons)". Both sheets build from this so they cannot drift apart — they were separate
+/// hand-rolled `InkWell`s, and one of them had already moved to 15.5 while the other had not.
+///
+/// The trailing slot is left to the caller because the two sheets disagree on purpose: §7 gives
+/// every Library row a 14px chevron, while §12's action rows carry no icon at all.
+class SrsSheetRow extends StatelessWidget {
+  const SrsSheetRow({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final String label;
+  final String? subtitle;
+  final Widget? trailing;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    return SrsPressable(
+      onPressed: onPressed,
+      semanticLabel: label,
+      radius: 10,
+      builder: (context, hovered, pressed) => Container(
+        color: hovered ? c.hairlineSoft : const Color(0x00000000),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: SrsText.settingLabel(c.ink)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle!, style: SrsText.sheetSub(c.ink3)),
+                  ],
+                ],
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+          ],
+        ),
+      ),
+    );
+  }
+}

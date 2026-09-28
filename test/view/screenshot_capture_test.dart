@@ -25,6 +25,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_srs/src/domain/clock.dart';
+import 'package:chess_srs/src/domain/study.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -76,6 +77,10 @@ const List<(String, Size)> _surfaces = [
 ];
 
 final GlobalKey _captureKey = GlobalKey();
+
+/// A top-level no-op, so a capture can pass const tear-offs where a sheet wants callbacks. A
+/// closure literal is not a constant expression, which makes the whole `const` tree fail.
+void _noop() {}
 
 /// A position with a line already played, so Analysis opens on a tree rather than a void.
 const _analysisOptions = AnalysisOptions.pgn(
@@ -310,6 +315,37 @@ void main() {
               await t.runAsync(() => repo.saveImportResult(result));
             }
           },
+        );
+      }, skip: !_enabled);
+
+      // The study actions sheet, which §12 pins row by row: three hairline-separated groups of
+      // 16/500 text rows with no icons. Mounted rather than opened, for the same RepaintBoundary
+      // reason as the scope list above.
+      testWidgets('capture: study actions sheet, $label, ${brightness.name}', (tester) async {
+        await capture(
+          tester,
+          screen: 'review-actions',
+          label: label,
+          home: const Scaffold(
+            body: StudyActionsSheet(
+              study: Study(id: 'capture', title: 'Sicilian Defense Repertoire', isActive: true),
+              // A stand-in for the scope row that would open this on a wide layout. Narrow
+              // surfaces ignore it, so the desktop and tablet captures cover the popover placement
+              // and the phone ones the bottom sheet.
+              anchor: Rect.fromLTWH(20, 100, 460, 56),
+              onDismiss: _noop,
+              onTogglePause: _noop,
+              onChapters: _noop,
+              onAnalyze: _noop,
+              onPractice: _noop,
+              onExport: _noop,
+              onRename: _noop,
+              onDelete: _noop,
+            ),
+          ),
+          surface: surface,
+          brightness: brightness,
+          overrides: repoOverrides(),
         );
       }, skip: !_enabled);
 
