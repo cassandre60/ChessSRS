@@ -37,6 +37,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/explorer/opening_explorer_settings.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -343,6 +344,22 @@ void main() {
               onDelete: _noop,
             ),
           ),
+          surface: surface,
+          brightness: brightness,
+          overrides: repoOverrides(),
+        );
+      }, skip: !_enabled);
+
+      // The opening explorer's database settings, which is the one place the Diagram system meets
+      // a genuinely dense row: a settings row whose control is a segmented control of six or nine
+      // options, which the design says wraps if it must. The interesting question is whether it
+      // wraps without pushing the row's label off, so this is the screen to look at.
+      testWidgets('capture: explorer settings, $label, ${brightness.name}', (tester) async {
+        await capture(
+          tester,
+          screen: 'explorer-settings',
+          label: label,
+          home: const Scaffold(body: OpeningExplorerSettings()),
           surface: surface,
           brightness: brightness,
           overrides: repoOverrides(),

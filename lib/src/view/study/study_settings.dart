@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/study/study_controller.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -55,13 +56,7 @@ class StudySettingsScreen extends ConsumerWidget {
               ),
               ListTile(
                 title: Text(context.l10n.openingExplorer),
-                onTap: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  isDismissible: true,
-                  builder: (_) => const OpeningExplorerSettings(),
-                ),
+                onTap: () => showSrsSheet<void>(context, const OpeningExplorerSettings()),
               ),
             ],
           ),

@@ -247,15 +247,46 @@ class SrsKbd extends StatelessWidget {
 // SrsSegmented — pill segmented control
 // ---------------------------------------------------------------------------
 class SrsSegmented<T> extends StatelessWidget {
+  /// Single-select. [onChanged] reports the chosen key.
   const SrsSegmented({
     super.key,
     required this.options,
     required this.value,
     required this.onChanged,
-  });
+  }) : values = null,
+       onToggled = null;
+
+  /// Multi-select, for the settings where more than one option can be on at once -- the opening
+  /// explorer's speeds, ratings and game modes. [onToggled] reports the key and whether it is now
+  /// on, so the caller owns the set rather than this control re-deriving it.
+  ///
+  /// The design specifies a segmented control only for the exclusive case, so this is the same
+  /// control in the same appearance rather than a second one. The alternative was leaving Material
+  /// filter chips in the middle of an otherwise-Diagram sheet.
+  const SrsSegmented.multi({
+    super.key,
+    required this.options,
+    required this.values,
+    required this.onToggled,
+  }) : value = null,
+       onChanged = null;
+
+  // `values` is an Iterable rather than a Set because the preferences that reach here hold
+  // `ISet`, which implements Iterable and not Set. Membership is a linear scan over at most nine
+  // options, so nothing is lost by not insisting on a Set.
+
   final Map<T, String> options;
-  final T value;
-  final ValueChanged<T> onChanged;
+
+  /// The selected key, in the single-select form. Null in the multi-select form.
+  final T? value;
+
+  /// The selected keys, in the multi-select form. Null in the single-select form.
+  final Iterable<T>? values;
+
+  final ValueChanged<T>? onChanged;
+  final void Function(T key, bool on)? onToggled;
+
+  bool _isOn(T key) => values != null ? values!.contains(key) : key == value;
 
   @override
   Widget build(BuildContext context) {
@@ -270,25 +301,30 @@ class SrsSegmented<T> extends StatelessWidget {
       child: Wrap(
         children: [
           for (final e in options.entries)
-            SrsPressable(
-              onPressed: () => onChanged(e.key),
-              semanticLabel: e.value,
-              semanticsToggled: e.key == value,
-              builder: (_, hover, _) => Container(
-                constraints: const BoxConstraints(minWidth: 38),
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-                decoration: BoxDecoration(
-                  color: e.key == value ? c.ink : const Color(0x00000000),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Center(
-                  widthFactor: 1,
-                  child: Text(
-                    e.value,
-                    style: SrsText.seg(e.key == value ? c.ground : (hover ? c.ink : c.ink2)),
+            Builder(
+              builder: (context) {
+                final isOn = _isOn(e.key);
+                return SrsPressable(
+                  onPressed: () => values == null ? onChanged!(e.key) : onToggled!(e.key, !isOn),
+                  semanticLabel: e.value,
+                  semanticsToggled: isOn,
+                  builder: (_, hover, _) => Container(
+                    constraints: const BoxConstraints(minWidth: 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isOn ? c.ink : const Color(0x00000000),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Center(
+                      widthFactor: 1,
+                      child: Text(
+                        e.value,
+                        style: SrsText.seg(isOn ? c.ground : (hover ? c.ink : c.ink2)),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
         ],
       ),

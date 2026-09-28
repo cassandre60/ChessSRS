@@ -182,4 +182,66 @@ void main() {
       expect(lead.right, lessThanOrEqualTo(label.left));
     });
   });
+  group('SrsSegmented.multi', () {
+    testWidgets('toggling one option leaves the others alone', (tester) async {
+      // The failure worth guarding is a multi-select behaving like a single-select: tapping a
+      // second option silently clearing the first, which is what the exclusive form does. The
+      // caller owns the set, so the control has to report the key and let the caller decide --
+      // this checks the report, and that the whole set reaches the widget.
+      var selected = <String>{'bullet'};
+      final toggled = <(String, bool)>[];
+
+      Widget build() => _wrap(
+        StatefulBuilder(
+          builder: (context, setState) => SrsSegmented<String>.multi(
+            options: const {'bullet': 'Bullet', 'blitz': 'Blitz', 'rapid': 'Rapid'},
+            values: selected,
+            onToggled: (key, on) {
+              toggled.add((key, on));
+              setState(() {
+                final next = Set<String>.of(selected);
+                if (!next.remove(key)) next.add(key);
+                selected = next;
+              });
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(build());
+
+      // Everything currently selected is reported as on, so a screen reader announces it.
+      expect(
+        tester
+            .widgetList<SrsPressable>(find.byType(SrsPressable))
+            .map((p) => p.semanticsToggled)
+            .toList(),
+        [true, false, false],
+      );
+
+      await tester.tap(find.text('Rapid'));
+      await tester.pump();
+      expect(toggled, [('rapid', true)], reason: 'the control reports the key, not the new set');
+
+      // The previously selected option is still on: this is the multi-select contract.
+      expect(
+        tester
+            .widgetList<SrsPressable>(find.byType(SrsPressable))
+            .map((p) => p.semanticsToggled)
+            .toList(),
+        [true, false, true],
+      );
+
+      await tester.tap(find.text('Bullet'));
+      await tester.pump();
+      expect(toggled, [('rapid', true), ('bullet', false)]);
+      expect(
+        tester
+            .widgetList<SrsPressable>(find.byType(SrsPressable))
+            .map((p) => p.semanticsToggled)
+            .toList(),
+        [false, false, true],
+      );
+    });
+  });
 }

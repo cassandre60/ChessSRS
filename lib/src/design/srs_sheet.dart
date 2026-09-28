@@ -134,3 +134,19 @@ class SrsTextInput extends StatelessWidget {
     return Semantics(label: semanticLabel, textField: true, child: field);
   }
 }
+
+/// Presents [child] — which should already be an [SrsSheetSurface] — as a bottom sheet.
+///
+/// The route's own background is transparent because the surface supplies the colour, radius and
+/// shadow; leaving the route's chrome on as well is what produces a grey sheet inside a Diagram one.
+/// The grabber belongs to the surface too, so `showDragHandle` stays off.
+Future<T?> showSrsSheet<T>(BuildContext context, Widget child, {bool isDismissible = true}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    isDismissible: isDismissible,
+    backgroundColor: const Color(0x00000000),
+    elevation: 0,
+    builder: (_) => child,
+  );
+}

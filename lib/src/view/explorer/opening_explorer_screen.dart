@@ -338,13 +338,7 @@ class _BottomBar extends ConsumerWidget {
           ),
           SrsTextButton(
             label: dbLabel,
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              isDismissible: true,
-              builder: (_) => const OpeningExplorerSettings(),
-            ),
+            onPressed: () => showSrsSheet<void>(context, const OpeningExplorerSettings()),
           ),
           SrsTextButton(
             label: 'Flip',
