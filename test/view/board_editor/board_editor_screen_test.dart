@@ -46,6 +46,47 @@ void main() {
       );
     });
 
+    testWidgets('Status panel shows the live FEN and edits side-to-move', (tester) async {
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The FEN is on screen without opening a dialog, and reads White to move.
+      expect(find.textContaining(' w KQkq '), findsOneWidget);
+
+      // Side-to-move is a visible control, not a Filters-sheet-only setting.
+      await tester.tap(find.text('Black to play'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(' b KQkq '), findsOneWidget);
+    });
+
+    testWidgets('Copy FEN writes the live FEN to the clipboard', (tester) async {
+      final copied = <String>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (methodCall) async {
+        if (methodCall.method == 'Clipboard.setData') {
+          final arguments = methodCall.arguments as Map<Object?, Object?>;
+          copied.add(arguments['text']! as String);
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Black to play'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy FEN'));
+      await tester.pumpAndSettle();
+
+      // Asserted on the write rather than on the label: a Copy button that copies the *starting*
+      // position would render identically and pass any label-based check.
+      expect(copied, hasLength(1));
+      expect(copied.single, contains(' b KQkq '));
+    });
+
     testWidgets('Opening with variant loads its starting position', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,

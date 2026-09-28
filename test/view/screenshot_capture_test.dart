@@ -37,6 +37,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_settings.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
@@ -430,6 +431,19 @@ void main() {
           surface: surface,
           brightness: brightness,
           overrides: repoOverrides(),
+        );
+      }, skip: !_enabled);
+
+      // The editor is behind Library -> Explore, not a top-level screen, but it is the screen the
+      // status panel landed on, so it needs the same evidence as the rest.
+      testWidgets('capture: editor, $label, ${brightness.name}', (tester) async {
+        await capture(
+          tester,
+          screen: 'editor',
+          label: label,
+          home: const BoardEditorScreen(),
+          surface: surface,
+          brightness: brightness,
         );
       }, skip: !_enabled);
     }

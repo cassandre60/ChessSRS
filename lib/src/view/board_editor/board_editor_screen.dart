@@ -31,6 +31,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
 
+/// Tools in a piece palette: the drag toggle, one per [Role], then erase.
+///
+/// `Role.values` is not a const expression, so this cannot be `const`; it is a top-level `final`
+/// instead. There is one instance, and the count is read at most once per build.
+final int _pieceMenuItemCount = Role.values.length + 2;
+
+/// The palette's 1px border, drawn inside its own box, so its children must fit the inner extent.
+const double _paletteBorderWidth = 1.0;
+
+/// Gap between palette, board and palette.
+const double _boardEditorSpacing = 8.0;
+
+/// Width of the status panel when it sits beside the board in landscape.
+///
+/// 260 is the width at which the side-to-move segmented control fits on one line: at 220 it wrapped
+/// "Black to play" onto a second row, which made the panel taller than the board beside it and
+/// undid the reason for moving it out from under the board. The FEN then wraps to two lines, which
+/// is what the panel has the height for.
+const double _editorPanelWidth = 260.0;
+
 class BoardEditorScreen extends ConsumerWidget {
   const BoardEditorScreen({super.key, this.params});
 
@@ -100,11 +120,52 @@ class BoardEditorScreen extends ConsumerWidget {
                   builder: (context, constraints) {
                     final aspectRatio = constraints.biggest.aspectRatio;
 
-                    final defaultBoardSize = constraints.biggest.shortestSide;
                     final isTablet = isTabletOrLarger(context);
-                    final boardSize = defaultBoardSize;
-
                     final direction = aspectRatio > 1 ? Axis.horizontal : Axis.vertical;
+
+                    // The board is square, so it can only be as large as the *shorter* side allows --
+                    // but the two palettes are rows of eight square tools laid along the cross axis,
+                    // so each is one item deep on the main axis and claims height (portrait) or width
+                    // (landscape) that the board has to be subtracted from. Sizing the board from the
+                    // shortest side alone therefore overflows the column as soon as anything is added
+                    // below it: the status panel cost ~90px, and a `Clip.hardEdge` then ate the bottom
+                    // palette whole, with no overflow error. Subtract what the palettes claim.
+                    //
+                    // `shortestSide / count` bounds an item from above (the palette also caps itself
+                    // at the board), so this over-reserves slightly and the board comes out a little
+                    // smaller than strictly necessary. Reserving exactly would mean solving
+                    // `board = extent - 2 * (board / count)`, which buys back a few px at the cost of
+                    // arithmetic that has to be right.
+                    final palettesClaim =
+                        2 *
+                            (constraints.biggest.shortestSide / _pieceMenuItemCount +
+                                _paletteBorderWidth) +
+                        2 * _boardEditorSpacing;
+                    // Both bounds matter, and neither subsumes the other. Portrait: the board is
+                    // limited by the width, and the palettes eat height. Landscape: the board is
+                    // limited by the height, and the palettes eat width -- which is why landscape
+                    // needs `maxWidth - palettesClaim` and not the same expression as portrait.
+                    // Clamped at zero rather than at a floor: a floor larger than the space
+                    // available produces a board that overflows its slot, and `Clip.hardEdge`
+                    // then crops it into a non-square rectangle.
+                    // Landscape has room beside the board but almost none below it, and the demo
+                    // draws the editor as `.split` -- board left, side column right. So in landscape
+                    // the status panel joins the Flex as a trailing column and claims width; in
+                    // portrait it stays under the board and claims height. Stacking it either way
+                    // costs a 390px-tall landscape phone 43% of its board, down to 104px.
+                    final panelBeside = direction == Axis.horizontal;
+                    final panelClaim = panelBeside ? _editorPanelWidth + _boardEditorSpacing : 0.0;
+                    final boardSize = math.max(
+                      0.0,
+                      math.min(
+                        constraints.biggest.shortestSide,
+                        (direction == Axis.vertical
+                                ? constraints.maxHeight
+                                : constraints.maxWidth) -
+                            palettesClaim -
+                            panelClaim,
+                      ),
+                    );
 
                     return Flex(
                       direction: direction,
@@ -114,7 +175,7 @@ class BoardEditorScreen extends ConsumerWidget {
                       // cannot claim the slack, so centre the block and keep the palette-to-board
                       // gap tight instead of equal.
                       mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 8,
+                      spacing: _boardEditorSpacing,
                       mainAxisSize: MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -146,6 +207,11 @@ class BoardEditorScreen extends ConsumerWidget {
                               ? constraints.maxHeight
                               : constraints.maxWidth,
                         ),
+                        if (panelBeside)
+                          SizedBox(
+                            width: _editorPanelWidth,
+                            child: _EditorStatusPanel(params: params, besideBoard: true),
+                          ),
                       ],
                     );
                   },
@@ -155,7 +221,78 @@ class BoardEditorScreen extends ConsumerWidget {
           ],
         ),
       ),
-      bottomNavigationBar: _BottomBar(params),
+      // In landscape the panel is a column beside the board, not a row under it -- see the
+      // `panelBeside` decision in the layout above.
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_isWideLayout(context)) _EditorStatusPanel(params: params),
+          _BottomBar(params),
+        ],
+      ),
+    );
+  }
+}
+
+bool _isWideLayout(BuildContext context) => MediaQuery.sizeOf(context).aspectRatio > 1;
+
+/// The demo `editor` side column's lower half, promoted out of the places it was buried in.
+///
+/// Side-to-move was reachable only through the Filters sheet, and the position's FEN only through
+/// the edit dialog, so neither was visible while editing — the one thing a board editor is for is
+/// seeing the position you built. This mirrors the demo's order: the side-to-move segmented
+/// control, then the live FEN, then the actions row, which is where the demo puts its *Copy FEN*
+/// pill. It is an addition: the Filters sheet keeps its own copy of side-to-move because it also
+/// owns castling rights, and the FEN dialog is untouched.
+class _EditorStatusPanel extends ConsumerWidget {
+  const _EditorStatusPanel({required this.params, this.besideBoard = false});
+
+  final BoardEditorControllerParams? params;
+
+  /// True when this panel is a column to the right of the board rather than a row beneath it.
+  final bool besideBoard;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.srs;
+    final editorState = ref.watch(boardEditorControllerProvider(params));
+    final notifier = ref.read(boardEditorControllerProvider(params).notifier);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(besideBoard ? 0 : 20, besideBoard ? 0 : 10, 20, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SrsSegmented<Side>(
+              // l10n rather than the demo's literals: these two strings already exist for the
+              // Filters sheet, and hardcoding them here would be a second, untranslated copy.
+              options: {Side.white: context.l10n.whitePlays, Side.black: context.l10n.blackPlays},
+              value: editorState.sideToPlay,
+              onChanged: notifier.setSideToPlay,
+            ),
+          ),
+          const SizedBox(height: 10),
+          // `12.5/1.5, ink2` from `code.fen` in the demo. The demo's font stack starts at
+          // `ui-monospace`, a CSS generic with no Flutter equivalent, and no monospace face is
+          // bundled -- so `fontFamily: 'monospace'` renders as tofu boxes here and in the captures.
+          // The UI face with tabular figures keeps FEN digits column-aligned, which is the part of
+          // monospace that matters for reading a position at a glance. Selectable, because a FEN you
+          // cannot select is a FEN you cannot copy out by hand.
+          SelectableText(
+            editorState.fen,
+            style: TextStyle(
+              fontFamily: SrsText.ui,
+              fontSize: 12.5,
+              height: 1.5,
+              color: c.ink2,
+              fontFeatures: SrsText.tabular,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -262,11 +399,12 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
     // *inner* width. Sizing them from the outer width overflowed by 2px and the ancestor's
     // Clip.hardEdge silently ate the erase button -- no overflow error, no test failure, and the
     // control was simply unreachable on a phone.
-    const borderWidth = 1.0;
-    final paletteItemCount = Role.values.length + 2; // drag toggle, one per role, erase
     final itemSize =
-        math.min(widget.boardSize, math.max(0.0, widget.maxPaletteWidth - 2 * borderWidth)) /
-        paletteItemCount;
+        math.min(
+          widget.boardSize,
+          math.max(0.0, widget.maxPaletteWidth - 2 * _paletteBorderWidth),
+        ) /
+        _pieceMenuItemCount;
 
     return Container(
       clipBehavior: Clip.hardEdge,
@@ -360,123 +498,151 @@ class _BottomBar extends ConsumerWidget {
 
     // Diagram actions replacing the legacy bottom bar: same features,
     // plain text buttons. Menu sheet, Flip, Analyze and Filters all survive.
-    // Wrap mirrors the demo's wrapping editor rows on narrow screens.
+    // The text actions wrap on a narrow phone; the pill stays on its own line, as the demo's
+    // actions row does (`<span></span><button class="pill">`), where the pill is the one
+    // affirmative action and belongs at the end of the row rather than among the labels.
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 6,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SrsTextButton(
-            label: context.l10n.menu,
-            onPressed: () => showAdaptiveActionSheet<void>(
-              context: context,
-              actions: [
-                if (editorState.variant != Variant.chess960 &&
-                    editorState.variant != Variant.fromPosition)
-                  BottomSheetAction(
-                    makeLabel: (context) => Text(context.l10n.startPosition),
-                    onPressed: () {
-                      ref
-                          .read(editorController.notifier)
-                          .loadFen(editorState.variant.initialPosition.fen);
-                    },
-                  ),
-                if (editorState.variant == .chess960)
-                  BottomSheetAction(
-                    makeLabel: (context) => const Text('Chess960 Position'),
-                    onPressed: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => _Chess960PositionDialog(
-                          onFenLoaded: (fen) {
-                            ref.read(editorController.notifier).loadFen(fen);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                if (editorState.variant == .standard)
-                  BottomSheetAction(
-                    makeLabel: (context) => Text(context.l10n.loadPosition),
-                    onPressed: () {
-                      final notifier = ref.read(editorController.notifier);
-                      Navigator.of(context).push(
-                        BoardEditorPositionsScreen.buildRoute(
-                          onPositionSelected: (position) => {
-                            notifier.loadFen(position.fen),
-                            Navigator.of(context).pop(),
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                BottomSheetAction(
-                  makeLabel: (context) => Text(context.l10n.variant),
-                  onPressed: () => showChoicePicker<Variant>(
-                    context,
-                    choices: readSupportedVariants
-                        .where((variant) => variant != .fromPosition)
-                        .toList(),
-                    selectedItem: editorState.variant,
-                    labelBuilder: (variant) => VariantLabel(variant),
-                    onSelectedItemChanged: (Variant variant) {
-                      if (variant != editorState.variant) {
-                        ref.read(editorController.notifier).setVariant(variant);
-                      }
-                    },
-                  ),
-                ),
-                if (editorState.pgn != null && pieceCount > 0 && pieceCount <= 32)
-                  BottomSheetAction(
-                    makeLabel: (context) => Text(context.l10n.continueFromHere),
-                    onPressed: () =>
-                        _showContinueFromHereMenu(context, editorState.variant, editorState.fen),
-                  ),
-                BottomSheetAction(
-                  makeLabel: (context) => Text(context.l10n.clearBoard),
-                  onPressed: () {
-                    ref.read(editorController.notifier).clearBoard();
-                  },
-                ),
-              ],
-            ),
-          ),
-          SrsTextButton(
-            key: const Key('flip-button'),
-            // Diagram's terse row labels, not the tooltip-length l10n strings. "Flip board" and
-            // "Analysis board" are 174px and 234px wide at 15px, which is what pushed this row
-            // onto three lines on a 390px phone and cost the board its height.
-            label: 'Flip',
-            onPressed: ref.read(boardEditorControllerProvider(params).notifier).flipBoard,
-          ),
-          SrsTextButton(
-            key: const Key('analysis-board-button'),
-            label: 'Analyse',
-            // The evaluator uses Fairy-Stockfish for nonstandard material.
-            onPressed: editorState.pgn != null && pieceCount > 0
-                ? () {
-                    Navigator.of(context).push(
-                      AnalysisScreen.buildRoute(
-                        AnalysisOptions.pgn(
-                          id: const StringId('board_editor_position'),
-                          orientation: editorState.orientation,
-                          pgn: editorState.pgn!,
-                          isComputerAnalysisAllowed: true,
-                          variant: editorState.variant,
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SrsTextButton(
+                label: context.l10n.menu,
+                onPressed: () => showAdaptiveActionSheet<void>(
+                  context: context,
+                  actions: [
+                    if (editorState.variant != Variant.chess960 &&
+                        editorState.variant != Variant.fromPosition)
+                      BottomSheetAction(
+                        makeLabel: (context) => Text(context.l10n.startPosition),
+                        onPressed: () {
+                          ref
+                              .read(editorController.notifier)
+                              .loadFen(editorState.variant.initialPosition.fen);
+                        },
+                      ),
+                    if (editorState.variant == .chess960)
+                      BottomSheetAction(
+                        makeLabel: (context) => const Text('Chess960 Position'),
+                        onPressed: () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => _Chess960PositionDialog(
+                              onFenLoaded: (fen) {
+                                ref.read(editorController.notifier).loadFen(fen);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    if (editorState.variant == .standard)
+                      BottomSheetAction(
+                        makeLabel: (context) => Text(context.l10n.loadPosition),
+                        onPressed: () {
+                          final notifier = ref.read(editorController.notifier);
+                          Navigator.of(context).push(
+                            BoardEditorPositionsScreen.buildRoute(
+                              onPositionSelected: (position) => {
+                                notifier.loadFen(position.fen),
+                                Navigator.of(context).pop(),
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    BottomSheetAction(
+                      makeLabel: (context) => Text(context.l10n.variant),
+                      onPressed: () => showChoicePicker<Variant>(
+                        context,
+                        choices: readSupportedVariants
+                            .where((variant) => variant != .fromPosition)
+                            .toList(),
+                        selectedItem: editorState.variant,
+                        labelBuilder: (variant) => VariantLabel(variant),
+                        onSelectedItemChanged: (Variant variant) {
+                          if (variant != editorState.variant) {
+                            ref.read(editorController.notifier).setVariant(variant);
+                          }
+                        },
+                      ),
+                    ),
+                    if (editorState.pgn != null && pieceCount > 0 && pieceCount <= 32)
+                      BottomSheetAction(
+                        makeLabel: (context) => Text(context.l10n.continueFromHere),
+                        onPressed: () => _showContinueFromHereMenu(
+                          context,
+                          editorState.variant,
+                          editorState.fen,
                         ),
                       ),
-                    );
-                  }
-                : null,
+                    BottomSheetAction(
+                      makeLabel: (context) => Text(context.l10n.clearBoard),
+                      onPressed: () {
+                        ref.read(editorController.notifier).clearBoard();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              SrsTextButton(
+                key: const Key('flip-button'),
+                // Diagram's terse row labels, not the tooltip-length l10n strings. "Flip board" and
+                // "Analysis board" are 174px and 234px wide at 15px, which is what pushed this row
+                // onto three lines on a 390px phone and cost the board its height.
+                label: 'Flip',
+                onPressed: ref.read(boardEditorControllerProvider(params).notifier).flipBoard,
+              ),
+              SrsTextButton(
+                key: const Key('analysis-board-button'),
+                label: 'Analyse',
+                // The evaluator uses Fairy-Stockfish for nonstandard material.
+                onPressed: editorState.pgn != null && pieceCount > 0
+                    ? () {
+                        Navigator.of(context).push(
+                          AnalysisScreen.buildRoute(
+                            AnalysisOptions.pgn(
+                              id: const StringId('board_editor_position'),
+                              orientation: editorState.orientation,
+                              pgn: editorState.pgn!,
+                              isComputerAnalysisAllowed: true,
+                              variant: editorState.variant,
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
+              ),
+              SrsTextButton(
+                label: 'Filters',
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  builder: (BuildContext context) => BoardEditorFilters(params: params),
+                  showDragHandle: true,
+                  constraints: BoxConstraints(minHeight: MediaQuery.heightOf(context) * 0.5),
+                ),
+              ),
+            ],
           ),
-          SrsTextButton(
-            label: 'Filters',
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              builder: (BuildContext context) => BoardEditorFilters(params: params),
-              showDragHandle: true,
-              constraints: BoxConstraints(minHeight: MediaQuery.heightOf(context) * 0.5),
+          // The demo's actions row ends with a *Copy FEN* pill and nothing after it, so the pill
+          // sits on its own line right-aligned rather than among the labels: it is the row's one
+          // affirmative action. A clipboard write is not undoable from the screen, so it confirms
+          // itself with a toast.
+          Align(
+            alignment: Alignment.centerRight,
+            child: SrsPillButton(
+              label: 'Copy FEN',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: editorState.fen));
+                if (context.mounted) {
+                  showSnackBar(context, 'FEN copied.');
+                }
+              },
             ),
           ),
         ],
