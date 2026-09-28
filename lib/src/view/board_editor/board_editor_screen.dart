@@ -505,15 +505,23 @@ class _BottomBar extends ConsumerWidget {
     // The text actions wrap on a narrow phone; the pill stays on its own line, as the demo's
     // actions row does (`<span></span><button class="pill">`), where the pill is the one
     // affirmative action and belongs at the end of the row rather than among the labels.
+    //
+    // This bar is `bottomNavigationBar`, so every pixel of its height is taken from the board
+    // above it. The pill is specified at 46px tall (03-components.md:129) and used to render at
+    // 23 because it had no height constraint, so fixing that cost the board 23px on a 390px-tall
+    // landscape phone. The bar is what gives the height back: it has no vertical gap of its own
+    // between the wrapped labels and the pill, and the pill is the tallest thing in it, so the
+    // `Wrap`'s own run spacing was buying nothing. Absorbed here rather than by shrinking the
+    // button, because the button's height is the part that was wrong.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Wrap(
             spacing: 14,
-            runSpacing: 6,
+            runSpacing: 0,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SrsTextButton(

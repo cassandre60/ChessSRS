@@ -596,6 +596,91 @@ void main() {
       },
     );
 
+    test(
+      'deleteStudy preserves the review history of a position another study still trains',
+      () async {
+        // The SRS memory itself is already covered above, and deleteStudy guards it. The review
+        // history is not, and the two are deleted by different code: the guarded pass over
+        // `position_knowledge_state` runs second, after the chunk loop has already removed every
+        // row keyed by a canonical id this study mentions — including one another study still
+        // points at. deleteChapter guards the same rows one at a time (see the test above), so
+        // the two functions disagree about who owns a shared position.
+        //
+        // The cost is not cosmetic. getTodayReviewedPositionsCount counts DISTINCT decisionId
+        // over srs_review_event, so losing the rows re-opens part of the day's quota for a
+        // position the user already reviewed today.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final studyA = Study(id: 'study-a', title: 'Study A', createdAt: now, updatedAt: now);
+          final chapterA = Chapter(id: 'ch-a', studyId: studyA.id, sourceOrder: 0);
+          final studyB = Study(id: 'study-b', title: 'Study B', createdAt: now, updatedAt: now);
+          final chapterB = Chapter(id: 'ch-b', studyId: studyB.id, sourceOrder: 0);
+
+          const shared = 'shared-pos';
+
+          const decA1 = RepertoireDecision(
+            id: 'dec-a1',
+            studyId: 'study-a',
+            chapterId: 'ch-a',
+            nodeId: 'na1',
+            expectedMoves: [],
+            canonicalStateId: shared,
+          );
+          const decB1 = RepertoireDecision(
+            id: 'dec-b1',
+            studyId: 'study-b',
+            chapterId: 'ch-b',
+            nodeId: 'nb1',
+            expectedMoves: [],
+            canonicalStateId: shared,
+          );
+
+          await repo.saveStudy(studyA);
+          await repo.saveChapter(chapterA);
+          await repo.saveDecision(decA1);
+          await repo.saveStudy(studyB);
+          await repo.saveChapter(chapterB);
+          await repo.saveDecision(decB1);
+
+          // Two reviews of the shared position, recorded under its canonical id — the spelling
+          // saveAnswerBatch writes.
+          ReviewEvent eventAt(int hour) => ReviewEvent(
+            decisionId: shared,
+            when: DateTime.utc(2026, 9, 16, hour, 0, 0),
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: shared),
+            newState: const ReviewState(decisionId: shared, repetitionCount: 1),
+          );
+          await repo.saveReviewEvent(eventAt(9));
+          await repo.saveReviewEvent(eventAt(10));
+          await repo.saveReviewState(const ReviewState(decisionId: shared, repetitionCount: 2));
+          expect(await repo.getReviewEvents(shared), hasLength(2));
+          expect(await repo.getReviewState(shared), isNotNull);
+          expect(await repo.getTodayReviewedPositionsCount(now), 1);
+
+          await repo.deleteStudy(studyA.id);
+
+          // Study B still trains this position, so its history is still Study B's history.
+          expect(
+            await repo.getReviewEvents(shared),
+            hasLength(2),
+            reason:
+                'study B still points at this position, so the reviews of it are not study A\'s',
+          );
+          expect(
+            await repo.getReviewState(shared),
+            isNotNull,
+            reason: 'the same rule applies to the state row keyed by the canonical id',
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     test('savePositionTree updates tree independently of chapter metadata', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);

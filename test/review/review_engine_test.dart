@@ -1228,7 +1228,7 @@ void main() {
       expect(
         session.reviewStates[canonB]!.repetitionCount,
         1,
-        reason: "a second question at the same position was advanced by this answer",
+        reason: 'a second question at the same position was advanced by this answer',
       );
     });
 

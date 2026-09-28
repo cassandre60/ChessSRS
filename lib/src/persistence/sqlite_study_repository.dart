@@ -217,6 +217,15 @@ class SqliteStudyRepository implements StudyRepository {
           // Events and canonical rows are keyed by the canonical id, which is not the
           // `srs_decision.id` these chunks hold. Both spellings are removed so a
           // legacy per-occurrence row and a current canonical row both go.
+          //
+          // The canonical spelling is only removed where no other study still points at that
+          // position. A canonical id describes the *position*, not the occurrence, so two
+          // repertoires that share a line share its history too — and deleting one of them
+          // must not take the other's review record with it. deleteChapter applies the same
+          // rule one canonical id at a time (see the `ownedElsewhere` guard there).
+          final ownedElsewhere =
+              'SELECT canonicalStateId FROM $kTableSrsDecision '
+              'WHERE canonicalStateId IS NOT NULL AND studyId != ?';
           final bothIds = <String>{
             ...chunk,
             ...canonicalRows.map((r) => r['canonicalStateId']).whereType<String>(),
@@ -224,13 +233,13 @@ class SqliteStudyRepository implements StudyRepository {
           final bothPlaceholders = List.filled(bothIds.length, '?').join(',');
           await txn.delete(
             kTableSrsReviewEvent,
-            where: 'decisionId IN ($bothPlaceholders)',
-            whereArgs: bothIds,
+            where: 'decisionId IN ($bothPlaceholders) AND decisionId NOT IN ($ownedElsewhere)',
+            whereArgs: [...bothIds, id],
           );
           await txn.delete(
             kTableSrsReviewState,
-            where: 'decisionId IN ($bothPlaceholders)',
-            whereArgs: bothIds,
+            where: 'decisionId IN ($bothPlaceholders) AND decisionId NOT IN ($ownedElsewhere)',
+            whereArgs: [...bothIds, id],
           );
         }
 
