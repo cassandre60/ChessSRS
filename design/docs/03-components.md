@@ -23,7 +23,7 @@ Left to right: **Scope button**, **due count**, spacer, **overflow button**.
   chevron-down (stroke 1.8, `ink2`) with gap 8. Padding 7/10, margin-left -10 (so the text aligns with the content edge),
   radius 10, hover fill `hairlineSoft`. Tapping toggles the scope list. `aria-haspopup="dialog"`, expanded state exposed.
   Must shrink (flex 0 1 auto) so the due count and overflow button never get pushed off narrow screens.
-- **Due count**: `{n} due`, 14, `ink2`; the numeral is 600 `ink`, tabular. In Practice mode show `Practice` (accent, 600) instead.
+- **Due count**: `{n} due`, 14, `ink2`; the numeral is 600 `ink`, tabular. In Practice mode show `Practice` (accent, 600) instead — as a **tappable label with a 44px hit area and semantics `Exit practice`**, since it occupies this slot and is the only exit from the mode (`00` open decision 3, resolved 2026-09-28). The visible text is `ExcludeSemantics`-wrapped so the announcement is the action, not "Exit practice Practice".
 - **Overflow button**: 44x44 circular hit area, three dots (20px icon, `ink` fill, dots r=1.7 at x=4,10,16), hover fill `hairlineSoft`.
   Label "Library and settings". Opens the Library sheet.
 - Hidden per screen: on *first launch* the scope button and due count are hidden (overflow stays); on *settings* the whole bar is hidden.
@@ -220,5 +220,5 @@ Apply the system; keep them obviously the same family; **send screenshots to the
 - **Study actions** (Chapters, Analyze, Practice, Export, Rename, Delete): a Library-style sheet of text rows (16/500, no icons), anchored to the row that opened it on wide layouts.
 - **Toast:** ink pill (`ink` bg, `ground` text 14/500), bottom 24, centered, padding 11/18, fades in 160 ms (translate 10px), visible 2.4 s. One line, no actions.
 - **Analysis / Explorer / Board editor:** reuse `SrsBoardBackground`, tokens and primitives; drop Lichess widgets and icons. Reached from the Library sheet's single `Analysis` row, which opens `AnalysisHubScreen` (open decision 1, resolved 2026-09-28).
-- **Practice mode banner:** none. The top bar shows `Practice` in the due-count slot (see `00` open decision 3).
+- **Practice mode banner:** none. The top bar shows `Practice` in the due-count slot, tappable, as the exit (see `00` open decision 3).
 - **About and licences:** Settings-style page: wordmark, version, `Based on Lichess Mobile (GPL-3.0)` with links, then the standard licence list.

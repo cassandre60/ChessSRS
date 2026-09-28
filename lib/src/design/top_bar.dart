@@ -83,23 +83,33 @@ class SrsTopBar extends StatelessWidget {
 
           // 2. Due count
           if (isPracticeMode) ...[
-            Text('Practice', style: SrsText.due(c.accent).copyWith(fontWeight: FontWeight.w600)),
-            if (onExitPractice != null) ...[
-              const SizedBox(width: 8),
-              SrsPressable(
-                onPressed: onExitPractice,
-                radius: 6,
-                semanticLabel: 'Exit Practice',
-                builder: (context, hovered, _) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: hovered ? c.hairlineSoft : const Color(0x00000000),
-                    borderRadius: BorderRadius.circular(6),
+            // The `Practice` label is itself the way out. It used to be inert text with a separate
+            // 12px `Exit Practice` button beside it -- a 168x16px target for the only exit from a
+            // mode the user opted into, against the 44x44 minimum in 03-components.md §6, and two
+            // controls where one says the same thing. `SrsPressable` enforces no minimum of its
+            // own, so the 44px is asked for here.
+            SrsPressable(
+              onPressed: onExitPractice,
+              semanticLabel: 'Exit practice',
+              radius: 8,
+              builder: (_, hover, _) => Container(
+                constraints: const BoxConstraints(minHeight: SrsLayout.minTouchTarget),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: hover ? c.hairlineSoft : const Color(0x00000000),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ExcludeSemantics(
+                  // Excluded for the same reason as [SrsTextButton] and [SrsPillButton]: the
+                  // pressable already announces `Exit practice`, and without this the visible text
+                  // merges with it and a screen reader says "Exit practice Practice".
+                  child: Text(
+                    'Practice',
+                    style: SrsText.due(c.accent).copyWith(fontWeight: FontWeight.w600),
                   ),
-                  child: Text('Exit Practice', style: SrsText.due(c.ink3).copyWith(fontSize: 12)),
                 ),
               ),
-            ],
+            ),
           ] else
             Text.rich(
               TextSpan(

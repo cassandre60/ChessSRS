@@ -605,8 +605,9 @@ void main() {
       expect(find.byType(Chessboard), findsOneWidget);
       expect(find.text('Practice'), findsOneWidget);
 
-      // Exit practice mode via TopBar button
-      await tester.tap(find.text('Exit Practice'));
+      // Exit practice mode via the TopBar's Practice label, which is the target (00-agent-brief.md
+      // open decision 3). It used to be a separate `Exit Practice` button beside inert text.
+      await tester.tap(find.text('Practice'));
       await pumpAsync(tester);
 
       // Returned to Nothing due view
