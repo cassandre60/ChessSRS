@@ -1,17 +1,24 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="50"
-    android:viewportHeight="50">
-  <group android:scaleX="0.42777777"
-      android:scaleY="0.42777777"
-      android:translateX="14.305555"
-      android:translateY="14.305555">
+    android:viewportWidth="38"
+    android:viewportHeight="38">
+    <!-- ChessSRS geometric square mark. Geometry follows assets/brand/mark.svg (22x22 space,
+        translated +8/+8 into this 38x38 viewport so the mark fills ~54% and stays inside the
+        adaptive-icon safe zone). The two hatched squares are explicit diagonal strokes rather
+        than a pattern fill, which VectorDrawable cannot express: same 45-degree direction and
+        same ~2.4-unit period as the brand SVG. Replaces the inherited Lichess knight.
+        See design/docs/00-agent-brief.md open decision 5. -->
     <path
-        android:strokeWidth="1"
-        android:pathData="M38.956,0.5c-3.53,0.418 -6.452,0.902 -9.286,2.984C5.534,1.786 -0.692,18.533 0.68,29.364 3.493,50.214 31.918,55.785 41.329,41.7c-7.444,7.696 -19.276,8.752 -28.323,3.084C3.959,39.116 -0.506,27.392 4.683,17.567 9.873,7.742 18.996,4.535 29.03,6.405c2.43,-1.418 5.225,-3.22 7.655,-3.187l-1.694,4.86 12.752,21.37c-0.439,5.654 -5.459,6.112 -5.459,6.112 -0.574,-1.47 -1.634,-2.942 -4.842,-6.036 -3.207,-3.094 -17.465,-10.177 -15.788,-16.207 -2.001,6.967 10.311,14.152 14.04,17.663 3.73,3.51 5.426,6.04 5.795,6.756 0,0 9.392,-2.504 7.838,-8.927L37.4,7.171z"
-        android:strokeLineJoin="round"
-        android:fillColor="#ffffff"
-        android:strokeColor="#ffffff"/>
-  </group>
+        android:pathData="M8.75,8.75h20.5v20.5h-20.5z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#F1F3F4" />
+    <path
+        android:pathData="M19,17.303L20.697,19M19,13.909L24.091,19M19,10.515L27.485,19M21.38,9.5L28.5,16.62M24.774,9.5L28.5,13.226M28.168,9.5L28.5,9.832"
+        android:strokeWidth="1.27"
+        android:strokeColor="#F1F3F4" />
+    <path
+        android:pathData="M17.303,19L19,20.697M13.909,19L19,24.091M10.515,19L19,27.485M9.5,21.38L16.62,28.5M9.5,24.774L13.226,28.5M9.5,28.168L9.832,28.5"
+        android:strokeWidth="1.27"
+        android:strokeColor="#F1F3F4" />
 </vector>

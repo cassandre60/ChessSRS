@@ -87,7 +87,17 @@ record findings at the top of your first PR description:
    behaviours. Whether iOS should get a calendar instead is still open and is not settled here.
    `test/design/one_look_test.dart` guards the rest and names this one exception in the code, so it cannot be
    forgotten or quietly widened.
-5. **Bespoke art.** Piece set, wordmark, icon and sounds here are placeholders. Ask before spending effort refining them.
+5. ~~**Bespoke art.** Piece set, wordmark, icon and sounds here are placeholders. Ask before spending effort refining them.~~
+   **Partially resolved 2026-09-28; sounds remain open.** Checking each item showed the sentence was half stale:
+   the piece set is already bespoke (`lib/src/design/piece_set.dart`, wired as the default in
+   `board_preferences.dart`) and the wordmark is already the geometric square mark (`SrsLogoMark`,
+   matching `assets/brand/mark.svg`, used on first launch and About). Owner decision: wire the brand
+   icon now, leave sounds. The Android adaptive-icon foreground was still the inherited Lichess knight
+   vector and is now the brand mark redrawn as explicit strokes (VectorDrawable has no pattern fill);
+   the iOS marketing icon and the Play-store png were the same inherited art and are now
+   `assets/brand/icon-1024.png`. Sounds stay Lichess: `assets/sounds/diagram/` holds only 3 wavs
+   against the 10 sounds the service loads, `SoundTheme` has no diagram entry, and the service falls
+   back to `standard` — wiring it is a sound-design task, not a file move, and was explicitly deferred.
 6. **Fonts.** Instrument Sans + Newsreader are the design's fonts. If the owner prefers others, only `SrsText` changes.
 
 ## When to stop and ask
