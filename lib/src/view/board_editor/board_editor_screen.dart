@@ -24,7 +24,6 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:chess_srs/src/widgets/variant_app_bar_title.dart';
 import 'package:chessground/chessground.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -428,7 +427,10 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
               child: GestureDetector(
                 onTap: () => ref.read(editorController.notifier).updateMode(EditorPointerMode.drag),
                 child: Icon(
-                  CupertinoIcons.hand_draw,
+                  // Material, not `CupertinoIcons`: the palette is a Diagram surface and an iOS
+                  // glyph in it is an iOS look inside the new visual language. `00-agent-brief.md`
+                  // open decision 4, resolved 2026-09-28.
+                  Icons.back_hand_outlined,
                   size: 0.8 * itemSize,
                   color: isDragActive ? c.accent : c.ink2,
                 ),
@@ -472,7 +474,9 @@ class _PieceMenuState extends ConsumerState<_PieceMenu> {
                 onTap: () =>
                     ref.read(editorController.notifier).updateMode(EditorPointerMode.edit, null),
                 child: Icon(
-                  CupertinoIcons.delete,
+                  // Demo erase tool: active state is accent, never red. Material glyph, like the
+                  // drag tool above.
+                  Icons.delete_outline,
                   size: 0.75 * itemSize,
                   color: isDeleteActive ? c.accent : c.ink3,
                 ),

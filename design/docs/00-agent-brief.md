@@ -74,8 +74,19 @@ record findings at the top of your first PR description:
    toggle, add it as a switch row at the top of the Library sheet, not back in the top bar.
 3. **Exiting Practice mode.** The prototype shows "Practice" in the top bar where the due count normally is. Implement it
    as a tappable label with semantics "Exit practice" (44dp target). A trailing small close glyph is allowed. Confirm.
-4. **Platform behaviour.** The design uses one visual language on all platforms. Keep platform *behaviours* (back
-   gestures, scroll physics, haptics), not platform-specific *looks*. Confirm no iOS-native (Cupertino) look is wanted.
+4. ~~**Platform behaviour.** The design uses one visual language on all platforms.~~ **Resolved 2026-09-28: one
+   look everywhere, one deliberate exception.** The app branched on `TargetPlatform` in four reachable places, all
+   of them menus or dialogs: `showChoicePicker`, `showMultipleChoicesPicker`, `showAdaptiveActionSheet` and
+   `showConfirmDialog` — plus the account menu's own duplicate of the last, and the analysis board's `⋯`
+   (`ContextMenuIconButton`, an iOS long-press preview). The account menu's list rows also drew a
+   `CupertinoListTileChevron` on iOS and nothing elsewhere, so the same settings list pointed one way on a phone
+   and another everywhere else. All of it now renders from `lib/src/design/`.
+   **The exception:** the analysis share screen's date picker, a `CupertinoDatePicker` wheel on iOS against a
+   Material calendar elsewhere. That is the same control reached two different ways — spin-and-stop against
+   tap-a-day — which is a platform *behaviour* as much as an appearance, and this decision's own rule keeps
+   behaviours. Whether iOS should get a calendar instead is still open and is not settled here.
+   `test/design/one_look_test.dart` guards the rest and names this one exception in the code, so it cannot be
+   forgotten or quietly widened.
 5. **Bespoke art.** Piece set, wordmark, icon and sounds here are placeholders. Ask before spending effort refining them.
 6. **Fonts.** Instrument Sans + Newsreader are the design's fonts. If the owner prefers others, only `SrsText` changes.
 

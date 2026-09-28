@@ -1,207 +1,105 @@
-import 'dart:math';
-
-import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
-import 'package:collection/collection.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// A action bottom sheet that adapts to the platform (Android/iOS).
+/// A sheet of text rows: the Diagram's action sheet.
 ///
-/// [actions] The Actions list that will appear on the ActionSheet. (required)
+/// One appearance on every platform. It used to branch on `TargetPlatform` — a
+/// `CupertinoActionSheet` on iOS, a Material `Dialog` elsewhere — so the same menu was two
+/// different-looking things. Ten call sites route through here, including the board editor's
+/// `Menu` and `Variant`, so the branch was visible well beyond the screens it was written for.
 ///
-/// [title] The optional title widget that show above the actions.
+/// `00-agent-brief.md` open decision 4, resolved 2026-09-28: keep platform *behaviours*, not
+/// platform-specific *looks*. Scrolling, back gestures and haptics are untouched by this; only the
+/// presentation changed.
 ///
-/// The optional [isDismissible] can be passed to set barrierDismissible of showCupertinoModalPopup
-/// and isDismissible of showModalBottomSheet (Default true as for both implementations)
+/// The two implementations also differed *within* the platform branch: the Material one rendered
+/// [BottomSheetAction.leading] and [BottomSheetAction.trailing] and the Cupertino one dropped both,
+/// so an action could look different for a reason that had nothing to do with the platform. Both
+/// are rendered now.
 Future<T?> showAdaptiveActionSheet<T>({
   required BuildContext context,
   Widget? title,
   required List<BottomSheetAction> actions,
   bool isDismissible = true,
 }) {
-  if (Theme.of(context).platform == TargetPlatform.iOS) {
-    return showCupertinoActionSheet(
-      context: context,
-      title: title,
-      actions: actions,
-      isDismissible: isDismissible,
-    );
-  } else {
-    return showMaterialActionSheet(
-      context: context,
-      title: title,
-      actions: actions,
-      isDismissible: isDismissible,
-    );
-  }
+  final deviceHeight = MediaQuery.heightOf(context);
+
+  return showSrsSheet<T>(
+    context,
+    SrsSheetSurface(
+      maxHeight: deviceHeight * 0.7,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (title != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: DefaultTextStyle(style: SrsText.groupTitle(context.srs.ink3), child: title),
+              ),
+            for (final action in actions)
+              Builder(
+                // A Builder so [BottomSheetAction.makeLabel] gets the context immediately around
+                // the row, which is what actions that position something relative to themselves
+                // need -- the iPad share dialog is the one that depended on it.
+                builder: (rowContext) => SrsSheetRow(
+                  label: '',
+                  labelWidget: action.makeLabel(rowContext),
+                  leading: action.leading,
+                  trailing: action.trailing,
+                  onPressed: () {
+                    if (action.dismissOnPress) {
+                      Navigator.of(rowContext).pop();
+                    }
+                    action.onPressed();
+                  },
+                ),
+              ),
+            // A cancel row rather than a scrim-only exit: the sheet has to be dismissible by
+            // keyboard and by anyone who cannot reliably hit a small scrim target.
+            SrsSheetRow(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+          ],
+        ),
+      ),
+    ),
+    isDismissible: isDismissible,
+  );
 }
 
+/// A confirmation dialog.
+///
+/// Was a `CupertinoActionSheet` on iOS and a Material `AlertDialog` elsewhere, which meant the same
+/// confirmation looked like two different questions depending on the device -- and on iOS it was a
+/// single action with no cancel row, so dismissing it was the only way to say no.
+///
+/// `SrsDialog` per 03-components.md §11: title 20/600, actions right-aligned text button then pill.
 Future<T?> showConfirmDialog<T>(
   BuildContext context, {
   required Widget title,
   required VoidCallback onConfirm,
 
-  /// Only for iOS
+  /// Retained for call-site compatibility. The design has no danger token -- a destructive action
+  /// is signalled by its wording and its confirm dialog, not by painting the label -- so this no
+  /// longer changes anything, exactly as `SrsSettingsRow.destructive` does not.
   bool isDestructiveAction = false,
 }) {
-  if (Theme.of(context).platform == TargetPlatform.iOS) {
-    return showCupertinoActionSheet(
-      context: context,
-      actions: [
-        BottomSheetAction(
-          makeLabel: (_) => title,
-          isDestructiveAction: isDestructiveAction,
-          onPressed: onConfirm,
-        ),
-      ],
-    );
-  } else {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: title,
-          actions: <Widget>[
-            TextButton(
-              style: TextButton.styleFrom(textStyle: TextTheme.of(context).labelLarge),
-              child: Text(context.l10n.cancel),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              style: TextButton.styleFrom(textStyle: TextTheme.of(context).labelLarge),
-              child: Text(context.l10n.mobileOkButton),
-              onPressed: () {
-                Navigator.of(context).pop();
-                onConfirm();
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-Future<T?> showCupertinoActionSheet<T>({
-  required BuildContext context,
-  Widget? title,
-  required List<BottomSheetAction> actions,
-  bool isDismissible = true,
-}) {
-  return showCupertinoModalPopup(
-    context: context,
-    barrierDismissible: isDismissible,
-    builder: (BuildContext context) {
-      return CupertinoActionSheet(
-        title: title,
-        actions: actions
-            .map(
-              // Builder is used to retrieve the context immediately surrounding the button
-              // This is necessary to get the correct context for the iPad share dialog
-              // which needs the position of the action to display the share dialog
-              (action) => Builder(
-                builder: (context) {
-                  return CupertinoActionSheetAction(
-                    onPressed: () {
-                      if (action.dismissOnPress) {
-                        Navigator.of(context).pop();
-                      }
-                      action.onPressed();
-                    },
-                    isDestructiveAction: action.isDestructiveAction,
-                    isDefaultAction: action.isDefaultAction,
-                    child: action.makeLabel(context),
-                  );
-                },
-              ),
-            )
-            .toList(),
-        cancelButton: CupertinoActionSheetAction(
-          isDefaultAction: true,
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          child: Text(context.l10n.cancel),
-        ),
-      );
-    },
-  );
-}
-
-Future<T?> showMaterialActionSheet<T>({
-  required BuildContext context,
-  Widget? title,
-  required List<BottomSheetAction> actions,
-  bool isDismissible = true,
-}) {
-  final actionTextStyle = TextTheme.of(context).titleMedium ?? const TextStyle(fontSize: 18);
-
-  final screenWidth = MediaQuery.widthOf(context);
   return showDialog<T>(
     context: context,
-    barrierDismissible: isDismissible,
-    builder: (BuildContext context) {
-      return Dialog(
-        child: SizedBox(
-          width: min(screenWidth, kMaterialPopupMenuMaxWidth),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (title != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Center(child: title),
-                  ),
-                ],
-                ...actions.mapIndexed<Widget>((index, action) {
-                  return InkWell(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(index == 0 ? 28 : 0),
-                      bottom: Radius.circular(index == actions.length - 1 ? 28 : 0),
-                    ),
-                    onTap: () {
-                      if (action.dismissOnPress) {
-                        Navigator.of(context).pop();
-                      }
-                      action.onPressed();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          if (action.leading != null) ...[
-                            action.leading!,
-                            const SizedBox(width: 15),
-                          ],
-                          Expanded(
-                            child: DefaultTextStyle(
-                              style: actionTextStyle,
-                              textAlign: action.leading != null
-                                  ? TextAlign.start
-                                  : TextAlign.center,
-                              child: action.makeLabel(context),
-                            ),
-                          ),
-                          if (action.trailing != null) ...[
-                            const SizedBox(width: 10),
-                            action.trailing!,
-                          ],
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
+    builder: (context) => SrsDialog(
+      title: title is Text ? (title.data ?? '') : '',
+      actions: [
+        SrsTextButton(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        SrsPillButton(
+          label: context.l10n.mobileOkButton,
+          onPressed: () {
+            Navigator.of(context).pop();
+            onConfirm();
+          },
         ),
-      );
-    },
+      ],
+    ),
   );
 }
 
@@ -230,13 +128,18 @@ class BottomSheetAction {
 
   /// A widget to display before the label.
   ///
-  /// Typically an [Icon] or a [CircleAvatar] widget. (Android only).
+  /// Typically an [Icon] or a [CircleAvatar] widget. Rendered on every platform now -- the two old
+  /// implementations disagreed, and this is the one that has callers.
   final Widget? leading;
 
-  /// Whether the action is destructive. (iOS only).
+  /// Whether the action is destructive.
+  ///
+  /// No longer changes anything: the design has no danger token, so a destructive action is
+  /// signalled by its wording and its confirm dialog rather than by painting the label. Retained so
+  /// the existing call sites keep compiling. Matches `SrsSettingsRow.destructive`.
   final bool isDestructiveAction;
 
-  /// Whether the action is the default action. (iOS only).
+  /// Whether the action is the default action. Also inert, for the same reason.
   final bool isDefaultAction;
 
   BottomSheetAction({

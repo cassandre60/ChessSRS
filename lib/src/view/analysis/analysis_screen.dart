@@ -34,7 +34,6 @@ import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/move_times_chart.dart';
-import 'package:chess_srs/src/widgets/platform_context_menu_button.dart';
 import 'package:chess_srs/src/widgets/user.dart';
 import 'package:chess_srs/src/widgets/variant_app_bar_title.dart';
 import 'package:dartchess/dartchess.dart';
@@ -730,30 +729,37 @@ class _AnalysisMenu extends ConsumerWidget {
 
     final archivedGame = analysisState.archivedGame;
 
-    return ContextMenuIconButton(
+    // The Diagram action sheet rather than `ContextMenuIconButton`, which on iOS was a
+    // long-press preview menu in Cupertino colours and on every other platform a Material popup --
+    // the same top-bar button looking like two different things. `00-agent-brief.md` open decision
+    // 4, resolved 2026-09-28. The share icon is no longer platform-conditional for the same reason.
+    return IconButton(
       icon: const Icon(Icons.more_horiz),
-      semanticsLabel: context.l10n.menu,
-      actions: [
-        if (archivedGame != null)
-          ContextMenuAction(
-            icon: archivedGame.data.bookmarked == true
-                ? Icons.bookmark_remove_outlined
-                : Icons.bookmark_add_outlined,
-            label: archivedGame.data.bookmarked == true
-                ? context.l10n.mobileRemoveBookmark
-                : context.l10n.bookmarkThisGame,
-            onPressed: () =>
-                ref.read(analysisControllerProvider(options).notifier).toggleBookmark(),
-          ),
-        if (analysisState.gameId != null || analysisState.isComputerAnalysisAllowed)
-          ContextMenuAction(
-            icon: Theme.of(context).platform == TargetPlatform.iOS
-                ? Icons.ios_share_outlined
-                : Icons.share_outlined,
-            label: context.l10n.studyShareAndExport,
-            onPressed: () => _showShareMenu(context, ref),
-          ),
-      ],
+      tooltip: context.l10n.menu,
+      onPressed: () => showAdaptiveActionSheet<void>(
+        context: context,
+        actions: [
+          if (archivedGame != null)
+            BottomSheetAction(
+              leading: archivedGame.data.bookmarked == true
+                  ? const Icon(Icons.bookmark_remove_outlined, size: 20)
+                  : const Icon(Icons.bookmark_add_outlined, size: 20),
+              makeLabel: (_) => Text(
+                archivedGame.data.bookmarked == true
+                    ? context.l10n.mobileRemoveBookmark
+                    : context.l10n.bookmarkThisGame,
+              ),
+              onPressed: () =>
+                  ref.read(analysisControllerProvider(options).notifier).toggleBookmark(),
+            ),
+          if (analysisState.gameId != null || analysisState.isComputerAnalysisAllowed)
+            BottomSheetAction(
+              leading: const Icon(Icons.share_outlined, size: 20),
+              makeLabel: (_) => Text(context.l10n.studyShareAndExport),
+              onPressed: () => _showShareMenu(context, ref),
+            ),
+        ],
+      ),
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:auto_size_text/auto_size_text.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
@@ -84,6 +85,7 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
     final isOnline = ref.watch(isDeviceOnlineProvider);
     final signInState = ref.watch(signInMutation);
     final signOutState = ref.watch(signOutMutation);
+    final c = context.srs;
 
     ref.listen(signInMutation, (_, next) => showSignInErrorSnackBar(context, next));
     final account = ref.watch(accountProvider);
@@ -128,9 +130,11 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                             ),
                     _ => const Icon(Icons.account_circle_outlined, size: 30),
                   },
-                  trailing: Theme.of(context).platform == TargetPlatform.iOS
-                      ? const CupertinoListTileChevron()
-                      : null,
+                  // §7: every row ends with the 14px ink3 chevron, on every platform. It was
+                  // a `CupertinoListTileChevron` on iOS and nothing elsewhere, so the same
+                  // settings list pointed one way on a phone and another everywhere else.
+                  // `00-agent-brief.md` open decision 4, resolved 2026-09-28.
+                  trailing: Icon(Symbols.chevron_right_rounded, size: 14, color: c.ink3),
                   title: AutoSizeText(
                     user.name,
                     style: Styles.callout,
@@ -178,9 +182,6 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
             children: [
               ListTile(
                 leading: const Icon(Icons.settings_outlined),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 title: Text(context.l10n.settingsSettings),
                 onTap: () {
                   _navigate(context, SrsSettingsScreen.buildRoute());
@@ -216,9 +217,6 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                 ),
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 title: Text(context.l10n.about),
                 onTap: () {
                   _navigate(context, AboutScreen.buildRoute());
@@ -237,46 +235,21 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
   }
 
   void _showSignOutConfirmDialog(BuildContext context, WidgetRef ref) {
-    if (Theme.of(context).platform == TargetPlatform.iOS) {
-      showCupertinoActionSheet<void>(
-        context: context,
-        actions: [
-          BottomSheetAction(
-            makeLabel: (context) => Text(context.l10n.logOut),
-            isDestructiveAction: true,
-            onPressed: () async {
-              await signOutMutation.run(ref, (tsx) async {
-                await tsx.get(authControllerProvider.notifier).signOut();
-              });
-            },
-          ),
-        ],
-      );
-    } else {
-      showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          return AlertDialog(
-            title: Text(context.l10n.logOut),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(context.l10n.cancel),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  await signOutMutation.run(ref, (tsx) async {
-                    await tsx.get(authControllerProvider.notifier).signOut();
-                  });
-                },
-                child: Text(context.l10n.mobileOkButton),
-              ),
-            ],
-          );
-        },
-      );
-    }
+    // One path, not a platform branch. This had its own copy of the branch: a `CupertinoActionSheet`
+    // on iOS carrying a single `Log out` action and no cancel row, and a Material `AlertDialog`
+    // elsewhere. So signing out asked a different question per device, and on iOS dismissing the
+    // sheet was the only way to decline. `showConfirmDialog` is the shared helper and is now a
+    // Diagram `SrsDialog` on every platform.
+    showConfirmDialog<void>(
+      context,
+      title: Text(context.l10n.logOut),
+      isDestructiveAction: true,
+      onConfirm: () async {
+        await signOutMutation.run(ref, (tsx) async {
+          await tsx.get(authControllerProvider.notifier).signOut();
+        });
+      },
+    );
   }
 }
 
@@ -372,9 +345,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.info_outlined),
                 title: Text(context.l10n.aboutX('Lichess')),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/about'));
                 },
@@ -382,9 +352,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.feedback_outlined),
                 title: Text(context.l10n.mobileFeedbackButton),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/contact'));
                 },
@@ -392,9 +359,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.article_outlined),
                 title: Text(context.l10n.termsOfService),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/terms-of-service'));
                 },
@@ -402,9 +366,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.privacy_tip_outlined),
                 title: Text(context.l10n.privacyPolicy),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/privacy'));
                 },
@@ -417,9 +378,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Symbols.database),
                 title: Text(context.l10n.database),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://database.lichess.org'));
                 },
@@ -427,9 +385,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.code_outlined),
                 title: Text(context.l10n.sourceCode),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/source'));
                 },
@@ -437,9 +392,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.bug_report_outlined),
                 title: Text(context.l10n.contribute),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/help/contribute'));
                 },
@@ -447,9 +399,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.star_border_outlined),
                 title: Text(context.l10n.thankYou),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   launchUrl(Uri.parse('https://lichess.org/thanks'));
                 },
@@ -462,9 +411,6 @@ class AboutScreen extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.copyright_outlined),
                 title: const Text('View licences'),
-                trailing: Theme.of(context).platform == TargetPlatform.iOS
-                    ? const CupertinoListTileChevron()
-                    : null,
                 onTap: () {
                   showLicensePage(
                     context: context,

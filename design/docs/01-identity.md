@@ -30,6 +30,10 @@ Why it looks different from Lichess (and from Chess.com, and from the app's prev
    Reduced-motion collapses everything to instant.
 7. **Plain words.** Sentence case, no exclamation marks, one vocabulary (see §4).
 8. **Instant.** No spinners for local data; optimistic UI; no layout shift; 120 Hz friendly (no blur, no big shadows).
+9. **One look, every platform.** Platform *behaviours* are kept — back gestures, scroll physics, haptics, the platform
+   date picker. Platform-specific *looks* are not: the same control is the same control everywhere, so a menu, dialog,
+   choice list or list row does not change appearance with the device. Enforced by `test/design/one_look_test.dart`,
+   which fails on any Cupertino widget in a reachable screen.
 
 ## What replaced what (from the previous build)
 

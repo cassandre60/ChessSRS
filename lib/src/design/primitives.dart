@@ -882,12 +882,28 @@ class SrsSheetRow extends StatelessWidget {
     super.key,
     required this.label,
     required this.onPressed,
+    this.labelWidget,
     this.subtitle,
+    this.leading,
     this.trailing,
   });
 
   final String label;
+
+  /// Richer label, for rows whose label is not plain text. Takes precedence over [label], which is
+  /// then only the accessibility label.
+  ///
+  /// Present because `BottomSheetAction.makeLabel` hands back a `Widget` rather than a string and
+  /// some call sites pass rich labels. Reading `.data` off a `Text.rich` yields null, which is how a
+  /// row ends up blank.
+  final Widget? labelWidget;
+
   final String? subtitle;
+
+  /// Sits at the left of the row. Carried because `BottomSheetAction.leading` does: the sign-in
+  /// options pass an icon per method, and dropping it would leave two identically-labelled rows.
+  final Widget? leading;
+
   final Widget? trailing;
   final VoidCallback? onPressed;
 
@@ -904,12 +920,16 @@ class SrsSheetRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 44),
         child: Row(
           children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 14)],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(label, style: SrsText.settingLabel(c.ink)),
+                  if (labelWidget != null)
+                    labelWidget!
+                  else
+                    Text(label, style: SrsText.settingLabel(c.ink)),
                   if (subtitle != null) ...[
                     const SizedBox(height: 2),
                     Text(subtitle!, style: SrsText.sheetSub(c.ink3)),

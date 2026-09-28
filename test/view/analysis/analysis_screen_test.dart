@@ -1502,11 +1502,12 @@ void main() {
       expect(find.textContaining('f4'), findsOneWidget);
       expect(boardHasPiece(tester, Square.f4, Piece.whitePawn), isTrue);
 
-      //open menu
+      // Open the top-bar menu. Settle rather than `pump`: it is an animating sheet now, and one
+      // frame leaves its rows mid-transition, off-screen and not hit-testable.
       await tester.tap(find.text('Menu'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      //tap Clear moves
+      // Tap Clear moves
       expect(find.text('Clear moves'), findsOneWidget);
       await tester.tap(find.text('Clear moves'));
       await tester.pump();

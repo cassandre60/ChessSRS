@@ -679,21 +679,22 @@ void main() {
 
     // Open the bottom sheet menu
     await tester.tap(find.bySemanticsLabel('Menu'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    // Tap the action to open the dialog
+    // Tap the action to open the dialog. Settle, not `pump`: the menu is an animating sheet, and a
+    // single frame leaves it mid-transition, where the row is not yet hit-testable.
     await tester.tap(find.text('Chess960 Position'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsOneWidget);
 
     // Enter a valid FRC ID
     await tester.enterText(find.byType(TextField), '0');
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // load position
     await tester.tap(find.text('Load position'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Verify the dialog closes successfully
     expect(find.byType(AlertDialog), findsNothing);
@@ -719,14 +720,14 @@ void main() {
     await tester.pumpWidget(app);
 
     await tester.tap(find.bySemanticsLabel('Menu'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Chess960 Position'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Enter an out-of-bounds ID
     await tester.enterText(find.byType(TextField), '999');
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // Verify the 'Load position' button is actually disabled
     final loadButton = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Load position'));
