@@ -681,6 +681,152 @@ void main() {
       },
     );
 
+    test('retry side effects: a correct retry that walks a learned continuation persists the '
+        'auto-traversal exposure credit', () async {
+      // Closed by this test: docs/audit-unverified-fixes.md recorded M10's persistence fix as
+      // shipped on reasoning alone, because every previous attempt built a session where the
+      // retry had nowhere to advance to. The recipe is a line of three decisions where the
+      // middle one is learned-but-not-due (so it is auto-played rather than asked) and the
+      // third is due (so traversal stops there instead of running off the end).
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+      try {
+        final service = ReviewService(repository: repo, clock: clock);
+
+        await repo.saveStudy(
+          Study(id: 's_retry', title: 'Retry Study', createdAt: now, updatedAt: now),
+        );
+
+        // root -e4-> n_e4 -e5-> n_e5 -Nf3-> n_nf3 -Nc6-> n_nc6 -Bc4-> n_bc4
+        const rootNode = RepertoireNode(
+          id: 'n_root',
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          children: [
+            RepertoireNode(
+              id: 'n_e4',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'n_e5',
+                  fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                  fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'n_nf3',
+                      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                      fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                      incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                      children: [
+                        RepertoireNode(
+                          id: 'n_nc6',
+                          fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+                          fenKey: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq -',
+                          incomingMove: RepertoireMove(from: 'b8', to: 'c6', san: 'Nc6'),
+                          children: [
+                            RepertoireNode(
+                              id: 'n_bc4',
+                              fen:
+                                  'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+                              fenKey:
+                                  'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq -',
+                              incomingMove: RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+
+        await repo.saveChapter(
+          const Chapter(
+            id: 'ch_r',
+            studyId: 's_retry',
+            title: 'Line',
+            sourceOrder: 0,
+            root: rootNode,
+          ),
+        );
+
+        final dec1 = RepertoireDecision.create(
+          studyId: 's_retry',
+          chapterId: 'ch_r',
+          nodeId: 'n_root',
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          canonicalStateId: 'canon_r1',
+        );
+        // Learned and not due: auto-traversal plays Nf3 through it and grants exposure credit.
+        final dec2 = RepertoireDecision.create(
+          studyId: 's_retry',
+          chapterId: 'ch_r',
+          nodeId: 'n_e5',
+          expectedMoves: const [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+          canonicalStateId: 'canon_r2',
+        );
+        // Due, so traversal stops here and the session has somewhere to advance to.
+        final dec3 = RepertoireDecision.create(
+          studyId: 's_retry',
+          chapterId: 'ch_r',
+          nodeId: 'n_nc6',
+          expectedMoves: const [RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4')],
+          canonicalStateId: 'canon_r3',
+        );
+        await repo.saveDecisions([dec1, dec2, dec3]);
+
+        final dec2Due = now.add(const Duration(days: 5));
+        const dec2Stability = 5.0 * 86400000;
+        await repo.savePositionKnowledgeState(
+          PositionKnowledgeState(
+            canonicalId: 'canon_r2',
+            stability: dec2Stability,
+            difficulty: 4.5,
+            repetitionCount: 2,
+            lastReviewedAt: now.subtract(const Duration(days: 2)),
+            nextDueAt: dec2Due,
+          ),
+        );
+
+        final session = await service.startSession(scope: const ReviewScope.study('s_retry'));
+        expect(session.currentPrompt?.decision.id, dec1.id);
+
+        // Lapse first, so the retry below is the natural next call. The lapse also propagates
+        // contagion into dec2, so the retry's exposure credit has to be measured against the
+        // state the lapse left behind, not against the value dec2 was seeded with.
+        final lapse = await service.submitMove(from: 'd2', to: 'd4');
+        expect(lapse.isCorrect, isFalse);
+
+        final afterLapse = await repo.getPositionKnowledgeState('canon_r2');
+        expect(afterLapse, isNotNull);
+        expect(afterLapse!.stability, lessThan(dec2Stability));
+        final afterLapseDue = afterLapse.nextDueAt!;
+
+        final retry = await service.retryMove(from: 'e2', to: 'e4');
+        expect(retry.isCorrect, isTrue);
+        // Traversal walked e5 -> (auto-played Nf3) -> Nc6 and stopped at the due decision.
+        expect(retry.nextPrompt?.decision.id, dec3.id);
+        expect(retry.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6']);
+        expect(retry.sideEffectStates, isNotEmpty);
+
+        // The exposure credit is in the store, not only in memory. Left in memory it would be
+        // lost on restart, and the next session would plan as though the continuation had
+        // never been walked.
+        final persisted = await repo.getPositionKnowledgeState('canon_r2');
+        expect(persisted, isNotNull);
+        expect(persisted!.stability, greaterThan(afterLapse.stability));
+        expect(persisted.nextDueAt!.isAfter(afterLapseDue), isTrue);
+      } finally {
+        await db.close();
+      }
+    });
+
     group('session ownership', () {
       test(
         'a session that resolves after a newer one has been requested does not become active',
