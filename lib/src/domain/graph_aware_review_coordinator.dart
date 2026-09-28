@@ -165,7 +165,14 @@ class GraphAwareReviewCoordinator {
     String? playedMoveUci,
     List<GraphNode> siblings = const [],
   }) {
-    final canonicalId = repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
+    // `node.decisionId` is already the canonical memory id — the caller resolved it from the
+    // decision that was actually asked. It must not be re-resolved through `canonicalIdFor`:
+    // that map is keyed by (FEN, single move), which is deliberately coarser than the canonical
+    // id. Two questions on one position that accept a shared first move but different
+    // continuations are separate memory items (position_knowledge_state.dart:22-38), so a
+    // (FEN, move) lookup resolves them to whichever was written last and schedules this answer
+    // against the wrong question's history.
+    final canonicalId = node.decisionId;
     final previous = repo.get(canonicalId) ?? ReviewState.initial(decisionId: canonicalId);
 
     final updatedPrimary = scheduler.schedule(previous: previous, result: result, now: now);
@@ -194,7 +201,9 @@ class GraphAwareReviewCoordinator {
   /// Never touches repetitionCount, lapseCount, difficulty, or lastReviewedAt.
   /// Throttled to once per calendar day per decision.
   ReviewState? recordAutoTraversalExposure({required GraphNode node, required DateTime now}) {
-    final canonicalId = repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
+    // As in recordActiveReview: the id is already canonical, and re-resolving it through the
+    // coarser (FEN, move) map can credit a neighbouring question instead of this one.
+    final canonicalId = node.decisionId;
     final previous = repo.get(canonicalId);
     if (previous == null || previous.stability <= 0) {
       return previous ?? ReviewState.initial(decisionId: canonicalId);
@@ -272,7 +281,10 @@ class GraphAwareReviewCoordinator {
   }) {
     for (final sib in siblings) {
       if (sib.expectedMoveUci != playedMoveUci) continue;
-      final sibCanonicalId = repo.canonicalIdFor(sib.fen4, sib.expectedMoveUci) ?? sib.decisionId;
+      // `sib.decisionId` is the sibling's own canonical id, set by the caller that built the
+      // node. Resolving it through the coarser (FEN, move) map would bump whichever question
+      // shares that key, which for a sibling pair is precisely the one that must not be touched.
+      final sibCanonicalId = sib.decisionId;
       final sibState = repo.get(sibCanonicalId);
       if (sibState == null) continue;
 
