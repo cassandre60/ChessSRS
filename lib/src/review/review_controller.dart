@@ -23,6 +23,18 @@ final Logger _logger = Logger('ReviewController');
 
 enum ReviewFeedback { none, correct, incorrect }
 
+/// Lichess answered 404 for a study id.
+///
+/// The cause is genuinely ambiguous: a private study and a study that does not exist are
+/// indistinguishable to an anonymous request, and Lichess returns 404 for both rather than 403.
+/// So the UI must not assert which one it was — it can only offer to sign in and retry.
+///
+/// Extends [FormatException] so existing callers that catch it keep working unchanged; the
+/// type is what lets the import dialog branch on the case without matching on message text.
+class StudyNotFoundException extends FormatException {
+  const StudyNotFoundException(super.message);
+}
+
 class ReviewScreenState {
   const ReviewScreenState({
     required this.studies,
@@ -1189,21 +1201,21 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       pgnText = await studyRepo.getStudyPgn(StudyId(studyRef.id), host: studyRef.host);
     } on ServerException catch (e) {
       if (e.statusCode == 404) {
-        throw const FormatException(
+        throw const StudyNotFoundException(
           'Study not found on Lichess. Ensure the study is public or unlisted.',
         );
       }
       throw FormatException('Failed to load study from Lichess (${e.statusCode}): ${e.message}');
     } on ClientException catch (e) {
       if (e.message.contains('404')) {
-        throw const FormatException(
+        throw const StudyNotFoundException(
           'Study not found on Lichess. Ensure the study is public or unlisted.',
         );
       }
       rethrow;
     } catch (e) {
       if (e.toString().contains('404')) {
-        throw const FormatException(
+        throw const StudyNotFoundException(
           'Study not found on Lichess. Ensure the study is public or unlisted.',
         );
       }

@@ -6,9 +6,11 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/view/account/account_menu.dart';
 import 'package:chess_srs/src/view/settings/app_log_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/board_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/engine_settings_screen.dart';
@@ -60,6 +62,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
     final boardPrefs = ref.watch(boardPreferencesProvider);
     final dbSize = ref.watch(getDbSizeInBytesProvider);
     final accent = ref.watch(srsAccentProvider);
+    final authUser = ref.watch(authControllerProvider);
 
     final isDark =
         generalPrefs.themeMode == BackgroundThemeMode.dark ||
@@ -135,7 +138,30 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // 1. Section: Review & Spaced Repetition
+                          // 1. Section: Account
+                          //
+                          // The only entry point to the account cluster. It was reachable through
+                          // a bottom-nav "More" tab until that shell was removed, and the row was
+                          // not replaced, so signing in, signing out, the profile and the about
+                          // page all sat in widgets nothing could navigate to. The import dialog
+                          // offers sign-in in context for private studies; this is the way back
+                          // for everything else, including signing out again.
+                          _buildSectionHeader('Account', c),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border(top: BorderSide(color: c.hairline)),
+                            ),
+                            child: _NavRow(
+                              label: 'Lichess account',
+                              help: 'Sign in to import private and unlisted studies.',
+                              value: authUser == null ? 'Not signed in' : authUser.user.name,
+                              onTap: () =>
+                                  Navigator.of(context).push(AccountMenuScreen.buildRoute(context)),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+
+                          // 2. Section: Review & Spaced Repetition
                           _buildSectionHeader('Review & Spaced Repetition', c),
                           Container(
                             decoration: BoxDecoration(
@@ -252,7 +278,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 2. Section: Appearance & Theme
+                          // 3. Section: Appearance & Theme
                           _buildSectionHeader('Appearance & Theme', c),
                           Container(
                             decoration: BoxDecoration(
@@ -293,7 +319,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 3. Section: Board & Pieces
+                          // 4. Section: Board & Pieces
                           _buildSectionHeader('Board & Pieces', c),
                           Container(
                             decoration: BoxDecoration(
@@ -313,7 +339,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 4. Section: Sound & Audio
+                          // 5. Section: Sound & Audio
                           _buildSectionHeader('Sound & Audio', c),
                           Container(
                             decoration: BoxDecoration(
@@ -341,7 +367,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 5. Section: Chess Engine
+                          // 6. Section: Chess Engine
                           _buildSectionHeader('Chess Engine', c),
                           Container(
                             decoration: BoxDecoration(
@@ -359,7 +385,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 6. Section: Data & Diagnostics
+                          // 7. Section: Data & Diagnostics
                           _buildSectionHeader('Data & Diagnostics', c),
                           Container(
                             decoration: BoxDecoration(
@@ -398,7 +424,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                           ),
 
-                          // 7. Section: About & Licences
+                          // 8. Section: About & Licences
                           _buildSectionHeader('About', c),
                           Container(
                             decoration: BoxDecoration(

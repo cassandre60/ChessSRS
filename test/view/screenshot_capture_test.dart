@@ -33,6 +33,7 @@ import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/model/study/study_repository.dart' as lichess_study;
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
@@ -40,6 +41,7 @@ import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_settings.dart';
+import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -49,7 +51,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override, ProviderOrFamily;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart' show Scaffold;
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:material_ui/material_ui.dart' show Scaffold, TextField;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../binding.dart';
@@ -422,6 +426,51 @@ void main() {
           brightness: brightness,
         );
       }, skip: !_enabled);
+
+      // The import dialog's Lichess tab, signed out, in the two states the sign-in affordance
+      // has. The quiet one is the resting state a user importing a public study sees, and it is
+      // the state that decides whether the affordance is too loud; the other is what a private
+      // study produces, where the 404 is ambiguous and the dialog offers sign-in and retry.
+      // Both are captured because the second only makes sense next to the first: judged alone
+      // it looks like a reasonable error screen, and the whole point is how little it changes.
+      for (final (state, studyUrl) in const [('quiet', ''), ('private-404', 'm1AbCd2E')]) {
+        testWidgets('capture: import dialog ($state), $label, ${brightness.name}', (tester) async {
+          await capture(
+            tester,
+            screen: 'import-dialog-$state',
+            label: label,
+            // The dialog is dialog content, not a screen: it paints a Stack over whatever is
+            // behind it, and the capture harness rejects a frame with no Scaffold. So it is
+            // hosted the way the scope drawer capture hosts itself, on a plain surface.
+            home: const Scaffold(body: RepertoireImportDialog()),
+            surface: surface,
+            brightness: brightness,
+            overrides: {
+              lichess_study.studyRepositoryProvider: lichess_study.studyRepositoryProvider
+                  .overrideWith(
+                    (ref) => lichess_study.StudyRepository(
+                      ref,
+                      MockClient((_) async => http.Response('Not Found', 404)),
+                    ),
+                  ),
+            },
+            afterSettle: state == 'quiet'
+                ? null
+                : (tester) async {
+                    // Drive the real 404 path rather than forcing a widget state, so the capture
+                    // shows what a user would see. `ensureVisible` first, because the dialog body
+                    // is taller than a landscape phone: without it the tap lands on whatever is
+                    // actually at that point on screen, the import never runs, and the capture
+                    // silently records the resting state while claiming to record a failure.
+                    await tester.enterText(find.byType(TextField).first, studyUrl);
+                    await tester.ensureVisible(find.text('Fetch & Import from Lichess'));
+                    await tester.pumpAndSettle();
+                    await tester.tap(find.text('Fetch & Import from Lichess'));
+                    await tester.pumpAndSettle();
+                  },
+          );
+        }, skip: !_enabled);
+      }
 
       // The Explore hub the Library sheet's single "Analysis" row opens. It lists the three tools
       // plus a chapters entry, so the study list it can reach is visible as absent here -- which is
