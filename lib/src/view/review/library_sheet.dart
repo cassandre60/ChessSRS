@@ -109,15 +109,7 @@ class SrsLibrarySheet extends ConsumerWidget {
             onTap: () => Navigator.of(context).pop(),
           ),
         ),
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onVerticalDragEnd: (details) {
-            if ((details.primaryVelocity ?? 0) > 150) {
-              Navigator.of(context).pop();
-            }
-          },
-          child: content,
-        ),
+        SrsSheetDismissible(child: content),
       ],
     );
   }

@@ -150,3 +150,35 @@ Future<T?> showSrsSheet<T>(BuildContext context, Widget child, {bool isDismissib
     builder: (_) => child,
   );
 }
+
+/// Finger-tracking drag-to-dismiss for the custom dialog sheets.
+///
+/// The Library, scope, study-actions and import sheets are plain routes over
+/// `showGeneralDialog`, so unlike `showModalBottomSheet` they get no drag
+/// handling from the framework: a swipe down previously did nothing until
+/// release, then the sheet vanished in one frame (owner report 2026-09-29).
+/// A downward [Dismissible] around the sheet content makes it follow the
+/// finger, snap back under the threshold, and fling away past it — and only
+/// then pops the route.
+class SrsSheetDismissible extends StatelessWidget {
+  const SrsSheetDismissible({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: const ValueKey('srs-sheet-dismissible'),
+      direction: DismissDirection.down,
+      dismissThresholds: const {DismissDirection.down: 0.25},
+      movementDuration: const Duration(milliseconds: 200),
+      // Translucent, like the drag-end detector this replaces: taps outside
+      // the sheet must keep reaching the barrier behind it (barrier-tap
+      // dismissal broke under the default opaque, which claims taps across
+      // the whole route area). Drags starting on the sheet still track.
+      behavior: HitTestBehavior.translucent,
+      onDismissed: (_) => Navigator.of(context).pop(),
+      child: child,
+    );
+  }
+}

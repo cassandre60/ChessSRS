@@ -349,15 +349,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
             onTap: () => Navigator.of(context).pop(),
           ),
         ),
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onVerticalDragEnd: (details) {
-            if ((details.primaryVelocity ?? 0) > 150) {
-              Navigator.of(context).pop();
-            }
-          },
-          child: content,
-        ),
+        SrsSheetDismissible(child: content),
       ],
     );
   }
@@ -817,10 +809,17 @@ class StudyActionsSheet extends StatelessWidget {
         Positioned.fill(
           child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onDismiss),
         ),
+        // Finger-tracking drag-to-dismiss, shared with the Library/scope/import
+        // sheets (owner report 2026-09-29): this dialog previously had no swipe
+        // handling at all.
         if (isWide)
-          Positioned(left: _popoverLeft(size), top: _popoverTop(size), child: sheet)
+          Positioned(
+            left: _popoverLeft(size),
+            top: _popoverTop(size),
+            child: SrsSheetDismissible(child: sheet),
+          )
         else
-          Positioned(left: 8, right: 8, bottom: 8, child: sheet),
+          Positioned(left: 8, right: 8, bottom: 8, child: SrsSheetDismissible(child: sheet)),
       ],
     );
   }
