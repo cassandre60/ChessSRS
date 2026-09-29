@@ -3851,5 +3851,20 @@
         "type": "String"
       }
     }
-  }
+  },
+  "reviewNoStudiesHeadline": "Bring your repertoire.",
+  "reviewNoStudiesSubtext": "Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.",
+  "reviewNoStudiesDropZone": "Drop a PGN file here",
+  "reviewNoStudiesChooseFile": "Choose file",
+  "reviewNoStudiesPastePgn": "Paste PGN text",
+  "reviewNoStudiesImportLichess": "Import a Lichess study",
+  "reviewNoStudiesTrainAs": "Train as",
+  "reviewNoStudiesAuto": "Auto",
+  "reviewNoStudiesWhite": "White",
+  "reviewNoStudiesBlack": "Black",
+  "reviewNothingDuePractice": "Practice",
+  "reviewNothingDueChooseRepertoire": "Choose a repertoire",
+  "reviewNothingDueChangeDailyLimit": "Change daily limit",
+  "reviewNothingDuePracticeDoesNotChangeSchedule": "Practice never changes your schedule.",
+  "reviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule."
 }
