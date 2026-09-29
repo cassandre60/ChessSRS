@@ -360,3 +360,16 @@ foundation already contains study-tree and game-tree prior art.
   concluding anything about what a worktree has changed. Verified by: 52 files
   / 13,844 insertions / 24,106 deletions before the format, empty after, with
   the test suite green either way.
+- [2026-09-29, Space Bunny Free] A worktree is not a working directory, it is
+  the *only* place you may write, and the isolation rule is easy to break by
+  inattention rather than by a `git reset`. Editing two docs in the shared main
+  tree while a worktree sat idle put the edits among another agent's in-flight
+  l10n churn, where they would have been committed as part of unrelated work or
+  reverted with it. Nothing was lost because the diff was saved first, but it
+  had to be extracted, checked line by line to confirm it contained only those
+  two files' changes, reverted, and redone in a worktree. Do all editing inside
+  the worktree and branch from `origin/main`, not local `main`: local main was
+  1 commit ahead of origin with another agent's unpushed work, so a branch cut
+  from it would have carried their commit into the PR. Verified by: diffing the
+  two files to confirm 29 added lines and 0 deletions before reverting, then
+  re-applying the same patch on a fresh branch off `ea1d09678`.

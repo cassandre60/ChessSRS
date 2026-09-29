@@ -270,6 +270,34 @@ Study import is built and reachable today:
 So a signed-in user's token really is validated at the next launch, and really is deleted
 when Lichess reports it dead. **This is live code, not dead code.**
 
+**A second correction, 2026-09-29: the fourth bullet above was circular, and sign-in was not
+reachable at all.** `account_menu.dart:170` is the `onPressed` of the sign-in button *inside*
+`AccountMenuScreen`, so citing it as evidence the account menu was reachable proved nothing —
+it is a line within the subtree whose reachability was the claim. The check that settles it is
+reachability from the widget tree, not the presence of a handler:
+
+- `AccountMenuButton` was never instantiated anywhere in the app. Its sole reference to
+  `AccountMenuScreen.buildRoute` was inside its own closure, and no view constructed the button.
+- `AccountMenuScreen` was referenced only from its own file.
+- `showSignInOptions` was called only from inside `AccountMenuScreen`.
+- `signOut` was invoked only from inside `AccountMenuScreen`.
+
+So both signing in and signing out were impossible from the UI, which also made this note's
+own claim that study import is "built and reachable" wrong in the part that matters most: a
+private study needs a token, and there was no way to obtain one. The bullet above is retained
+as written because this note is a record of what was believed on the date it was written, and
+the correction belongs next to it rather than replacing it.
+
+Fixed in PR #84 (merged 2026-09-29): an `Account` section in `SrsSettingsScreen` provides the
+entry point, and the import dialog offers sign-in in context when a study import comes back 404
+while signed out — the case that is ambiguous, since Lichess answers the same for a private
+study as for one that does not exist.
+
+The lesson generalises past this finding: **a reachability claim needs a reference from outside
+the subtree it describes.** A handler inside an unreachable screen is not evidence the screen is
+reachable, and the grep that seemed to confirm it — finding `AccountMenuScreen` at all — is
+exactly the check that passes while the bug is live.
+
 That does not change the decision, but it does change why the decision is defensible:
 
 - It is **inherited upstream code, unchanged since the fork's foundation commit**, with years of production use behind it. The project's own rule is that inherited behaviour is not this fork's to change unilaterally, and reshaping working code purely so a test can reach it is the weakest version of that rule.

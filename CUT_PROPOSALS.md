@@ -30,8 +30,8 @@ These are the authoritative decisions from the owner. Do not override them.
 
 | # | Decision | Rationale |
 |---|---|---|
-| C1 Firebase | `[G]` GREY | Undecided — leave untouched |
-| C2 Notifications | `[G]` GREY | May be needed for SRS review reminders (like Anki) — leave untouched |
+| C1 Firebase | `[K]` KEEP | Owner decision 2026-09-29: keep, because notifications need it (C2). Still pointed at Lichess's own project (`lichessv2` / `org.lichess.mobileV2`) — see the open item below |
+| C2 Notifications | `[K]` KEEP | Owner decision 2026-09-29: keep. FCM path is live and is the *only* thing keeping the Firebase project in use; but it delivers Lichess push, not SRS reminders — see the open item below |
 | C3 Auth/login | `[K]` KEEP | Login is optional but enables importing Lichess/chess.com studies; app is 100% functional offline without it |
 | C4 Online play | `[x]` DONE | Removed 2026-09-15 — lobby, seeks, challenges, view/play, model/lobby, model/challenge |
 | C5 Server games | `[x]` DONE | Removed 2026-09-15 — server game lifecycle, correspondence, GameScreen, ongoing games |
@@ -131,6 +131,51 @@ Step 18 [x]  C5/C6 — Dead Android system gestures exclusion utility & method c
 
 Steps beyond 12 (C12 offline computer, C13 engine) are blocked on owner
 GREY decisions and are not started until explicit approval.
+
+---
+
+## C1/C2 decided 2026-09-29 — keep, and what "keep" actually means here
+
+Owner decision: keep Firebase, because notifications need it. Recorded here because
+the decision and its consequences are easy to conflate, and only one of the two is
+a decision.
+
+**What is actually running.** The FCM path is live and started at launch
+(`lib/src/app.dart:123`). It requests permission, listens for token refresh, and
+registers on connectivity regain. It is real code doing real work.
+
+**What it delivers is not SRS reminders.** `CUT_PROPOSALS.md` C2 was written as
+"may be needed for SRS review reminders (like Anki)". That feature does not exist.
+There is no `zonedSchedule` and no topic subscription anywhere in `lib/`; the only
+display calls initialize the plugin (`lib/src/init.dart:71`). What the plumbing
+delivers today is Lichess's own push, registered against Lichess:
+
+```dart
+// lib/src/model/notifications/notification_service.dart:475
+client.post(Uri(path: '/mobile/register/firebase/$token'))
+```
+
+That request also returns early when no user is signed in (`:471`), so the whole
+notification path is gated behind sign-in — which is why the unreachable account
+menu (fixed in PR #84) was suppressing notifications as well as study import.
+
+**The consequence that is not a decision.** Keeping Firebase keeps
+`lib/firebase_options.dart` pointed at Lichess's project — `lichessv2`,
+`org.lichess.mobileV2`. So:
+
+- FCM device tokens are registered on **Lichess's** backend, not one we control.
+- Crashlytics non-fatals, including sign-in failures
+  (`lib/src/model/auth/sign_in_failure_reporter.dart`), go to **Lichess's**
+  console.
+
+`lib/firebase_options.dart` is generated, so this is a console-and-regeneration
+task, not a code edit. It stays open because it is a consequence of the decision,
+not a separate decision.
+
+**What would change the answer.** Building the Anki-style daily review reminder
+that C2 was written for would need a backend we own, and at that point owning the
+Firebase project stops being optional. That is the decision to revisit first if
+notifications are ever built for real.
 
 ---
 
