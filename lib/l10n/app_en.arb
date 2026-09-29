@@ -3851,5 +3851,9 @@
         "type": "String"
       }
     }
-  }
+  },
+  "settingsBoardLandscapePosition": "Board position in landscape mode",
+  "settingsBoardMoveOnRelease": "Move on release",
+  "settingsBoardMoveOnReleaseHelp": "When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.",
+  "settingsAccountPrefsSaved": "Your preferences have been saved in your Lichess account. They will be synchronized across all your devices."
 }
