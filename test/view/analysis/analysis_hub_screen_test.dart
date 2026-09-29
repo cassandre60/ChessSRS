@@ -3,9 +3,11 @@
 
 import 'package:chess_srs/src/domain/chapter.dart';
 import 'package:chess_srs/src/domain/study.dart';
+import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/study_chapters_screen.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,6 +74,51 @@ void main() {
       // The existing screen, not a new one: this hub routes, it does not reimplement.
       expect(find.byType(StudyChaptersScreen), findsOneWidget);
       expect(find.text('Sicilian: Najdorf'), findsOneWidget);
+    });
+  });
+
+  group('review position', () {
+    // Owner report 2026-09-29: the tools opened the start position instead of
+    // the position on the review board. These pin the helpers the hub routes
+    // through, so a regression back to startpos fails here first.
+    const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
+
+    test('position PGN carries the FEN', () {
+      expect(reviewPositionPgn(fen), contains('[FEN "$fen"]'));
+    });
+
+    test('position PGN parses with the FEN intact', () {
+      final game = PgnGame.parsePgn(reviewPositionPgn(fen));
+      expect(game.headers['FEN'], fen);
+    });
+
+    test('analysis opens the review position, not standalone', () {
+      final options = analysisOptionsForReviewPosition(fen: fen, orientation: Side.black);
+      expect(options, isA<Pgn>());
+      final pgn = options as Pgn;
+      expect(pgn.pgn, contains(fen));
+      expect(pgn.orientation, Side.black);
+    });
+
+    test('analysis falls back to standalone with no review position', () {
+      expect(
+        analysisOptionsForReviewPosition(fen: null, orientation: Side.white),
+        isA<Standalone>(),
+      );
+    });
+
+    test('explorer opens the review position, not startpos', () {
+      final options = explorerOptionsForReviewPosition(fen: fen, orientation: Side.black);
+      expect(options, isA<Pgn>());
+      final pgn = options as Pgn;
+      expect(pgn.pgn, contains(fen));
+      expect(pgn.orientation, Side.black);
+    });
+
+    test('explorer falls back to startpos with no review position', () {
+      final options = explorerOptionsForReviewPosition(fen: null, orientation: Side.white);
+      final pgn = (options as Pgn).pgn;
+      expect(pgn, isEmpty);
     });
   });
 }
