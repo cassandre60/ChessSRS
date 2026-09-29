@@ -1,35 +1,8 @@
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:chess_srs/src/styles/lichess_icons.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-class AppBarLichessTitle extends StatelessWidget {
-  const AppBarLichessTitle({super.key, this.iconSize = 24});
-
-  final double iconSize;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          WidgetSpan(
-            alignment: .bottom,
-            child: Icon(LichessIcons.logo_lichess, size: iconSize),
-          ),
-          const TextSpan(text: ' lichess'),
-          TextSpan(
-            text: '.org',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
-          ),
-        ],
-      ),
-      maxLines: 1,
-    );
-  }
-}
 
 /// A widget that displays a title in the app bar with auto-sizing text.
 class AppBarTitleText extends StatelessWidget {

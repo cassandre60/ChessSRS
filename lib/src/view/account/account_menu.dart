@@ -414,9 +414,13 @@ class AboutScreen extends ConsumerWidget {
                 onTap: () {
                   showLicensePage(
                     context: context,
-                    applicationName: 'Lichess',
+                    applicationName: 'ChessSRS',
                     applicationVersion: packageInfo.version,
-                    applicationIcon: const Icon(LichessIcons.logo_lichess),
+                    applicationIcon: Image.asset(
+                      'assets/brand/icon-1024.png',
+                      width: 48,
+                      height: 48,
+                    ),
                   );
                 },
               ),
