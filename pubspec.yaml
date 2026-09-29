@@ -149,7 +149,6 @@ flutter:
     - assets/sounds/standard/
     - assets/sounds/sfx/
     - assets/sounds/diagram/
-    - assets/board-thumbnails/
     - assets/maia/
     - assets/positions.json
     - assets/endgames.json

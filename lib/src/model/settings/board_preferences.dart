@@ -226,11 +226,7 @@ sealed class BoardPrefs with _$BoardPrefs implements Serializable {
     // If the boardTheme is diagram (or fallback default), and srsColors is present,
     // use Diagram's bespoke hatched color scheme.
     // If the user selected an alternative theme (e.g. Wood, Blue, etc.), respect that choice.
-    final isDiagramOrFallback =
-        boardTheme == BoardTheme.diagram ||
-        boardTheme == BoardTheme.system ||
-        boardTheme == BoardTheme.brown;
-    final colorScheme = (isDiagramOrFallback && srsColors != null)
+    final colorScheme = (boardTheme.usesSrsBoard && srsColors != null)
         ? srsBoardColorScheme(srsColors)
         : boardTheme.colors;
 
@@ -374,59 +370,38 @@ enum BoardTheme {
     }
   }
 
-  Widget get thumbnail => switch (this) {
-    BoardTheme.diagram => Builder(
-      builder: (context) {
-        final srsColors = SrsTheme.maybeOf(context) ?? SrsColors.light(kSrsDefaultAccent);
-        return SizedBox(
-          height: 44,
-          width: 44 * 6,
-          child: Row(
-            children: [
-              for (final c in const [1, 2, 3, 4, 5, 6])
-                Container(
-                  width: 44,
-                  color: c.isEven ? srsColors.squareDark : srsColors.squareLight,
-                ),
-            ],
-          ),
-        );
-      },
-    ),
-    BoardTheme.system => SizedBox(
-      height: 44,
-      width: 44 * 6,
-      child: Row(
-        children: [
-          for (final c in const [1, 2, 3, 4, 5, 6])
-            Container(
-              width: 44,
-              color: c.isEven
-                  ? BoardTheme.system.colors.darkSquare
-                  : BoardTheme.system.colors.lightSquare,
-            ),
-        ],
-      ),
-    ),
-    BoardTheme.ic => SizedBox(
-      height: 44,
-      width: 44 * 6,
-      child: Row(
-        children: [
-          for (final c in const [1, 2, 3, 4, 5, 6])
-            Container(
-              width: 44,
-              color: c.isEven ? BoardTheme.ic.colors.darkSquare : BoardTheme.ic.colors.lightSquare,
-            ),
-        ],
-      ),
-    ),
-    _ => Image.asset(
-      'assets/board-thumbnails/$name.jpg',
-      height: 44,
-      errorBuilder: (context, o, st) => const SizedBox.shrink(),
-    ),
-  };
+  /// Whether this theme renders as the SRS hatched board rather than its own
+  /// colours (see [BoardPrefs.toBoardSettings]).
+  ///
+  /// Single source of truth for the render path and [thumbnail]: the settings
+  /// preview must show what the board will actually draw (owner report
+  /// 2026-09-29 — System previewed system colours and Brown a photo while both
+  /// drew the SRS board).
+  bool get usesSrsBoard =>
+      this == BoardTheme.diagram || this == BoardTheme.system || this == BoardTheme.brown;
+
+  /// A live preview of the first board row, drawn from the same colours the
+  /// board renders — never a stock photo (the old `assets/board-thumbnails`
+  /// jpgs drifted from the render and were removed).
+  Widget get thumbnail => Builder(
+    builder: (context) {
+      final srsColors = SrsTheme.maybeOf(context) ?? SrsColors.light(kSrsDefaultAccent);
+      // The same decision as the render path: SRS-backed themes preview the
+      // SRS squares, every other theme its own square colours.
+      final light = usesSrsBoard ? srsColors.squareLight : colors.lightSquare;
+      final dark = usesSrsBoard ? srsColors.squareDark : colors.darkSquare;
+      return SizedBox(
+        height: 44,
+        width: 44 * 6,
+        child: Row(
+          children: [
+            for (final c in const [1, 2, 3, 4, 5, 6])
+              Container(width: 44, color: c.isEven ? dark : light),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 enum MaterialDifferenceFormat {
