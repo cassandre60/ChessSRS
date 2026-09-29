@@ -792,7 +792,25 @@ class StudyActionsSheet extends StatelessWidget {
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [if (!isWide) const SrsSheetGrabber(), title, rows],
+      children: [
+        if (!isWide) const SrsSheetGrabber(),
+        // Scrollable so the last rows (Rename/Delete) stay reachable on small
+        // phones: the previous plain Column clipped them once the content
+        // exceeded the sheet's maxHeight with no way to scroll (owner report
+        // 2026-09-29 Q8). Flexible bounds the scroll to the sheet's maxHeight.
+        Flexible(
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [title, rows],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
 
     final sheet = SrsSheetSurface(
