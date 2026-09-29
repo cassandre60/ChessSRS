@@ -60,7 +60,9 @@ Every engineering task must follow:
 4. WRITE TESTS with the contract (dart test, widget test, or integration
    test as appropriate).
 5. IMPLEMENT minimally, following Lichess Mobile conventions (CLAUDE.md).
-6. TARGETED VERIFICATION: run the specific test file.
+6. TARGETED VERIFICATION: run the specific test file — once, and on a budget
+   (see §3.1). The owner's machine heats up under repeated local runs; every
+   local run you skip is a run CI does for you on merge.
 7. STATIC CHECK: `flutter analyze` on the files you touched.
    The full suite is CI's job — see the note on ./verify below. Do not run
    `./verify` as part of the inner loop.
@@ -69,6 +71,29 @@ Every engineering task must follow:
 10. UPDATE IMPLEMENTATION_PLAN.md / spec docs if boundaries changed.
 11. ATOMIC COMMIT matching repository conventions.
 ```
+
+### 3.1 Local test budget (the machine is not a build server)
+
+CI runs the full suite on every push. Local runs exist only to answer "does
+my change do what I claim" — one answer, minimum heat:
+
+- Iterate with `fvm flutter test <file> --plain-name '<test name>'`: one test,
+  not the file. The full file runs exactly once, at the end.
+- Never run neighbouring files, whole directories, or `./verify` locally to
+  "be safe" — that safety is what the PR's CI run is for. If you have a
+  concrete reason to suspect cross-file breakage, state it in the PR instead
+  of running it.
+- The fail-on-old-code check (stash + rerun) counts as the second run of the
+  file: pass run + fail run, then stop. No third run.
+- One `flutter analyze` per task, on the files touched, after the last edit —
+  not after every edit.
+- Never run two heavy commands at once (no test run beside build_runner, no
+  parallel worktrees verifying simultaneously). The per-worktree
+  `build_runner build` (~85s) is the one unavoidable cost; everything else is
+  negotiable.
+- `fvm flutter run -d linux` for runtime validation is exempt from the
+  budget but stays bounded: launch, exercise, quit. No release builds, ever
+  (§4).
 
 ### Isolation: one worktree per task, `main` only by merged PR
 
@@ -317,6 +342,15 @@ foundation already contains study-tree and game-tree prior art.
   Verified by: `review_controller_test.dart` failing inside a 128-test run and
   passing 30/30 in isolation, with `pumpAsync`'s `Future.delayed` as the only
   wall-clock wait in the path.
+- [2026-09-29, Muse Spark] "Run the specific test file" is not a budget: across
+  eight phone-feedback PRs the agent ran each file 3-5 times (new-test-only,
+  full file, stash fail-check, neighbouring files, repeat analyzes), plus a
+  62-test engine file and a 15-test account batch locally — all work CI repeats
+  on every push anyway. The owner's PC heated up for zero extra safety. Hence
+  §3.1: iterate with --plain-name, one full-file run at the end, fail-check
+  counts as run two, neighbours and ./verify are CI's job. Verified by: the
+  owner reporting the heat and asking for the rule, against a history of green
+  CI runs that had already covered every locally re-run file.
 - [2026-09-28, Space Bunny Free] `build_runner` writes `lib/l10n/*.dart` with
   different line wrapping than what is committed, so a fresh worktree shows 52
   files and ~38,000 changed lines that are pure formatting. Run
