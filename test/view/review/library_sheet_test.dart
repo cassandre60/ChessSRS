@@ -52,4 +52,22 @@ void main() {
       expect(hub, contains(destination), reason: 'the hub must reach $destination');
     }
   });
+
+  testWidgets('study management lives in the scope drawer, not the Library sheet', (tester) async {
+    final sheet = await rowLabels(tester, const SrsLibrarySheet());
+
+    expect(
+      sheet,
+      isNot(contains('Import PGN')),
+      reason: 'Import PGN lives in the scope drawer pill; duplicating it here gives two paths',
+    );
+    expect(
+      sheet,
+      isNot(contains('Studies & Repertoires')),
+      reason: 'scope button already opens the drawer; this row was a redundant hop',
+    );
+    // Guard the survivors so a future edit cannot empty the sheet silently.
+    expect(sheet, contains('Analysis'));
+    expect(sheet, contains('Settings'));
+  });
 }

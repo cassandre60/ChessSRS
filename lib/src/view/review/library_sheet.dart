@@ -6,8 +6,6 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
-import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
-import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -146,29 +144,13 @@ class SrsLibrarySheet extends ConsumerWidget {
           ] else
             const SizedBox(height: 8),
 
-          // Group 1: Add repertoire
-          _buildRow(
-            c: c,
-            title: 'Import PGN',
-            subtitle: 'From a file, pasted text or a Lichess study',
-            onTap: () {
-              Navigator.pop(context);
-              RepertoireImportDialog.show(context);
-            },
-          ),
-          _buildRow(
-            c: c,
-            title: 'Studies & Repertoires',
-            subtitle: 'Choose active study or opening hub',
-            onTap: () {
-              Navigator.pop(context);
-              ReviewScopeDrawer.show(context);
-            },
-          ),
-
-          _buildDivider(c),
-
-          // Group 2: Explore.
+          // Group 1: Explore.
+          //
+          // Import PGN and Studies & Repertoires used to live here. They were a
+          // second path to the scope drawer, which already owns study choice
+          // plus import (owner decision 2026-09-29): scope button > Repertoires
+          // group + Import PGN pill. Leaving them here gave two paths to one
+          // screen, so they were removed. This sheet offers tools + settings.
           //
           // These were three flat rows here, which left this sheet doing two unrelated jobs:
           // choosing a repertoire to review, and listing tools. They now live in one screen,
@@ -186,7 +168,7 @@ class SrsLibrarySheet extends ConsumerWidget {
           ),
           _buildDivider(c),
 
-          // Group 3: Preferences & Settings
+          // Group 2: Preferences & Settings
           _buildGroupHeader('Preferences', c),
           _buildRow(
             c: c,
