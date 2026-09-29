@@ -108,10 +108,14 @@ class SrsColors {
       hairline: const Color.fromRGBO(236, 238, 241, 0.14),
       hairlineSoft: const Color.fromRGBO(236, 238, 241, 0.06),
       scrim: const Color.fromRGBO(0, 0, 0, 0.5),
-      squareLight: const Color(0xFF11141A),
-      squareDark: const Color(0xFF161A22),
+      // Board order is a chess fundamental, pinned in CI: the light squares
+      // must read lighter than the dark ones (h1 light, a1 dark). The previous
+      // values were inverted in luminance (#11141A over #161A22), so on a phone
+      // in dark mode h1 rendered darker than its neighbours.
+      squareLight: const Color(0xFF232A36),
+      squareDark: const Color(0xFF10141B),
       hatch: const Color.fromRGBO(236, 238, 241, 0.22),
-      halo: const Color(0xFF11141A),
+      halo: const Color(0xFF232A36),
       accent: accent,
       accentSoft: accent.withValues(alpha: 0.15),
       accentMid: accent.withValues(alpha: 0.30),
