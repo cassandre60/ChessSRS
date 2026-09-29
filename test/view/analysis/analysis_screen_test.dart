@@ -994,6 +994,17 @@ void main() {
           expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
           expect(find.widgetWithText(InlineMove, '+0.3'), findsOne);
         });
+
+        testWidgets('bottom bar has no Engine label or switch', (tester) async {
+          // Owner report 2026-09-29: the 'Engine' label is redundant chrome and
+          // the switch duplicates the button tap, which already toggles the
+          // engine. Both were removed; the button stays as the single control.
+          await makeEngineTestApp(tester, isCloudEvalEnabled: false);
+
+          expect(find.text('Engine'), findsNothing);
+          expect(find.byType(SrsSwitch), findsNothing);
+          expect(find.byType(EngineButton), findsOneWidget);
+        });
       });
 
       group('Engine analysis on move navigation', () {

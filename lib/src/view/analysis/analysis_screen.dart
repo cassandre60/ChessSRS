@@ -476,8 +476,6 @@ class _BottomBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ctrlProvider = analysisControllerProvider(options);
     final analysisState = ref.watch(ctrlProvider).requireValue;
-    final evalPrefs = ref.watch(engineEvaluationPreferencesProvider);
-    final c = context.srs;
     final notifier = ref.read(ctrlProvider.notifier);
 
     // Engine controls as individual wrap items rather than one atomic Row: inside a `Wrap` an
@@ -491,7 +489,9 @@ class _BottomBar extends ConsumerWidget {
       ref.watch(engineEvaluationProvider(filters));
       engineControls.addAll([
         const SrsRowRule(),
-        Text('Engine', style: SrsText.settingLabel(c.ink)),
+        // No 'Engine' label and no switch (owner report 2026-09-29): the
+        // button taps to toggle the engine off/on, so both were redundant
+        // chrome crowding the wrap row into extra lines.
         Builder(
           builder: (context) {
             Future<void>? toggleFuture;
@@ -529,13 +529,6 @@ class _BottomBar extends ConsumerWidget {
         // the fold were dropped -- the same failure mode as the viewport crush fixed in #15, still
         // live for archived games. Removing the duplicate takes the row to 635px, inside the 720px
         // two lines allow.
-        SrsSwitch(
-          value: evalPrefs.isEnabled,
-          semanticLabel: context.l10n.toggleLocalEvaluation,
-          onChanged: analysisState.isEngineAllowed
-              ? (_) => unawaited(notifier.toggleEngine())
-              : null,
-        ),
       ]);
     }
 
