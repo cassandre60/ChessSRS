@@ -3851,5 +3851,6 @@
         "type": "String"
       }
     }
-  }
+  },
+  "toggleSoundTooltip": "Toggle sound"
 }
