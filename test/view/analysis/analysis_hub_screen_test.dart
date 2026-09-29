@@ -10,6 +10,7 @@ import 'package:chess_srs/src/view/review/study_chapters_screen.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../test_provider_scope.dart';
 
@@ -17,12 +18,13 @@ import '../../test_provider_scope.dart';
 ///
 /// This exists because of a decision, not a design: `00-agent-brief.md` open decision 1 asked
 /// whether Analysis, Explorer and Board editor should be kept, folded into an "Explore" area, or
-/// cut. Owner decision 2026-09-28: fold them into one screen called Analysis, alongside an entry
-/// for a study's chapters. Chapters stay owned by the scope drawer for *choosing* what to review;
-/// this entry is for *browsing* them.
+/// cut. Owner decision 2026-09-28: fold them into one screen called Analysis, alongside an
+/// Explore-study entry (owner decision 2026-09-29 Q7: chapters open for free
+/// browsing, not quizzing). Chapters stay owned by the scope drawer for
+/// *choosing* what to review; this entry is for *browsing* them.
 void main() {
   group('Analysis hub', () {
-    testWidgets('offers the three tools and a chapters entry', (tester) async {
+    testWidgets('offers the three tools and an explore entry', (tester) async {
       final app = await makeTestProviderScopeApp(tester, home: const AnalysisHubScreen());
       await tester.pumpWidget(app);
       await tester.pumpAndSettle();
@@ -32,7 +34,7 @@ void main() {
       expect(find.text('Analysis board'), findsOneWidget);
       expect(find.text('Opening explorer'), findsOneWidget);
       expect(find.text('Board editor'), findsOneWidget);
-      expect(find.text('Chapters of a study'), findsOneWidget);
+      expect(find.text('Explore study'), findsOneWidget);
     });
 
     testWidgets('says so plainly when there is nothing to browse', (tester) async {
@@ -42,7 +44,7 @@ void main() {
 
       // Tapping with nothing imported must *say* so. A row that opens an empty sheet, or silently
       // does nothing, both read as a broken hub rather than as "you have no repertoires yet".
-      await tester.tap(find.text('Chapters of a study'));
+      await tester.tap(find.text('Explore study'));
       await tester.pumpAndSettle();
 
       expect(find.text('Import a repertoire first.'), findsOneWidget);
@@ -63,7 +65,7 @@ void main() {
       // put a second set of repertoire rows beside the scope drawer, which already owns that.
       expect(find.text('Sicilian Defense'), findsNothing);
 
-      await tester.tap(find.text('Chapters of a study'));
+      await tester.tap(find.text('Explore study'));
       await tester.pumpAndSettle();
 
       expect(find.text('Sicilian Defense'), findsOneWidget);
@@ -74,6 +76,30 @@ void main() {
       // The existing screen, not a new one: this hub routes, it does not reimplement.
       expect(find.byType(StudyChaptersScreen), findsOneWidget);
       expect(find.text('Sicilian: Najdorf'), findsOneWidget);
+    });
+
+    testWidgets('explorer mode browses without quizzing', (tester) async {
+      // Owner decision 2026-09-29 Q7: explore shows the answers, so the
+      // chapter rows offer Explore + Export but no Practice — Practice
+      // re-scopes the review queue, which is quizzing, not browsing.
+      final study = Study.create(title: 'Sicilian Defense');
+      final chapters = [Chapter.create(studyId: study.id, sourceOrder: 0, title: 'Najdorf')];
+
+      Future<void> pumpChapters({required bool explorer}) async {
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: StudyChaptersScreen(study: study, chapters: chapters, isExplorerMode: explorer),
+        );
+        await tester.pumpWidget(app);
+        await tester.pumpAndSettle();
+      }
+
+      await pumpChapters(explorer: true);
+      expect(find.byIcon(Symbols.explore_rounded), findsOneWidget);
+      expect(find.byIcon(Symbols.fitness_center_rounded), findsNothing);
+
+      await pumpChapters(explorer: false);
+      expect(find.byIcon(Symbols.fitness_center_rounded), findsOneWidget);
     });
   });
 

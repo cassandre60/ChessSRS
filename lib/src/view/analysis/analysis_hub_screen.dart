@@ -29,6 +29,10 @@ import 'package:material_ui/material_ui.dart' show Scaffold, showModalBottomShee
 /// home for the study list: the scope drawer still owns choosing what to review, and this screen
 /// only reaches the existing `StudyChaptersScreen`. The two overlap in subject matter and not in
 /// purpose, which is why the entry only appears once a study actually exists.
+///
+/// Tapping a chapter opens it in the analysis board: free browsing of all
+/// moves, variations and notes with no quizzing and no SRS writes — the
+/// answers to review's questions (owner decision 2026-09-29 Q7).
 /// Minimal PGN carrying a single FEN, so the analysis and explorer screens
 /// open on the review board's live position instead of the start position
 /// (owner report 2026-09-29). `PgnGame.parsePgn` honours the FEN header.
@@ -131,8 +135,8 @@ class AnalysisHubScreen extends ConsumerWidget {
                       ),
                       const _SectionHeader('Repertoires'),
                       SrsSettingsRow(
-                        label: 'Chapters of a study',
-                        help: 'Browse the chapters of a repertoire you imported',
+                        label: 'Explore study',
+                        help: 'Browse a repertoire\u2019s moves and notes freely, no quizzing',
                         onTap: () => _pickStudyToBrowse(context, ref),
                       ),
                     ],

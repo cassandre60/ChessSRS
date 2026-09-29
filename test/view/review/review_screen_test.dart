@@ -360,8 +360,8 @@ void main() {
       expect(find.text('Chapter 1: Open Games'), findsOneWidget);
       expect(find.text('Chapter 2: French Defense'), findsOneWidget);
 
-      // Tap Analyze icon on Chapter 1
-      await tester.tap(find.byTooltip('Analyze chapter').first);
+      // Tap Explore icon on Chapter 1
+      await tester.tap(find.byTooltip('Explore chapter').first);
       await pumpAsync(tester, 200);
       await tester.pumpAndSettle();
 

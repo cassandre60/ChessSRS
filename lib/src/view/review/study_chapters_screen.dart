@@ -224,22 +224,27 @@ class StudyChaptersScreen extends ConsumerWidget {
               children: [
                 IconButton(
                   icon: const Icon(Symbols.explore_rounded),
-                  tooltip: 'Analyze chapter',
+                  tooltip: 'Explore chapter',
                   onPressed: () =>
                       openChapterAnalysis(context, ref, study: study, chapter: chapter),
                 ),
-                IconButton(
-                  icon: const Icon(Symbols.fitness_center_rounded),
-                  tooltip: 'Practice chapter',
-                  onPressed: () {
-                    ref
-                        .read(reviewControllerProvider.notifier)
-                        .startPracticeMode(
-                          scope: ReviewScope.chapter(studyId: study.id, chapterId: chapter.id),
-                        );
-                    Navigator.of(context).pop();
-                  },
-                ),
+                // No Practice entry in explore mode: it re-scopes the review
+                // queue to this chapter, which is quizzing, not browsing
+                // (owner decision 2026-09-29 Q7). Practice stays where review
+                // lives — the scope drawer and the study actions sheet.
+                if (!isExplorerMode)
+                  IconButton(
+                    icon: const Icon(Symbols.fitness_center_rounded),
+                    tooltip: 'Practice chapter',
+                    onPressed: () {
+                      ref
+                          .read(reviewControllerProvider.notifier)
+                          .startPracticeMode(
+                            scope: ReviewScope.chapter(studyId: study.id, chapterId: chapter.id),
+                          );
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 IconButton(
                   icon: const Icon(Symbols.share_rounded),
                   tooltip: 'Export chapter PGN',

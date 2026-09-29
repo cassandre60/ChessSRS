@@ -152,7 +152,7 @@ class SrsLibrarySheet extends ConsumerWidget {
           _buildRow(
             c: c,
             title: 'Analysis',
-            subtitle: 'Analysis board, explorer, editor, chapters',
+            subtitle: 'Analysis board, explorer, editor, study explorer',
             onTap: () {
               Navigator.pop(context);
               Navigator.of(context, rootNavigator: true).push(AnalysisHubScreen.buildRoute());
