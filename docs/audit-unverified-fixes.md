@@ -3,10 +3,10 @@
 Four of the fixes in this series are shipped on reasoning rather than on a
 regression test. This records what each one does, what evidence exists, and what
 would close the gap. It exists so the caveat is not something a future reader has
-to rediscover from a commit message. A fifth, M4, has since been closed and is
-recorded at the end.
+to rediscover from a commit message. Two more have since been closed — M4, at the
+end, and M10, whose entry below is marked closed.
 
-None of these is a suspected defect. They are unproven.
+Of those still open, none is a suspected defect. They are unproven.
 
 ## M3 — engine subscription is cancelled on supersession
 
@@ -57,42 +57,43 @@ side to move, castling and en-passant, so this is compliance with a written
 invariant rather than a judgement call. It is in the offline move path, which is
 why it is worth a test eventually.
 
-## M10 — retry persists its side effects
+## M10 — retry persists its side effects — **now closed**
 
-**The fix.** `review_service.dart:256` persists `result.sideEffectStates` and
+**The fix.** `review_service.dart:282` persists `result.sideEffectStates` and
 rolls the session back if the write fails, mirroring `submitMove`.
 
-**Evidence.** None. Three attempts failed. In every scenario that could be built,
-a correct retry produced no side-effect states at all, so the fix was never
-exercised.
+**Evidence.** A service-level test now covers it, and fails without the fix.
+`review_service_test.dart`, *"retry side effects: a correct retry that walks a
+learned continuation persists the auto-traversal exposure credit"*.
 
-**What was established by instrumentation, after four failed test attempts.**
-The exposure credit on the correct-move path is produced in exactly one place,
-`review_session.dart:512`, gated on `mode != practice && nextDecision != null`.
-`recordAutoTraversalExposure` returns non-null on every path, including for a
-decision that has never been seen, so the only real condition is that there is a
-next decision. A probe at that gate fires **twice in the retry test alone**, and
-nine times across the review suite, with a non-null next decision each time.
+**The recipe, which is what the four earlier attempts were missing.** A line of
+**three** decisions, not two and not four:
 
-So the path is **live**: a correct retry does produce side effects, and the
-persistence fix is not dead code. An earlier reading of this file suggested it
-might be; that was wrong and is corrected here.
+1. the prompted decision (due),
+2. a decision that is **learned but not due** (so auto-traversal plays through it
+   and grants it exposure credit — the state that gets persisted),
+3. a decision that is **due** (so the traversal stops there).
 
-**Why the four test attempts still failed.** They all built a session where the
-retry had nowhere to advance to — a two-decision study, retrying the last
-decision — so `nextDecision` was null and the list stayed empty no matter what
-the persistence code did. A test needs a decision *after* the retried one, and
-that decision must itself be due. An attempt with a four-node tree and a second
-due decision still produced an empty batch, so the recipe is not complete and the
-remaining gap is in the session construction, not in the fix.
+The retry is preceded by a lapse on decision 1, so `retryMove` is the natural
+next call. Then `retryMove` walks `e5 → Nf3 (auto-played) → Nc6` and stops at 3,
+and `canon_r2` in `position_knowledge_state` comes back with a boosted stability
+and a later due date.
 
-**What would still close it.** A service-level test built on the working recipe
-from the domain-level tests, asserting that `saveAnswerBatch` receives a state
-for the position walked into.
+**The measurement trap, worth recording because it is what made the first
+version of this test fail.** Decision 2 is a *descendant* of decision 1, so the
+lapse on decision 1 propagates contagion into it first. Its stability after the
+lapse is roughly 0.908 of the seeded value, and the exposure credit then
+multiplies that by 1.08 — a net **0.98**, i.e. *below* where the seed was.
+Asserting "greater than the seeded stability" therefore fails on correct code.
+The test measures the retry against the state the lapse left behind.
 
-**Risk if wrong.** Low, and lower than this file previously implied: the path is
-reachable, so the fix does real work. It is still guarded by `isNotEmpty`, so it
-cannot corrupt anything when there is nothing to persist.
+Verified by disabling the persistence and watching the assertion fail with
+`Actual: 392076684.8240257` against `Expected: greater than
+392076684.8240257` — identical values, i.e. no write happened — and pass again
+with it restored.
+
+**Risk if wrong.** Now demonstrably none for this path: the fix does real work,
+and the test proves it.
 
 ## M15 — large imports hash off the UI isolate
 
@@ -119,17 +120,15 @@ for exactly this, and it is covered where the behaviour is observable.
 |---|---|---|---|
 | M3 | subscription cancel | low — hygiene only | no — would need a production change for testability |
 | M6 | repetition identity | very low — spec-mandated | awkward, needs a scripted engine |
-| M10 | retry side effects | low — path confirmed live | yes, recipe is known |
+| M10 | ~~retry side effects~~ | **closed** | **closed** |
 | M15 | isolate offloading | very low | no — unreachable under test |
 
 Two of the four (M6, M15) are better argued from the spec and from the helper's
 existing contract than from a test, and I would not spend more on them. M3 is not
 worth closing: its only observable effect is on a stream no test can reach, and
 asserting it would need a production change made purely for testability.
-M10 has since been settled by instrumentation: the path is live, a correct retry
-does produce side effects, and the fix is not dead code. The recipe for its test
-is now known — every failed attempt built a session where the retry had nowhere
-to advance to — even though the test itself is still unwritten.
+M10 is closed — the test exists and fails without the fix; its own entry records
+the recipe and the measurement trap.
 
 ## Closed since this file was written
 

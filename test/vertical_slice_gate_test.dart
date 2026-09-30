@@ -129,7 +129,11 @@ void main() {
         // design/docs/01-identity.md names the everywhere scope `All repertoires`; the top bar
         // shows it, and the scope list's first row shows the same string when the drawer opens.
         expect(find.text('All repertoires'), findsOneWidget);
-        expect(find.text('Repertoire vs Opponent'), findsOneWidget);
+        // The chapter's own title, taken from [Event]. This PGN carries
+        // [White "Repertoire"]/[Black "Opponent"] — this app's own placeholders, which the
+        // importer used to read first and show as the chapter name.
+        expect(find.text('Italian Game Repertoire'), findsOneWidget);
+        expect(find.text('Repertoire vs Opponent'), findsNothing);
         expect(find.text('White to play'), findsOneWidget);
 
         // -----------------------------------------------------------------------

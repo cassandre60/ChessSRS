@@ -1048,6 +1048,190 @@ void main() {
       );
     });
 
+    test('a review is scheduled against the question that was asked, not a different one '
+        'sharing its FEN and first move', () {
+      // Two chapters whose roots are the same position and which both accept e2e4, but which
+      // offer different complete answer sets. canonicalKeyForPosition keys those apart on
+      // purpose (position_knowledge_state.dart:22-38), so they are separate memory items — the
+      // code calls such a pair "confusable siblings" and hunts for them on purpose
+      // (review_session.dart:768-789).
+      final study = Study(
+        id: 'study-collision',
+        title: 'Collision',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+
+      // Shared first move e2e4, divergent second moves: two questions, one position.
+      const rootA = RepertoireNode(
+        id: 'nA-root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'nA-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'nA-e5',
+                fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'nA-d4',
+            fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+            children: [
+              RepertoireNode(
+                id: 'nA-d5',
+                fen: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2',
+                fenKey: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'd7', to: 'd5', san: 'd5'),
+              ),
+            ],
+          ),
+        ],
+      );
+      const rootB = RepertoireNode(
+        id: 'nB-root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'nB-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'nB-c5',
+                fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+                fenKey: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'nB-c4',
+            fen: 'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq c3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/2P5/8/PP1PPPPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'c2', to: 'c4', san: 'c4'),
+            children: [
+              RepertoireNode(
+                id: 'nB-e5',
+                fen: 'rnbqkbnr/pppp1ppp/8/2p5/2P5/8/PP1PPPPP/RNBQKBNR w KQkq e6 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/8/2p5/2P5/8/PP1PPPPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final chapterA = Chapter(
+        id: 'chA',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'A',
+        root: rootA,
+        createdAt: baseTime,
+      );
+      final chapterB = Chapter(
+        id: 'chB',
+        studyId: study.id,
+        sourceOrder: 1,
+        title: 'B',
+        root: rootB,
+        createdAt: baseTime,
+      );
+
+      // Canonical ids computed the way the importer computes them, from the complete accepted
+      // set — so they are genuinely different memory items.
+      final canonA = canonicalKeyForPosition(startKey, ['e2e4', 'd2d4']);
+      final canonB = canonicalKeyForPosition(startKey, ['e2e4', 'c2c4']);
+      expect(
+        canonA,
+        isNot(canonB),
+        reason: 'the two chapters must offer different answer sets for this to be a collision',
+      );
+
+      final decA = RepertoireDecision(
+        id: 'decA',
+        studyId: study.id,
+        chapterId: chapterA.id,
+        nodeId: rootA.id,
+        expectedMoves: const [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ],
+        canonicalStateId: canonA,
+      );
+      final decB = RepertoireDecision(
+        id: 'decB',
+        studyId: study.id,
+        chapterId: chapterB.id,
+        nodeId: rootB.id,
+        expectedMoves: const [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'c2', to: 'c4', san: 'c4'),
+        ],
+        canonicalStateId: canonB,
+      );
+
+      // decA is a mature memory item; decB has never been seen.
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapterA, chapterB],
+        decisions: [decA, decB],
+        reviewStates: {
+          canonA: ReviewState(
+            decisionId: canonA,
+            stability: 30.0 * 86400000,
+            difficulty: 4.0,
+            repetitionCount: 12,
+            lastReviewedAt: baseTime.subtract(const Duration(days: 3)),
+            nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          ),
+        },
+        scope: const ReviewScope.study('study-collision'),
+      );
+
+      // Never-reviewed positions sort ahead of scheduled ones, so decB is asked first and decA
+      // second. Both are answered, because the damage shows on the second: decA is the mature
+      // memory item, and answering it must advance decA's own history.
+      expect(session.currentPrompt?.decision.id, decB.id);
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, decA.id);
+
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+
+      // decA's own 12 repetitions are the base for the answer that was asked of it.
+      final afterA = session.reviewStates[canonA]!;
+      expect(
+        afterA.repetitionCount,
+        13,
+        reason: 'decA was the question asked; its own 12 repetitions must be the base',
+      );
+      expect(
+        afterA.stability,
+        greaterThan(30.0 * 86400000),
+        reason: "decA's accumulated stability must carry forward",
+      );
+      // decB got its own single correct answer and no more.
+      expect(
+        session.reviewStates[canonB]!.repetitionCount,
+        1,
+        reason: 'a second question at the same position was advanced by this answer',
+      );
+    });
+
     test('due-aware opponent selection counts due decisions keyed by canonicalId in subtree', () {
       final study = Study(
         id: 'study-canon-test',
