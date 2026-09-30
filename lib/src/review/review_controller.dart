@@ -261,7 +261,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       final hasText = prefs.showPgnComments && pgn.text?.trim().isNotEmpty == true;
       final hasShapes = prefs.showAnnotations && pgn.shapes.isNotEmpty;
       return hasText || hasShapes;
-    } catch (_) {
+    } on FormatException {
       return comment.trim().isNotEmpty;
     }
   }
@@ -269,7 +269,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   bool get _shouldAnimateOpponentPreMove {
     try {
       return ref.read(studyPreferencesProvider).animateOpponentPreMove;
-    } catch (_) {
+    } on Exception {
       return true;
     }
   }
