@@ -5,6 +5,7 @@ import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/analysis/analysis_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
+import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
 import 'package:chess_srs/src/model/game/player.dart';
@@ -492,32 +493,12 @@ class _BottomBar extends ConsumerWidget {
         // No 'Engine' label and no switch (owner report 2026-09-29): the
         // button taps to toggle the engine off/on, so both were redundant
         // chrome crowding the wrap row into extra lines.
-        Builder(
-          builder: (context) {
-            Future<void>? toggleFuture;
-            return FutureBuilder(
-              future: toggleFuture,
-              builder: (context, snapshot) {
-                return EngineButton(
-                  filters: filters,
-                  savedEval: analysisState.currentNode.eval,
-                  onTap:
-                      analysisState.isEngineAllowed &&
-                          snapshot.connectionState != ConnectionState.waiting
-                      ? () async {
-                          toggleFuture = ref.read(ctrlProvider.notifier).toggleEngine();
-                          try {
-                            await toggleFuture;
-                          } finally {
-                            toggleFuture = null;
-                          }
-                        }
-                      : null,
-                  goDeeper: () => ref.read(ctrlProvider.notifier).requestEval(goDeeper: true),
-                );
-              },
-            );
-          },
+        _EngineToggleButton(
+          filters: filters,
+          savedEval: analysisState.currentNode.eval,
+          enabled: analysisState.isEngineAllowed,
+          onToggle: notifier.toggleEngine,
+          goDeeper: () => notifier.requestEval(goDeeper: true),
         ),
         // No "Deeper" button here. _EnginePopup already offers it (engine_button.dart), and
         // long-pressing the engine button is the gesture that opens it -- so a second copy in
@@ -705,6 +686,61 @@ class _BottomBar extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Engine on/off button that stays disabled while a toggle is in flight.
+///
+/// A previous revision kept the in-flight future in a `Builder` local and
+/// read it through a `FutureBuilder`: the builder captured null at build time
+/// and nothing ever rebuilt it, so the waiting guard never engaged and rapid
+/// double-taps fired concurrent `toggleEngine` calls. Holding the future in
+/// state makes the guard real.
+class _EngineToggleButton extends StatefulWidget {
+  const _EngineToggleButton({
+    required this.filters,
+    required this.enabled,
+    required this.onToggle,
+    required this.goDeeper,
+    this.savedEval,
+  });
+
+  final EngineEvaluationFilters filters;
+  final ClientEval? savedEval;
+  final bool enabled;
+  final Future<void> Function() onToggle;
+  final VoidCallback goDeeper;
+
+  @override
+  State<_EngineToggleButton> createState() => _EngineToggleButtonState();
+}
+
+class _EngineToggleButtonState extends State<_EngineToggleButton> {
+  Future<void>? _toggleFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: _toggleFuture,
+      builder: (context, snapshot) {
+        return EngineButton(
+          filters: widget.filters,
+          savedEval: widget.savedEval,
+          onTap: widget.enabled && snapshot.connectionState != ConnectionState.waiting
+              ? () async {
+                  final future = widget.onToggle();
+                  setState(() => _toggleFuture = future);
+                  try {
+                    await future;
+                  } finally {
+                    if (mounted) setState(() => _toggleFuture = null);
+                  }
+                }
+              : null,
+          goDeeper: widget.goDeeper,
+        );
+      },
     );
   }
 }
