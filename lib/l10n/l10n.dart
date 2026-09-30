@@ -11632,6 +11632,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{param}\'s Blog'**
   String ublogXBlog(String param);
+
+  /// No description provided for @settingsBoardLandscapePosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Board position in landscape mode'**
+  String get settingsBoardLandscapePosition;
+
+  /// No description provided for @settingsBoardMoveOnRelease.
+  ///
+  /// In en, this message translates to:
+  /// **'Move on release'**
+  String get settingsBoardMoveOnRelease;
+
+  /// No description provided for @settingsBoardMoveOnReleaseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.'**
+  String get settingsBoardMoveOnReleaseHelp;
+
+  /// No description provided for @settingsAccountPrefsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.'**
+  String get settingsAccountPrefsSaved;
+
+  /// No description provided for @toggleSoundTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle sound'**
+  String get toggleSoundTooltip;
+
+  /// No description provided for @reviewNoStudiesHeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Bring your repertoire.'**
+  String get reviewNoStudiesHeadline;
+
+  /// No description provided for @reviewNoStudiesSubtext.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.'**
+  String get reviewNoStudiesSubtext;
+
+  /// No description provided for @reviewNoStudiesDropZone.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop a PGN file here'**
+  String get reviewNoStudiesDropZone;
+
+  /// No description provided for @reviewNoStudiesChooseFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose file'**
+  String get reviewNoStudiesChooseFile;
+
+  /// No description provided for @reviewNoStudiesPastePgn.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste PGN text'**
+  String get reviewNoStudiesPastePgn;
+
+  /// No description provided for @reviewNoStudiesImportLichess.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a Lichess study'**
+  String get reviewNoStudiesImportLichess;
+
+  /// No description provided for @reviewNoStudiesTrainAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Train as'**
+  String get reviewNoStudiesTrainAs;
+
+  /// No description provided for @reviewNoStudiesAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get reviewNoStudiesAuto;
+
+  /// No description provided for @reviewNoStudiesWhite.
+  ///
+  /// In en, this message translates to:
+  /// **'White'**
+  String get reviewNoStudiesWhite;
+
+  /// No description provided for @reviewNoStudiesBlack.
+  ///
+  /// In en, this message translates to:
+  /// **'Black'**
+  String get reviewNoStudiesBlack;
+
+  /// No description provided for @reviewNothingDuePractice.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice'**
+  String get reviewNothingDuePractice;
+
+  /// No description provided for @reviewNothingDueChooseRepertoire.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a repertoire'**
+  String get reviewNothingDueChooseRepertoire;
+
+  /// No description provided for @reviewNothingDueChangeDailyLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Change daily limit'**
+  String get reviewNothingDueChangeDailyLimit;
+
+  /// No description provided for @reviewNothingDuePracticeDoesNotChangeSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice never changes your schedule.'**
+  String get reviewNothingDuePracticeDoesNotChangeSchedule;
+
+  /// No description provided for @reviewNothingDuePracticeStillAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Practice is still available and does not change your schedule.'**
+  String get reviewNothingDuePracticeStillAvailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

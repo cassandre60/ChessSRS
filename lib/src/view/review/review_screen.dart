@@ -9,6 +9,7 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
@@ -130,7 +131,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 32.0),
           Text(
-            'Bring your repertoire.',
+            context.l10n.reviewNoStudiesHeadline,
             style: TextStyle(
               fontFamily: SrsText.ui,
               fontSize: headlineSize,
@@ -142,7 +143,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 16.0),
           Text(
-            'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.',
+            context.l10n.reviewNoStudiesSubtext,
             style: TextStyle(fontFamily: SrsText.ui, fontSize: 17, height: 1.45, color: c.ink2),
           ),
           const SizedBox(height: 28.0),
@@ -155,12 +156,12 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Drop a PGN file here',
+                    context.l10n.reviewNoStudiesDropZone,
                     style: TextStyle(fontFamily: SrsText.ui, fontSize: 15.5, color: c.ink),
                   ),
                   const SizedBox(height: 16.0),
                   SrsPillButton(
-                    label: 'Choose file',
+                    label: context.l10n.reviewNoStudiesChooseFile,
                     onPressed: () => RepertoireImportDialog.show(
                       context,
                       initialSource: ImportSource.file,
@@ -177,7 +178,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             runSpacing: 8.0,
             children: [
               SrsTextButton(
-                label: 'Paste PGN text',
+                label: context.l10n.reviewNoStudiesPastePgn,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.file,
@@ -185,7 +186,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 ),
               ),
               SrsTextButton(
-                label: 'Import a Lichess study',
+                label: context.l10n.reviewNoStudiesImportLichess,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.lichess,
@@ -199,12 +200,16 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Train as',
+                context.l10n.reviewNoStudiesTrainAs,
                 style: TextStyle(fontFamily: SrsText.ui, fontSize: 14, color: c.ink2),
               ),
               const SizedBox(width: 12.0),
               SrsSegmented<Side?>(
-                options: const {null: 'Auto', Side.white: 'White', Side.black: 'Black'},
+                options: {
+                  null: context.l10n.reviewNoStudiesAuto,
+                  Side.white: context.l10n.reviewNoStudiesWhite,
+                  Side.black: context.l10n.reviewNoStudiesBlack,
+                },
                 value: _trainSide,
                 onChanged: (val) => setState(() => _trainSide = val),
               ),
@@ -507,19 +512,19 @@ class _NothingDueView extends ConsumerWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             SrsPillButton(
-                              label: 'Practice',
+                              label: context.l10n.reviewNothingDuePractice,
                               shortcut: 'P',
                               onPressed: () {
                                 ref.read(reviewControllerProvider.notifier).startPracticeMode();
                               },
                             ),
                             SrsTextButton(
-                              label: 'Choose a repertoire',
+                              label: context.l10n.reviewNothingDueChooseRepertoire,
                               onPressed: () => ReviewScopeDrawer.show(context),
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
-                                label: 'Change daily limit',
+                                label: context.l10n.reviewNothingDueChangeDailyLimit,
                                 onPressed: () => Navigator.push(
                                   context,
                                   MaterialPageRoute<void>(
@@ -532,8 +537,8 @@ class _NothingDueView extends ConsumerWidget {
                         const SizedBox(height: 18.0),
                         Text(
                           state.isDailyLimitReached
-                              ? 'Practice is still available and does not change your schedule.'
-                              : 'Practice never changes your schedule.',
+                              ? context.l10n.reviewNothingDuePracticeStillAvailable
+                              : context.l10n.reviewNothingDuePracticeDoesNotChangeSchedule,
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],

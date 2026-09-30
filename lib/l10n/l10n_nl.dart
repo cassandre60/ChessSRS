@@ -7059,4 +7059,69 @@ class AppLocalizationsNl extends AppLocalizations {
   String ublogXBlog(String param) {
     return 'Blog van $param';
   }
+
+  @override
+  String get settingsBoardLandscapePosition => 'Board position in landscape mode';
+
+  @override
+  String get settingsBoardMoveOnRelease => 'Move on release';
+
+  @override
+  String get settingsBoardMoveOnReleaseHelp =>
+      'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.';
+
+  @override
+  String get settingsAccountPrefsSaved =>
+      'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.';
+
+  @override
+  String get toggleSoundTooltip => 'Toggle sound';
+
+  @override
+  String get reviewNoStudiesHeadline => 'Bring your repertoire.';
+
+  @override
+  String get reviewNoStudiesSubtext =>
+      'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.';
+
+  @override
+  String get reviewNoStudiesDropZone => 'Drop a PGN file here';
+
+  @override
+  String get reviewNoStudiesChooseFile => 'Choose file';
+
+  @override
+  String get reviewNoStudiesPastePgn => 'Paste PGN text';
+
+  @override
+  String get reviewNoStudiesImportLichess => 'Import a Lichess study';
+
+  @override
+  String get reviewNoStudiesTrainAs => 'Train as';
+
+  @override
+  String get reviewNoStudiesAuto => 'Auto';
+
+  @override
+  String get reviewNoStudiesWhite => 'White';
+
+  @override
+  String get reviewNoStudiesBlack => 'Black';
+
+  @override
+  String get reviewNothingDuePractice => 'Practice';
+
+  @override
+  String get reviewNothingDueChooseRepertoire => 'Choose a repertoire';
+
+  @override
+  String get reviewNothingDueChangeDailyLimit => 'Change daily limit';
+
+  @override
+  String get reviewNothingDuePracticeDoesNotChangeSchedule =>
+      'Practice never changes your schedule.';
+
+  @override
+  String get reviewNothingDuePracticeStillAvailable =>
+      'Practice is still available and does not change your schedule.';
 }
