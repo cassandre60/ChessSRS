@@ -317,3 +317,18 @@ rating.
 What did correlate was **file-level evidence pointing at fork-introduced code**.
 That is the heuristic worth applying to a future audit of this fork, and it is
 recorded in `AGENTS.md` for the same reason.
+
+## 2026-09-30 release readiness audit
+
+See `docs/release-audit-2026-09-30.md` for the full assessment. Summary of new
+findings and actions:
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | Firebase still points at Lichess (`lichessv2`) | **Open — owner decision required** |
+| F2 | Android notification icon is Lichess horse head | Deferred until F1 resolved |
+| F3 | iOS display name "Lichess" in pbxproj | **Fixed** (`ed4f7a5b7`) |
+| F4/F9 | iOS LichessWidgets extension is dead code | Documented, recommend cut |
+| F5/F10 | Android broadcast widget is dead code | Documented, recommend cut |
+| F7 | Dead hintUsed/multipleAttempts in FSRS scheduler | Not a bug — dead future-intent code |
+| F8 | Silent exception swallowing in PGN hash | **Fixed** (`1182d7188`) |

@@ -42,7 +42,9 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
         return sha256.convert(utf8.encode(canonicalStr)).toString();
       }
     }
-  } catch (_) {}
+  } catch (e, st) {
+    _logger.warning('Tree-based PGN hash failed, falling back to text hash', e, st);
+  }
 
   // Fallback if parsing fails
   final normalized = pgnText.trim();
