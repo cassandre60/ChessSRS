@@ -741,6 +741,59 @@ void main() {
     });
 
     testWidgets(
+      'study options Chapters navigates even when chapter load outlasts the dismiss animation',
+      (tester) async {
+        final importResult = importPgn(
+          '1. e4 e5 *',
+          studyTitle: 'King Pawn',
+          repertoireSide: Side.white,
+        );
+        // Dismiss transitions run 180ms; a 400ms chapter load guarantees the
+        // drawer is fully unmounted before the navigation decision is made.
+        final slowRepo = _SlowChaptersRepository(db);
+        await tester.runAsync(() => slowRepo.saveImportResult(importResult));
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => slowRepo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: slowRepo, clock: clock),
+            ),
+          },
+        );
+
+        await tester.pumpWidget(app);
+        // Slow chapter load delays the initial state too; settle twice.
+        await pumpAsync(tester, 600);
+        await pumpAsync(tester, 600);
+
+        // Open drawer and study options sheet
+        await tester.tap(find.byTooltip('Studies & Scope'));
+        await pumpAsync(tester, 600);
+        await tester.longPress(find.text('King Pawn'));
+        await pumpAsync(tester, 600);
+
+        // Tap Chapters: pops both sheets, loads chapters, then must navigate.
+        // Strict lose-order for the race: the 300ms pump completes the 180ms
+        // dismiss transitions (unmounting the drawer) while the 400ms load is
+        // still pending; the 500ms pump fires the load timer; pumpAsync then
+        // gives the DB read a real-time window so the continuation runs on
+        // the dead context. Pre-fix the push is skipped; post-fix the
+        // captured navigator pushes regardless.
+        await tester.tap(find.text('Chapters'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 500));
+        await pumpAsync(tester, 600);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(StudyChaptersScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
       'correct move with commentary/shapes pauses auto-advancement with Move Explanation and Continue button',
       (tester) async {
         final importResult = importPgn(
@@ -1336,4 +1389,16 @@ void main() {
       },
     );
   });
+}
+
+/// Chapter loads slower than the 180ms sheet-dismiss transition, so any
+/// navigation decision made after the load sees an unmounted drawer.
+class _SlowChaptersRepository extends SqliteStudyRepository {
+  _SlowChaptersRepository(super.db);
+
+  @override
+  Future<List<Chapter>> getChaptersByStudy(String studyId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    return await super.getChaptersByStudy(studyId);
+  }
 }

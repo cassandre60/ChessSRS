@@ -23,7 +23,17 @@ import 'package:material_ui/material_ui.dart';
 /// If the study has a single chapter, navigates directly to [AnalysisScreen].
 /// If the study has multiple chapters, opens [StudyChaptersScreen] so the user
 /// can choose which chapter to explore.
-Future<void> openStudyExplorer(BuildContext context, WidgetRef ref, {String? studyId}) async {
+///
+/// [navigator], when provided, is used for pushes instead of the context's
+/// root navigator: callers that dismiss their own sheets first hold no mounted
+/// context by the time the loads below complete, but a captured
+/// [NavigatorState] stays usable.
+Future<void> openStudyExplorer(
+  BuildContext context,
+  WidgetRef ref, {
+  String? studyId,
+  NavigatorState? navigator,
+}) async {
   final reviewState = ref.read(reviewControllerProvider).value;
   if (reviewState == null) return;
 
@@ -50,24 +60,33 @@ Future<void> openStudyExplorer(BuildContext context, WidgetRef ref, {String? stu
     return;
   }
 
-  if (!context.mounted) return;
+  if (!context.mounted && navigator == null) return;
 
   if (chapters.length == 1) {
-    await openChapterAnalysis(context, ref, study: study, chapter: chapters.first);
-  } else {
-    Navigator.of(
+    await openChapterAnalysis(
       context,
-      rootNavigator: true,
-    ).push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters, isExplorerMode: true));
+      ref,
+      study: study,
+      chapter: chapters.first,
+      navigator: navigator,
+    );
+  } else {
+    (navigator ?? Navigator.of(context, rootNavigator: true)).push(
+      StudyChaptersScreen.buildRoute(study: study, chapters: chapters, isExplorerMode: true),
+    );
   }
 }
 
 /// Opens [AnalysisScreen] for a specific chapter within [study].
+///
+/// [navigator], when provided, is used for the push instead of the context's
+/// root navigator: see [openStudyExplorer].
 Future<void> openChapterAnalysis(
   BuildContext context,
   WidgetRef ref, {
   required Study study,
   required Chapter chapter,
+  NavigatorState? navigator,
 }) async {
   Chapter fullChapter = chapter;
   if (fullChapter.root == null) {
@@ -84,9 +103,9 @@ Future<void> openChapterAnalysis(
     return;
   }
 
-  if (!context.mounted) return;
+  if (!context.mounted && navigator == null) return;
 
-  Navigator.of(context, rootNavigator: true).push(
+  (navigator ?? Navigator.of(context, rootNavigator: true)).push(
     AnalysisScreen.buildRoute(
       AnalysisOptions.pgn(
         id: StringId('study_${study.id}_${chapter.id}'),

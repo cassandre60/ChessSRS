@@ -390,21 +390,22 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           ref.read(reviewControllerProvider.notifier).toggleStudyActive(study.id, !study.isActive);
         },
         onChapters: () async {
+          // Captured before the pops below: both sheets live on the root
+          // navigator, so after they dismiss there is no mounted context left
+          // to push from, and awaiting the loads first would only widen that
+          // window (the dismiss transitions alone take 180ms).
+          final navigator = Navigator.of(context, rootNavigator: true);
           Navigator.of(dialogContext).pop();
           Navigator.of(context).pop();
           final repo = await ref.read(srsStudyRepositoryProvider.future);
           final chapters = await repo.getChaptersByStudy(study.id);
-          if (context.mounted) {
-            Navigator.of(
-              context,
-              rootNavigator: true,
-            ).push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters));
-          }
+          navigator.push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters));
         },
         onAnalyze: () {
+          final navigator = Navigator.of(context, rootNavigator: true);
           Navigator.of(dialogContext).pop();
           Navigator.of(context).pop();
-          openStudyExplorer(context, ref, studyId: study.id);
+          openStudyExplorer(context, ref, studyId: study.id, navigator: navigator);
         },
         onPractice: () {
           Navigator.of(dialogContext).pop();
