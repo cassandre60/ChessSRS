@@ -9,12 +9,6 @@
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		1FFE4A4C12CAA086D6F19B18 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4DF7CC3BEB7A4192F4BEA9C /* Foundation.framework */; };
-		2F2A90DE2F6DF5F3008DA3C7 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F2A90DD2F6DF5F3008DA3C7 /* WidgetKit.framework */; };
-		2F2A90E02F6DF5F3008DA3C7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F2A90DF2F6DF5F3008DA3C7 /* SwiftUI.framework */; };
-		2F2A90EB2F6DF5F4008DA3C7 /* LichessWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2F2A90DC2F6DF5F3008DA3C7 /* LichessWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		2F2A90F42F6DFF0F008DA3C7 /* FeedKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2F2A90F32F6DFF0F008DA3C7 /* FeedKit */; };
-		2F2A90F62F6DFF0F008DA3C7 /* XMLKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2F2A90F52F6DFF0F008DA3C7 /* XMLKit */; };
-		2FCBD8E32F8D91DF00E9C376 /* ChessgroundAssets in Frameworks */ = {isa = PBXBuildFile; productRef = 2FCBD8E22F8D91DF00E9C376 /* ChessgroundAssets */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
@@ -28,13 +22,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		2F2A90E92F6DF5F4008DA3C7 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 2F2A90DB2F6DF5F3008DA3C7;
-			remoteInfo = LichessWidgetsExtension;
-		};
 		74E1CD80CD62F0ED873ABFB7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
@@ -51,7 +38,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				2F2A90EB2F6DF5F4008DA3C7 /* LichessWidgetsExtension.appex in Embed Foundation Extensions */,
 				FEF3ED92C5351EE7044A11A1 /* ShareExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -73,9 +59,6 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		23144F22AF9BFCA0EB65C4B6 /* SharePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharePlugin.swift; sourceTree = "<group>"; };
-		2F2A90DC2F6DF5F3008DA3C7 /* LichessWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LichessWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		2F2A90DD2F6DF5F3008DA3C7 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
-		2F2A90DF2F6DF5F3008DA3C7 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		2F884A662F70988D00F27CB2 /* EXTENSIONS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = EXTENSIONS.md; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		413909FB1CFC01F2BB462F59 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -98,49 +81,12 @@
 		E6F8E2C52685DA6F95D33873 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2F2A90F02F6DF5F4008DA3C7 /* Exceptions for "LichessWidgets" folder in "LichessWidgetsExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Resources/Info.plist,
-			);
-			target = 2F2A90DB2F6DF5F3008DA3C7 /* LichessWidgetsExtension */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		2F2A90E12F6DF5F3008DA3C7 /* LichessWidgets */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				2F2A90F02F6DF5F4008DA3C7 /* Exceptions for "LichessWidgets" folder in "LichessWidgetsExtension" target */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = LichessWidgets;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFrameworksBuildPhase section */
 		246CDD82BA114DBDA795ED4A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				1FFE4A4C12CAA086D6F19B18 /* Foundation.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		2F2A90D92F6DF5F3008DA3C7 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				2FCBD8E32F8D91DF00E9C376 /* ChessgroundAssets in Frameworks */,
-				2F2A90F42F6DFF0F008DA3C7 /* FeedKit in Frameworks */,
-				2F2A90E02F6DF5F3008DA3C7 /* SwiftUI.framework in Frameworks */,
-				2F2A90DE2F6DF5F3008DA3C7 /* WidgetKit.framework in Frameworks */,
-				2F2A90F62F6DFF0F008DA3C7 /* XMLKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -173,7 +119,6 @@
 				2F884A662F70988D00F27CB2 /* EXTENSIONS.md */,
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
-				2F2A90E12F6DF5F3008DA3C7 /* LichessWidgets */,
 				97C146EF1CF9000F007C117D /* Products */,
 				9A4FA943AFDC088B6B1831BF /* Frameworks */,
 				D30EA23BD9D2932936A0A1CD /* GoogleService-Info.plist */,
@@ -185,7 +130,6 @@
 			isa = PBXGroup;
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
-				2F2A90DC2F6DF5F3008DA3C7 /* LichessWidgetsExtension.appex */,
 				E6F8E2C52685DA6F95D33873 /* ShareExtension.appex */,
 			);
 			name = Products;
@@ -211,8 +155,6 @@
 		9A4FA943AFDC088B6B1831BF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				2F2A90DD2F6DF5F3008DA3C7 /* WidgetKit.framework */,
-				2F2A90DF2F6DF5F3008DA3C7 /* SwiftUI.framework */,
 				BCD4A0B3B0DD9847D06D5EAB /* iOS */,
 			);
 			name = Frameworks;
@@ -239,31 +181,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2F2A90DB2F6DF5F3008DA3C7 /* LichessWidgetsExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 2F2A90F12F6DF5F4008DA3C7 /* Build configuration list for PBXNativeTarget "LichessWidgetsExtension" */;
-			buildPhases = (
-				2F2A90D82F6DF5F3008DA3C7 /* Sources */,
-				2F2A90D92F6DF5F3008DA3C7 /* Frameworks */,
-				2F2A90DA2F6DF5F3008DA3C7 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				2F2A90E12F6DF5F3008DA3C7 /* LichessWidgets */,
-			);
-			name = LichessWidgetsExtension;
-			packageProductDependencies = (
-				2F2A90F32F6DFF0F008DA3C7 /* FeedKit */,
-				2F2A90F52F6DFF0F008DA3C7 /* XMLKit */,
-				2FCBD8E22F8D91DF00E9C376 /* ChessgroundAssets */,
-			);
-			productName = LichessWidgetsExtension;
-			productReference = 2F2A90DC2F6DF5F3008DA3C7 /* LichessWidgetsExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -280,7 +197,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				2F2A90EA2F6DF5F4008DA3C7 /* PBXTargetDependency */,
 				476563ED0999414B50A5645F /* PBXTargetDependency */,
 			);
 			name = Runner;
@@ -319,9 +235,6 @@
 				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
-					2F2A90DB2F6DF5F3008DA3C7 = {
-						CreatedOnToolsVersion = 26.3;
-					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
@@ -339,28 +252,18 @@
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
 				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
-				2F2A90F22F6DFF0F008DA3C7 /* XCRemoteSwiftPackageReference "FeedKit" */,
-				2FCBD8E12F8D91DF00E9C376 /* XCRemoteSwiftPackageReference "flutter-chessground" */,
 			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
-				2F2A90DB2F6DF5F3008DA3C7 /* LichessWidgetsExtension */,
 				F272DD7F6D0C87EB8890B610 /* ShareExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		2F2A90DA2F6DF5F3008DA3C7 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		8669C759F40BA8F18029D232 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -437,13 +340,6 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		2F2A90D82F6DF5F3008DA3C7 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		4A2E34953BF1E7CC2DA94448 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -465,11 +361,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		2F2A90EA2F6DF5F4008DA3C7 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 2F2A90DB2F6DF5F3008DA3C7 /* LichessWidgetsExtension */;
-			targetProxy = 2F2A90E92F6DF5F4008DA3C7 /* PBXContainerItemProxy */;
-		};
 		476563ED0999414B50A5645F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = ShareExtension;
@@ -580,140 +471,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Profile;
-		};
-		2F2A90ED2F6DF5F4008DA3C7 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = LichessWidgets/LichessWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = LichessWidgets/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = LichessWidgets;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.chesssrs.app.LichessWidgets;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		2F2A90EE2F6DF5F4008DA3C7 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = LichessWidgets/LichessWidgets.entitlements;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = HP5YLVDU97;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = LichessWidgets/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = LichessWidgets;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.chesssrs.app.LichessWidgets;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "match AppStore org.chesssrs.app.LichessWidgets";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
-		2F2A90EF2F6DF5F4008DA3C7 /* Profile */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = LichessWidgets/LichessWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = LichessWidgets/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = LichessWidgets;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MARKETING_VERSION = 1.0;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.chesssrs.app.LichessWidgets;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Profile;
 		};
@@ -985,16 +742,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2F2A90F12F6DF5F4008DA3C7 /* Build configuration list for PBXNativeTarget "LichessWidgetsExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				2F2A90ED2F6DF5F4008DA3C7 /* Debug */,
-				2F2A90EE2F6DF5F4008DA3C7 /* Release */,
-				2F2A90EF2F6DF5F4008DA3C7 /* Profile */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		3BA028C39799611CC07B9CBD /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1034,41 +781,7 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		2F2A90F22F6DFF0F008DA3C7 /* XCRemoteSwiftPackageReference "FeedKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/nmdias/FeedKit";
-			requirement = {
-				kind = exactVersion;
-				version = 10.4.0;
-			};
-		};
-		2FCBD8E12F8D91DF00E9C376 /* XCRemoteSwiftPackageReference "flutter-chessground" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/lichess-org/flutter-chessground";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		2F2A90F32F6DFF0F008DA3C7 /* FeedKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 2F2A90F22F6DFF0F008DA3C7 /* XCRemoteSwiftPackageReference "FeedKit" */;
-			productName = FeedKit;
-		};
-		2F2A90F52F6DFF0F008DA3C7 /* XMLKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 2F2A90F22F6DFF0F008DA3C7 /* XCRemoteSwiftPackageReference "FeedKit" */;
-			productName = XMLKit;
-		};
-		2FCBD8E22F8D91DF00E9C376 /* ChessgroundAssets */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 2FCBD8E12F8D91DF00E9C376 /* XCRemoteSwiftPackageReference "flutter-chessground" */;
-			productName = ChessgroundAssets;
-		};
 		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FlutterGeneratedPluginSwiftPackage;

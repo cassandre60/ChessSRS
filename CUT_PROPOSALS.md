@@ -398,3 +398,6 @@ or HTTP consumers outside auth and study-import paths.
 | 16 / C4-Playban | Dead playban dialog, notification model & account service monitoring | `c3e91b183` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
 | 17 / UI-Residue | Dead orphaned widgets, views & assets (UserContextMenu, ServerOutageDisplay, ExpandedSection, SideIndicator, TextBadge, BrightnessNotifier) | `8f0e8f7d3` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
 | 18 / Gestures | Dead Android system gestures exclusion utility & method channel handler | `bd4fa6c97` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
+| 19 / Android-Widgets | Dead Android broadcast widget (BroadcastWidgetProvider, layouts, preview drawables, strings, receiver) | `3ed89a5b7` | 2026-09-30 | analyze 0 |
+| 20 / Home-Widget-Plugin | Drop home_widget plugin dependency, board preference listener, AGP 9 workarounds | `f7ff59df9` | 2026-09-30 | analyze 0 |
+| 21 / iOS-Widgets | Dead iOS LichessWidgets extension (1830 LOC Swift, targets, schemes, FeedKit/flutter-chessground SPM deps) | `b8777bef8` | 2026-09-30 | pbxproj syntax valid |
