@@ -275,6 +275,14 @@ remains a later option — never a redesign.
       3. AppLogSettingsScreen Polish: added quick category filter chips (`All`, `Review`, `Repo / DB`, `Import`, `Network`, `Engine`), stylized domain-colored logger badges, copy to clipboard on long-press, and a full detail inspection modal dialog with copy message/error/stack actions.
       4. SRS Diagnostics Integration: added direct "View in-app diagnostic logs" tile in `SrsSettingsScreen` under the Diagnostics section, pre-filtering directly to review and scheduling traces. *(done: 2026-09-19)*
 
+### Open — awaiting verification (not blocking the MVP)
+- [ ] **F-AUTHBODY: confirm #94 against the production server** *(opened: 2026-09-29)*
+      1. `fix(auth): send email login credentials in POST body` (PR #94) is merged and CI-green but has never run against production. It moves the login code, email and username out of the query string, which was leaking the one-time code into proxy logs and the app's 7-day `http_log` table.
+      2. **The one check remaining:** one successful email-code sign-in. Run it with `fvm flutter run -d linux --dart-define=LICHESS_HOST=lichess.org` — the default `lichess.dev` host sends `/auth/mobile-code/*` to the dev server and reports "We couldn't find any user by this name", which is a config symptom, not a code defect.
+      3. If it fails, revert the two `lichessUri(path, {...})` call sites in `lib/src/model/auth/auth_repository.dart` plus the three updated assertions in `test/model/auth/auth_repository_test.dart` and `test/view/auth/email_login_screen_test.dart`. Nothing else depends on it.
+      4. Ruled out already, do not re-investigate: `_emailRegExp`, `AuthRepository`, `AuthController` and `UserRepository.usernameExists` are byte-identical to upstream; a widget test through the real `EmailLoginScreen` accepts the owner's address. No Lichess client accepts a password, so "user + password" is not implementable. Full detail and the session's dead ends: `docs/open-email-login-handoff.md`.
+      5. Not MVP-critical: login exists only to import private/unlisted studies (C3). Everything else is local-first.
+
 Workflow polish, information architecture, performance, onboarding/import
 improvements, remaining Lichess code removal (per CUT_PROPOSALS §2), and only
 then differentiation features justified by specs or beta feedback.

@@ -360,6 +360,30 @@ foundation already contains study-tree and game-tree prior art.
   concluding anything about what a worktree has changed. Verified by: 52 files
   / 13,844 insertions / 24,106 deletions before the format, empty after, with
   the test suite green either way.
+- [2026-09-29, Space Bunny Free] Merging a batch of PRs is not delivering it: the
+  owner's own `fvm flutter run` in the primary checkout is the acceptance gate for
+  user-visible work, and that checkout stayed at `ea1d09678` while seven PRs merged
+  to `388b38f3e`. A whole session was spent on "the Account section is missing from
+  Settings" — a feature that arrived in PR #84, *after* the frozen commit — plus a
+  second app window from a worktree, so two windows with different features produced
+  contradictory observations that were chased in the wrong direction each time. After
+  merging, pull `main` in the primary checkout and tell the owner it is current;
+  verify with `git log --oneline -1` there against `origin/main`. Verified by: the
+  Account section being unconditional in `SrsSettingsScreen` and present in
+  `388b38f3e` but absent from `ea1d09678`, and the checkout log showing the stale
+  commit throughout.
+- [2026-09-29, Space Bunny Free] Auth verification needs
+  `--dart-define=LICHESS_HOST=lichess.org`; `kLichessHost` defaults to `lichess.dev`
+  (inherited upstream, correct for server work), so a plain `flutter run` sends
+  `/auth/mobile-code/*` and `/api/player/autocomplete` to the dev server. The symptom
+  is "We couldn't find any user by this name", which blames the user's typing and
+  sends you auditing a regex and a repository that are byte-identical to upstream.
+  Also: no Lichess client accepts a password, so a "user + password" request is not
+  implementable and must not be treated as a bug. Full handoff, including the ruled-out
+  suspects, in `docs/open-email-login-handoff.md`. Verified by: `curl` against
+  `lichess.org/api/player/autocomplete` returning real accounts while the app
+  reported none, and a widget test through the real `EmailLoginScreen` passing with
+  the owner's address.
 - [2026-09-29, Space Bunny Free] A worktree is not a working directory, it is
   the *only* place you may write, and the isolation rule is easy to break by
   inattention rather than by a `git reset`. Editing two docs in the shared main
