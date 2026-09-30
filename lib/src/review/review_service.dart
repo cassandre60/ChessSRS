@@ -472,8 +472,9 @@ class ReviewService {
     List<Study> studies,
   ) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
+    final wanted = openingFamily.trim();
     final matchingChapterIds = allChapters
-        .where((c) => c.opening == openingFamily && activeStudyIds.contains(c.studyId))
+        .where((c) => (c.opening?.trim() ?? '') == wanted && activeStudyIds.contains(c.studyId))
         .map((c) => c.id)
         .toSet();
     final allDecisions = await repository.getAllDecisions();

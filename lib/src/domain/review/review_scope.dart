@@ -23,8 +23,12 @@ class ReviewScope {
     if (this.chapterId != null && this.chapterId != chapterId) {
       return false;
     }
-    if (this.openingFamily != null && this.openingFamily != openingFamily) {
-      return false;
+    if (this.openingFamily != null) {
+      // Opening names come from PGN headers and may carry stray whitespace;
+      // compare trimmed so loading and queue filtering agree.
+      if ((openingFamily?.trim() ?? '') != this.openingFamily!.trim()) {
+        return false;
+      }
     }
     return true;
   }

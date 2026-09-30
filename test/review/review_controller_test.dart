@@ -321,6 +321,44 @@ void main() {
       expect(state.expectedMove, isNull);
     });
 
+    test('lapsed item is re-tested: dues drop when the re-test is answered', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Queen Pawn"]
+1. d4 d5 *
+''';
+
+      await controller.importPgnText(pgnText: pgn, title: 'Queen Pawn', repertoireSide: Side.white);
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Lapse: play 1. e4 instead of 1. d4. The item is re-queued, still due.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse, isNotNull);
+      expect(lapse!.isCorrect, isFalse);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Reguess correctly: proves the move was seen, but the re-test is still
+      // pending, so dues must NOT drop yet (the screen still shows a prompt).
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry, isNotNull);
+      expect(retry!.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt, isNotNull);
+      expect(state.totalDueCount, 1);
+
+      // Answer the re-test correctly first-try: now the item resolves.
+      final retest = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retest, isNotNull);
+      expect(retest!.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 0);
+    });
+
     test(
       'handles incorrect move (lapse), shows expected move, and continues on acknowledge',
       () async {

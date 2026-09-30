@@ -105,5 +105,17 @@ void main() {
       expect(exported, contains('[White "Repertoire"]'));
       expect(exported, contains('[Black "Opponent"]'));
     });
+
+    test('opening classification survives export then re-import', () {
+      const pgn = '[Opening "Sicilian Defense"]\n\n1. e4 c5 2. Nf3 d6 *';
+      final importResult = importPgn(pgn, studyTitle: 'Sicilian');
+      expect(importResult.chapters.first.opening, 'Sicilian Defense');
+
+      final exported = chapterToPgn(importResult.chapters.first);
+      expect(exported, contains('[Opening "Sicilian Defense"]'));
+
+      final reimported = importPgn(exported);
+      expect(reimported.chapters.first.opening, 'Sicilian Defense');
+    });
   });
 }

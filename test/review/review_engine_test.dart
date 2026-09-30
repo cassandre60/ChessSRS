@@ -1166,5 +1166,129 @@ void main() {
       expect(stepResult.isCorrect, isTrue);
       expect(stepResult.autoPlayedMoves.first.move.san, 'c5');
     });
+
+    test('same position with different accepted sets keeps separate SRS memory', () {
+      // Two modern decisions ask different questions at the same position:
+      // A accepts {e4, d4}, B accepts {e4, c4}. They share the (FEN, e4) pair,
+      // so the single-move adjacency slot collides — reviewing A must still
+      // update only A's complete-set state and leave B untouched.
+      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      const study = Study(id: 'study-collision', title: 'Collision');
+      const rootA = RepertoireNode(
+        id: 'node-a',
+        fen: startFen,
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'node-a-e4',
+            fen: startFen,
+            fenKey: startKey,
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ),
+          RepertoireNode(
+            id: 'node-a-d4',
+            fen: startFen,
+            fenKey: startKey,
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+          ),
+        ],
+      );
+      const rootB = RepertoireNode(
+        id: 'node-b',
+        fen: startFen,
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'node-b-e4',
+            fen: startFen,
+            fenKey: startKey,
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ),
+          RepertoireNode(
+            id: 'node-b-c4',
+            fen: startFen,
+            fenKey: startKey,
+            incomingMove: RepertoireMove(from: 'c2', to: 'c4', san: 'c4'),
+          ),
+        ],
+      );
+      const chapterA = Chapter(
+        id: 'chapter-a',
+        studyId: 'study-collision',
+        sourceOrder: 0,
+        title: 'A',
+        startingFen: startFen,
+        root: rootA,
+      );
+      const chapterB = Chapter(
+        id: 'chapter-b',
+        studyId: 'study-collision',
+        sourceOrder: 1,
+        title: 'B',
+        startingFen: startFen,
+        root: rootB,
+      );
+      const decA = RepertoireDecision(
+        id: 'dec-a',
+        studyId: 'study-collision',
+        chapterId: 'chapter-a',
+        nodeId: 'node-a',
+        expectedMoves: [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ],
+        canonicalStateId: 'canon-a',
+      );
+      const decB = RepertoireDecision(
+        id: 'dec-b',
+        studyId: 'study-collision',
+        chapterId: 'chapter-b',
+        nodeId: 'node-b',
+        expectedMoves: [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'c2', to: 'c4', san: 'c4'),
+        ],
+        canonicalStateId: 'canon-b',
+      );
+
+      final stateB = ReviewState(
+        decisionId: 'canon-b',
+        nextDueAt: baseTime.add(const Duration(days: 30)),
+        repetitionCount: 5,
+        stability: 777.0,
+        difficulty: 4.0,
+        firstReviewedAt: baseTime.subtract(const Duration(days: 40)),
+        lastReviewedAt: baseTime.subtract(const Duration(days: 5)),
+      );
+      final reviewStates = {
+        'canon-a': ReviewState(
+          decisionId: 'canon-a',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'canon-b': stateB,
+      };
+
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapterA, chapterB],
+        decisions: [decA, decB],
+        reviewStates: reviewStates,
+      );
+
+      // Only A is due; B's learned state keeps it out of the queue.
+      expect(session.remainingDueCount, 1);
+      expect(session.currentPrompt?.decision.id, 'dec-a');
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      expect(result.updatedState.decisionId, 'canon-a');
+      expect(result.updatedState.repetitionCount, 2);
+
+      // B's memory is untouched: no shared scheduling across questions.
+      expect(session.reviewStates['canon-b'], equals(stateB));
+    });
   });
 }

@@ -905,6 +905,41 @@ void main() {
       }
     });
 
+    test('getTodayReviewedPositionsCount includes a review at local midnight', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        // Local wall time (no UTC suffix): this is what SystemClock produces.
+        final now = DateTime(2026, 9, 18, 14, 30);
+        final atMidnight = DateTime(2026, 9, 18);
+        final beforeMidnight = DateTime(2026, 9, 17, 23, 59, 59);
+
+        Future<void> saveAt(String decisionId, DateTime when) {
+          return repo.saveReviewEvent(
+            ReviewEvent(
+              decisionId: decisionId,
+              when: when,
+              result: ReviewResult.correct,
+              oldState: ReviewState(decisionId: decisionId),
+              newState: ReviewState(decisionId: decisionId, repetitionCount: 1),
+            ),
+          );
+        }
+
+        await saveAt('dec-midnight', atMidnight);
+        await saveAt('dec-before', beforeMidnight);
+
+        final count = await repo.getTodayReviewedPositionsCount(now);
+        // Midnight belongs to today; the minute before does not. The old
+        // UTC-midnight bound (with a 'Z' suffix) excluded the midnight row
+        // via string comparison against offset-less local timestamps.
+        expect(count, 1);
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'saveAnswerBatch atomically commits knowledge states, legacy mirrors, and events',
       () async {

@@ -100,8 +100,12 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
       if (row != null) merged[entry.value] = Map<String, Object?>.of(row);
     } else {
       mergeCount++;
-      if (_knowledgeProgress(row: statesByOldId[entry.key]!, incumbent: existing)) {
-        merged[entry.value] = Map<String, Object?>.of(statesByOldId[entry.key]!);
+      final incoming = statesByOldId[entry.key];
+      // A decision that was never reviewed has no knowledge row; there is
+      // nothing to merge, so keep the surviving row instead of crashing.
+      if (incoming == null) continue;
+      if (_knowledgeProgress(row: incoming, incumbent: existing)) {
+        merged[entry.value] = Map<String, Object?>.of(incoming);
       }
     }
   }

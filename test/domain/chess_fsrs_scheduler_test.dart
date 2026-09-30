@@ -149,5 +149,21 @@ void main() {
       // Higher target retention produces shorter intervals for equal stability
       expect(intervals95[0], lessThan(intervals90[0]));
     });
+
+    test('schedulers differing only in params compare unequal', () {
+      const base = ChessFsrsScheduler(targetRetention: 0.88);
+      const tuned = ChessFsrsScheduler(targetRetention: 0.88, params: ChessFsrsParams(w2: 3.5));
+      // The provider reload gate depends on this: a params change must fire it.
+      expect(base == tuned, isFalse);
+      expect(base.hashCode == tuned.hashCode, isFalse);
+      expect(base == const ChessFsrsScheduler(targetRetention: 0.88), isTrue);
+    });
+
+    test('params with identical values compare equal', () {
+      const a = ChessFsrsParams(w2: 2.2);
+      const b = ChessFsrsParams(w2: 2.2);
+      expect(a == b, isTrue);
+      expect(a.hashCode, b.hashCode);
+    });
   });
 }
