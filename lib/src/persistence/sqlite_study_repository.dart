@@ -214,23 +214,20 @@ class SqliteStudyRepository implements StudyRepository {
             }
           }
 
-          // Events and canonical rows are keyed by the canonical id, which is not the
-          // `srs_decision.id` these chunks hold. Both spellings are removed so a
-          // legacy per-occurrence row and a current canonical row both go.
-          final bothIds = <String>{
-            ...chunk,
-            ...canonicalRows.map((r) => r['canonicalStateId']).whereType<String>(),
-          }.toList();
-          final bothPlaceholders = List.filled(bothIds.length, '?').join(',');
+          // Events and legacy per-occurrence rows keyed by the occurrence id
+          // belong to this study outright. Canonical-keyed rows are handled
+          // below under the surviving-study guard: a transposition shared
+          // with another study must keep its history and mirrors.
+          final bothPlaceholders = List.filled(chunk.length, '?').join(',');
           await txn.delete(
             kTableSrsReviewEvent,
             where: 'decisionId IN ($bothPlaceholders)',
-            whereArgs: bothIds,
+            whereArgs: chunk,
           );
           await txn.delete(
             kTableSrsReviewState,
             where: 'decisionId IN ($bothPlaceholders)',
-            whereArgs: bothIds,
+            whereArgs: chunk,
           );
         }
 
@@ -241,15 +238,23 @@ class SqliteStudyRepository implements StudyRepository {
             i + chunkSize > canonicalList.length ? canonicalList.length : i + chunkSize,
           );
           final cPlaceholders = List.filled(chunk.length, '?').join(',');
+          final sharedGuard =
+              'canonicalId IN ($cPlaceholders) AND canonicalId NOT IN ( '
+              'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)';
           await txn.delete(
             kTablePositionKnowledgeState,
-            where:
-                'canonicalId IN ($cPlaceholders) AND canonicalId NOT IN ( '
-                'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)',
+            where: sharedGuard,
             whereArgs: [...chunk, id],
           );
           await txn.delete(
             kTableSrsReviewState,
+            where:
+                'decisionId IN ($cPlaceholders) AND decisionId NOT IN ( '
+                'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)',
+            whereArgs: [...chunk, id],
+          );
+          await txn.delete(
+            kTableSrsReviewEvent,
             where:
                 'decisionId IN ($cPlaceholders) AND decisionId NOT IN ( '
                 'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)',

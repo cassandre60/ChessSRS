@@ -596,6 +596,66 @@ void main() {
       },
     );
 
+    test(
+      'deleteStudy preserves shared canonical events and mirrors referenced by another study',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final studyA = Study(id: 'study-a', title: 'Study A', createdAt: now, updatedAt: now);
+          final chapterA = Chapter(id: 'ch-a', studyId: studyA.id, sourceOrder: 0);
+          final studyB = Study(id: 'study-b', title: 'Study B', createdAt: now, updatedAt: now);
+          final chapterB = Chapter(id: 'ch-b', studyId: studyB.id, sourceOrder: 0);
+
+          const sharedCanonicalId = 'shared-pos-canonical';
+          const decA = RepertoireDecision(
+            id: 'dec-a',
+            studyId: 'study-a',
+            chapterId: 'ch-a',
+            nodeId: 'na',
+            expectedMoves: [],
+            canonicalStateId: sharedCanonicalId,
+          );
+          const decB = RepertoireDecision(
+            id: 'dec-b',
+            studyId: 'study-b',
+            chapterId: 'ch-b',
+            nodeId: 'nb',
+            expectedMoves: [],
+            canonicalStateId: sharedCanonicalId,
+          );
+          const sharedState = ReviewState(decisionId: sharedCanonicalId, repetitionCount: 3);
+          final event = ReviewEvent(
+            decisionId: sharedCanonicalId,
+            when: now,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: sharedCanonicalId),
+            newState: sharedState,
+          );
+
+          await repo.saveStudy(studyA);
+          await repo.saveChapter(chapterA);
+          await repo.saveDecision(decA);
+          await repo.saveStudy(studyB);
+          await repo.saveChapter(chapterB);
+          await repo.saveDecision(decB);
+          await repo.saveReviewState(sharedState);
+          await repo.saveReviewEvent(event);
+
+          await repo.deleteStudy(studyA.id);
+
+          // Study B still owns the position: its history and mirror survive.
+          expect(await repo.getDecision(decB.id), isNotNull);
+          expect(await repo.getReviewState(sharedCanonicalId), isNotNull);
+          expect(await repo.getReviewEvents(sharedCanonicalId), hasLength(1));
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     test('savePositionTree updates tree independently of chapter metadata', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);

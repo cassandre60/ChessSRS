@@ -729,13 +729,18 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     required ReviewStepResult result,
     required bool isFirstAttempt,
   }) async {
+    // The board animation below awaits real time, and a scope/mode change in
+    // that window replaces the active session (every replacement path bumps
+    // _generation). Advancing afterwards would write this prompt's dues math
+    // onto the new scope's live state, so abort and leave the fresh load alone.
+    final generation = _generation;
     // 2. If opponent has an auto-reply, pause briefly then show it with smooth piece animation.
     // If it's the final move of the line (no opponent reply), pause so the user
     // sees their move actualized on the board before the line transitions.
     final opponentMoves = result.autoPlayedMoves.where((m) => !m.isUserMove).toList();
     if (opponentMoves.isNotEmpty) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _generation) return;
 
       final oppMove = opponentMoves.first;
       final oppNormalMove = NormalMove(
@@ -756,15 +761,17 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         ref.read(moveFeedbackServiceProvider).moveFeedback();
       } catch (_) {}
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _generation) return;
     } else {
       // Final move of line: pause so user sees their move actualized on the board
       await Future<void>.delayed(const Duration(milliseconds: 350));
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _generation) return;
     }
 
-    // 3. Advance to next prompt
-    final session = _service.activeSession!;
+    // 3. Advance to next prompt. Prefer the answered session over the
+    // service-global one: the guard above already aborts a superseded
+    // advancement, so these agree unless a replacement slipped through.
+    final session = currentState.session ?? _service.activeSession!;
     final nextPrompt = session.currentPrompt;
 
     final shouldAnimateBranchPreMove =

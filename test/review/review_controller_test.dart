@@ -359,6 +359,44 @@ void main() {
       expect(state.totalDueCount, 0);
     });
 
+    test('mid-advance scope change discards the stale advancement', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final importA = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      final importB = await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      // Back to study A: one due prompt (1. e4).
+      await controller.changeScope(ReviewScope.study(importA.study.id));
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Answer correctly but do not await the advancement: the 300ms+
+      // opponent-reply animation is still in flight below.
+      final advance = controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      // Switch to study B mid-advance and let it fully load.
+      await controller.changeScope(ReviewScope.study(importB.study.id));
+      await advance;
+
+      // The stale advancement for A must not paint over B's fresh load:
+      // scope, prompt and dues all belong to B.
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, ReviewScope.study(importB.study.id));
+      expect(state.totalDueCount, 1);
+      expect(state.currentPrompt, isNotNull);
+      expect(state.currentPrompt!.studyId, importB.study.id);
+    });
+
     test(
       'handles incorrect move (lapse), shows expected move, and continues on acknowledge',
       () async {
