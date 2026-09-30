@@ -16,18 +16,19 @@ gates — and mandatory runtime validation.
 
 | Invariant / Property in `QUALITY.md` | Enforcement Mechanism | Test Target |
 |---|---|---|
-| **Layer Independence & Clean Architecture** | Static analysis (`fvm flutter analyze`, zero warnings) | All files in `lib/` |
+| **Layer Independence & Clean Architecture** | Static analysis (`fvm flutter analyze`, zero warnings) | whole project; the domain layer is `lib/src/domain/` |
 | **Single Chess Representation (dartchess only)** | Dependency review + analyzer import linting | `pubspec.yaml`, domain & application code |
-| **Legal Move Validation & SAN/UCI** | dartchess itself (already upstream-tested); our adapter unit tests | chess adapter |
-| **PGN Multi-game & Variation Preservation** | Unit tests of import pipeline (dartchess `PgnParser` → Study/Chapter/tree) | import module |
-| **Study Tree Normalization & Error Reporting** | Integration tests incl. malformed-PGN quarantine | import module |
-| **SRS Interval Growth & Lapse Recovery** | Deterministic unit tests with injected `Clock` | `Scheduler` impls, `ReviewState` |
-| **Repertoire Answer Validation & Persistence** | Service tests over repository (in-memory + sqflite) | review session engine |
-| **Auto-Traversal & No Permanent Exclusion** | Deterministic engine tests (fixed clock) | review session engine |
-| **Review Scene Rendering & Interaction** | Widget tests using Lichess `test_helpers.dart` board helpers | review scene |
-| **Incremental Persistence** | Repository tests asserting write scope | persistence module |
+| **Legal Move Validation & SAN/UCI** | dartchess itself (already upstream-tested); our adapter unit tests | `test/import/pgn_importer_test.dart` |
+| **PGN Multi-game & Variation Preservation** | Unit tests of import pipeline (dartchess `PgnParser` → Study/Chapter/tree) | `test/import/pgn_importer_test.dart` |
+| **Study Tree Normalization & Error Reporting** | Integration tests incl. malformed-PGN quarantine | `test/import/pgn_importer_test.dart`, `test/import/chapter_orientation_test.dart` |
+| **SRS Interval Growth & Lapse Recovery** | Deterministic unit tests with injected `Clock` | `test/domain/scheduler_test.dart`, `test/domain/chess_fsrs_scheduler_test.dart` |
+| **Repertoire Answer Validation & Persistence** | Service tests over repository (in-memory + sqflite) | `test/review/review_service_test.dart` |
+| **Auto-Traversal & No Permanent Exclusion** | Deterministic engine tests (fixed clock) | `test/review/review_engine_test.dart` |
+| **Review Scene Rendering & Interaction** | Widget tests using Lichess `test_helpers.dart` board helpers | `test/view/review/review_screen_test.dart` |
+| **Incremental Persistence** | Repository tests asserting write scope | `test/persistence/sqlite_study_repository_test.dart` |
 | **Move Validation Latency (< 16 ms, §4.1)** | Wall-clock assertion on the median of a graded-move batch, sample list printed on failure | `test/review/move_latency_test.dart` |
-| **Complete Mandatory Quality Gate** | Executable script | `./verify` |
+| **No Unreachable Source** | Import/export graph walk from `lib/main.dart`; new unreachable files fail, ratcheted against a baseline | `test/reachability/reachability_test.dart` |
+| **Complete Mandatory Quality Gate** | Executable script | `verify` |
 
 ## 2. Test Suite Organization (target)
 
