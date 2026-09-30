@@ -325,7 +325,7 @@ findings and actions:
 
 | # | Finding | Disposition |
 |---|---|---|
-| F1 | Firebase still points at Lichess (`lichessv2`) | **Open — owner decision required** |
+| F1 | Firebase still points at Lichess (`lichessv2`) | **Resolved (Option B)** — Stripped Firebase, FCM, Crashlytics |
 | F2 | Android notification icon was Lichess horse head | **Fixed** (`ic_stat_notification.xml`) |
 | F3 | iOS display name "Lichess" in pbxproj | **Fixed** (`ed4f7a5b7`) |
 | F4/F9 | iOS LichessWidgets extension is dead code | **Cut** (PR #100) |

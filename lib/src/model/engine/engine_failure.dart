@@ -1,7 +1,8 @@
-import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/engine/engine_diagnostics.dart';
-import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('EngineFailure');
 
 /// What the engine was doing when it failed.
 enum EngineFailureKind {
@@ -127,40 +128,9 @@ class EngineFailure {
 ///
 /// This never throws: telemetry must not interfere with the engine.
 Future<void> reportEngineFailure(EngineFailure failure) async {
-  // Firebase is only available on Android and iOS; there is nothing to report
-  // on other platforms.
-  if (!LichessBinding.instance.isFirebaseSupported) {
-    return;
-  }
-  try {
-    final crashlytics = LichessBinding.instance.firebaseCrashlytics;
-    final diagnostics = failure.diagnostics;
-
-    await crashlytics.setCustomKey('engine_failure_kind', failure.kind.name);
-    await crashlytics.setCustomKey('engine_backend', failure.engine);
-    await crashlytics.setCustomKey('engine_variant', failure.variant?.name ?? 'unknown');
-    await crashlytics.setCustomKey('engine_state', failure.engineState ?? 'unknown');
-    await crashlytics.setCustomKey('engine_max_memory_mb', failure.maxMemoryInMb ?? -1);
-    await crashlytics.setCustomKey('engine_hash_mb', failure.hashSizeInMb ?? -1);
-    await crashlytics.setCustomKey('engine_phase', diagnostics?.phase ?? 'unknown');
-    await crashlytics.setCustomKey(
-      'engine_phase_step',
-      diagnostics == null || diagnostics.step.isEmpty ? 'unknown' : diagnostics.step,
-    );
-    await crashlytics.setCustomKey(
-      'engine_phase_elapsed_ms',
-      diagnostics?.elapsed.inMilliseconds ?? -1,
-    );
-    await crashlytics.setCustomKey('engine_native_error', diagnostics?.lastError ?? 'none');
-    await crashlytics.setCustomKey('engine_unrecoverable', failure.isUnrecoverable);
-
-    await crashlytics.recordError(
-      failure.error ?? failure.message,
-      failure.stackTrace,
-      reason: failure.toString(),
-      fatal: false,
-    );
-  } catch (e) {
-    debugPrint('Failed to report engine failure: $e');
-  }
+  _logger.warning(
+    'Engine failure [${failure.kind.name}]: ${failure.message}',
+    failure.error,
+    failure.stackTrace,
+  );
 }

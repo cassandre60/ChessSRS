@@ -131,27 +131,5 @@ void main() {
         );
       }
     });
-
-    test('the FCM token is not logged directly', () {
-      // The one site that logged a secret rather than carrying it in a URL. Scoped to logger
-      // calls: the request that follows legitimately interpolates the real token, and forbidding
-      // that would break registration rather than protect anything.
-      final loggerCalls = File(
-        'lib/src/model/notifications/notification_service.dart',
-      ).readAsStringSync().split('\n').where((line) => line.contains('_logger.'));
-
-      expect(
-        loggerCalls.where((line) => line.contains('\$token')),
-        isEmpty,
-        reason:
-            'the FCM token is interpolated into a log line. It is a long-lived device '
-            'credential and the record is readable in Settings -> app logs',
-      );
-      expect(
-        File('lib/src/model/notifications/notification_service.dart').readAsStringSync(),
-        contains('/mobile/register/firebase/\$token'),
-        reason: 'the request itself must still send the real token, or registration breaks',
-      );
-    });
   });
 }

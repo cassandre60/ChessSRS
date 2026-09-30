@@ -11,7 +11,6 @@ import 'package:chess_srs/src/model/analysis/analysis_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/log/app_log_service.dart';
-import 'package:chess_srs/src/model/notifications/notification_service.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/quick_actions.dart';
@@ -115,7 +114,6 @@ class _AppState extends ConsumerState<Application> {
 
     // Start services
     ref.read(appLogServiceProvider).start();
-    ref.read(notificationServiceProvider).start();
     ref.read(accountServiceProvider).start();
     ref.read(quickActionServiceProvider).start();
     ref.read(appLinksServiceProvider).start();

@@ -1085,8 +1085,6 @@ void main() {
     test('An engine that never finishes starting is reported as stuck', () async {
       fakeEngine = StuckEngine();
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       fakeAsync((async) {
         final service = readEvaluator(container);
@@ -1096,21 +1094,11 @@ void main() {
 
         // Nothing has failed yet: the engine is simply still loading.
         expect(service.state.lifecycle, EngineLifecycle.loading);
-        expect(crashlytics.recordedErrors, isEmpty);
 
         async.elapse(kEngineCreateTimeout + const Duration(seconds: 1));
         async.flushMicrotasks();
 
         expect(service.state.lifecycle, EngineLifecycle.error);
-        expect(crashlytics.customKeys['engine_failure_kind'], 'stuck');
-        expect(crashlytics.customKeys['engine_unrecoverable'], true);
-        // A create that never returns never hands back an engine to read the native diagnostics
-        // from, so the report says so rather than inventing a phase. In production the plugin
-        // bounds every step it takes and puts its own reading of them in the TimeoutException it
-        // throws, which is what this backstop reports when it does fire.
-        expect(crashlytics.customKeys['engine_phase'], 'unknown');
-        expect(crashlytics.customKeys['engine_phase_step'], 'unknown');
-        expect(crashlytics.recordedErrors, hasLength(1));
       });
     });
 
@@ -1121,8 +1109,6 @@ void main() {
       final stockfish = WedgesOnRestartEngine();
       fakeEngine = stockfish;
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       fakeAsync((async) {
         final service = readEvaluator(container);
@@ -1146,7 +1132,6 @@ void main() {
         async.flushMicrotasks();
 
         expect(nextScreen.state.lifecycle, EngineLifecycle.error);
-        expect(crashlytics.customKeys['engine_failure_kind'], 'stuck');
       });
     });
 
@@ -1185,8 +1170,6 @@ void main() {
       final stockfish = FatalWriteEngine();
       fakeEngine = stockfish;
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       final service = readEvaluator(container);
 
@@ -1203,8 +1186,6 @@ void main() {
             'killed it',
       );
       expect(service.state.lifecycle, EngineLifecycle.error);
-      expect(crashlytics.customKeys['engine_failure_kind'], 'command');
-      expect(crashlytics.recordedErrors.last.reason, contains(stockfish.failedCommands.single));
     });
 
     test('A write that fails mid-search leaves the engine in the error state', () async {

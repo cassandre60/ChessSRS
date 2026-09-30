@@ -30,8 +30,8 @@ These are the authoritative decisions from the owner. Do not override them.
 
 | # | Decision | Rationale |
 |---|---|---|
-| C1 Firebase | `[K]` KEEP | Owner decision 2026-09-29: keep, because notifications need it (C2). Still pointed at Lichess's own project (`lichessv2` / `org.lichess.mobileV2`) — see the open item below |
-| C2 Notifications | `[K]` KEEP | Owner decision 2026-09-29: keep. FCM path is live and is the *only* thing keeping the Firebase project in use; but it delivers Lichess push, not SRS reminders — see the open item below |
+| C1 Firebase | `[x]` DONE | Removed 2026-09-30 (Option B) — firebase_core, crashlytics, messaging dropped; app is 100% offline-first with zero cloud dependencies |
+| C2 Notifications | `[x]` DONE | Removed 2026-09-30 — FCM path and Lichess push models removed; app has no server-push dependencies |
 | C3 Auth/login | `[K]` KEEP | Login is optional but enables importing Lichess/chess.com studies; app is 100% functional offline without it |
 | C4 Online play | `[x]` DONE | Removed 2026-09-15 — lobby, seeks, challenges, view/play, model/lobby, model/challenge |
 | C5 Server games | `[x]` DONE | Removed 2026-09-15 — server game lifecycle, correspondence, GameScreen, ongoing games |
@@ -401,3 +401,4 @@ or HTTP consumers outside auth and study-import paths.
 | 19 / Android-Widgets | Dead Android broadcast widget (BroadcastWidgetProvider, layouts, preview drawables, strings, receiver) | `3ed89a5b7` | 2026-09-30 | analyze 0 |
 | 20 / Home-Widget-Plugin | Drop home_widget plugin dependency, board preference listener, AGP 9 workarounds | `f7ff59df9` | 2026-09-30 | analyze 0 |
 | 21 / iOS-Widgets | Dead iOS LichessWidgets extension (1830 LOC Swift, targets, schemes, FeedKit/flutter-chessground SPM deps) | `b8777bef8` | 2026-09-30 | pbxproj syntax valid |
+| 22 / Firebase-FCM | Strip Firebase, Crashlytics, FCM push models & local notifications (Option B) | pending | 2026-09-30 | analyze 0 |

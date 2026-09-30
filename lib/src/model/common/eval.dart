@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chessground/chessground.dart';
 import 'package:collection/collection.dart';
@@ -190,11 +189,6 @@ sealed class PvData with _$PvData {
       final move = Move.parse(uciMove);
       final movesString = moves.join(' ');
       if (move == null) {
-        LichessBinding.instance.firebaseCrashlytics.recordError(
-          'Invalid UCI move: "$uciMove" in PV: $movesString for position: ${pos.fen} rule: ${pos.rule}',
-          null,
-          reason: 'Failed to parse UCI move from PV',
-        );
         _logger.warning(
           'Invalid UCI move: "$uciMove" in PV: $movesString for position: ${pos.fen}',
         );

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/db/secure_storage.dart';
-import 'package:chess_srs/src/model/notifications/notification_service.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/utils/chessboard.dart';
@@ -13,7 +12,6 @@ import 'package:chess_srs/src/utils/screen.dart';
 import 'package:chess_srs/src/utils/string.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -53,33 +51,9 @@ Future<void> initializeApp() async {
     }
   } catch (e, st) {
     _logger.severe('Error during app initialization:', e, st);
-    // Firebase is only initialized on Android/iOS; guard against calling
-    // Crashlytics on platforms where it is unavailable (e.g. Linux desktop).
-    if (LichessBinding.instance.isFirebaseSupported) {
-      LichessBinding.instance.firebaseCrashlytics.recordError(
-        e,
-        st,
-        reason: 'Error during app initialization',
-      );
-    }
   } finally {
     await prefs.setBool('first_run', false);
   }
-}
-
-Future<void> initializeLocalNotifications(Locale locale) async {
-  await FlutterLocalNotificationsPlugin().initialize(
-    settings: const InitializationSettings(
-      android: AndroidInitializationSettings('ic_stat_notification'),
-      iOS: DarwinInitializationSettings(
-        requestBadgePermission: false,
-        notificationCategories: <DarwinNotificationCategory>[],
-      ),
-      linux: LinuxInitializationSettings(defaultActionName: 'Action'),
-    ),
-    onDidReceiveNotificationResponse: NotificationService.onDidReceiveNotificationResponse,
-    // onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-  );
 }
 
 Future<void> preloadPieceImages() async {

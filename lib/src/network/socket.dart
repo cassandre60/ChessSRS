@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
@@ -528,11 +527,6 @@ class SocketClient {
           onEventGapFailure?.call();
           _logger.warning(
             'Version gap at event ${event.version} (socket: $version); reconnecting to resynchronize.',
-          );
-          LichessBinding.instance.firebaseCrashlytics.recordError(
-            'Version gap: version incoming ${event.version} vs current $version',
-            null,
-            information: ['socket.route: $route', 'event.topic: ${event.topic}'],
           );
           unawaited(_disconnect());
           _scheduleReconnect(Duration.zero);
