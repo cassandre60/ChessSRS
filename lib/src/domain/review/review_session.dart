@@ -610,7 +610,7 @@ class ReviewSession {
         chapter?.startingFen ??
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     final fenKey = node?.fenKey ?? fen;
-    final side = _sideFromFen(fen);
+    final side = sideFromFen(fen);
     final parentNode = node != null ? _parentOfNode[node.id] : null;
     final moveHistory = _moveHistoryForNode(node?.id);
 
@@ -662,12 +662,16 @@ class ReviewSession {
     }
   }
 
-  Side _sideFromFen(String fen) {
-    final parts = fen.trim().split(RegExp(r'\s+'));
-    if (parts.length > 1 && parts[1].toLowerCase() == 'b') {
-      return Side.black;
+  /// Parses the active side to move from [fen] using dartchess [Setup.parseFen].
+  ///
+  /// Falls back to [Side.white] if the FEN cannot be parsed.
+  static Side sideFromFen(String fen) {
+    try {
+      final pos = Setup.parseFen(fen.trim());
+      return pos.turn;
+    } catch (_) {
+      return Side.white;
     }
-    return Side.white;
   }
 
   /// Selects the opponent response among multiple children.

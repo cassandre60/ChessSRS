@@ -1,7 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-016, INV-017, INV-020, INV-021, INV-022, INV-023, INV-027, INV-028, INV-029,
-//   INV-031, INV-033, INV-041.
+// SPEC coverage: INV-012, INV-015, INV-016, INV-017, INV-020, INV-021, INV-022, INV-023, INV-027,
+//   INV-028, INV-029, INV-031, INV-033, INV-041.
 
 import 'dart:math';
 
@@ -1475,6 +1475,78 @@ void main() {
 
       // B's memory is untouched: no shared scheduling across questions.
       expect(session.reviewStates['canon-b'], equals(stateB));
+    });
+
+    // SPEC INV-015: side to move parsed robustly from FEN using dartchess Setup.
+    group('ReviewSession.sideFromFen', () {
+      test('identifies White to move from standard start FEN', () {
+        expect(
+          ReviewSession.sideFromFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'),
+          Side.white,
+        );
+      });
+
+      test('identifies Black to move from standard move-1 FEN', () {
+        expect(
+          ReviewSession.sideFromFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1'),
+          Side.black,
+        );
+      });
+
+      test('handles whitespace padding and partial FENs', () {
+        expect(
+          ReviewSession.sideFromFen(
+            '  rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1 \n',
+          ),
+          Side.black,
+        );
+        expect(ReviewSession.sideFromFen('8/8/8/8/8/8/8/8 w - - 0 1'), Side.white);
+      });
+
+      test('falls back gracefully to Side.white on malformed FEN', () {
+        expect(ReviewSession.sideFromFen(''), Side.white);
+        expect(ReviewSession.sideFromFen('not a valid fen'), Side.white);
+        expect(ReviewSession.sideFromFen('8/8/8/8/8/8/8/8 x - - 0 1'), Side.white);
+      });
+
+      test('session prompt sideToMove reflects custom starting FEN with Black to move', () {
+        const blackToMoveFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+        final study = Study(
+          id: 's-black',
+          title: 'Black Repertoire',
+          createdAt: baseTime,
+          updatedAt: baseTime,
+        );
+        const chapter = Chapter(
+          id: 'ch-black',
+          studyId: 's-black',
+          sourceOrder: 0,
+          title: 'French Defense',
+          startingFen: blackToMoveFen,
+          root: RepertoireNode(
+            id: 'node-root-black',
+            fen: blackToMoveFen,
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+          ),
+        );
+        final dec = RepertoireDecision(
+          id: 'dec-black-1',
+          studyId: study.id,
+          chapterId: chapter.id,
+          nodeId: 'node-root-black',
+          expectedMoves: const [RepertoireMove(from: 'e7', to: 'e6', san: 'e6')],
+        );
+
+        final engine = ReviewEngine(clock: clock);
+        final session = engine.createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: [dec],
+          reviewStates: const {},
+        );
+
+        expect(session.currentPrompt?.sideToMove, Side.black);
+      });
     });
   });
 }
