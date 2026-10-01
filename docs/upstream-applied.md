@@ -15,6 +15,7 @@ Because `HEAD` does not share a linear ancestor history with recent upstream com
 | `60309eb8d` | Route app links by exact host, not prefix match (#3730) | `0fad2d1e3` (#99) | `lib/src/model/common/service/app_links_service.dart` | Fixes routing of lichess deep links |
 | `c60a0edd8` | Index openings.epd for per-position lookup (#3706) | `7f2a0c4e7` (#102) | `scripts/update_openings_db.py`, `lib/src/model/common/service/openings_service.dart` | Performance index for opening lookups |
 | `498ce10a7` | Await openings database cleanup (#3702) | `02d91a23f` (#103) | `lib/src/model/common/service/openings_service.dart` | Prevents race condition during DB reset |
-| `ed3dbea51` | Remove unrequired abiFilters in build.gradle.kts (#3750) | In-flight (upstream sync) | `android/app/build.gradle.kts` | Drops x86 from abiFilters as Flutter excludes x86 |
-| `1a3a4dda8` | Cancel eval stream subscription of replaced eval request (#3718) | In-flight (upstream sync) | `lib/src/model/engine/evaluation_mixin.dart` | Cancels subscription on new eval request and on dispose |
-| `e6be63d22` | Native Linux audio playback support (#3670) | In-flight (upstream sync) | `lib/src/model/common/service/sound_service.dart` | Linux audio playback using pw-play/paplay/aplay system backends |
+| `ed3dbea51` | Remove unrequired abiFilters in build.gradle.kts (#3750) | `c042255c0` (#120) | `android/app/build.gradle.kts` | Drops x86 from abiFilters as Flutter excludes x86 |
+| `1a3a4dda8` | Cancel eval stream subscription of replaced eval request (#3718) | `c042255c0` (#120) | `lib/src/model/engine/evaluation_mixin.dart` | Cancels subscription on new eval request and on dispose |
+| `e6be63d22` | Native Linux audio playback support (#3670) | `c042255c0` (#120) | `lib/src/model/common/service/sound_service.dart` | Linux audio playback using pw-play/paplay/aplay system backends |
+| `cd25cd5f8` | Cancel superseded PR runs so only latest commit is tested (#3763) | In-flight (upstream sync) | `.github/workflows/test.yml` | Concurrency cancel-in-progress on pull_request |
