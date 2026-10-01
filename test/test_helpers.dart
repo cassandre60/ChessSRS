@@ -216,7 +216,26 @@ Future<void> pumpUntil(
     if (DateTime.now().isAfter(deadline)) {
       throw StateError('pumpUntil timed out after $timeout');
     }
-    await tester.pump(interval);
+    await tester.runAsync(() => Future<void>.delayed(interval));
+    await tester.pump();
+  }
+}
+
+/// Polls until [condition] returns true, checking every [interval] up to [timeout].
+///
+/// Useful for unit tests where background async tasks (such as controller timers or
+/// animations) complete over real wall-clock time without a [WidgetTester].
+Future<void> waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('waitUntil timed out after $timeout');
+    }
+    await Future<void>.delayed(interval);
   }
 }
 
@@ -245,7 +264,7 @@ Future<void> pumpUntilGone(
 /// This uses a fixed delay and is kept for existing tests that haven't migrated yet.
 /// New tests should use pumpUntil/pumpUntilFound instead.
 @Deprecated('Use pumpUntil or pumpUntilFound instead')
-Future<void> pumpAsync(WidgetTester tester, [int ms = 80]) async {
+Future<void> pumpAsync(WidgetTester tester, [int ms = 120]) async {
   await tester.runAsync(() async {
     await Future<void>.delayed(Duration(milliseconds: ms));
   });

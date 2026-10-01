@@ -54,15 +54,6 @@ void main() {
       await db.close();
     });
 
-    Future<void> pumpAsync(WidgetTester tester, [int ms = 80]) async {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(Duration(milliseconds: ms));
-      });
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 300));
-    }
-
     testWidgets('shows first launch empty state when no studies exist', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,

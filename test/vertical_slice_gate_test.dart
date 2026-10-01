@@ -54,15 +54,6 @@ void main() {
       } catch (_) {}
     });
 
-    Future<void> pumpAsync(WidgetTester tester, [int ms = 80]) async {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(Duration(milliseconds: ms));
-      });
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 300));
-    }
-
     testWidgets(
       'Full vertical slice lifecycle: import -> review -> correct -> lapse -> restart persistence',
       (tester) async {

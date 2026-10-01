@@ -22,6 +22,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../binding.dart';
 import '../model/common/service/fake_sound_service.dart';
+import '../test_helpers.dart';
 import 'gated_study_repository.dart';
 
 void main() {
@@ -255,7 +256,9 @@ void main() {
       // Pre-move animation: starts at parent position (White's turn before 1. e4),
       // then animates White's 1. e4 onto the board so Black sees opponent's move!
       expect(state.boardPosition!.turn, Side.white);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       final stateAfterPreMove = container.read(reviewControllerProvider).requireValue;
       expect(stateAfterPreMove.boardPosition!.turn, Side.black);
       expect(stateAfterPreMove.lastMove, const NormalMove(from: Square.e2, to: Square.e4));
@@ -581,9 +584,18 @@ void main() {
 
       // Complete all items in normal review so due count is 0
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await waitUntil(() => container.read(reviewControllerProvider).value?.isComplete == true);
 
       var state = container.read(reviewControllerProvider).requireValue;
       expect(state.totalDueCount, 0);
@@ -626,21 +638,35 @@ void main() {
       // User plays 1. e4
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
       // Auto-reply plays 1... e5
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
 
       // User plays 2. Nf3 to complete branch 1
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Transitioning to the other branch: White to play against opponent's response.
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.currentPrompt?.incomingMove != null,
+      );
 
-      // Now transitioning to the other branch: White to play against opponent's response.
-      // Initially, board is at parent position (before opponent's move)
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.currentPrompt, isNotNull);
       final incoming = state.currentPrompt!.incomingMove;
       expect(incoming, isNotNull);
 
       // Wait for pre-move animation of the opponent's incoming branch move
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).value?.lastMove ==
+            NormalMove(from: Square.fromName(incoming!.from), to: Square.fromName(incoming.to)),
+      );
       final stateAfterPreMove = container.read(reviewControllerProvider).requireValue;
       expect(
         stateAfterPreMove.lastMove,
@@ -668,7 +694,9 @@ void main() {
       );
 
       // Wait for pre-move of Prompt 1
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       var state = container.read(reviewControllerProvider).requireValue;
       expect(state.currentPrompt, isNotNull);
 
@@ -688,7 +716,9 @@ void main() {
       expect(nextIncoming, isNotNull);
 
       // Wait for pre-move animation of White's move onto the board
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       final stateAfter = container.read(reviewControllerProvider).requireValue;
       expect(
         stateAfter.lastMove,
@@ -711,15 +741,42 @@ void main() {
 
       // Move 1: 1. e4
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
 
       // Move 2: 2. Nf3
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Bc4' || m.uci == 'f1c4') ==
+            true,
+      );
 
       // Move 3: 3. Bc4
       await controller.onUserMove(const NormalMove(from: Square.f1, to: Square.c4));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'O-O' || m.uci == 'e1g1') ==
+            true,
+      );
 
       // Move 4: User plays O-O by dragging King from e1 to g1 on board!
       final result = await controller.onUserMove(const NormalMove(from: Square.e1, to: Square.g1));
