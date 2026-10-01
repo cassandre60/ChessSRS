@@ -449,3 +449,9 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
   for both fork and upstream on `study_controller.dart`, `network/http.dart`,
   `analysis_screen.dart`, `board.dart`, `game.dart`, with `LICENSE` and
   `COPYING.md` present in both trees.
+- [2026-10-01, antigravity/gemini-3.8-flash-tiered] GitHub branch protection
+  requires both 'T1 fast gates' and 'Unit tests on ubuntu-latest'. When a PR touches
+  only files in docs/**, gates.yml does not trigger, leaving 'T1 fast gates'
+  unreported and blocking merge even with --admin. Verified by: PR #119 failing
+  merge with 'GraphQL: Required status check \"T1 fast gates\" is expected', while
+  PR #112 merged cleanly because touching AGENTS.md triggered gates.yml.
