@@ -14,7 +14,7 @@ dependencies:
   app_settings: ^9.0.0
   async: ^2.13.1
   auto_size_text: ^3.0.0
-  chessground: ^10.2.0
+  chessground: ^10.3.0
   clock: ^1.1.2
   collection: ^1.19.1
   connectivity_plus: ^7.3.1
@@ -23,7 +23,7 @@ dependencies:
   cupertino_http: ^3.0.2
   cupertino_icons: ^1.0.9
   cupertino_ui: ^1.1.1
-  dartchess: ^0.13.1
+  dartchess: ^0.14.0
   deep_pick: ^1.1.0
   device_info_plus: ^13.2.0
   dynamic_system_colors: ^1.9.0
@@ -103,12 +103,6 @@ dev_dependencies:
 # The engine plugin branch pins native package versions that are not published yet. Remove this
 # whole block, and restore a pub.dev version under `multistockfish` above, once they are.
 dependency_overrides:
-  # dartchess is pinned to the Zobrist hashing the opening book keys on (0.14.0, unreleased).
-  # Remove once dartchess 0.14.0 is on pub.dev and the constraint above is bumped.
-  dartchess:
-    git:
-      url: https://github.com/lichess-org/dartchess.git
-      ref: ed64d8a58ea16e3597f71a037ff0f50733b8604d
   multistockfish_chess:
     git:
       url: https://github.com/lichess-org/dart-multistockfish.git
