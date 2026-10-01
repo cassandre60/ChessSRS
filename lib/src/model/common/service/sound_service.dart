@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -42,6 +43,72 @@ final _extension = defaultTargetPlatform == TargetPlatform.iOS ? 'aifc' : 'mp3';
 
 const Set<Sound> _emtpySet = {};
 
+final _linuxSoundPlayer = _LinuxSoundPlayer();
+
+/// Linux audio player using system audio backends (pw-play, paplay, or aplay).
+class _LinuxSoundPlayer {
+  final Map<String, String> _soundPaths = {};
+  String? _playerCmd;
+
+  void initialize() {
+    if (_hasCmd('pw-play')) {
+      _playerCmd = 'pw-play';
+    } else if (_hasCmd('paplay')) {
+      _playerCmd = 'paplay';
+    } else if (_hasCmd('aplay')) {
+      _playerCmd = 'aplay';
+    }
+  }
+
+  bool _hasCmd(String cmd) {
+    if (File('/usr/bin/$cmd').existsSync() || File('/usr/local/bin/$cmd').existsSync()) {
+      return true;
+    }
+    try {
+      final res = Process.runSync('which', [cmd]);
+      return res.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> load(SoundTheme theme, String soundId, String fullPath) async {
+    try {
+      final tmpDir = Directory('${Directory.systemTemp.path}/chess_srs_sounds');
+      if (!tmpDir.existsSync()) {
+        tmpDir.createSync(recursive: true);
+      }
+      final destFile = File('${tmpDir.path}/${theme.name}_$soundId.$_extension');
+      if (!destFile.existsSync()) {
+        final byteData = await rootBundle.load(fullPath);
+        await destFile.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
+      }
+      _soundPaths[soundId] = destFile.path;
+    } catch (e) {
+      _logger.warning('Failed to cache Linux sound $soundId ($fullPath):', e);
+    }
+  }
+
+  void play(String soundId, {double volume = 1.0}) {
+    final filePath = _soundPaths[soundId];
+    if (filePath == null || _playerCmd == null) return;
+
+    final vol = volume.clamp(0.0, 1.0);
+    if (_playerCmd == 'pw-play') {
+      Process.start('pw-play', ['--volume=$vol', filePath]);
+    } else if (_playerCmd == 'paplay') {
+      final paVol = (vol * 65536).toInt();
+      Process.start('paplay', ['--volume=$paVol', filePath]);
+    } else {
+      Process.start(_playerCmd!, [filePath]);
+    }
+  }
+
+  void release() {
+    _soundPaths.clear();
+  }
+}
+
 /// Loads all sounds of the given [SoundTheme].
 Future<void> _loadAllSounds(SoundTheme soundTheme, {Set<Sound> excluded = _emtpySet}) async {
   await Future.wait(
@@ -62,7 +129,14 @@ Future<void> _loadSound(SoundTheme theme, Sound sound) async {
   } catch (_) {
     fullPath = '$standardPath/$file';
   }
-  await _soundEffectPlugin.load(soundId, fullPath);
+  if (defaultTargetPlatform == TargetPlatform.linux) {
+    await _linuxSoundPlayer.load(theme, soundId, fullPath);
+  } else {
+    try {
+      await _soundEffectPlugin.load(soundId, fullPath);
+    } on PlatformException catch (_) {
+    } on MissingPluginException catch (_) {}
+  }
 }
 
 /// Service to play game sounds.
@@ -85,7 +159,14 @@ class SoundService {
                   ? GeneralPrefs.fromJson(jsonDecode(stored) as Map<String, dynamic>)
                   : GeneralPrefs.defaults)
               .soundTheme;
-      await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
+      if (defaultTargetPlatform == TargetPlatform.linux) {
+        _linuxSoundPlayer.initialize();
+      } else {
+        try {
+          await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
+        } on PlatformException catch (_) {
+        } on MissingPluginException catch (_) {}
+      }
       await _loadAllSounds(theme);
     } catch (e, st) {
       _logger.warning('Failed to initialize sound service:', e, st);
@@ -98,6 +179,10 @@ class SoundService {
     final isEnabled = _ref.read(generalPreferencesProvider).isSoundEnabled;
     final finalVolume = _ref.read(generalPreferencesProvider).masterVolume * volume;
     if (!isEnabled || finalVolume == 0.0) {
+      return;
+    }
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      _linuxSoundPlayer.play(sound.name, volume: finalVolume);
       return;
     }
     try {
@@ -121,8 +206,15 @@ class SoundService {
   ///
   /// If [playSound] is true, a move sound will be played.
   Future<void> changeTheme(SoundTheme theme, {bool playSound = false}) async {
-    await _soundEffectPlugin.release();
-    await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      _linuxSoundPlayer.release();
+    } else {
+      try {
+        await _soundEffectPlugin.release();
+        await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
+      } on PlatformException catch (_) {
+      } on MissingPluginException catch (_) {}
+    }
     await _loadSound(theme, Sound.move);
     if (playSound) {
       play(Sound.move);
@@ -131,6 +223,13 @@ class SoundService {
   }
 
   Future<void> release() async {
-    await _soundEffectPlugin.release();
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      _linuxSoundPlayer.release();
+    } else {
+      try {
+        await _soundEffectPlugin.release();
+      } on PlatformException catch (_) {
+      } on MissingPluginException catch (_) {}
+    }
   }
 }
