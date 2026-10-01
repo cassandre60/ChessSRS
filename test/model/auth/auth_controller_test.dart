@@ -213,4 +213,30 @@ void main() {
     expect(fakeStorage.storedUser, userB);
     expect(fakeStorage.deleteCalls, 0);
   });
+
+  test('retains authUser state when all listeners are closed', () async {
+    final fakeStorage = _FakeAuthStorage();
+    final fakeRepo = _FakeAuthRepository(onSignIn: () async => userA);
+    final container = await makeContainer(
+      overrides: {
+        authStorageProvider: authStorageProvider.overrideWithValue(fakeStorage),
+        authRepositoryProvider: authRepositoryProvider.overrideWithValue(fakeRepo),
+      },
+    );
+    final sub = container.listen(authControllerProvider, (_, _) {});
+
+    // Initially null
+    expect(container.read(authControllerProvider), isNull);
+
+    // Sign in as userA
+    await container.read(authControllerProvider.notifier).signIn();
+    expect(container.read(authControllerProvider), userA);
+
+    // Close listener (simulates user leaving screen)
+    sub.close();
+    await Future<void>.delayed(Duration.zero);
+
+    // Must still be userA!
+    expect(container.read(authControllerProvider), userA);
+  });
 }
