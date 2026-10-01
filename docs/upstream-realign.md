@@ -1,5 +1,12 @@
 # Upstream sync + realign with lichess-org/mobile
 
+> **Read first: `docs/upstream-audit-2026-09-30.md`.** It is the current
+> state of this document's Task 1 and Task 2. Its §1 records the finding that
+> governs every sync — `e57fcb411` is **not** an ancestor of `HEAD`, so
+> `git log HEAD..upstream/main` overstates the real gap and a blind merge will
+> conflict on files that are already correct. Its §3 ranks the Take candidates
+> and §9 orders them. Earlier snapshot: `docs/upstream-audit-2026-09-29.md`.
+
 ## Principle (owner-set 2026-09-29)
 Align with Lichess in CODE, differ in PRESENTATION. Deleting Lichess features
 we don't want is fine and good. What must stop: drifting away by rewriting

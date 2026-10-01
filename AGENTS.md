@@ -431,3 +431,21 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
   from it would have carried their commit into the PR. Verified by: diffing the
   two files to confirm 29 added lines and 0 deletions before reverting, then
   re-applying the same patch on a fresh branch off `ea1d09678`.
+- [2026-09-30, Space Bunny Free] `e57fcb411` is NOT an ancestor of `HEAD`, so
+  `git log HEAD..upstream/main` overstates the upstream gap: fixes reach this fork
+  only as hand-squashed cherry-picks, and at least five are already applied under
+  different hashes (`a99dad8a1`→`bcb66ad5b`, `25cf0fae5`→`a0d9ed580`,
+  `60309eb8d`→`0fad2d1e3`, `c60a0edd8`→`7f2a0c4e7`, `498ce10a7`→`02d91a23f`).
+  Never attempt `git merge upstream/main` — it conflicts on files that are already
+  correct. Realign subsystem-by-subsystem per `docs/upstream-realign.md`; current
+  state and Take ranking in `docs/upstream-audit-2026-09-30.md`. Verified by:
+  `git merge-base --is-ancestor e57fcb411 HEAD` returning non-zero with 167
+  upstream-only commits, and each pair confirmed against both diffs.
+- [2026-09-30, Space Bunny Free] "387 surviving upstream files have no per-file
+  GPL header" is a false positive: upstream puts no per-file headers in those same
+  files either, and licensing here is file-level `LICENSE` + `COPYING.md` exactly
+  as upstream does it. Do not re-raise it in a future audit without first
+  checking the same files at `upstream/main`. Verified by: header grep scoring 0
+  for both fork and upstream on `study_controller.dart`, `network/http.dart`,
+  `analysis_screen.dart`, `board.dart`, `game.dart`, with `LICENSE` and
+  `COPYING.md` present in both trees.

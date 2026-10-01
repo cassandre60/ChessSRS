@@ -76,6 +76,15 @@ Risk levels (`Low`/`Medium`/`High`) apply only to `Logic-shared` and
 
 Write the report to `docs/upstream-audit-<date>.md` and output three tables:
 
+> **Prior reports — read the most recent one first, and diff against it rather
+> than re-deriving the baseline:**
+> - `docs/upstream-audit-2026-09-30.md` — current. §1 explains why
+>   `git log HEAD..upstream/main` overstates the gap (upstream fixes arrive as
+>   hand-squashed cherry-picks, and five are already applied); §6 records the
+>   per-file GPL header question as a measured false positive, so do not
+>   re-raise it.
+> - `docs/upstream-audit-2026-09-29.md` — the earlier snapshot.
+
 ### Your changes vs upstream
 | File/subsystem | Category | Change | Notes |
 
