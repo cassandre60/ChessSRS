@@ -3,7 +3,6 @@ import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/game/game_history.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/model/user/user_repository.dart';
-import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -50,14 +49,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
-    final online = ref.watch(isDeviceOnlineProvider);
     return PlatformScaffold(
       appBar: PlatformAppBar(
         titleSpacing: 0,
         title: account.when(
           data: (user) => user == null
               ? const SizedBox.shrink()
-              : UserAppBarTitleWidget(user: user.lightUser, isOnline: online, seenAt: user.seenAt),
+              : UserAppBarTitleWidget(user: user.lightUser, isOnline: true, seenAt: user.seenAt),
           loading: () => const SizedBox.shrink(),
           error: (error, _) => const SizedBox.shrink(),
         ),
