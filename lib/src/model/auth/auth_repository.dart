@@ -1,13 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/model/auth/sign_in_failure_reporter.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Host of the custom URI scheme callback. Must stay in sync with the
 /// intent-filter for `net.openid.appauth.RedirectUriReceiverActivity` in
@@ -69,6 +75,12 @@ class AuthRepository {
 
   /// Sign in with Lichess using OAuth 2.0 PKCE using the system browser.
   Future<AuthUser> signIn() async {
+    if (defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return await _desktopSignIn();
+    }
+
     final AuthorizationTokenResponse authResp;
     try {
       authResp = await _appAuth.authorizeAndExchangeCode(
@@ -98,6 +110,115 @@ class AuthRepository {
     }
 
     return await _fetchAuthUser(token);
+  }
+
+  /// Desktop loopback OAuth PKCE flow using the system browser.
+  Future<AuthUser> _desktopSignIn() async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    try {
+      final redirectUri = 'http://127.0.0.1:${server.port}/callback';
+
+      final random = Random.secure();
+      final verifierBytes = List<int>.generate(32, (_) => random.nextInt(256));
+      final codeVerifier = base64UrlEncode(verifierBytes).replaceAll('=', '');
+      final challengeBytes = sha256.convert(ascii.encode(codeVerifier)).bytes;
+      final codeChallenge = base64UrlEncode(challengeBytes).replaceAll('=', '');
+
+      final authUri = lichessUri('/oauth', {
+        'response_type': 'code',
+        'client_id': kLichessClientId,
+        'redirect_uri': redirectUri,
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
+        'scope': 'study:read study:write preference:read',
+      });
+
+      if (!await launchUrl(authUri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch system browser for authentication.');
+      }
+
+      final request = await server.first.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw const SignInCancelledException(),
+      );
+
+      final code = request.uri.queryParameters['code'];
+      final error = request.uri.queryParameters['error'];
+
+      final response = request.response;
+      response.headers.contentType = ContentType.html;
+      if (code != null) {
+        response.write('''
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>ChessSRS Sign In</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 48px; background: #141416; color: #f4f4f5;">
+  <h2 style="margin-bottom: 8px;">Authorization successful!</h2>
+  <p style="color: #a1a1aa;">You can close this window and return to ChessSRS.</p>
+</body>
+</html>
+''');
+      } else {
+        response.write('''
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>ChessSRS Sign In</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 48px; background: #141416; color: #f4f4f5;">
+  <h2 style="margin-bottom: 8px;">Authorization was cancelled.</h2>
+  <p style="color: #a1a1aa;">You can close this window and return to ChessSRS.</p>
+</body>
+</html>
+''');
+      }
+      await response.close();
+
+      if (error == 'access_denied') {
+        throw const SignInCancelledException();
+      }
+      if (code == null) {
+        throw Exception('Authorization code missing from callback: $error');
+      }
+
+      final tokenUri = lichessUri('/api/token');
+      final tokenResponse = await _ref
+          .read(defaultClientProvider)
+          .post(
+            tokenUri,
+            body: {
+              'grant_type': 'authorization_code',
+              'code': code,
+              'code_verifier': codeVerifier,
+              'redirect_uri': redirectUri,
+              'client_id': kLichessClientId,
+            },
+          );
+
+      if (tokenResponse.statusCode >= 400) {
+        throw ServerException(
+          tokenResponse.statusCode,
+          'Could not exchange authorization code: ${tokenResponse.statusCode}',
+          tokenUri,
+          null,
+        );
+      }
+
+      final json = jsonDecode(tokenResponse.body) as Map<String, dynamic>;
+      final token = json['access_token'] as String?;
+      if (token == null) {
+        throw Exception('Access token not found in response.');
+      }
+
+      _log.fine('Got desktop OAuth token response');
+
+      return await _fetchAuthUser(token);
+    } catch (e, st) {
+      if (e is! SignInCancelledException) {
+        await reportSignInFailure(_ref, e, st);
+      }
+      rethrow;
+    } finally {
+      await server.close(force: true);
+    }
   }
 
   /// Asks lichess to email a 6 character login code for the [username] account to [email].
