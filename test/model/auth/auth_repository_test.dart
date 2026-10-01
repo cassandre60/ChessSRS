@@ -177,6 +177,28 @@ void main() {
         throwsA(isA<ServerException>()),
       );
     });
+
+    test('falls back to query parameters if the server returns 404 to body-only request', () async {
+      final requests = <Uri>[];
+      final container = await emailLoginContainer((request) {
+        requests.add(request.url);
+        if (!request.url.hasQuery) {
+          return mockResponse('', 404);
+        }
+        return mockResponse('', 204);
+      });
+
+      await container
+          .read(authRepositoryProvider)
+          .requestEmailLoginCode(username: 'johndoe', email: 'johndoe@lichess.org');
+
+      expect(requests, hasLength(2));
+      expect(requests.first.hasQuery, isFalse);
+      expect(requests.last.queryParameters, {
+        'email': 'johndoe@lichess.org',
+        'username': 'johndoe',
+      });
+    });
   });
 
   group('AuthRepository.signInWithEmailCode', () {
@@ -262,6 +284,37 @@ void main() {
             .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx'),
         throwsA(isA<Exception>()),
       );
+    });
+
+    test('falls back to query parameters if the server returns 404 to body-only request', () async {
+      final requests = <Uri>[];
+      final container = await emailLoginContainer((request) {
+        switch (request.url.path) {
+          case '/auth/mobile-code/bearer':
+            requests.add(request.url);
+            if (!request.url.hasQuery) {
+              return mockResponse('', 404);
+            }
+            return mockResponse('lio_token', 200);
+          case '/api/account':
+            return mockResponse(_accountResponse, 200);
+          default:
+            return mockResponse('', 404);
+        }
+      });
+
+      final authUser = await container
+          .read(authRepositoryProvider)
+          .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx');
+
+      expect(requests, hasLength(2));
+      expect(requests.first.hasQuery, isFalse);
+      expect(requests.last.queryParameters, {
+        'email': 'johndoe@lichess.org',
+        'username': 'johndoe',
+        'code': 'xxxxxx',
+      });
+      expect(authUser.token, 'lio_token');
     });
   });
 }
