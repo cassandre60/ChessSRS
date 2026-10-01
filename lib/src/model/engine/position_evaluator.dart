@@ -617,7 +617,13 @@ class PositionEvaluator extends Notifier<EngineEvaluationState> {
     // Track max pv index to determine when pv prints are done.
     if (_expectedPvs < info.multiPv) _expectedPvs = info.multiPv;
 
-    if (info.depth < minDepth && info.pv.isNotEmpty) return;
+    // Infos without a principal variation carry no moves to display or store:
+    // emitting them would publish evals with empty move lists. Shallow noisy
+    // infos were already skipped above only when they had a PV; empties
+    // slipped through regardless of depth.
+    if (info.pv.isEmpty) return;
+
+    if (info.depth < minDepth) return;
 
     final isMate = info.mate != null;
     final povEv = info.mate ?? info.cp!;

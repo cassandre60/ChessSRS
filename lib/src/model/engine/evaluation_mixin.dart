@@ -436,11 +436,17 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
               evalWork.searchTime != kMaxEngineSearchTime) {
             final targetTime = evalWork.searchTime;
             final evalSearchTime = eval.searchTime;
-            final likelyNodes =
-                ((targetTime.inMilliseconds * eval.nodes) / evalSearchTime.inMilliseconds).round();
+            // Null means no rate can be established (e.g. zero elapsed time
+            // on the engine's first instant infos): keep the eval, skip the
+            // stop comparison rather than dividing by zero.
+            final likelyNodes = likelyNodesFor(
+              targetTime: targetTime,
+              nodes: eval.nodes,
+              elapsed: evalSearchTime,
+            );
             // if the cloud eval is likely better, stop the local engine
             // nps varies with positional complexity so this is rough, but save planet earth
-            if (likelyNodes < nodeEval.nodes) {
+            if (likelyNodes != null && likelyNodes < nodeEval.nodes) {
               _evaluator.stop();
             }
             return;
@@ -461,4 +467,17 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
       }
     });
   }
+}
+
+/// Estimates the node count a local search would reach in [targetTime] at the
+/// observed rate ([nodes] in [elapsed]), or null when no rate can be
+/// established.
+///
+/// A zero elapsed time arrives with the engine's first near-instant infos.
+/// Dividing by it yields Infinity, and `Infinity.round()` throws — inside the
+/// eval listener, where the throw kills all later local evals for that work.
+/// Callers treat null as "cannot compare": keep the eval, skip the stop.
+int? likelyNodesFor({required Duration targetTime, required int nodes, required Duration elapsed}) {
+  if (elapsed.inMilliseconds <= 0 || nodes < 0) return null;
+  return ((targetTime.inMilliseconds * nodes) / elapsed.inMilliseconds).round();
 }
