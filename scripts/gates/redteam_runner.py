@@ -46,6 +46,10 @@ def main():
     rejected, escaped, stale = [], [], []
     for case in cases:
         patch = os.path.abspath(os.path.join(args.cases, case, "patch.diff"))
+        if os.path.getsize(patch) == 0:
+            print(f"INVALID  {case}: patch.diff is empty (unfinished scaffold?) - "
+                  "finish it per docs/ESCAPE_TO_GATE.md step 6, do not commit empties")
+            return 2
         wt = tempfile.mkdtemp(prefix="redteam-")
         try:
             if run(["git", "worktree", "add", "--detach", wt, args.ref], repo).returncode != 0:

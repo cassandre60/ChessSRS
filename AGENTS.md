@@ -305,7 +305,10 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
    before pushing. The full suite stays CI's job per §3.1.
 6. New tests cite their invariant (`// SPEC INV-xxx.`); G05 rejects
    orphaned invariants and unknown IDs.
-7. Report honestly: what you ran, what passed, what you could not run, and
+7. Fixing a bug the gates missed? Follow `docs/ESCAPE_TO_GATE.md` —
+   regression test, SPEC invariant, red-team case, escapes-log row, in
+   that order. The flywheel only turns if you turn it.
+8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
 
 ## Lessons Learned

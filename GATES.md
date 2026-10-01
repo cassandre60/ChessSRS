@@ -58,6 +58,9 @@ spec coverage of intent, and check strength.
 |------|--------------|------------|--------------------------------------|
 | (none recorded since gates introduced 2026-10-01) | | | |
 
+Adding a row? Follow `docs/ESCAPE_TO_GATE.md` — the row is step 7 of the
+escape loop, after the regression test, SPEC invariant, and red-team case.
+
 ## Operator checklist (owner actions, not automatable here)
 
 1. GitHub branch protection on `main`: required status checks (`Tests`,

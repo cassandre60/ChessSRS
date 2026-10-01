@@ -6,6 +6,7 @@ GATES.md
 GATES_PLAN.md
 QUALITY.md
 TEST_STRATEGY.md
+docs/ESCAPE_TO_GATE.md
 CODEOWNERS
 verify
 .gates/*
