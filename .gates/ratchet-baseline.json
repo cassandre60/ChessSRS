@@ -1,0 +1,9 @@
+{
+  "metrics": {
+    "direct_dependencies": {"value": 65, "direction": "lower_is_better", "tolerance": 0},
+    "analyzer_suppressions": {"value": 18, "direction": "lower_is_better", "tolerance": 0},
+    "test_skips": {"value": 11, "direction": "lower_is_better", "tolerance": 0},
+    "test_declarations": {"value": 1509, "direction": "higher_is_better", "tolerance": 0},
+    "domain_loc": {"value": 2876, "direction": "lower_is_better", "tolerance": 150}
+  }
+}

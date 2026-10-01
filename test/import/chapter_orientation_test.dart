@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-013.
 
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';

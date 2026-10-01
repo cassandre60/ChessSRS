@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-017, INV-027, INV-028, INV-029.
 
 import 'dart:math' as math;
 import 'package:chess_srs/src/domain/chess_fsrs_scheduler.dart';

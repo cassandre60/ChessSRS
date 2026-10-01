@@ -277,6 +277,37 @@ foundation already contains study-tree and game-tree prior art.
   primitive (filter widget, avatar, sheet) that other survivors need.
 - Keep GPL notices of any removed-origin code that still shares files.
 
+## 10. Quality gates: rules for any agent or contributor working here
+
+This repository is gated. Your job is to get a change accepted by the gates
+honestly, not to make the gates go green. Before editing, read `SPEC.md`
+(invariants with stable IDs), `GATES.md` (everything that can reject you),
+`GATES_PLAN.md` (what is deliberately not gated), and `.gates/`.
+
+1. Classify your change (bugfix, perf, refactor, feature, test-only,
+   dependency, docs, gate-change, spec-change) and gather the evidence that
+   class requires — see `.github/PULL_REQUEST_TEMPLATE.md` and `GATES.md`.
+   A bugfix starts with a test that fails on the current code.
+2. Never edit the referee to get a pass: `SPEC.md`, `GATES.md`,
+   `GATES_PLAN.md`, `QUALITY.md`, `TEST_STRATEGY.md`, `CODEOWNERS`, `.gates/`,
+   `redteam/`, `scripts/gates*`, CI config, `analysis_options.yaml`,
+   `pubspec.yaml`, ratchet baselines, `AGENTS.md`/`CLAUDE.md`, the PR
+   template. If you think a gate is wrong, stop and propose a separate
+   gate-change PR with evidence — never bundle it with product code.
+3. Never weaken a check: no deleted or loosened assertions, no
+   skip/ignore/xfail, no new suppressions, no widened tolerances, no mocking
+   the subject under test, no hardcoded expected values, no catch-all error
+   handling. The tripwire (G08) diffs for exactly this.
+4. When a gate fails, fix the code. Reproduce with the printed command, and
+   address the root cause. After 3 failed attempts on the same gate, stop and
+   report what you learned instead of iterating blindly.
+5. Run `./scripts/gates.sh t1` (needs `BASE_REF`, defaults to `origin/main`)
+   before pushing. The full suite stays CI's job per §3.1.
+6. New tests cite their invariant (`// SPEC INV-xxx.`); G05 rejects
+   orphaned invariants and unknown IDs.
+7. Report honestly: what you ran, what passed, what you could not run, and
+   what remains unverified.
+
 ## Lessons Learned
 
 - [2026-09-25, Space Bunny Free] The full suite is a pre-push gate, not a

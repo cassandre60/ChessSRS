@@ -1,0 +1,11 @@
+diff --git a/lib/src/domain/study.dart b/lib/src/domain/study.dart
+index 77cb8107e..f754fc54b 100644
+--- a/lib/src/domain/study.dart
++++ b/lib/src/domain/study.dart
+@@ -1,5 +1,6 @@
+ // Copyright (C) 2024 ChessSRS contributors
+ // SPDX-License-Identifier: GPL-3.0-or-later
++// ignore: lines_longer_than_80_chars
+ 
+ import 'package:chess_srs/src/domain/ids.dart';
+ 

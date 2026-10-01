@@ -1,0 +1,20 @@
+# The referee: changes here need the human owner's approval, no exceptions.
+# Gate-change/spec-change PRs additionally need the `gate-approved` label
+# (see .github/workflows/gates.yml) before the protected-paths check passes.
+/CODEOWNERS                  @mansourvery-hub
+/SPEC.md                     @mansourvery-hub
+/GATES.md                    @mansourvery-hub
+/GATES_PLAN.md               @mansourvery-hub
+/QUALITY.md                  @mansourvery-hub
+/TEST_STRATEGY.md            @mansourvery-hub
+/.gates/                     @mansourvery-hub
+/redteam/                    @mansourvery-hub
+/scripts/gates/              @mansourvery-hub
+/scripts/gates.sh            @mansourvery-hub
+/.github/                    @mansourvery-hub
+/AGENTS.md                   @mansourvery-hub
+/CLAUDE.md                   @mansourvery-hub
+/verify                      @mansourvery-hub
+/analysis_options.yaml       @mansourvery-hub
+/pubspec.yaml                @mansourvery-hub
+/test_fixtures/              @mansourvery-hub

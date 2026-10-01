@@ -1,5 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-003, INV-011, INV-020, INV-021, INV-023, INV-026, INV-030, INV-031, INV-032,
+//   INV-033.
 
 import 'dart:async';
 

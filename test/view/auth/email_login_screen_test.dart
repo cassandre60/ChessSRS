@@ -1,3 +1,5 @@
+// SPEC coverage: INV-006.
+
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
