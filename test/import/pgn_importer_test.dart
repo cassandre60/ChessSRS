@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart';
@@ -692,6 +693,63 @@ void main() {
 
       expect(result.errors, isEmpty);
       expect(result.decisions, isNotEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Import fidelity round 2: comments, titles, openings, hashes, error volume
+  // ---------------------------------------------------------------------------
+  group('importPgn — fidelity', () {
+    test('keeps both pre-move and post-move comments on a node', () {
+      // A comment between the move number and the SAN lands in
+      // startingComments; one after the SAN lands in comments. Either/or
+      // logic kept only the latter.
+      final result = importPgn('1. e4 e5 (1... {pre} c5 {post}) 2. Nf3 *');
+      expect(result.errors, isEmpty);
+      final root = result.chapters.single.root!;
+      RepertoireNode? walk(RepertoireNode node, String san) {
+        if (node.incomingMove?.san == san) return node;
+        for (final c in node.children) {
+          final found = walk(c, san);
+          if (found != null) return found;
+        }
+        return null;
+      }
+
+      final c5 = walk(root, 'c5');
+      expect(c5, isNotNull);
+      expect(c5!.comment, contains('pre'));
+      expect(c5.comment, contains('post'));
+    });
+
+    test('keeps hyphenated opening names intact', () {
+      // The old split on every '-' cut these to just 'Caro'.
+      expect(extractOpeningFamily({'Opening': 'Caro-Kann Defense'}), 'Caro-Kann Defense');
+      expect(
+        extractOpeningFamily({'Opening': 'Caro-Kann Defense: Advance Variation'}),
+        'Caro-Kann Defense',
+      );
+      expect(
+        extractOpeningFamily({'Opening': 'Sicilian Defense: Najdorf Variation'}),
+        'Sicilian Defense',
+      );
+      expect(extractOpeningFamily({'Opening': 'French Defence - Winawer'}), 'French Defence');
+    });
+
+    test('short ECO codes return null instead of throwing', () {
+      expect(extractOpeningFamily({'ECO': 'B9'}), isNull);
+      expect(extractOpeningFamily({'ECO': 'B'}), isNull);
+      expect(extractOpeningFamily({'ECO': 'B12'}), 'Caro-Kann Defense');
+    });
+
+    test('illegal move error reports how many following moves are skipped', () {
+      // 2. Nh4 is illegal (knight cannot reach h4 in one move); Nf6 and d4
+      // follow it in the line and are skipped along with it.
+      final result = importPgn('1. e4 e5 2. Nh4 Nf6 3. d4 *');
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('Skipping it and 2 following move(s)'));
+      // Only 1. e4 survives as a repertoire decision.
+      expect(result.decisions.map((d) => d.expectedMoves.first.san), ['e4']);
     });
   });
 }

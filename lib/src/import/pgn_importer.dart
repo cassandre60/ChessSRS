@@ -408,8 +408,16 @@ Side resolveChapterOrientation(
     return Side.white;
   }
 
-  // 3. Event / ChapterName / StudyName keyword heuristics
-  final titleCandidates = [headers['ChapterName'], headers['Event'], headers['StudyName']];
+  // 3. Event / ChapterName / StudyName keyword heuristics. Also read the
+  // plain Chapter/Study tags our own exporter writes (Lichess uses
+  // ChapterName/StudyName), so self round-trips keep the signal.
+  final titleCandidates = [
+    headers['ChapterName'],
+    headers['Chapter'],
+    headers['Event'],
+    headers['StudyName'],
+    headers['Study'],
+  ];
   final blackKeywords = RegExp(
     r'(\bfor black\b|\bas black\b|\[black\]|\(black\)|\bblack repertoire\b|\bvs white\b)',
     caseSensitive: false,
@@ -522,6 +530,18 @@ RepertoireNode? _buildRoot(
   return result;
 }
 
+/// Counts the moves in the subtree rooted at [node], excluding [node] itself.
+///
+/// Used to tell the user how much of a line is dropped along with an
+/// unparseable or illegal move, whose whole continuation is skipped.
+int _countDescendantMoves(PgnNode<PgnNodeData> node) {
+  var count = 0;
+  for (final child in node.children) {
+    count += 1 + _countDescendantMoves(child);
+  }
+  return count;
+}
+
 /// Recursively builds children from a [PgnNode], returning the updated parent.
 RepertoireNode _buildChildren(
   PgnNode<PgnNodeData> pgnNode,
@@ -532,7 +552,6 @@ RepertoireNode _buildChildren(
   int moveIndex,
 ) {
   var current = parent;
-
   for (final pgnChild in pgnNode.children) {
     final data = pgnChild.data;
     final san = data.san;
@@ -542,22 +561,28 @@ RepertoireNode _buildChildren(
     try {
       parsed = position.parseSan(san);
     } catch (e) {
+      final skipped = _countDescendantMoves(pgnChild);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,
           moveIndex: moveIndex,
-          message: 'Could not parse move "$san": $e',
+          message:
+              'Could not parse move "$san": $e. '
+              'Skipping it and $skipped following move(s) in this line.',
         ),
       );
       continue;
     }
 
     if (parsed == null) {
+      final skipped = _countDescendantMoves(pgnChild);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,
           moveIndex: moveIndex,
-          message: 'Illegal or unrecognized move "$san" at position ${position.fen}',
+          message:
+              'Illegal or unrecognized move "$san" at position ${position.fen}. '
+              'Skipping it and $skipped following move(s) in this line.',
         ),
       );
       continue;
@@ -572,16 +597,15 @@ RepertoireNode _buildChildren(
     final nextPosition = position.play(parsed);
     final nextFen = nextPosition.fen;
 
-    // Extract comment (prefer post-move comment, fall back to starting comment).
-    final comment = data.comments?.join(' ').trim().isNotEmpty == true
-        ? data.comments!.join(' ').trim()
-        : data.startingComments?.join(' ').trim();
+    // Concatenate pre-move (starting) and post-move comments: studies
+    // routinely carry both ("{before} 1. e4 {after}"), and either/or drops one.
+    final comment = [...?data.startingComments, ...?data.comments].join(' ').trim();
 
     var childNode = RepertoireNode.child(
       fen: nextFen,
       fenKey: fenKey(nextFen),
       incomingMove: reperMove,
-      comment: comment?.isNotEmpty == true ? comment : null,
+      comment: comment.isNotEmpty ? comment : null,
     );
 
     // Recurse into this child's subtree.
@@ -667,7 +691,9 @@ String? extractOpeningFamily(PgnHeaders headers) {
 }
 
 String _simplifyOpeningName(String raw) {
-  final splitColon = raw.split(RegExp('[:,-]'));
+  // Split on ':' and ',' always, and on '-' only when spaced: "French Defence
+  // - Winawer" separates family from variation, but "Caro-Kann" is one name.
+  final splitColon = raw.split(RegExp(r':|,|\s+-\s+'));
   if (splitColon.isNotEmpty && splitColon.first.trim().isNotEmpty) {
     return splitColon.first.trim();
   }
@@ -714,7 +740,7 @@ bool _isLikelyOpeningName(String name) {
 }
 
 String? _ecoToOpeningFamily(String eco) {
-  if (eco.length < 2) return null;
+  if (eco.length < 3) return null;
   final letter = eco[0];
   final number = int.tryParse(eco.substring(1, 3)) ?? -1;
   if (number < 0) return null;

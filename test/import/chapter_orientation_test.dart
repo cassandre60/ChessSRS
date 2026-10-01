@@ -23,6 +23,14 @@ void main() {
       expect(resolveChapterOrientation({'Event': 'Nimzo-Indian vs White'}), Side.black);
     });
 
+    test('reads the plain Study/Chapter tags our exporter writes', () {
+      // Lichess writes StudyName/ChapterName; our exporter writes Study/Chapter.
+      // Both spellings must feed the heuristic or self round-trips lose it.
+      expect(resolveChapterOrientation({'Study': 'My Rep for Black'}), Side.black);
+      expect(resolveChapterOrientation({'Chapter': 'French for Black'}), Side.black);
+      expect(resolveChapterOrientation({'Study': 'My Rep for White'}), Side.white);
+    });
+
     test('detects White from Event or ChapterName keywords', () {
       expect(resolveChapterOrientation({'Event': 'Italian Game for White'}), Side.white);
       expect(resolveChapterOrientation({'ChapterName': 'Scotch [White]'}), Side.white);
