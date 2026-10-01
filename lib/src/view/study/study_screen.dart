@@ -18,7 +18,6 @@ import 'package:chess_srs/src/utils/share.dart';
 import 'package:chess_srs/src/view/analysis/analysis_board.dart';
 import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
 import 'package:chess_srs/src/view/analysis/analysis_player_widget.dart';
-import 'package:chess_srs/src/view/analysis/server_analysis.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:chess_srs/src/view/engine/engine_lines.dart';
 import 'package:chess_srs/src/view/explorer/explorer_view.dart';
@@ -181,7 +180,6 @@ class _StudyScreenState extends ConsumerState<_StudyScreen> with TickerProviderS
     tabs = [
       if (widget.studyState.isOpeningExplorerAvailable) AnalysisTab.explorer,
       AnalysisTab.moves,
-      if (widget.studyState.isServerAnalysisAllowed) AnalysisTab.summary,
     ];
 
     _tabController = TabController(
@@ -375,19 +373,6 @@ class _StudyMenu extends ConsumerWidget {
   }
 }
 
-class _CannotRequestServerAnalysisReason extends StatelessWidget {
-  const _CannotRequestServerAnalysisReason({required this.reason});
-
-  final String reason;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(padding: const EdgeInsets.symmetric(vertical: 16.0), child: Text(reason)),
-    );
-  }
-}
-
 class _Body extends ConsumerWidget {
   const _Body({required this.options, required this.tabController, required this.tabs});
 
@@ -493,38 +478,6 @@ class _Body extends ConsumerWidget {
               );
             } else {
               return const Center(child: Text('Opening explorer not available.'));
-            }
-          case AnalysisTab.summary:
-            switch (studyState.chapterServerAnalysisStatus) {
-              case ChapterServerAnalysisStatus.canRequest || ChapterServerAnalysisStatus.available:
-                return ServerAnalysisSummary(
-                  serverAnalysisSource: studyState.serverAnalysisSource,
-                  playersAnalysis: studyState.playersAnalysis,
-                  pgnHeaders: studyState.pgnHeaders,
-                  acplChartParams: studyState.acplChartData != null
-                      ? (
-                          acplChartData: studyState.acplChartData!,
-                          division: studyState.analysisSummary?.division,
-                          rootPly: studyState.root!.position.ply,
-                          currentNodePly: studyState.currentPosition!.ply,
-                          isOnMainline: studyState.isOnMainline,
-                          onJumpToNode: ref
-                              .read(studyControllerProvider(options).notifier)
-                              .jumpToNthNodeOnMainline,
-                        )
-                      : null,
-                  onRequestServerAnalysis: ref
-                      .read(studyControllerProvider(options).notifier)
-                      .requestServerAnalysis,
-                );
-              case ChapterServerAnalysisStatus.notEnoughMoves:
-                return _CannotRequestServerAnalysisReason(
-                  reason: context.l10n.studyTheChapterIsTooShortToBeAnalysed,
-                );
-              case ChapterServerAnalysisStatus.notWriteable:
-                return _CannotRequestServerAnalysisReason(
-                  reason: context.l10n.studyOnlyContributorsCanRequestAnalysis,
-                );
             }
           case _:
             return bottomChild;

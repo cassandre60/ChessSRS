@@ -4,7 +4,6 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
-import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -136,31 +135,7 @@ class SrsLibrarySheet extends ConsumerWidget {
           ] else
             const SizedBox(height: 8),
 
-          // Group 1: Explore.
-          //
-          // Import PGN and Studies & Repertoires used to live here. They were a
-          // second path to the scope drawer, which already owns study choice
-          // plus import (owner decision 2026-09-29): scope button > Repertoires
-          // group + Import PGN pill. Leaving them here gave two paths to one
-          // screen, so they were removed. This sheet offers tools + settings.
-          //
-          // These were three flat rows here, which left this sheet doing two unrelated jobs:
-          // choosing a repertoire to review, and listing tools. They now live in one screen,
-          // `AnalysisHubScreen` (owner decision 2026-09-28 on `00-agent-brief.md` open decision
-          // 1), which also carries a study's chapters.
-          _buildGroupHeader('Explore', c),
-          _buildRow(
-            c: c,
-            title: 'Analysis',
-            subtitle: 'Analysis board, explorer, editor, study explorer',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context, rootNavigator: true).push(AnalysisHubScreen.buildRoute());
-            },
-          ),
-          _buildDivider(c),
-
-          // Group 2: Preferences & Settings
+          // Preferences & Settings
           _buildGroupHeader('Preferences', c),
           _buildRow(
             c: c,
@@ -203,13 +178,6 @@ class SrsLibrarySheet extends ConsumerWidget {
           color: c.ink3,
         ),
       ),
-    );
-  }
-
-  Widget _buildDivider(SrsColors c) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Container(height: 1, color: c.hairlineSoft),
     );
   }
 

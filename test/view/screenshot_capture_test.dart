@@ -342,7 +342,6 @@ void main() {
               anchor: Rect.fromLTWH(20, 100, 460, 56),
               onDismiss: _noop,
               onTogglePause: _noop,
-              onChapters: _noop,
               onAnalyze: _noop,
               onPractice: _noop,
               onExport: _noop,

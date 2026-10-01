@@ -8,11 +8,11 @@ import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
-import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
+import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
@@ -264,7 +264,7 @@ void main() {
       sem.dispose();
     });
 
-    testWidgets('study actions sheet opens AnalysisScreen via Analyze', (tester) async {
+    testWidgets('study actions sheet opens StudyScreen via Analyze', (tester) async {
       final importResult = importPgn(
         '1. e4 e5 2. Nf3 Nc6 *',
         studyTitle: 'King Pawn Repertoire',
@@ -301,15 +301,13 @@ void main() {
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // AnalysisScreen is now opened
-      expect(find.byType(AnalysisScreen), findsOneWidget);
+      // StudyScreen is now opened
+      expect(find.byType(StudyScreen), findsOneWidget);
     });
 
-    testWidgets('multi-chapter study opens StudyChaptersScreen and navigates to AnalysisScreen', (
-      tester,
-    ) async {
+    testWidgets('multi-chapter study opens StudyScreen via Analyze', (tester) async {
       const multiChapterPgn = '''
 [Event "Chapter 1: Open Games"]
 1. e4 e5 *
@@ -353,20 +351,10 @@ void main() {
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // StudyChaptersScreen is now opened
-      expect(find.byType(StudyChaptersScreen), findsOneWidget);
-      expect(find.text('Chapter 1: Open Games'), findsOneWidget);
-      expect(find.text('Chapter 2: French Defense'), findsOneWidget);
-
-      // Tap Explore icon on Chapter 1
-      await tester.tap(find.byTooltip('Explore chapter').first);
-      await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
-
-      // AnalysisScreen is now opened
-      expect(find.byType(AnalysisScreen), findsOneWidget);
+      // StudyScreen is now opened
+      expect(find.byType(StudyScreen), findsOneWidget);
     });
 
     testWidgets(
@@ -741,7 +729,7 @@ void main() {
     });
 
     testWidgets(
-      'study options Chapters navigates even when chapter load outlasts the dismiss animation',
+      'study options Analyze navigates even when chapter load outlasts the dismiss animation',
       (tester) async {
         final importResult = importPgn(
           '1. e4 e5 *',
@@ -776,20 +764,14 @@ void main() {
         await tester.longPress(find.text('King Pawn'));
         await pumpAsync(tester, 600);
 
-        // Tap Chapters: pops both sheets, loads chapters, then must navigate.
-        // Strict lose-order for the race: the 300ms pump completes the 180ms
-        // dismiss transitions (unmounting the drawer) while the 400ms load is
-        // still pending; the 500ms pump fires the load timer; pumpAsync then
-        // gives the DB read a real-time window so the continuation runs on
-        // the dead context. Pre-fix the push is skipped; post-fix the
-        // captured navigator pushes regardless.
-        await tester.tap(find.text('Chapters'));
+        // Tap Analyze: pops both sheets, loads chapters, then must navigate.
+        await tester.tap(find.text('Analyze'));
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 500));
         await pumpAsync(tester, 600);
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 500));
 
-        expect(find.byType(StudyChaptersScreen), findsOneWidget);
+        expect(find.byType(StudyScreen), findsOneWidget);
       },
     );
 

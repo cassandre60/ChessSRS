@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
@@ -894,9 +893,7 @@ void main() {
   });
 
   group('Server Analysis', () {
-    testWidgets('Does not display server analysis tab if chapter does not allow it', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('Does not display server analysis tab', (WidgetTester tester) async {
       final mockRepository = MockStudyRepository();
 
       when(() => mockRepository.getStudy(id: testId)).thenAnswer(
@@ -905,11 +902,11 @@ void main() {
             chapter: makeChapter(
               id: const StudyChapterId('1'),
               orientation: Side.white,
-              features: (computer: false, explorer: false),
+              features: (computer: true, explorer: false),
             ),
           ),
           null,
-          '',
+          'e4 e5 Nf3 Nc6',
         ),
       );
 
@@ -925,137 +922,8 @@ void main() {
       // Wait for study to load
       await tester.pumpAndSettle();
 
-      // Server analysis tab should not be displayed since chapter does not allow it
+      // Server analysis tab should not be displayed
       expect(find.bySemanticsLabel(RegExp('Computer analysis')), findsNothing);
-    });
-
-    testWidgets('Cannot request server analysis if study has less than 4 moves', (
-      WidgetTester tester,
-    ) async {
-      final mockRepository = MockStudyRepository();
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: true, explorer: false),
-            ),
-          ),
-          null,
-          '',
-        ),
-      );
-
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const StudyScreen(options: (id: testId, initialChapter: null)),
-        overrides: {
-          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
-        },
-      );
-      await tester.pumpWidget(app);
-
-      // Wait for study to load
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
-
-      expect(find.textContaining('The chapter is too short'), findsOneWidget);
-    });
-
-    testWidgets('Cannot request server analysis without write permissions', (
-      WidgetTester tester,
-    ) async {
-      final mockRepository = MockStudyRepository();
-
-      final user = AuthUser(
-        user: LightUser(id: UserId.fromUserName('John'), name: 'John'),
-        token: 'test-token',
-      );
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: true, explorer: false),
-            ),
-            members: IMap<UserId, StudyMember>(
-              const {},
-            ).add(user.user.id, StudyMember(user: user.user, role: '')),
-          ),
-          null,
-          'e4 e5 Nf3 Nc6',
-        ),
-      );
-
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const StudyScreen(options: (id: testId, initialChapter: null)),
-        overrides: {
-          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
-        },
-        authUser: user,
-      );
-      await tester.pumpWidget(app);
-
-      // Wait for study to load
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
-
-      expect(find.textContaining('Only the study contributors'), findsOneWidget);
-    });
-
-    testWidgets('Can request server analysis if chapter is long enough and has write permissions', (
-      WidgetTester tester,
-    ) async {
-      final mockRepository = MockStudyRepository();
-
-      final user = AuthUser(
-        user: LightUser(id: UserId.fromUserName('John'), name: 'John'),
-        token: 'test-token',
-      );
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: true, explorer: false),
-            ),
-            members: IMap<UserId, StudyMember>(
-              const {},
-            ).add(user.user.id, StudyMember(user: user.user, role: 'w')),
-          ),
-          null,
-          'e4 e5 Nf3 Nc6',
-        ),
-      );
-
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const StudyScreen(options: (id: testId, initialChapter: null)),
-        overrides: {
-          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
-        },
-        authUser: user,
-      );
-      await tester.pumpWidget(app);
-
-      // Wait for study to load
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
-
-      expect(find.textContaining('Request a computer analysis'), findsOneWidget);
     });
   });
 }

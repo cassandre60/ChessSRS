@@ -1,11 +1,15 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/model/analysis/analysis_summary.dart';
+import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
 import 'package:chess_srs/src/model/study/study_list_paginator.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:chess_srs/src/persistence/study_repository.dart';
+import 'package:collection/collection.dart';
 import 'package:deep_pick/deep_pick.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,6 +73,68 @@ class StudyRepository {
     required StudyId id,
     StudyChapterId? chapterId,
   }) async {
+    final srsRepoAsync = ref.read(srsStudyRepositoryProvider);
+    final srsRepo = srsRepoAsync.asData?.value;
+    if (srsRepo != null) {
+      try {
+        final localStudy = await srsRepo.getStudy(id.value);
+        if (localStudy != null) {
+          final chapters = await srsRepo.getChaptersByStudy(localStudy.id);
+          if (chapters.isNotEmpty) {
+            final currentChapter = chapterId != null
+                ? (chapters.firstWhereOrNull((c) => c.id == chapterId.value) ?? chapters.first)
+                : chapters.first;
+            final root = await srsRepo.getPositionTree(currentChapter.id);
+            final fullChapter = currentChapter.copyWith(root: root);
+            final pgn = chapterToPgn(fullChapter, studyTitle: localStudy.title);
+
+            final chapterMetas = chapters
+                .mapIndexed(
+                  (index, ch) => StudyChapterMeta(
+                    id: StudyChapterId(ch.id),
+                    name: ch.title ?? 'Chapter ${index + 1}',
+                    fen: ch.startingFen,
+                  ),
+                )
+                .toIList();
+
+            final studyChapter = StudyChapter(
+              id: StudyChapterId(currentChapter.id),
+              setup: StudyChapterSetup(
+                id: null,
+                orientation: currentChapter.orientation,
+                variant: Variant.standard,
+                fromFen: currentChapter.startingFen != null,
+              ),
+              practise: false,
+              conceal: null,
+              gamebook: false,
+              features: (computer: true, explorer: true),
+            );
+
+            final study = Study(
+              id: id,
+              name: localStudy.title,
+              liked: false,
+              likes: 0,
+              ownerId: null,
+              features: (cloneable: false, chat: false, sticky: false),
+              topics: const IListConst([]),
+              chapters: chapterMetas,
+              chapter: studyChapter,
+              members: const IMapConst({}),
+              hints: const IListConst([]),
+              deviationComments: const IListConst([]),
+            );
+
+            return (study, null, pgn);
+          }
+        }
+      } catch (_) {
+        // Fall back to network
+      }
+    }
+
     final study = await client.readJson(
       Uri(
         path: (chapterId != null) ? '/study/$id/$chapterId' : '/study/$id',

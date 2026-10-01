@@ -28,7 +28,6 @@ void main() {
           study: study,
           onDismiss: () {},
           onTogglePause: () {},
-          onChapters: () {},
           onAnalyze: () {},
           onPractice: () {},
           onExport: () {},
@@ -46,5 +45,29 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(deleted, isTrue, reason: 'Delete must be tappable, not clipped off-screen');
+  });
+
+  testWidgets('StudyActionsSheet displays Analyze and no longer displays Chapters', (tester) async {
+    const study = Study(id: 's1', title: 'My repertoire');
+
+    await tester.pumpWidget(
+      await makeTestProviderScopeApp(
+        tester,
+        home: StudyActionsSheet(
+          study: study,
+          onDismiss: () {},
+          onTogglePause: () {},
+          onAnalyze: () {},
+          onPractice: () {},
+          onExport: () {},
+          onRename: () {},
+          onDelete: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Analyze'), findsOneWidget);
+    expect(find.text('Chapters'), findsNothing);
   });
 }

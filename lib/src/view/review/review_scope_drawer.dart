@@ -5,11 +5,11 @@ import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
-import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
-import 'package:chess_srs/src/view/review/study_chapters_screen.dart';
+import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -389,23 +389,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           Navigator.of(dialogContext).pop();
           ref.read(reviewControllerProvider.notifier).toggleStudyActive(study.id, !study.isActive);
         },
-        onChapters: () async {
-          // Captured before the pops below: both sheets live on the root
-          // navigator, so after they dismiss there is no mounted context left
-          // to push from, and awaiting the loads first would only widen that
-          // window (the dismiss transitions alone take 180ms).
-          final navigator = Navigator.of(context, rootNavigator: true);
-          Navigator.of(dialogContext).pop();
-          Navigator.of(context).pop();
-          final repo = await ref.read(srsStudyRepositoryProvider.future);
-          final chapters = await repo.getChaptersByStudy(study.id);
-          navigator.push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters));
-        },
         onAnalyze: () {
           final navigator = Navigator.of(context, rootNavigator: true);
           Navigator.of(dialogContext).pop();
           Navigator.of(context).pop();
-          openStudyExplorer(context, ref, studyId: study.id, navigator: navigator);
+          navigator.push(StudyScreen.buildRoute((id: StudyId(study.id), initialChapter: null)));
         },
         onPractice: () {
           Navigator.of(dialogContext).pop();
@@ -690,7 +678,6 @@ class StudyActionsSheet extends StatelessWidget {
     required this.study,
     required this.onDismiss,
     required this.onTogglePause,
-    required this.onChapters,
     required this.onAnalyze,
     required this.onPractice,
     required this.onExport,
@@ -706,7 +693,6 @@ class StudyActionsSheet extends StatelessWidget {
 
   final VoidCallback onDismiss;
   final VoidCallback onTogglePause;
-  final VoidCallback onChapters;
   final VoidCallback onAnalyze;
   final VoidCallback onPractice;
   final VoidCallback onExport;
@@ -734,11 +720,6 @@ class StudyActionsSheet extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         group([
-          SrsSheetRow(
-            label: 'Chapters',
-            subtitle: 'View and train specific chapters',
-            onPressed: onChapters,
-          ),
           SrsSheetRow(
             label: 'Analyze',
             subtitle: 'Browse moves and variations',

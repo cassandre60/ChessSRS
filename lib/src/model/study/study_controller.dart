@@ -110,12 +110,14 @@ class StudyController extends AsyncNotifier<StudyState>
         .read(studyRepositoryProvider)
         .getStudy(id: options.id, chapterId: options.initialChapter);
 
-    _socketClient = socketPool.open(
-      Uri(path: '/study/${options.id}/socket/v6'),
-      version: study.socketVersion,
-    );
-    _socketSubscription?.cancel();
-    _socketSubscription = _socketClient?.stream.listen(handleSocketEvent);
+    if (study.socketVersion != null) {
+      _socketClient = socketPool.open(
+        Uri(path: '/study/${options.id}/socket/v6'),
+        version: study.socketVersion,
+      );
+      _socketSubscription?.cancel();
+      _socketSubscription = _socketClient?.stream.listen(handleSocketEvent);
+    }
 
     final chapter = await _loadChapter(
       study,

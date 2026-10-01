@@ -11,12 +11,10 @@ import 'package:chess_srs/src/view/chat/chat_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/study/create_study_chapter_bottom_sheet.dart';
 import 'package:chess_srs/src/view/study/study_settings.dart';
-import 'package:chess_srs/src/view/user/user_or_profile_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:chess_srs/src/widgets/bottom_bar.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
-import 'package:chess_srs/src/widgets/user.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -317,14 +315,6 @@ class _StudyMenuButton extends ConsumerWidget {
           onPressed: () => Navigator.of(context).push(StudySettingsScreen.buildRoute(options)),
         ),
         BottomSheetAction(
-          makeLabel: (context) => Text(context.l10n.studyMembers),
-          onPressed: () => _showStudySheet(
-            context,
-            builder: (context, scrollController) =>
-                _StudyMembersSheet(options: options, scrollController: scrollController),
-          ),
-        ),
-        BottomSheetAction(
           makeLabel: (context) => Text(context.l10n.flipBoard),
           onPressed: () => ref.read(studyControllerProvider(options).notifier).toggleBoard(),
         ),
@@ -379,39 +369,6 @@ class _ChapterButton extends ConsumerWidget {
       ),
       label: context.l10n.studyNbChapters(nbChapters),
       icon: Icons.menu_book,
-    );
-  }
-}
-
-class _StudyMembersSheet extends ConsumerWidget {
-  const _StudyMembersSheet({required this.options, required this.scrollController});
-
-  final StudyOptions options;
-  final ScrollController scrollController;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(studyControllerProvider(options)).requireValue;
-
-    return BottomSheetScrollableContainer(
-      scrollController: scrollController,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            context.l10n.studyNbMembers(state.study.members.length),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 16),
-        for (final member in state.study.members.values)
-          ListTile(
-            title: UserFullNameWidget(user: member.user),
-            onTap: () {
-              Navigator.of(context).push(UserOrProfileScreen.buildRoute(member.user));
-            },
-          ),
-      ],
     );
   }
 }

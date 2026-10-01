@@ -88,7 +88,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SrsLibrarySheet), findsOneWidget);
 
-    await tester.fling(find.text('Analysis'), const Offset(0, 400), 1000);
+    await tester.fling(find.text('Settings'), const Offset(0, 400), 1000);
     await tester.pumpAndSettle();
 
     expect(find.byType(SrsLibrarySheet), findsNothing);
