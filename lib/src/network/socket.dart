@@ -266,7 +266,11 @@ class SocketClient {
 
     final authUser = getSession();
 
-    final queryParameters = Map<String, String>.from(route.queryParameters);
+    // The sri goes in the query string, and it has to: lila identifies a socket by it, and refuses
+    // the upgrade with a 400 when it is absent. The User-Agent carries it too, but that is not read
+    // for this — a handshake without the parameter fails whatever the agent string says, which is
+    // why every connection used to fail and nothing said why.
+    final queryParameters = Map<String, String>.from(route.queryParameters)..['sri'] = sri;
     if (version != null) {
       queryParameters['v'] = version.toString();
     }
