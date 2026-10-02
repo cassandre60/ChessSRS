@@ -281,6 +281,11 @@ remains a later option — never a redesign.
       2. **Closing evidence:** the owner signed in through the browser on Linux desktop, and the app's `http_log` then shows `GET /api/study/Gg4E2sIS.pgn → 200` — a private study imported. Ping tile reads `PING nn ms` rather than `Offline`.
       3. **Do not re-investigate:** `_emailRegExp`, `AuthRepository`, `AuthController` and `UserRepository.usernameExists` are byte-identical to upstream, so none of the above was a defect in them. No Lichess client accepts a password, so "user + password" is not implementable. Full chain with the ruled-out suspects: `docs/open-email-login-handoff.md`.
       4. **Email-code login is now the mobile path only** and remains unverified against production, since no device was attached. Desktop sign-in goes through OAuth and is verified. Reopen this item only if someone runs it on Android or iOS.
+- [x] **F-STUDYPERSIST: does a remote study edit reach the local database?** *(opened: 2026-10-02, closed: 2026-10-02)*
+      1. **Verified: No remote study edit ever reaches the local database, by design.**
+      2. **Code audit:** `StudyController` holds `_root` (`RootNode`) in memory. Its `handleSocketEvent` applies lila's `promote`, `deleteNode`, `anaMove`, `anaDrop` topics to `_root` and calls `_refreshTreeView()` to update UI state. It contains zero references or imports to `srs_study`, `SqliteStudyRepository`, or any database persistence layer.
+      3. **Local repertoires vs. online viewer:** When a study is imported into ChessSRS (via PGN or "Fetch & Import from Lichess"), it is stored in SQLite (`srs_study`, `srs_chapter`, etc.) with a newly generated UUID and operates strictly as a local-first offline repertoire. It does not open a study socket. When a local study is opened via "Analyze" in the scope drawer, `study.socketVersion` is null, so `StudyController` does not even open a `/study/.../socket/v6` connection.
+      4. **Conclusion:** Remote study socket events are strictly in-memory presentation updates for live viewing of remote Lichess studies. There is no background divergence, no silent overwrite, and no database mutation from WebSocket study events.
 
 ### Open — gate defects found 2026-10-02 (each needs its own gate-change PR)
 - [ ] **G-BASEINV: G05 judges a PR's test citations against the base ref, so no PR can add a SPEC invariant** *(opened: 2026-10-02)*
@@ -299,10 +304,6 @@ remains a later option — never a redesign.
 - [ ] **F-CLOUDEVAL: exercise cloud Stockfish evaluation with a live socket** *(opened: 2026-10-02)*
       1. Never exercised: every handshake was refused with HTTP 400 until #129, so `/analysis/socket/v5` and its `evalGet` had no connection for the entire life of the app.
       2. Low risk by construction — `evaluation_mixin.dart` starts the local engine as a backstop and only gives the cloud a head start, so a non-Premium account loses cloud evals and nothing else. Worth one run before anyone reports it broken.
-
-- [ ] **F-STUDYPERSIST: does a remote study edit reach the local database?** *(opened: 2026-10-02)*
-      1. `StudyController.handleSocketEvent` applies lila's `promote` / `deleteNode` / `anaMove` / `anaDrop` to the in-memory `_root`, then calls `_refreshTreeView()`. What was **not** checked is whether that reaches SQLite, or whether the edit lives in memory until a reload.
-      2. Only reachable by editing a study on lichess.org while the app has that chapter open. Not reachable from a headless run.
 
 - [ ] **F-MOBILELOGIN: email-code sign-in on a real device** *(opened: 2026-10-02)*
       1. Desktop sign-in goes through loopback OAuth (#125) and is verified; the mobile-code path is not, because no device was attached.
