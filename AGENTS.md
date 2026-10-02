@@ -406,18 +406,19 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
   Account section being unconditional in `SrsSettingsScreen` and present in
   `388b38f3e` but absent from `ea1d09678`, and the checkout log showing the stale
   commit throughout.
-- [2026-09-29, Space Bunny Free] Auth verification needs
-  `--dart-define=LICHESS_HOST=lichess.org`; `kLichessHost` defaults to `lichess.dev`
-  (inherited upstream, correct for server work), so a plain `flutter run` sends
-  `/auth/mobile-code/*` and `/api/player/autocomplete` to the dev server. The symptom
-  is "We couldn't find any user by this name", which blames the user's typing and
-  sends you auditing a regex and a repository that are byte-identical to upstream.
-  Also: no Lichess client accepts a password, so a "user + password" request is not
-  implementable and must not be treated as a bug. Full handoff, including the ruled-out
-  suspects, in `docs/open-email-login-handoff.md`. Verified by: `curl` against
-  `lichess.org/api/player/autocomplete` returning real accounts while the app
-  reported none, and a widget test through the real `EmailLoginScreen` passing with
-  the owner's address.
+- [2026-09-29, Space Bunny Free] *"We couldn't find any user by this name"* blames
+  the user's typing and sends you auditing a regex and a repository that are
+  byte-identical to upstream. **Superseded 2026-10-02:** the host default is now
+  `lichess.org` (#124), so `--dart-define=LICHESS_HOST=lichess.org` is a no-op,
+  and sign-in is verified working — that symptom had five separate causes, not
+  one. Two parts of the original note still hold: no Lichess client accepts a
+  password, so a "user + password" request is not implementable; and the
+  ruled-out suspects (`_emailRegExp`, `AuthRepository`, `AuthController`,
+  `UserRepository.usernameExists` are byte-identical to upstream) stay ruled out.
+  Current state, the five-defect chain, and what is still unverified:
+  `docs/open-email-login-handoff.md`. Verified by: the owner signing in through
+  the browser on Linux desktop, and `GET /api/study/Gg4E2sIS.pgn → 200` in the
+  app's `http_log`.
 - [2026-09-29, Space Bunny Free] A worktree is not a working directory, it is
   the *only* place you may write, and the isolation rule is easy to break by
   inattention rather than by a `git reset`. Editing two docs in the shared main
