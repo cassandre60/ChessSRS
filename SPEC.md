@@ -313,6 +313,19 @@ domain computes, adapters persist and fetch.
 - Gates: G03, G02 boundary test.
 - Tier: T1. Covering: `test/gates/domain_boundary_test.dart`.
 
+### INV-064 Every socket handshake carries the session sri
+`SocketClient` appends the session `sri` to the connect URL as a query
+parameter on every connection attempt, so the server attributes the socket
+to the session instead of refusing the handshake.
+- Oracle: `connects with the sri in the query string` in
+  `test/network/socket_test.dart`, which records requested URLs — the fake
+  channels key on path alone and cannot see a missing query string.
+- Gates: network suite (G04), G05 traceability.
+- Tier: T1. Covering: `test/network/socket_test.dart`.
+- History: 2026-10-02, every handshake refused with HTTP 400 while the suite
+  stayed green (#129); the invariant itself was blocked until G-BASEINV was
+  fixed (#135/#137).
+
 ## E. Performance budgets (T2)
 
 ### INV-050 A graded move settles within one frame
@@ -376,3 +389,4 @@ and appear only after grading (or never, when annotations are disabled).
 | Date | Invariant | Change | Reviewer |
 |------|-----------|--------|----------|
 | 2026-10-01 | all | Initial SPEC transcribed from QUALITY.md + mined regressions | (owner, on merge) |
+| 2026-10-03 | INV-064 | Added: socket handshake carries session sri (escape #129) | (owner, on merge) |

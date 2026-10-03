@@ -1,0 +1,9 @@
+diff --git a/test/network/socket_test.dart b/test/network/socket_test.dart
+index 9c979e5fe..dc9f9492f 100644
+--- a/test/network/socket_test.dart
++++ b/test/network/socket_test.dart
+@@ -1,4 +1,3 @@
+-// SPEC coverage: INV-064.
+ import 'dart:convert';
+ import 'dart:io';
+ 
