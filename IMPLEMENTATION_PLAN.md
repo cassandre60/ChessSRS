@@ -295,10 +295,14 @@ remains a later option — never a redesign.
       4. **Fix direction (owner's call):** judge citations against the PR's `SPEC.md` while keeping coverage against the base, or pass `--allow-uncovered` for IDs the same PR introduces. Both change CI config, which is protected.
       5. This is what left the socket-`sri` escape (#129) recorded as a `GATES.md` row only, with no invariant.
 
-- [ ] **G-LABELEVENT: adding `gate-approved` never re-runs the gate** *(opened: 2026-10-02)*
-      1. `gates.yml` declares `on: pull_request:` with only `paths:`, so the trigger types are the defaults (`opened`, `synchronize`, `reopened`). Labelling fires no event at all.
+- [ ] **G-LABELEVENT: adding `gate-approved` never re-runs the gate** *(opened: 2026-10-02)*      1. `gates.yml` declares `on: pull_request:` with only `paths:`, so the trigger types are the defaults (`opened`, `synchronize`, `reopened`). Labelling fires no event at all.
       2. `gh run rerun` does not help either: it replays the original event payload, which predates the label, so `APPROVAL` stayed empty and G07 failed again. Seen on PR #130 — the job only passed `--approved` after the PR was closed and reopened.
       3. **Fix direction:** add `types: [opened, synchronize, reopened, labeled]`, or stop reading labels from the event payload and read them from the API at run time.
+
+- [ ] **G-CIREPORT: required checks that never run block merges permanently, even for admins** *(opened: 2026-10-03)*
+      1. Branch protection requires `T1 fast gates` and `Unit tests on ubuntu-latest` on every PR. When a workflow's `paths` filter skips a PR, its check stays `expected` forever and GitHub refuses the merge — `gh pr merge --admin` fails identically (`Required status check ... is expected`).
+      2. Froze PRs #133–#135 despite green gates: #133/#135 touch only CI/gate files absent from `test.yml`'s filter; #134 is docs-only and triggers no lane at all.
+      3. **Fix direction (fixed by the PR carrying this row):** widen `test.yml`'s `paths` to the referee set `gates.yml` already covers, so both reports always exist. Pure `docs/**` stays lane-less by decision and must ride along. Never game a trigger (e.g. touching `test.yml` to force a run) to force a merge.
 
 ### Open — awaiting verification (not blocking the MVP)
 - [ ] **F-CLOUDEVAL: exercise cloud Stockfish evaluation with a live socket** *(opened: 2026-10-02)*
@@ -308,6 +312,12 @@ remains a later option — never a redesign.
 - [ ] **F-MOBILELOGIN: email-code sign-in on a real device** *(opened: 2026-10-02)*
       1. Desktop sign-in goes through loopback OAuth (#125) and is verified; the mobile-code path is not, because no device was attached.
       2. This is the only path that exercises #123's query-parameter fallback on `/auth/mobile-code/email` and `/bearer`. Needs an Android or iOS device against `lichess.org`, now the default host — no `--dart-define`.
+
+### Open — product backlog (deferred, unscheduled; owner-reported 2026-10-03)
+- [ ] **P-COLLAPSE: collapsible scope-drawer groups** — the `Everywhere` / `Openings` / `Repertoires` groups in `ReviewScopeDrawer` are flat headers; with many studies and hubs the list gets long. Each group should collapse/expand (persisted per group).
+- [ ] **P-RESTUDY: rename "repertoires" to "studies"** — user-facing copy (`All repertoires`, `Repertoires` group, review-screen scope label) should say studies. Note: `design/docs/01-identity.md` currently prescribes `All repertoires`, so the design doc changes with the copy; domain entity names (`Study`, `Chapter`) already match.
+- [ ] **P-OPENNAME: spurious opening hubs from Event-header fallback** — `extractOpeningFamily` (`lib/src/import/pgn_importer.dart`) accepts `Event` headers containing a keyword (`french`, `game`, …), so non-opening event names (e.g. `White vs French`-style titles) become bogus opening hubs. Tighten `_isLikelyOpeningName` or require ECO corroboration; never invent a hub when uncertain (leave `opening` null).
+- [ ] **P-TRANSPOSE (optional): transposition support in review mode** — R2 already shares SRS memory across transposed positions; this asks for review-time behavior (move-order tolerance / transposed lines resolving to the same drill). Explicitly optional; needs a spec first, never a scheduler redesign.
 
 Workflow polish, information architecture, performance, onboarding/import
 improvements, remaining Lichess code removal (per CUT_PROPOSALS §2), and only
