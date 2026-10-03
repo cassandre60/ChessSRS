@@ -109,7 +109,7 @@ jobs:
 
       - name: G05 spec traceability
         working-directory: pr
-        run: python3 "$TRUSTED/scripts/gates/spec_trace_check.py" --spec "$TRUSTED/SPEC.md" --tests test
+        run: python3 "$TRUSTED/scripts/gates/spec_trace_check.py" --spec SPEC.md --tests test
 
       - name: G10 ratchets
         working-directory: pr

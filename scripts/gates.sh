@@ -29,7 +29,17 @@ step "G08 test-weakening tripwire (base $BASE)"
 python3 "$gates/test_weakening_check.py" --base "$BASE" || fail "G08 test weakening"
 
 step "G05 spec traceability"
-python3 "$gates/spec_trace_check.py" --spec SPEC.md --tests test || fail "G05 spec traceability"
+# Local parity with CI: judge citations against this tree's SPEC.md and keep
+# coverage against the base spec's, so a same-tree INV + test addition passes
+# here exactly as it does in CI (G-BASEINV).
+tmp_dir="$(mktemp -d)"
+if git show "$BASE:SPEC.md" >"$tmp_dir/base-spec.md" 2>/dev/null; then
+  python3 "$gates/spec_trace_check.py" --spec SPEC.md --tests test --base-spec "$tmp_dir/base-spec.md" || fail "G05 spec traceability"
+else
+  echo "warning: no SPEC.md on $BASE; judging citations only" >&2
+  python3 "$gates/spec_trace_check.py" --spec SPEC.md --tests test || fail "G05 spec traceability"
+fi
+rm -rf "$tmp_dir"
 
 step "G10 ratchets"
 metrics_dir="$(mktemp -d)"
