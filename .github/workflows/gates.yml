@@ -21,6 +21,11 @@ name: Gates
 
 on:
   pull_request:
+    # `labeled` is load-bearing: the G07 approval path depends on the owner
+    # adding the `gate-approved` label re-running these gates (G-LABELEVENT).
+    # Without it the label fires no event and `gh run rerun` replays the
+    # pre-label payload, so approval could only land via close/reopen.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'lib/**'
       - 'test/**'
