@@ -287,22 +287,13 @@ remains a later option — never a redesign.
       3. **Local repertoires vs. online viewer:** When a study is imported into ChessSRS (via PGN or "Fetch & Import from Lichess"), it is stored in SQLite (`srs_study`, `srs_chapter`, etc.) with a newly generated UUID and operates strictly as a local-first offline repertoire. It does not open a study socket. When a local study is opened via "Analyze" in the scope drawer, `study.socketVersion` is null, so `StudyController` does not even open a `/study/.../socket/v6` connection.
       4. **Conclusion:** Remote study socket events are strictly in-memory presentation updates for live viewing of remote Lichess studies. There is no background divergence, no silent overwrite, and no database mutation from WebSocket study events.
 
-### Open — gate defects found 2026-10-02 (each needs its own gate-change PR)
-- [ ] **G-BASEINV: G05 judges a PR's test citations against the base ref, so no PR can add a SPEC invariant** *(opened: 2026-10-02)*
-      1. `gates.yml` runs `spec_trace_check.py --spec "$TRUSTED/SPEC.md" --tests test`: the spec comes from the base checkout, only the tests from the PR. Cite-without-invariant gives "Tests cite IDs missing from the spec"; invariant-without-cite gives "Invariants with no test"; both in one PR still fails, because the spec side is the base's copy.
-      2. **Consequence:** `docs/ESCAPE_TO_GATE.md` steps 4 and 5 cannot be satisfied, so the escape flywheel records nothing. Confirmed on PR #130, where CI printed `39 invariants in spec, 39 referenced by tests` and then `Tests cite IDs missing from the spec: INV-064`.
-      3. **Do not re-investigate by running the script locally:** against the working tree it reads the PR's own `SPEC.md` and passes, so it cannot reproduce this. Reproduce with the base ref's copy.
-      4. **Fix direction (owner's call):** judge citations against the PR's `SPEC.md` while keeping coverage against the base, or pass `--allow-uncovered` for IDs the same PR introduces. Both change CI config, which is protected.
-      5. This is what left the socket-`sri` escape (#129) recorded as a `GATES.md` row only, with no invariant.
+### Closed — gate defects fixed 2026-10-03 (each landed as its own gate-change PR)
+- [x] **G-BASEINV: G05 judged a PR's test citations against the base ref, so no PR could add a SPEC invariant** — fixed by #135 (phase 1: `--base-spec` flag on `spec_trace_check.py` + local `gates.sh` parity) and this PR (phase 2: CI step activation). Proven locally (old logic reproduces the #130 failure, new logic passes both-at-once while still rejecting typos and spec-deletion dodges) and by this PR's own green T1, which runs the new flag in CI.
+- [x] **G-LABELEVENT: adding `gate-approved` never re-ran the gate** — fixed by #133 (`types: [opened, synchronize, reopened, labeled]`). Proven live: the label on #133 fired a fresh T1 run that went green.
+- [x] **G-CIREPORT: required checks that never run block merges permanently, even for admins** — fixed by #136 (widened `test.yml` paths to the referee set). Proven live: #136, #133, and #135 phase 1 all got both reports and merged; pure `docs/**` stays lane-less by decision and must ride along.
 
-- [ ] **G-LABELEVENT: adding `gate-approved` never re-runs the gate** *(opened: 2026-10-02)*      1. `gates.yml` declares `on: pull_request:` with only `paths:`, so the trigger types are the defaults (`opened`, `synchronize`, `reopened`). Labelling fires no event at all.
-      2. `gh run rerun` does not help either: it replays the original event payload, which predates the label, so `APPROVAL` stayed empty and G07 failed again. Seen on PR #130 — the job only passed `--approved` after the PR was closed and reopened.
-      3. **Fix direction:** add `types: [opened, synchronize, reopened, labeled]`, or stop reading labels from the event payload and read them from the API at run time.
-
-- [ ] **G-CIREPORT: required checks that never run block merges permanently, even for admins** *(opened: 2026-10-03)*
-      1. Branch protection requires `T1 fast gates` and `Unit tests on ubuntu-latest` on every PR. When a workflow's `paths` filter skips a PR, its check stays `expected` forever and GitHub refuses the merge — `gh pr merge --admin` fails identically (`Required status check ... is expected`).
-      2. Froze PRs #133–#135 despite green gates: #133/#135 touch only CI/gate files absent from `test.yml`'s filter; #134 is docs-only and triggers no lane at all.
-      3. **Fix direction (fixed by the PR carrying this row):** widen `test.yml`'s `paths` to the referee set `gates.yml` already covers, so both reports always exist. Pure `docs/**` stays lane-less by decision and must ride along. Never game a trigger (e.g. touching `test.yml` to force a run) to force a merge.
+### Open — gate defects
+(none — G-BASEINV, G-LABELEVENT, and G-CIREPORT are closed above.)
 
 ### Open — awaiting verification (not blocking the MVP)
 - [ ] **F-CLOUDEVAL: exercise cloud Stockfish evaluation with a live socket** *(opened: 2026-10-02)*

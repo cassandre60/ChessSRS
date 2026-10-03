@@ -109,7 +109,10 @@ jobs:
 
       - name: G05 spec traceability
         working-directory: pr
-        run: python3 "$TRUSTED/scripts/gates/spec_trace_check.py" --spec SPEC.md --tests test
+        # Citations are judged against the PR spec (one PR may add an
+        # invariant with its test); coverage is enforced against the union
+        # with the base spec (a PR cannot dodge by deleting; G-BASEINV).
+        run: python3 "$TRUSTED/scripts/gates/spec_trace_check.py" --spec SPEC.md --tests test --base-spec "$TRUSTED/SPEC.md"
 
       - name: G10 ratchets
         working-directory: pr
