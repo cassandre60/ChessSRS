@@ -107,6 +107,10 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final collapsedGroups = ref.watch(
       studyPreferencesProvider.select((p) => p.collapsedScopeGroups),
     );
+    // Master switch: with collapsing off, headers are plain titles and every
+    // group always expanded, whatever the persisted per-group state says.
+    final collapseEnabled =
+        ref.watch(studyPreferencesProvider.select((p) => p.collapsibleScopeGroups)) && !searching;
 
     final filteredOpeningHubs = query.isEmpty
         ? reviewState.openingDueCounts.entries.toList()
@@ -245,9 +249,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     group: 'everywhere',
                                     title: 'Everywhere',
                                     collapsed: collapsedGroups.contains('everywhere'),
-                                    searching: searching,
+                                    plain: !collapseEnabled,
                                   ),
-                                  if (searching || !collapsedGroups.contains('everywhere'))
+                                  if (!collapseEnabled || !collapsedGroups.contains('everywhere'))
                                     _ScopeRow(
                                       name: 'All studies',
                                       semanticLabel:
@@ -273,9 +277,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     group: 'openings',
                                     title: 'Openings',
                                     collapsed: collapsedGroups.contains('openings'),
-                                    searching: searching,
+                                    plain: !collapseEnabled,
                                   ),
-                                  if (searching || !collapsedGroups.contains('openings'))
+                                  if (!collapseEnabled || !collapsedGroups.contains('openings'))
                                     for (final entry in filteredOpeningHubs)
                                       Builder(
                                         builder: (context) {
@@ -310,9 +314,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     group: 'studies',
                                     title: 'Studies',
                                     collapsed: collapsedGroups.contains('studies'),
-                                    searching: searching,
+                                    plain: !collapseEnabled,
                                   ),
-                                  if (searching || !collapsedGroups.contains('studies'))
+                                  if (!collapseEnabled || !collapsedGroups.contains('studies'))
                                     for (final study in filteredStudies)
                                       Builder(
                                         builder: (context) {
@@ -390,17 +394,18 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   /// design/docs/03-components.md §6.2: group titles are `12.5/500 ink3`, padding 14/18/4.
   /// Tapping a header collapses its group; the state persists per group in
   /// [StudyPrefs.collapsedScopeGroups] and survives drawer closes and restarts.
-  /// While searching, headers are plain titles and every match shows.
+  /// Without collapsing (master switch off, or while searching), headers are
+  /// plain titles and every match shows.
   Widget _buildGroupHeader(
     WidgetRef ref,
     SrsColors c, {
     required String group,
     required String title,
     required bool collapsed,
-    required bool searching,
+    required bool plain,
   }) {
     final label = Text(title, style: SrsText.groupTitle(c.ink3));
-    if (searching) {
+    if (plain) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(18.0, 14.0, 18.0, 4.0),

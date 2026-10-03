@@ -265,6 +265,16 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   ),
                                 ),
                                 _SettingRow(
+                                  label: 'Collapsible list groups',
+                                  help:
+                                      'Let the Everywhere, Openings and Studies headers fold away in the scope list.',
+                                  control: SrsSwitch(
+                                    value: studyPrefs.collapsibleScopeGroups,
+                                    semanticLabel: 'Collapsible list groups',
+                                    onChanged: (_) => studyNotifier.toggleCollapsibleScopeGroups(),
+                                  ),
+                                ),
+                                _SettingRow(
                                   label: 'Review Diagnostics HUD',
                                   help:
                                       'Show real-time FSRS retrievability, stability, and difficulty HUD in review.',

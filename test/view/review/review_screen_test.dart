@@ -1393,6 +1393,57 @@ void main() {
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
     });
 
+    testWidgets('collapse toggle off keeps groups expanded and headers plain', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      final element = tester.element(find.byType(ReviewScreen));
+      final container = ProviderScope.containerOf(element);
+      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('Studies & Scope'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      // With the master switch off, tapping a header does nothing.
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsOneWidget);
+      expect(inDrawer('All studies'), findsOneWidget);
+
+      // Switching it back on restores collapsing without losing the state.
+      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
+      await pumpAsync(tester);
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+      expect(inDrawer('All studies'), findsOneWidget);
+    });
+
     testWidgets(
       'displays daily limit reached view and navigates to SrsSettingsScreen on Change daily limit',
       (tester) async {

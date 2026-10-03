@@ -135,6 +135,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     }
     return save(state.copyWith(collapsedScopeGroups: collapsed));
   }
+
+  Future<void> toggleCollapsibleScopeGroups() {
+    return save(state.copyWith(collapsibleScopeGroups: !state.collapsibleScopeGroups));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -168,6 +172,10 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Scope-drawer group ids ('everywhere', 'openings', 'studies') the user
     // collapsed. Empty (default) means every group is expanded.
     @JsonKey(defaultValue: <String>{}) required Set<String> collapsedScopeGroups,
+    // Master switch for collapsible scope-drawer groups. On (default) the
+    // Everywhere/Openings/Studies headers fold; off renders plain headers
+    // and every group always expanded.
+    @JsonKey(defaultValue: true) required bool collapsibleScopeGroups,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -189,6 +197,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     schedulerScaling: 1.5,
     maxDailyReviews: 100,
     collapsedScopeGroups: {},
+    collapsibleScopeGroups: true,
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {

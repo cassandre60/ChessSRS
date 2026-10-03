@@ -59,6 +59,11 @@ void main() {
     await tester.tap(find.text('Show notes after a move'));
     await tester.pumpAndSettle();
 
+    // Collapsible list groups: same row-tap pattern, gates the drawer collapse switch.
+    await tester.scrollUntilVisible(find.text('Collapsible list groups'), 200);
+    await tester.tap(find.text('Collapsible list groups'));
+    await tester.pumpAndSettle();
+
     // Toggle arrows -- the design's label for the row that gates showAnnotations.
     await tester.scrollUntilVisible(find.text('Show arrows and circles'), 200);
     await tester.tap(find.text('Show arrows and circles'));
