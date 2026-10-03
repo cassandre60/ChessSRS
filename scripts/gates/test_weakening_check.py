@@ -9,6 +9,14 @@ conventions. Scans `git diff -U0 BASE...HEAD` and reports:
   - added lint/type suppressions in ANY file
 It is a tripwire, not proof: findings require a human (or a justified note in the PR).
 
+Pairing rule (G08 retune): a removed assertion is NOT a finding when an added
+assertion in the same file has the same shape — the line with string
+literals and `//` comments stripped. That is exactly "same check, new
+words" (e.g. a copy rename changing only the expected text). Deleting a
+check, or changing its matcher, still fails: the stripped shapes differ.
+Fail-closed by construction: an unpaired removal, an empty shape, and any
+removed test declaration always report.
+
 Dart tuning (deliberate deviations from the generic template):
   - SKIP matches the `skip:` *named argument* only. It does NOT match `.skip(`,
     which is the Iterable API (`moves.skip(1)`) and the ReviewSession.skip()
@@ -34,6 +42,12 @@ ASSERT = re.compile(r"\bexpect(Later)?\s*\(|\bassert\s*\(|\bassert\b")
 CASE = re.compile(r"^\s*(testWidgets|test|group)\s*\(")
 SKIP = re.compile(r"[(,]\s*skip\s*:")
 SUPPRESS = re.compile(r"(//\s*ignore_for_file|//\s*ignore:|nolint|# pylint: disable|type:\s*ignore)")
+STRING = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
+
+
+def shape_of_assertion(text):
+    """The check's shape ignoring its words: no string literals, no comments."""
+    return STRING.sub("", text).split("//", 1)[0].strip()
 
 
 def diff_lines(base, head):
@@ -63,6 +77,8 @@ def main():
     args = ap.parse_args()
 
     findings = []
+    removed_asserts = {}
+    added_shapes = {}
     for path, lineno, sign, text in diff_lines(args.base, args.head):
         if not path:
             continue
@@ -70,13 +86,22 @@ def main():
             continue
         is_test = bool(TEST_PATH.search(path))
         if sign == "-" and is_test and ASSERT.search(text):
-            findings.append((path, lineno, "removed assertion-like line", text.strip()))
+            removed_asserts.setdefault(path, []).append((lineno, shape_of_assertion(text), text.strip()))
+        elif sign == "+" and is_test and ASSERT.search(text):
+            added_shapes.setdefault(path, []).append(shape_of_assertion(text))
         elif sign == "-" and is_test and CASE.search(text):
             findings.append((path, lineno, "removed test declaration", text.strip()))
         elif sign == "+" and is_test and SKIP.search(text):
             findings.append((path, lineno, "added skip marker in test", text.strip()))
         elif sign == "+" and SUPPRESS.search(text):
             findings.append((path, lineno, "added suppression", text.strip()))
+    for path, removed in removed_asserts.items():
+        pool = list(added_shapes.get(path, []))
+        for lineno, shape, text in removed:
+            if shape and shape in pool:
+                pool.remove(shape)
+            else:
+                findings.append((path, lineno, "removed assertion-like line", text))
 
     if not findings:
         print("no test-weakening patterns found")

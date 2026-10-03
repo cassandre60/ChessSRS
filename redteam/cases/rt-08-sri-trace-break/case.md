@@ -6,8 +6,12 @@ Expected catcher(s): G05 spec traceability
 
 ## What the patch does
 Deletes the `// SPEC coverage: INV-064.` citation line from
-`test/network/socket_test.dart`, leaving the oracle test itself intact.
-INV-064 is cited nowhere else, so the invariant is orphaned.
+`test/network/socket_test.dart` and neutralises the only other mention
+(the `INV-064` comment in the analysis-route test), leaving the oracle
+tests themselves intact. INV-064 is then cited nowhere, so the invariant
+is orphaned. (Regenerated 2026-10-03: #139 added the second mention, so
+the one-line patch stopped orphaning it and the case escaped t1 — the
+trace check counts any mention by design.)
 
 ## Why it is wrong
 The spec claims wire-format coverage the suite no longer demonstrates.
