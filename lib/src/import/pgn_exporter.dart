@@ -14,7 +14,7 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   // Headers
   final event = (chapter.title != null && !chapter.title!.startsWith('Game '))
       ? chapter.title!
-      : (studyTitle ?? chapter.title ?? 'Repertoire Study');
+      : (studyTitle ?? chapter.title ?? 'Untitled Study');
   buffer.writeln('[Event "$event"]');
   buffer.writeln('[Site "ChessSRS"]');
   buffer.writeln('[Date "${_formatDate(chapter.createdAt ?? DateTime.now())}"]');

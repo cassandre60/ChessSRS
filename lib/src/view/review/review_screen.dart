@@ -845,10 +845,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   ///
   /// design/docs/04-screens-and-flows.md §6 requires announcing position changes through a live
   /// region, and design/docs/01-identity.md gives the wording: `Correct. {san}.` and `Not this
-  /// move. The repertoire move is {san}.` The demo does this through a visually hidden
+  /// move. The study move is {san}.` The demo does this through a visually hidden
   /// `aria-live` node; this is the same thing.
   ///
-  /// It matters most exactly where it is least visible. A wrong answer already puts the repertoire
+  /// It matters most exactly where it is least visible. A wrong answer already puts the study
   /// move on screen in large letters, so a sighted player is told. A *correct* answer shows
   /// nothing at all — the product is deliberately quiet on success — which left a screen-reader user
   /// with no confirmation that they had got it right, and no way to tell a right answer from a
@@ -856,7 +856,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   ///
   /// On a correct answer this announces the move that was played rather than the expected one,
   /// because `expectedMoves` is a list: a transposition can make an alternative equally correct, and
-  /// then the repertoire move is not the move the player made.
+  /// then the study move is not the move the player made.
   String? _verdictAnnouncement(
     ReviewScreenState state, {
     required bool isLapse,
@@ -875,7 +875,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     if (expectedMoveSan == null || expectedMoveSan.isEmpty) {
       return 'Not this move.';
     }
-    return 'Not this move. The repertoire move is $expectedMoveSan.';
+    return 'Not this move. The study move is $expectedMoveSan.';
   }
 
   Widget _buildActions(
@@ -1047,9 +1047,9 @@ String _computeScopeTitle(ReviewScreenState state) {
     }
     return study.title;
   }
-  // design/docs/01-identity.md names the everywhere scope `All repertoires`, and the demo's top bar
+  // design/docs/01-identity.md names the everywhere scope `All studies`, and the demo's top bar
   // shows the same string the scope list row uses.
-  return 'All repertoires';
+  return 'All studies';
 }
 
 class _SrsDiagnosticsOverlay extends StatelessWidget {

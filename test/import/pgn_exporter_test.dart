@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-010, INV-014.
 
+import 'package:chess_srs/src/domain/chapter.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';
@@ -148,6 +149,11 @@ void main() {
       final reimported = importPgn(exported, studyTitle: 'Openings');
 
       expect(reimported.chapters.map((c) => c.title).toList(), ['Italian Game', 'Sicilian']);
+    });
+    test('falls back to Untitled Study when no title is available', () {
+      final chapter = Chapter.create(studyId: 'study-1', sourceOrder: 0);
+      final exported = chapterToPgn(chapter);
+      expect(exported, contains('[Event "Untitled Study"]'));
     });
   });
 }

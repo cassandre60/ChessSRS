@@ -7077,7 +7077,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get toggleSoundTooltip => 'Toggle sound';
 
   @override
-  String get reviewNoStudiesHeadline => 'Bring your repertoire.';
+  String get reviewNoStudiesHeadline => 'Bring your study.';
 
   @override
   String get reviewNoStudiesSubtext =>
@@ -7111,7 +7111,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get reviewNothingDuePractice => 'Practice';
 
   @override
-  String get reviewNothingDueChooseRepertoire => 'Choose a repertoire';
+  String get reviewNothingDueChooseRepertoire => 'Choose a study';
 
   @override
   String get reviewNothingDueChangeDailyLimit => 'Change daily limit';

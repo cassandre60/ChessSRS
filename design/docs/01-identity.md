@@ -57,9 +57,10 @@ Why it looks different from Lichess (and from Chess.com, and from the app's prev
 - Sentence case everywhere. No exclamation marks. No emoji. No "Oops".
 - Say what happened or what to do, in the fewest words. Never scold, never congratulate.
 - Numbers: tabular figures; write durations in words ("3 hours 20 minutes") in body copy, short forms ("3 h") only if space demands.
-- One noun for the content unit. **Decision needed from owner: "Repertoire" or "Study".** The prototype uses
-  "repertoire" for the user's imported collections and "Study" only in "From your study" (source attribution).
-  Apply one choice consistently; if the app's data model says Study, map UI text to the owner's choice.
+- One noun for the content unit. **Owner decision 2026-10-03: "Study".** UI text says study/studies
+  everywhere; the data model already says Study. (File-format internals such as the PGN
+  `[White "Repertoire"]` placeholder tags keep their names: renaming the interchange
+  format would break re-imports.)
 - Do not say "mastered". Use **retained / learning / new** (see `04` §7 for the mapping from FSRS data; thresholds are
   a product decision).
 
@@ -79,19 +80,19 @@ Hard-coded English first (repo convention), then localise later. `{}` = dynamic.
 | Idle title | `Nothing due.` |
 | Idle next | `Next review in {3 hours 20 minutes}.` |
 | Idle legend | `{n} retained`, `{n} learning`, `{n} new` |
-| Idle actions | `Practice`, `Choose a repertoire` |
+| Idle actions | `Practice`, `Choose a study` |
 | Idle footnote | `Practice never changes your schedule.` |
 | Scope search | placeholder `Search` |
-| Scope groups | `Everywhere`, `Openings`, `Repertoires` |
-| Scope first row | `All repertoires` |
+| Scope groups | `Everywhere`, `Openings`, `Studies` |
+| Scope first row | `All studies` |
 | Scope row sub | `{n} positions` or `Paused` |
 | Scope row due | `{n}` + `due` |
 | Scope empty | `Nothing matches “{query}”.` |
 | Library rows | `Import PGN` (sub: `From a file, pasted text or a Lichess study`), group `Explore`: `Analysis` (sub: `Analysis board, explorer, editor, chapters`); `Settings`; `About and licences` |
-| First launch | wordmark `ChessSRS`; `Bring your repertoire.`; `Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.`; drop area `Drop a PGN file here`; button `Choose file`; links `Paste PGN text`, `Import a Lichess study`; `Train as` `Auto` `White` `Black` |
+| First launch | wordmark `ChessSRS`; `Bring your study.`; `Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.`; drop area `Drop a PGN file here`; button `Choose file`; links `Paste PGN text`, `Import a Lichess study`; `Train as` `Auto` `White` `Black` |
 | Import success toast | `Imported {n} positions from {file}.` |
 | Settings | title `Settings`; back `Review`; `Daily limit` (`Positions reviewed per day.`); `Target retention` (`Higher means more reviews. 88% suits most players; 95% is for tournament preparation.`); `Show notes after a move` (`Comments from your study appear once you have answered.`); `Show arrows and circles` (`Drawn from your study, only after you answer.`); `Accent` (`Used for the move you should play and for selection.`); `Theme` `Light`/`Dark` (add `System`); `Sound` (`Soft move and correction sounds.`); `Advanced`: `Scheduling algorithm` (`FSRS adapts to how well you remember each position.`), `Diagnostics` (`Show memory metrics during review.`) |
-| Screen-reader live | `Correct. {san}.` / `Not this move. The repertoire move is {san}.` |
+| Screen-reader live | `Correct. {san}.` / `Not this move. The study move is {san}.` |
 
 Strings that exist only in the prototype (do **not** ship): `... is shown as a placeholder in this prototype.`
 

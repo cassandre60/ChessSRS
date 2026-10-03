@@ -70,7 +70,7 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester, 500);
 
-      expect(find.text('Bring your repertoire.'), findsOneWidget);
+      expect(find.text('Bring your study.'), findsOneWidget);
       expect(find.text('Choose file'), findsWidgets);
     });
 
@@ -125,7 +125,7 @@ void main() {
 
       // Board is rendered with Chessboard
       expect(find.byType(Chessboard), findsOneWidget);
-      expect(find.text('All repertoires'), findsOneWidget);
+      expect(find.text('All studies'), findsOneWidget);
 
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
@@ -177,7 +177,7 @@ void main() {
       );
       expect(find.text('Skip'), findsOneWidget);
 
-      // Reguess on the board by playing the correct repertoire move d2 -> d4
+      // Reguess on the board by playing the correct study move d2 -> d4
       await playMove(tester, 'd2', 'd4');
       await pumpAsync(tester, 700);
 
@@ -196,7 +196,7 @@ void main() {
     testWidgets('a screen reader is told whether the answer was right', (tester) async {
       // design/docs/04-screens-and-flows.md §6 requires the verdict announced through a live
       // region, and this is the assertion that was missing. A wrong answer already puts the
-      // repertoire move on screen, so a sighted player is told; a *correct* one shows nothing at
+      // study move on screen, so a sighted player is told; a *correct* one shows nothing at
       // all, because the product is deliberately quiet on success. That left a screen-reader user
       // with no confirmation, and no way to tell a right answer from a wrong one.
       final sem = tester.ensureSemantics();
@@ -234,7 +234,7 @@ void main() {
       expect(find.bySemanticsLabel(RegExp('Not this move')), findsNothing);
 
       // The correct move, announced as the move that was played. Not the expected one: a
-      // transposition can make an alternative equally correct, in which case the repertoire move is
+      // transposition can make an alternative equally correct, in which case the study move is
       // not what the player actually played.
       await playMove(tester, 'e2', 'e4');
       await pumpAsync(tester, 100);
@@ -245,11 +245,11 @@ void main() {
       await pumpAsync(tester, 400);
       expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
 
-      // A wrong move, announced with the repertoire move. The repertoire's second move is Nf3, so
+      // A wrong move, announced with the study move. The study's second move is Nf3, so
       // d4 is the mistake here and Nf3 is what should have been played.
       await playMove(tester, 'd2', 'd4');
       await pumpAsync(tester, 100);
-      expect(find.bySemanticsLabel('Not this move. The repertoire move is Nf3.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Not this move. The study move is Nf3.'), findsOneWidget);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
       // addTearDown.
@@ -631,7 +631,7 @@ void main() {
       await pumpAsync(tester);
 
       // Verify the Openings section exists (design/docs/01-identity.md: scope groups are
-      // `Everywhere`, `Openings`, `Repertoires`)
+      // `Everywhere`, `Openings`, `Studies`)
       expect(find.text('Openings'), findsOneWidget);
       expect(find.text('Sicilian Defense'), findsOneWidget);
       expect(find.text('French Defense'), findsOneWidget);
@@ -717,7 +717,7 @@ void main() {
       await pumpAsync(tester);
 
       // Study is deleted -> empty state
-      expect(find.text('Bring your repertoire.'), findsOneWidget);
+      expect(find.text('Bring your study.'), findsOneWidget);
     });
 
     testWidgets(
@@ -958,7 +958,7 @@ void main() {
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
       // the memory mini-bar beside it, not in the text.
-      expect(find.text('2 positions'), findsNWidgets(2)); // All repertoires & the study row
+      expect(find.text('2 positions'), findsNWidgets(2)); // All studies & the study row
       List<SrsMemoryBar> drawerBars() => tester
           .widgetList<SrsMemoryBar>(
             find.descendant(
@@ -970,9 +970,9 @@ void main() {
       expect(drawerBars().map((b) => b.learning), everyElement(2));
       expect(drawerBars().map((b) => b.retained), everyElement(0));
 
-      // Close drawer by tapping the All repertoires row (scoped: the top bar shows the same name)
+      // Close drawer by tapping the All studies row (scoped: the top bar shows the same name)
       await tester.tap(
-        find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('All repertoires')),
+        find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('All studies')),
       );
       await pumpAsync(tester);
 
@@ -1047,7 +1047,7 @@ void main() {
       // Dialog is dismissed and info snackbar is shown
       expect(find.byType(RepertoireImportDialog), findsNothing);
       expect(
-        find.text('Repertoire "King Pawn Repertoire" is already imported and up to date'),
+        find.text('Study "King Pawn Repertoire" is already imported and up to date'),
         findsOneWidget,
       );
     });
@@ -1206,23 +1206,23 @@ void main() {
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
-      // Both studies and the All repertoires row are visible initially. Scope every assertion to
+      // Both studies and the All studies row are visible initially. Scope every assertion to
       // the drawer: the top bar carries the same scope name, so an unscoped text finder sees two.
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All repertoires'), findsOneWidget);
+      expect(inDrawer('All studies'), findsOneWidget);
 
       // Type "French" into the search field
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'French');
       await tester.pumpAndSettle();
 
-      // "French Defense Repertoire" is visible, "Sicilian" and the All repertoires row are hidden
+      // "French Defense Repertoire" is visible, "Sicilian" and the All studies row are hidden
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
-      expect(inDrawer('All repertoires'), findsNothing);
+      expect(inDrawer('All studies'), findsNothing);
 
       // Type a query that matches nothing
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'Nonexistent');
@@ -1236,10 +1236,10 @@ void main() {
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
 
-      // Both studies and the All repertoires row reappear
+      // Both studies and the All studies row reappear
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All repertoires'), findsOneWidget);
+      expect(inDrawer('All studies'), findsOneWidget);
     });
 
     testWidgets(

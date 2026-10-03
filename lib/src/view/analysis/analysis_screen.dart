@@ -88,7 +88,7 @@ class _AnalysisScreenState extends ConsumerState<_AnalysisScreen> {
             : (chapterName != null &&
                       chapterName != '?' &&
                       chapterName != 'Standard' &&
-                      chapterName != 'Repertoire Study'
+                      chapterName != 'Untitled Study'
                   ? chapterName
                   : null);
 

@@ -98,8 +98,8 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         reviewState.scope.studyId == null && reviewState.scope.openingFamily == null;
 
     final query = _searchQuery.trim().toLowerCase();
-    // The row is labelled `All repertoires` (design/docs/01-identity.md), so match that.
-    final showAllStudies = query.isEmpty || 'all repertoires'.contains(query);
+    // The row is labelled `All studies` (design/docs/01-identity.md), so match that.
+    final showAllStudies = query.isEmpty || 'all studies'.contains(query);
 
     final filteredOpeningHubs = query.isEmpty
         ? reviewState.openingDueCounts.entries.toList()
@@ -230,13 +230,12 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
-                                // Group: Everywhere (All repertoires)
+                                // Group: Everywhere (All studies)
                                 if (showAllStudies) ...[
                                   _buildGroupHeader('Everywhere', c),
                                   _ScopeRow(
-                                    name: 'All repertoires',
-                                    semanticLabel:
-                                        'All repertoires, ${reviewState.totalDueCount} due',
+                                    name: 'All studies',
+                                    semanticLabel: 'All studies, ${reviewState.totalDueCount} due',
                                     dueCount: reviewState.totalDueCount,
                                     isPaused: false,
                                     isSelected: isAllSelected,
@@ -277,9 +276,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     ),
                                 ],
 
-                                // Group: Repertoires
+                                // Group: Studies
                                 if (filteredStudies.isNotEmpty) ...[
-                                  _buildGroupHeader('Repertoires', c),
+                                  _buildGroupHeader('Studies', c),
                                   for (final study in filteredStudies)
                                     Builder(
                                       builder: (context) {
@@ -439,7 +438,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   }
 
   /// The rename dialog. design/docs/03-components.md §12: a centred card, title 20/600, a bare
-  /// 16px input, then Cancel and Rename. The demo titles it `Rename repertoire` and toasts
+  /// 16px input, then Cancel and Rename. The demo titles it `Rename study` and toasts
   /// `Renamed to "{v}".`.
   ///
   /// The dialog returns the new name rather than renaming itself, so the rename and its toast run
@@ -467,7 +466,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final confirmed = await SrsDialog.show<bool>(
       context: context,
       builder: (ctx) => SrsDialog(
-        title: 'Delete repertoire?',
+        title: 'Delete study?',
         body:
             'Delete \u201c${study.title}\u201d and its $positions positions? This cannot be undone.',
         actions: [
@@ -867,11 +866,11 @@ class _RenameDialogBodyState extends State<_RenameDialogBody> {
   @override
   Widget build(BuildContext context) {
     return SrsDialog(
-      title: 'Rename repertoire',
+      title: 'Rename study',
       content: SrsTextInput(
         controller: _controller,
         autofocus: true,
-        semanticLabel: 'Repertoire name',
+        semanticLabel: 'Study name',
         onSubmitted: (_) => _submit(),
       ),
       actions: [

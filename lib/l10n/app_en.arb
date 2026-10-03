@@ -3857,7 +3857,7 @@
   "settingsBoardMoveOnReleaseHelp": "When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.",
   "settingsAccountPrefsSaved": "Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.",
   "toggleSoundTooltip": "Toggle sound",
-  "reviewNoStudiesHeadline": "Bring your repertoire.",
+  "reviewNoStudiesHeadline": "Bring your study.",
   "reviewNoStudiesSubtext": "Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.",
   "reviewNoStudiesDropZone": "Drop a PGN file here",
   "reviewNoStudiesChooseFile": "Choose file",
@@ -3868,7 +3868,7 @@
   "reviewNoStudiesWhite": "White",
   "reviewNoStudiesBlack": "Black",
   "reviewNothingDuePractice": "Practice",
-  "reviewNothingDueChooseRepertoire": "Choose a repertoire",
+  "reviewNothingDueChooseRepertoire": "Choose a study",
   "reviewNothingDueChangeDailyLimit": "Change daily limit",
   "reviewNothingDuePracticeDoesNotChangeSchedule": "Practice never changes your schedule.",
   "reviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule."

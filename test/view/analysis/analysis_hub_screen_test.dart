@@ -47,7 +47,7 @@ void main() {
       await tester.tap(find.text('Explore study'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Import a repertoire first.'), findsOneWidget);
+      expect(find.text('Import a study first.'), findsOneWidget);
       expect(find.byType(StudyChaptersScreen), findsNothing);
     });
 

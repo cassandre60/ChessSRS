@@ -133,10 +133,10 @@ class AnalysisHubScreen extends ConsumerWidget {
                           )),
                         ),
                       ),
-                      const _SectionHeader('Repertoires'),
+                      const _SectionHeader('Studies'),
                       SrsSettingsRow(
                         label: 'Explore study',
-                        help: 'Browse a repertoire\u2019s moves and notes freely, no quizzing',
+                        help: 'Browse a study\u2019s moves and notes freely, no quizzing',
                         onTap: () => _pickStudyToBrowse(context, ref),
                       ),
                     ],
@@ -153,7 +153,7 @@ class AnalysisHubScreen extends ConsumerWidget {
   /// Opens the study picker, then the chosen study's chapters.
   ///
   /// A sheet rather than a study list inline on this screen. Inlining it was the first attempt and
-  /// it was wrong twice over: it put a *second* list of the user's repertoires next to the scope
+  /// it was wrong twice over: it put a *second* list of the user's studies next to the scope
   /// drawer, which already owns that list, and it meant the hub's one job -- offering tools -- grew
   /// a second purpose. The picker keeps the duplication one level deeper, where it is a choice
   /// rather than a competing home.
@@ -162,7 +162,7 @@ class AnalysisHubScreen extends ConsumerWidget {
     if (!context.mounted) return;
 
     if (studies.isEmpty) {
-      showSnackBar(context, 'Import a repertoire first.');
+      showSnackBar(context, 'Import a study first.');
       return;
     }
 

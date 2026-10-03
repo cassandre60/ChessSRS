@@ -76,7 +76,7 @@ void main() {
         await tester.pumpWidget(app);
         await pumpAsync(tester, 200);
 
-        expect(find.text('Bring your repertoire.'), findsOneWidget);
+        expect(find.text('Bring your study.'), findsOneWidget);
         expect(find.text('Choose file'), findsWidgets);
 
         // -----------------------------------------------------------------------
@@ -117,9 +117,9 @@ void main() {
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
-        // design/docs/01-identity.md names the everywhere scope `All repertoires`; the top bar
+        // design/docs/01-identity.md names the everywhere scope `All studies`; the top bar
         // shows it, and the scope list's first row shows the same string when the drawer opens.
-        expect(find.text('All repertoires'), findsOneWidget);
+        expect(find.text('All studies'), findsOneWidget);
         // The chapter's own title, taken from [Event]. This PGN carries
         // [White "Repertoire"]/[Black "Opponent"] — this app's own placeholders, which the
         // importer used to read first and show as the chapter name.

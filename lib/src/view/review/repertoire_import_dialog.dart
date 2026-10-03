@@ -150,7 +150,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         if (result.isDuplicate) {
           showSnackBar(
             context,
-            'Repertoire "${result.study.title}" is already imported and up to date',
+            'Study "${result.study.title}" is already imported and up to date',
             type: SnackBarType.info,
           );
         } else {
@@ -227,7 +227,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         if (result.isDuplicate) {
           showSnackBar(
             context,
-            'Repertoire "${result.study.title}" is already imported and up to date',
+            'Study "${result.study.title}" is already imported and up to date',
             type: SnackBarType.info,
           );
         } else {

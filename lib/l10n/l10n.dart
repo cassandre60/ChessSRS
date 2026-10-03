@@ -11666,7 +11666,7 @@ abstract class AppLocalizations {
   /// No description provided for @reviewNoStudiesHeadline.
   ///
   /// In en, this message translates to:
-  /// **'Bring your repertoire.'**
+  /// **'Bring your study.'**
   String get reviewNoStudiesHeadline;
 
   /// No description provided for @reviewNoStudiesSubtext.
@@ -11732,7 +11732,7 @@ abstract class AppLocalizations {
   /// No description provided for @reviewNothingDueChooseRepertoire.
   ///
   /// In en, this message translates to:
-  /// **'Choose a repertoire'**
+  /// **'Choose a study'**
   String get reviewNothingDueChooseRepertoire;
 
   /// No description provided for @reviewNothingDueChangeDailyLimit.
