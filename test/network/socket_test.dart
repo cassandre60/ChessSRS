@@ -27,12 +27,13 @@ import 'fake_websocket_channel.dart';
 final defaultSocketUri = Uri(path: kDefaultSocketRoute);
 
 SocketClient makeTestSocketClient({
+  Uri? route,
   WebSocketChannelFactory fakeChannelFactory = defaultFakeWebSocketChannelFactory,
   int? version,
   VoidCallback? onEventGapFailure,
 }) {
   final client = SocketClient(
-    defaultSocketUri,
+    route ?? defaultSocketUri,
     version: version,
     channelFactory: fakeChannelFactory,
     onEventGapFailure: onEventGapFailure,
@@ -110,6 +111,23 @@ void main() {
       await socketClient.close();
 
       expect(Uri.parse(factory.urls.single).queryParameters['sri'], 'testSri');
+    });
+
+    test('connects with the sri in the query string on the analysis route', () async {
+      // The F-CLOUDEVAL path: cloud eval goes out over /analysis/socket, and
+      // INV-064 holds per route, not just for the default one.
+      final factory = _RecordingUrlChannelFactory();
+
+      final socketClient = makeTestSocketClient(
+        route: Uri(path: '/analysis/socket/v5'),
+        fakeChannelFactory: factory,
+      );
+      await socketClient.connect();
+      await socketClient.close();
+
+      final url = Uri.parse(factory.urls.single);
+      expect(url.path, '/analysis/socket/v5');
+      expect(url.queryParameters['sri'], 'testSri');
     });
 
     test('handles ping/pong', () async {

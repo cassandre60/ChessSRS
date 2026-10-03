@@ -296,10 +296,11 @@ remains a later option — never a redesign.
 (none — G-BASEINV, G-LABELEVENT, and G-CIREPORT are closed above.)
 
 ### Open — awaiting verification (not blocking the MVP)
-- [ ] **F-CLOUDEVAL: exercise cloud Stockfish evaluation with a live socket** *(opened: 2026-10-02)*
-      1. Never exercised: every handshake was refused with HTTP 400 until #129, so `/analysis/socket/v5` and its `evalGet` had no connection for the entire life of the app.
-      2. Low risk by construction — `evaluation_mixin.dart` starts the local engine as a backstop and only gives the cloud a head start, so a non-Premium account loses cloud evals and nothing else. Worth one run before anyone reports it broken.
-
+- [x] **F-CLOUDEVAL: exercise cloud Stockfish evaluation with a live socket** *(opened: 2026-10-02, verified: 2026-10-03)*
+      1. Live round-trip from the dev machine: `wss://socket.lichess.org/analysis/socket/v5?sri=<rand>` handshake accepted (no 400 — the #129 fix holds against production), `evalGet` answered with `evalHit` depth 65.
+      2. HTTP fallback `/api/cloud-eval` answered the same position identically.
+      3. New oracle: analysis-route `sri` assertion in `test/network/socket_test.dart` (INV-064 per route, not just default). Full file 46/46, analyze clean.
+      4. Remainder is owner-beta territory: open any study → Analyze and watch cloud depth arrive in-app.
 - [ ] **F-MOBILELOGIN: email-code sign-in on a real device** *(opened: 2026-10-02)*
       1. Desktop sign-in goes through loopback OAuth (#125) and is verified; the mobile-code path is not, because no device was attached.
       2. This is the only path that exercises #123's query-parameter fallback on `/auth/mobile-code/email` and `/bearer`. Needs an Android or iOS device against `lichess.org`, now the default host — no `--dart-define`.
