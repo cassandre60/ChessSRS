@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
@@ -212,6 +213,19 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                     },
                                     value: studyPrefs.schedulerType,
                                     onChanged: (algo) => studyNotifier.setSchedulerType(algo),
+                                  ),
+                                ),
+                                _SettingRow(
+                                  label: 'Review order',
+                                  help:
+                                      'Due date jumps to the most overdue position; By line walks each line in order.',
+                                  control: SrsSegmented<ReviewOrder>(
+                                    options: const {
+                                      ReviewOrder.dueDate: 'Due date',
+                                      ReviewOrder.byLine: 'By line',
+                                    },
+                                    value: studyPrefs.reviewOrder,
+                                    onChanged: (order) => studyNotifier.setReviewOrder(order),
                                   ),
                                 ),
                                 if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[

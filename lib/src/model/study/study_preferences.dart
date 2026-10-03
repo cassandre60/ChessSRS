@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/model/analysis/common_analysis_prefs.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
@@ -139,6 +140,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
   Future<void> toggleCollapsibleScopeGroups() {
     return save(state.copyWith(collapsibleScopeGroups: !state.collapsibleScopeGroups));
   }
+
+  Future<void> setReviewOrder(ReviewOrder order) {
+    return save(state.copyWith(reviewOrder: order));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -176,6 +181,9 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Everywhere/Openings/Studies headers fold; off renders plain headers
     // and every group always expanded.
     @JsonKey(defaultValue: true) required bool collapsibleScopeGroups,
+    // Presentation order of the due queue (P-ORDER). The due set never
+    // depends on this: urgency filtering and the quota cut apply first.
+    @JsonKey(defaultValue: ReviewOrder.byLine) required ReviewOrder reviewOrder,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -198,6 +206,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     maxDailyReviews: 100,
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
+    reviewOrder: ReviewOrder.byLine,
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {

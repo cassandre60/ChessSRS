@@ -10,6 +10,7 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
+import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
 import 'package:chess_srs/src/domain/review/review_step_result.dart';
@@ -36,6 +37,7 @@ class ReviewSession {
     required Map<String, ReviewState> reviewStates,
     this.scope = const ReviewScope.all(),
     this.mode = ReviewMode.srs,
+    this.order = ReviewOrder.dueDate,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.prefetchBatchSize = 25,
@@ -127,6 +129,27 @@ class ReviewSession {
         );
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
+
+      // By-line order (INV-066): same urgency-selected set, presented walking
+      // study, then chapter source order, then tree order. Stable sort keeps
+      // due-date order for ties, so equally placed cards stay most-due-first.
+      if (order == ReviewOrder.byLine) {
+        final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
+        final nodeOrder = <String, int>{};
+        var n = 0;
+        for (final id in _nodesById.keys) {
+          nodeOrder[id] = n++;
+        }
+        _unbufferedQueue.sort((a, b) {
+          var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
+          if (c != 0) return c;
+          c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
+            _chapters[b.chapterId]?.sourceOrder ?? 0,
+          );
+          if (c != 0) return c;
+          return (nodeOrder[a.nodeId] ?? 0).compareTo(nodeOrder[b.nodeId] ?? 0);
+        });
+      }
     }
 
     _initialDueCount = _unbufferedQueue.length;
@@ -139,6 +162,9 @@ class ReviewSession {
 
   final ReviewScope scope;
   final ReviewMode mode;
+
+  /// Presentation order of the due queue. The due set never depends on this.
+  final ReviewOrder order;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;

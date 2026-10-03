@@ -34,12 +34,18 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final repo = repoAsync.asData?.value;
   final scheduler = ref.watch(schedulerProvider);
   final clock = ref.watch(clockProvider);
+  final reviewOrder = ref.watch(studyPreferencesProvider.select((p) => p.reviewOrder));
 
   if (repo == null) {
     throw StateError('StudyRepository is not yet initialized');
   }
 
-  return ReviewService(repository: repo, scheduler: scheduler, clock: clock);
+  return ReviewService(
+    repository: repo,
+    scheduler: scheduler,
+    clock: clock,
+    reviewOrder: reviewOrder,
+  );
 });
 
 /// Application service orchestrating review sessions, local persistence,
@@ -67,11 +73,16 @@ class ReviewService {
     required this.repository,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
+    this.reviewOrder = ReviewOrder.dueDate,
   });
 
   final StudyRepository repository;
   final Scheduler scheduler;
   final Clock clock;
+
+  /// Presentation order of the due queue. The domain default stays due-date;
+  /// the product default (StudyPrefs) is by-line.
+  final ReviewOrder reviewOrder;
 
   ReviewSession? _activeSession;
   ReviewSession? get activeSession => _activeSession;
@@ -173,6 +184,7 @@ class ReviewService {
       reviewStates: reviewStates,
       scope: scope,
       mode: mode,
+      order: reviewOrder,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,

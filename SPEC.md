@@ -301,6 +301,17 @@ moves stay incorrect, exactly as before.
   (P-TRANSPOSE); memory sharing across transpositions already existed (R2),
   grading did not.
 
+### INV-066 By-line review order presents the same due set in line order
+With `ReviewOrder.byLine`, consecutive prompts follow study, then chapter,
+then tree order over the due set selected by urgency — no position is added
+or dropped by the ordering, and the daily quota still cuts the most overdue
+first. `ReviewOrder.dueDate` keeps most-overdue-first.
+- Oracle: queue-order tests in `test/review/review_order_test.dart`.
+- Gates: review engine suite, G05 traceability.
+- Tier: T1. Covering: `test/review/review_order_test.dart`.
+- History: 2026-10-03, owner-reported scattered jumps across unrelated lines
+  (P-ORDER); researched against Listudy line-walking and chessrs due queues.
+
 ## D. Architecture and determinism (T1)
 
 ### INV-040 The domain layer is pure Dart
@@ -404,3 +415,4 @@ and appear only after grading (or never, when annotations are disabled).
 | 2026-10-01 | all | Initial SPEC transcribed from QUALITY.md + mined regressions | (owner, on merge) |
 | 2026-10-03 | INV-064 | Added: socket handshake carries session sri (escape #129) | (owner, on merge) |
 | 2026-10-03 | INV-065 | Added: out-of-line repertoire moves accepted when in scope (P-TRANSPOSE) | (owner, on merge) |
+| 2026-10-03 | INV-066 | Added: by-line queue order over the urgency-selected due set (P-ORDER) | (owner, on merge) |

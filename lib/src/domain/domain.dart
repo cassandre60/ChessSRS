@@ -19,6 +19,7 @@ export 'repertoire_node.dart';
 export 'repertoire_progress.dart';
 export 'review/review_engine.dart';
 export 'review/review_mode.dart';
+export 'review/review_order.dart';
 export 'review/review_prompt.dart';
 export 'review/review_scope.dart';
 export 'review/review_session.dart';
