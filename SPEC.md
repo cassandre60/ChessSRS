@@ -288,6 +288,19 @@ of the same castling match each other in grading and tree lookup.
   `test/review/review_engine_test.dart`,
   `test/review/review_controller_test.dart`.
 
+### INV-065 A repertoire move played out of line is accepted when its position is in scope
+A legal move that matches no expected continuation is still graded correct
+when the position it reaches exists in the active scope's repertoire tree;
+review continues from the transposed line. Out-of-scope targets and illegal
+moves stay incorrect, exactly as before.
+- Oracle: transposition acceptance tests in
+  `test/review/review_transposition_test.dart`.
+- Gates: review engine suite, G05 traceability.
+- Tier: T1. Covering: `test/review/review_transposition_test.dart`.
+- History: 2026-10-03, owner-requested review-time transposition support
+  (P-TRANSPOSE); memory sharing across transpositions already existed (R2),
+  grading did not.
+
 ## D. Architecture and determinism (T1)
 
 ### INV-040 The domain layer is pure Dart
@@ -390,3 +403,4 @@ and appear only after grading (or never, when annotations are disabled).
 |------|-----------|--------|----------|
 | 2026-10-01 | all | Initial SPEC transcribed from QUALITY.md + mined regressions | (owner, on merge) |
 | 2026-10-03 | INV-064 | Added: socket handshake carries session sri (escape #129) | (owner, on merge) |
+| 2026-10-03 | INV-065 | Added: out-of-line repertoire moves accepted when in scope (P-TRANSPOSE) | (owner, on merge) |

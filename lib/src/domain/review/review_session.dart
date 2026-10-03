@@ -52,7 +52,7 @@ class ReviewSession {
     // Index all nodes across chapter trees for O(1) lookup
     for (final chapter in chapters) {
       if (chapter.root != null) {
-        _indexNodes(chapter.root!);
+        _indexNodes(chapter.root!, chapter.id);
       }
     }
 
@@ -162,6 +162,8 @@ class ReviewSession {
   final Map<String, RepertoireDecision> _decisionsByCanonicalId = {};
   final Map<String, List<RepertoireDecision>> _decisionsByFenKey = {};
   final Map<String, RepertoireNode> _nodesById = {};
+  final Map<String, List<RepertoireNode>> _nodesByFenKey = {};
+  final Map<String, String> _chapterOfNode = {};
   final Map<String, RepertoireNode> _parentOfNode = {};
   final Map<String, String> _canonicalByFenMove = {};
   final Map<String, int> _nodeCountCache = {};
@@ -262,7 +264,18 @@ class ReviewSession {
 
     // Validate move against expected repertoire moves (Invariant §2.1)
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    final expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    var expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    RepertoireNode? transposedStart;
+    if (expectedMatch == null) {
+      // Transposition (INV-065): book from another in-scope line. The
+      // incoming move carries the contextual SAN; its UCI is the move played.
+      final target = _findTransposedNode(prompt, movePlayed);
+      final incoming = target?.incomingMove;
+      if (incoming != null && incoming.matches(movePlayed)) {
+        expectedMatch = incoming;
+        transposedStart = target;
+      }
+    }
 
     final now = clock.now();
 
@@ -315,6 +328,7 @@ class ReviewSession {
         expectedMatch: expectedMatch,
         updatedState: nextState,
         event: event,
+        startNode: transposedStart,
       );
     } else {
       // -----------------------------------------------------------------------
@@ -403,7 +417,16 @@ class ReviewSession {
     }
 
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    final expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    var expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    RepertoireNode? transposedStart;
+    if (expectedMatch == null) {
+      final target = _findTransposedNode(prompt, movePlayed);
+      final incoming = target?.incomingMove;
+      if (incoming != null && incoming.matches(movePlayed)) {
+        expectedMatch = incoming;
+        transposedStart = target;
+      }
+    }
 
     final currentState =
         _reviewStates[prompt.decision.canonicalId] ??
@@ -420,6 +443,7 @@ class ReviewSession {
         expectedMatch: expectedMatch,
         updatedState: currentState,
         event: null,
+        startNode: transposedStart,
       );
     } else {
       final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
@@ -441,11 +465,14 @@ class ReviewSession {
     required RepertoireMove expectedMatch,
     required ReviewState updatedState,
     required ReviewEvent? event,
+    RepertoireNode? startNode,
   }) {
     final now = clock.now();
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
-    var activeNode = _findChildForMove(prompt.currentNode, expectedMatch);
+    // A transposed acceptance starts the traversal from the reached line;
+    // otherwise it starts from the played child of the drilled position.
+    var activeNode = startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
 
     while (activeNode != null) {
       if (activeNode.children.isEmpty) {
@@ -652,14 +679,75 @@ class ReviewSession {
     return node.childForMove(move);
   }
 
-  void _indexNodes(RepertoireNode node, [RepertoireNode? parent]) {
+  void _indexNodes(RepertoireNode node, String chapterId, [RepertoireNode? parent]) {
     _nodesById[node.id] = node;
+    _chapterOfNode[node.id] = chapterId;
+    _nodesByFenKey.putIfAbsent(node.fenKey, () => []).add(node);
     if (parent != null) {
       _parentOfNode[node.id] = parent;
     }
     for (final child in node.children) {
-      _indexNodes(child, node);
+      _indexNodes(child, chapterId, node);
     }
+  }
+
+  /// Transposition acceptance (P-TRANSPOSE, INV-065): the played move matches
+  /// no expected continuation here, but the position it reaches exists in the
+  /// active scope's repertoire tree. Returns that node, or null.
+  ///
+  /// The drilled decision is still graded correct; only the continuation
+  /// jumps to the transposed line. Illegal moves, targets outside the scope,
+  /// and targets without a repertoire move of their own fail closed to null,
+  /// preserving ordinary incorrect handling exactly.
+  RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
+    // Position identity is the 4-field FEN (QUALITY.md §2.3). Recomputed
+    // here rather than imported: the domain layer owns no FEN helpers.
+    Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(prompt.fen));
+    } catch (_) {
+      return null;
+    }
+    final Role? promotion = switch (movePlayed.promotion) {
+      'q' => Role.queen,
+      'r' => Role.rook,
+      'b' => Role.bishop,
+      'n' => Role.knight,
+      _ => null,
+    };
+    if (movePlayed.promotion != null && promotion == null) return null;
+    late final Position next;
+    try {
+      next = position.play(
+        NormalMove(
+          from: Square.fromName(movePlayed.from),
+          to: Square.fromName(movePlayed.to),
+          promotion: promotion,
+        ),
+      );
+    } catch (_) {
+      return null; // illegal here: ordinary incorrect, unchanged behavior
+    }
+    final parts = next.fen.split(' ');
+    if (parts.length < 4) return null;
+    final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
+    for (final node in _nodesByFenKey[key] ?? const <RepertoireNode>[]) {
+      final incoming = node.incomingMove;
+      if (incoming == null || !incoming.matches(movePlayed)) continue;
+      final chapter = _chapters[_chapterOfNode[node.id]];
+      final study = chapter == null ? null : _studies[chapter.studyId];
+      if (chapter == null ||
+          study == null ||
+          !scope.matches(
+            studyId: chapter.studyId,
+            chapterId: chapter.id,
+            openingFamily: chapter.opening,
+          )) {
+        continue;
+      }
+      return node;
+    }
+    return null;
   }
 
   /// Parses the active side to move from [fen] using dartchess [Setup.parseFen].
