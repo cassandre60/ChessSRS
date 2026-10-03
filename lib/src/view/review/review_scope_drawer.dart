@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/common/id.dart';
+import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
@@ -100,6 +101,12 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final query = _searchQuery.trim().toLowerCase();
     // The row is labelled `All studies` (design/docs/01-identity.md), so match that.
     final showAllStudies = query.isEmpty || 'all studies'.contains(query);
+    // While searching, every match shows regardless of collapse: the query,
+    // not the persisted state, decides what is visible.
+    final searching = query.isNotEmpty;
+    final collapsedGroups = ref.watch(
+      studyPreferencesProvider.select((p) => p.collapsedScopeGroups),
+    );
 
     final filteredOpeningHubs = query.isEmpty
         ? reviewState.openingDueCounts.entries.toList()
@@ -232,84 +239,111 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                               children: [
                                 // Group: Everywhere (All studies)
                                 if (showAllStudies) ...[
-                                  _buildGroupHeader('Everywhere', c),
-                                  _ScopeRow(
-                                    name: 'All studies',
-                                    semanticLabel: 'All studies, ${reviewState.totalDueCount} due',
-                                    dueCount: reviewState.totalDueCount,
-                                    isPaused: false,
-                                    isSelected: isAllSelected,
-                                    progress: reviewState.totalProgress,
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                      ref
-                                          .read(reviewControllerProvider.notifier)
-                                          .changeScope(const ReviewScope.all());
-                                    },
+                                  _buildGroupHeader(
+                                    ref,
+                                    c,
+                                    group: 'everywhere',
+                                    title: 'Everywhere',
+                                    collapsed: collapsedGroups.contains('everywhere'),
+                                    searching: searching,
                                   ),
+                                  if (searching || !collapsedGroups.contains('everywhere'))
+                                    _ScopeRow(
+                                      name: 'All studies',
+                                      semanticLabel:
+                                          'All studies, ${reviewState.totalDueCount} due',
+                                      dueCount: reviewState.totalDueCount,
+                                      isPaused: false,
+                                      isSelected: isAllSelected,
+                                      progress: reviewState.totalProgress,
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        ref
+                                            .read(reviewControllerProvider.notifier)
+                                            .changeScope(const ReviewScope.all());
+                                      },
+                                    ),
                                 ],
 
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
-                                  _buildGroupHeader('Openings', c),
-                                  for (final entry in filteredOpeningHubs)
-                                    Builder(
-                                      builder: (context) {
-                                        final progress =
-                                            reviewState.openingProgress[entry.key] ??
-                                            RepertoireProgress.zero;
-                                        return _ScopeRow(
-                                          name: entry.key,
-                                          semanticLabel: '${entry.key} opening, ${entry.value} due',
-                                          dueCount: entry.value,
-                                          isPaused: false,
-                                          isSelected: reviewState.scope.openingFamily == entry.key,
-                                          progress: progress,
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                            ref
-                                                .read(reviewControllerProvider.notifier)
-                                                .changeScope(ReviewScope.opening(entry.key));
-                                          },
-                                        );
-                                      },
-                                    ),
+                                  _buildGroupHeader(
+                                    ref,
+                                    c,
+                                    group: 'openings',
+                                    title: 'Openings',
+                                    collapsed: collapsedGroups.contains('openings'),
+                                    searching: searching,
+                                  ),
+                                  if (searching || !collapsedGroups.contains('openings'))
+                                    for (final entry in filteredOpeningHubs)
+                                      Builder(
+                                        builder: (context) {
+                                          final progress =
+                                              reviewState.openingProgress[entry.key] ??
+                                              RepertoireProgress.zero;
+                                          return _ScopeRow(
+                                            name: entry.key,
+                                            semanticLabel:
+                                                '${entry.key} opening, ${entry.value} due',
+                                            dueCount: entry.value,
+                                            isPaused: false,
+                                            isSelected:
+                                                reviewState.scope.openingFamily == entry.key,
+                                            progress: progress,
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              ref
+                                                  .read(reviewControllerProvider.notifier)
+                                                  .changeScope(ReviewScope.opening(entry.key));
+                                            },
+                                          );
+                                        },
+                                      ),
                                 ],
 
                                 // Group: Studies
                                 if (filteredStudies.isNotEmpty) ...[
-                                  _buildGroupHeader('Studies', c),
-                                  for (final study in filteredStudies)
-                                    Builder(
-                                      builder: (context) {
-                                        final due = reviewState.studyDueCounts[study.id] ?? 0;
-                                        final progress =
-                                            reviewState.studyProgress[study.id] ??
-                                            RepertoireProgress.zero;
-                                        return _ScopeRow(
-                                          name: study.title,
-                                          semanticLabel:
-                                              '${study.title}, $due due'
-                                              '${study.isActive ? '' : ', paused'}',
-                                          dueCount: due,
-                                          isPaused: !study.isActive,
-                                          isSelected: reviewState.scope.studyId == study.id,
-                                          progress: progress,
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                            ref
-                                                .read(reviewControllerProvider.notifier)
-                                                .changeScope(ReviewScope.study(study.id));
-                                          },
-                                          onShowActions: (anchor) => _showStudyActionsSheet(
-                                            context,
-                                            ref,
-                                            study,
-                                            anchor: anchor,
-                                          ),
-                                        );
-                                      },
-                                    ),
+                                  _buildGroupHeader(
+                                    ref,
+                                    c,
+                                    group: 'studies',
+                                    title: 'Studies',
+                                    collapsed: collapsedGroups.contains('studies'),
+                                    searching: searching,
+                                  ),
+                                  if (searching || !collapsedGroups.contains('studies'))
+                                    for (final study in filteredStudies)
+                                      Builder(
+                                        builder: (context) {
+                                          final due = reviewState.studyDueCounts[study.id] ?? 0;
+                                          final progress =
+                                              reviewState.studyProgress[study.id] ??
+                                              RepertoireProgress.zero;
+                                          return _ScopeRow(
+                                            name: study.title,
+                                            semanticLabel:
+                                                '${study.title}, $due due'
+                                                '${study.isActive ? '' : ', paused'}',
+                                            dueCount: due,
+                                            isPaused: !study.isActive,
+                                            isSelected: reviewState.scope.studyId == study.id,
+                                            progress: progress,
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              ref
+                                                  .read(reviewControllerProvider.notifier)
+                                                  .changeScope(ReviewScope.study(study.id));
+                                            },
+                                            onShowActions: (anchor) => _showStudyActionsSheet(
+                                              context,
+                                              ref,
+                                              study,
+                                              anchor: anchor,
+                                            ),
+                                          );
+                                        },
+                                      ),
                                 ],
                               ],
                             ),
@@ -354,11 +388,50 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   }
 
   /// design/docs/03-components.md §6.2: group titles are `12.5/500 ink3`, padding 14/18/4.
-  Widget _buildGroupHeader(String title, SrsColors c) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18.0, 14.0, 18.0, 4.0),
-      child: Text(title, style: SrsText.groupTitle(c.ink3)),
+  /// Tapping a header collapses its group; the state persists per group in
+  /// [StudyPrefs.collapsedScopeGroups] and survives drawer closes and restarts.
+  /// While searching, headers are plain titles and every match shows.
+  Widget _buildGroupHeader(
+    WidgetRef ref,
+    SrsColors c, {
+    required String group,
+    required String title,
+    required bool collapsed,
+    required bool searching,
+  }) {
+    final label = Text(title, style: SrsText.groupTitle(c.ink3));
+    if (searching) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(18.0, 14.0, 18.0, 4.0),
+        child: label,
+      );
+    }
+    return SrsPressable(
+      onPressed: () => ref.read(studyPreferencesProvider.notifier).toggleScopeGroupCollapsed(group),
+      semanticLabel: collapsed ? 'Expand $title section' : 'Collapse $title section',
+      semanticsToggled: !collapsed,
+      radius: 10,
+      builder: (_, hover, _) => Container(
+        constraints: const BoxConstraints(minHeight: SrsLayout.minTouchTarget),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 4.0),
+        decoration: BoxDecoration(
+          color: hover ? c.hairlineSoft : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            ExcludeSemantics(child: label),
+            const Spacer(),
+            Icon(
+              collapsed ? Symbols.expand_more_rounded : Symbols.expand_less_rounded,
+              size: 14,
+              color: c.ink3,
+            ),
+          ],
+        ),
+      ),
     );
   }
 

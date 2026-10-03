@@ -1242,6 +1242,157 @@ void main() {
       expect(inDrawer('All studies'), findsOneWidget);
     });
 
+    testWidgets('ReviewScopeDrawer groups collapse and expand on header tap', (tester) async {
+      final study = importPgn(
+        '[Opening "Sicilian Defense"]\n1. e4 c5 *',
+        studyTitle: 'Sicilian Lines',
+        repertoireSide: Side.black,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('Studies & Scope'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+      expect(inDrawer('Sicilian Lines'), findsOneWidget);
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Lines'), findsNothing);
+      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+
+      await tester.tap(inDrawer('Openings'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Defense'), findsNothing);
+      expect(inDrawer('All studies'), findsOneWidget);
+
+      await tester.tap(inDrawer('Openings'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+
+      await tester.tap(inDrawer('Everywhere'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('All studies'), findsNothing);
+
+      await tester.tap(inDrawer('Everywhere'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('All studies'), findsOneWidget);
+    });
+
+    testWidgets('ReviewScopeDrawer collapse survives closing and reopening', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('Studies & Scope'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+
+      // Choosing a scope closes the drawer; reopening must keep the collapse.
+      await tester.tap(inDrawer('All studies'));
+      await pumpAsync(tester);
+      await tester.tap(find.byTooltip('Studies & Scope'));
+      await pumpAsync(tester);
+
+      expect(find.byType(ReviewScopeDrawer), findsOneWidget);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+      expect(inDrawer('All studies'), findsOneWidget);
+    });
+
+    testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('Studies & Scope'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Search'), 'King Pawn');
+      await tester.pumpAndSettle();
+
+      expect(inDrawer('King Pawn Lines'), findsOneWidget);
+    });
+
     testWidgets(
       'displays daily limit reached view and navigates to SrsSettingsScreen on Change daily limit',
       (tester) async {

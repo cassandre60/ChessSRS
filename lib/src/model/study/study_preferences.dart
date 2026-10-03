@@ -127,6 +127,14 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
   Future<void> toggleSrsDiagnostics() {
     return save(state.copyWith(srsDiagnostics: !state.srsDiagnostics));
   }
+
+  Future<void> toggleScopeGroupCollapsed(String group) {
+    final collapsed = Set<String>.of(state.collapsedScopeGroups);
+    if (!collapsed.add(group)) {
+      collapsed.remove(group);
+    }
+    return save(state.copyWith(collapsedScopeGroups: collapsed));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -157,6 +165,9 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: 2.5) required double schedulerEase,
     @JsonKey(defaultValue: 1.5) required double schedulerScaling,
     @JsonKey(defaultValue: 100) required int maxDailyReviews,
+    // Scope-drawer group ids ('everywhere', 'openings', 'studies') the user
+    // collapsed. Empty (default) means every group is expanded.
+    @JsonKey(defaultValue: <String>{}) required Set<String> collapsedScopeGroups,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -177,6 +188,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     schedulerEase: 2.5,
     schedulerScaling: 1.5,
     maxDailyReviews: 100,
+    collapsedScopeGroups: {},
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {
