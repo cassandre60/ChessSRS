@@ -701,19 +701,17 @@ String _simplifyOpeningName(String raw) {
 }
 
 bool _isLikelyOpeningName(String name) {
-  final lower = name.toLowerCase();
-  const keywords = [
-    'defense',
-    'defence',
-    'game',
-    'gambit',
-    'opening',
-    'attack',
-    'system',
+  // The family must LEAD the name or CLOSE it: "French Defence - Winawer",
+  // "Petrov Defense", and "Queen's Gambit Declined" are families, but
+  // "White vs French" and "My Custom French Repertoire" merely mention one.
+  // A bare `contains` check turns every such Event title into a bogus
+  // opening hub (P-OPENNAME), so never invent a hub when uncertain: bare
+  // category words ('game', 'system', ...) match nothing on their own.
+  final lower = name.toLowerCase().replaceAll('-', ' ');
+  const familyLeads = [
     'sicilian',
     'french',
-    'caro-kann',
-    'caro',
+    'caro kann',
     'ruy lopez',
     'italian',
     'scotch',
@@ -721,6 +719,11 @@ bool _isLikelyOpeningName(String name) {
     'kings indian',
     "queen's indian",
     'queens indian',
+    "queen's gambit",
+    'queens gambit',
+    "king's gambit",
+    'kings gambit',
+    'open game',
     'nimzo',
     'gruenfeld',
     'grunfeld',
@@ -736,7 +739,11 @@ bool _isLikelyOpeningName(String name) {
     'alekhine',
     'vienna',
   ];
-  return keywords.any((k) => lower.contains(k));
+  if (familyLeads.any((k) => lower == k || lower.startsWith('$k '))) {
+    return true;
+  }
+  const categoryTails = ['defense', 'defence', 'gambit', 'attack', 'system', 'opening'];
+  return categoryTails.any((n) => lower.endsWith(' $n'));
 }
 
 String? _ecoToOpeningFamily(String eco) {

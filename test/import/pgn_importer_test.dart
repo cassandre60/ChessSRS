@@ -80,6 +80,15 @@ void main() {
       expect(result.chapters.first.opening, 'French Defence');
     });
 
+    test('ignores Event headers that merely mention an opening', () {
+      const pgn = '''
+[Event "White vs French"]
+1. e4 e6 2. d4 d5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, isNull);
+    });
+
     test('classifies opening family from ECO header fallback', () {
       const pgn = '''
 [ECO "B90"]
