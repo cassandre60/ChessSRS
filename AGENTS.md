@@ -311,6 +311,36 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
 8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
 
+## 11. Releases: when to cut one (agent decides, owner doesn't)
+
+Releases are tags (`git tag vX.Y.Z && git push origin vX.Y.Z`); the release
+workflow builds + publishes automatically (see `docs/releases.md`). The
+owner has delegated the release decision to the agent: evaluate at the end
+of every merged work item, and cut one when worthy without asking.
+
+Worth releasing when ALL hold:
+
+- Something the owner can feel changed: a user-visible feature, fix, or
+  copy. Gate/CI/refactor/test-only/docs-only deltas ride silently.
+- The work's own PR went in green (T1 + Unit tests) with its evidence
+  intact — never tag a red or unverified tree to "see what happens".
+- Nothing known-broken is pending: no just-merged change already known to
+  misbehave, and the release notes won't claim an unverified proof.
+
+Not worth releasing:
+
+- The delta since the last tag is invisible to the owner.
+- A release already covers the same code (one tag per merged batch — batch
+  related PRs into one release, never tag per-PR).
+- The last tag was cut for the same batch (check `git tag --sort=-creatordate`
+  and what main has gained since before tagging).
+
+Versioning: patch (`x.y.Z`) for fixes/copy, minor (`x.Y.0`) for features or
+new settings/options. Major stays `0` until the owner declares otherwise.
+After tagging, watch the Release workflow to green and report what shipped
+with the download page link. Tags publish — never push one casually, and
+never move or delete a published tag.
+
 ## Lessons Learned
 
 - [2026-09-25, Space Bunny Free] The full suite is a pre-push gate, not a
