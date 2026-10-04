@@ -129,11 +129,20 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Rename Android artifacts per tag
+      - name: Collect and rename artifacts per tag
+        # download-artifact with merge-multiple preserves each upload's
+        # directory layout, so locate by filename instead of assuming dist/.
+        # (v0.1.1 failed here assuming a flat dist/.)
         run: |
           TAG="${GITHUB_REF_NAME}"
-          mv dist/app-release.aab "dist/chesssrs-${TAG}-android-testing.aab"
-          mv dist/app-release.apk "dist/chesssrs-${TAG}-android-testing.apk"
+          AAB=$(find dist -name 'app-release.aab' | head -1)
+          APK=$(find dist -name 'app-release.apk' | head -1)
+          TGZ=$(find dist -name 'chesssrs-*.tar.gz' | head -1)
+          test -n "$AAB" && test -n "$APK" && test -n "$TGZ" || { echo "missing artifacts:"; find dist -type f; exit 1; }
+          mkdir -p release
+          mv "$AAB" "release/chesssrs-${TAG}-android-testing.aab"
+          mv "$APK" "release/chesssrs-${TAG}-android-testing.apk"
+          mv "$TGZ" "release/chesssrs-${TAG}-linux-x64.tar.gz"
 
       - name: Create release
         env:
@@ -141,7 +150,7 @@ jobs:
         # Beta: marked pre-release until the owner declares stable. Release
         # notes are generated from the merged PR titles since the last tag.
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/* \
+          gh release create "${GITHUB_REF_NAME}" release/* \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             --prerelease
