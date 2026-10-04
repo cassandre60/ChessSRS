@@ -702,6 +702,30 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
 
     void onSkip() => ref.read(reviewControllerProvider.notifier).skip();
 
+    /// Plays the study move on the learner's behalf and continues through the normal
+    /// retry path — the lapse already stands, so this changes the flow, not the grade.
+    /// Only offered in the correction state, where recall has already failed and a bare
+    /// "Skip" mislabels what is left to do.
+    void onRevealAnswer() {
+      final expected = state.expectedMove;
+      if (expected == null) return;
+      ref
+          .read(reviewControllerProvider.notifier)
+          .onUserMove(
+            NormalMove(
+              from: Square.fromName(expected.from),
+              to: Square.fromName(expected.to),
+              promotion: switch (expected.promotion) {
+                'q' => Role.queen,
+                'r' => Role.rook,
+                'b' => Role.bishop,
+                'n' => Role.knight,
+                _ => null,
+              },
+            ),
+          );
+    }
+
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
@@ -711,7 +735,12 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             if (state.isAwaitingAdvance) onContinue();
           },
           const SingleActivator(LogicalKeyboardKey.keyS): () {
-            if (!state.isAwaitingAdvance) onSkip();
+            if (state.isAwaitingAdvance) return;
+            if (isLapse && state.expectedMove != null) {
+              onRevealAnswer();
+            } else {
+              onSkip();
+            }
           },
         },
         child: SrsReviewLayout(
@@ -784,7 +813,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             actions: _buildActions(
               context,
               isAwaitingAdvance: state.isAwaitingAdvance,
+              isLapse: isLapse,
+              canReveal: state.expectedMove != null,
               onSkip: onSkip,
+              onRevealAnswer: onRevealAnswer,
               onContinue: onContinue,
             ),
           ),
@@ -891,14 +923,22 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   Widget _buildActions(
     BuildContext context, {
     required bool isAwaitingAdvance,
+    required bool isLapse,
+    required bool canReveal,
     required VoidCallback onSkip,
+    required VoidCallback onRevealAnswer,
     required VoidCallback onContinue,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         if (!isAwaitingAdvance)
-          SrsTextButton(label: 'Skip', shortcut: 'S', onPressed: onSkip)
+          if (isLapse && canReveal)
+            // Recall has already failed, so "Skip" mislabels what is left: revealing the
+            // study move by playing it on the learner's behalf through the retry path.
+            SrsTextButton(label: 'Reveal answer', shortcut: 'S', onPressed: onRevealAnswer)
+          else
+            SrsTextButton(label: 'Skip', shortcut: 'S', onPressed: onSkip)
         else
           const SizedBox.shrink(),
         if (isAwaitingAdvance)

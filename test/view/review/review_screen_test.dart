@@ -177,7 +177,10 @@ void main() {
         find.text('Play this move to continue. The position will come back soon.'),
         findsOneWidget,
       );
-      expect(find.text('Skip'), findsOneWidget);
+      // Recall has failed, so the action says what it does: reveal the study move by
+      // playing it on the learner's behalf. A bare "Skip" here mislabeled the action.
+      expect(find.text('Reveal answer'), findsOneWidget);
+      expect(find.text('Skip'), findsNothing);
 
       // Reguess on the board by playing the correct study move d2 -> d4
       await playMove(tester, 'd2', 'd4');
@@ -246,6 +249,55 @@ void main() {
         (options as Pgn).pgn,
         contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'),
       );
+    });
+
+    testWidgets('Reveal answer plays the study move and continues the session', (tester) async {
+      // The correction state offers no way out except replaying the move by hand or
+      // requeueing: tapping Reveal answer must do what a correct reguess does — advance
+      // through the retry path with the lapse standing — rather than swallowing the tap
+      // or requeueing silently.
+      final importResult = importPgn(
+        '1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Prompt state still says Skip: recall has not failed yet.
+      expect(find.text('Skip'), findsOneWidget);
+
+      // Play incorrect move: e2 -> e4 instead of d2 -> d4
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+
+      await tester.tap(find.text('Reveal answer'));
+      await pumpAsync(tester, 700);
+
+      // The correction is gone and the session continued (re-queued card re-prompted,
+      // exactly as after a manual correct reguess).
+      expect(
+        find.text('Play this move to continue. The position will come back soon.'),
+        findsNothing,
+      );
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.text('White to play'), findsOneWidget);
     });
 
     testWidgets('a screen reader is told whether the answer was right', (tester) async {

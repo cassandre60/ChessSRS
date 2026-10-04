@@ -18,7 +18,7 @@ Why it looks different from Lichess (and from Chess.com, and from the app's prev
 ## Principles (each one is testable)
 
 1. **Chrome budget.** On the Review screen, non-board persistent elements are: the scope title (which opens the scope
-   list), the due count, and one overflow button. Nothing else. Skip/Continue live in the feedback region and appear
+   list), the due count, and one overflow button. Nothing else. Skip / Reveal answer / Continue live in the feedback region and appear
    only when relevant.
 2. **Fixed regions.** The board rectangle never changes size or position between prompt, correction, note and idle-to-
    review. The feedback region has a fixed height; content scrolls inside it (fade at the bottom on narrow layouts).
@@ -75,7 +75,7 @@ Hard-coded English first (repo convention), then localise later. `{}` = dynamic.
 | Meta line | Study/chapter title as provided (prototype placeholder: `White vs Scandinavian, opening`) |
 | Side to move | `White to play` / `Black to play` |
 | Correction help | `Play this move to continue. The position will come back soon.` |
-| Feedback actions | `Skip`, `Continue` |
+| Feedback actions | `Skip` (prompt), `Reveal answer` (correction), `Continue` |
 | Note attribution | `From your study` |
 | Idle title | `Nothing due.` |
 | Idle next | `Next review in {3 hours 20 minutes}.` |
