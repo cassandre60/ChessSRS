@@ -36,7 +36,9 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake git ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+          # libsecret-1-dev: flutter_secure_storage_linux links libsecret at
+          # CMake configure time (v0.1.0 failed without it).
+          sudo apt-get install -y clang cmake git ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev
 
       - name: 🐦 Install flutter
         uses: subosito/flutter-action@v2.23.0
