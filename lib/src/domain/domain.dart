@@ -24,6 +24,7 @@ export 'review/review_prompt.dart';
 export 'review/review_scope.dart';
 export 'review/review_session.dart';
 export 'review/review_step_result.dart';
+export 'review/transpose_scope.dart';
 export 'review_result.dart';
 export 'review_state.dart';
 export 'scheduler.dart';

@@ -14,6 +14,7 @@ import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
 import 'package:chess_srs/src/domain/review/review_step_result.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
@@ -38,7 +39,7 @@ class ReviewSession {
     this.scope = const ReviewScope.all(),
     this.mode = ReviewMode.srs,
     this.order = ReviewOrder.dueDate,
-    this.transposeAccept = true,
+    this.transposeScope = TransposeScope.inScope,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.prefetchBatchSize = 25,
@@ -131,16 +132,11 @@ class ReviewSession {
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
 
-      // By-line order (INV-066): same urgency-selected set, presented walking
-      // study, chapter source order, tree order. Stable sort keeps due-date
-      // order for ties.
+      // By-line order (INV-066): same set, walking study, chapter, tree order.
       if (order == ReviewOrder.byLine) {
         final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
-        final nodeOrder = <String, int>{};
         var n = 0;
-        for (final id in _nodesById.keys) {
-          nodeOrder[id] = n++;
-        }
+        final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
         _unbufferedQueue.sort((a, b) {
           var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
           if (c != 0) return c;
@@ -150,6 +146,11 @@ class ReviewSession {
           if (c != 0) return c;
           return (nodeOrder[a.nodeId] ?? 0).compareTo(nodeOrder[b.nodeId] ?? 0);
         });
+      }
+
+      // Random order: same set, shuffled with the session Random.
+      if (order == ReviewOrder.random) {
+        _unbufferedQueue.shuffle(_random);
       }
     }
 
@@ -168,7 +169,7 @@ class ReviewSession {
   final ReviewOrder order;
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
-  final bool transposeAccept;
+  final TransposeScope transposeScope;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;
@@ -292,19 +293,12 @@ class ReviewSession {
         _reviewStates[decision.id] ??
         ReviewState.initial(decisionId: decision.canonicalId);
 
-    // Validate move against expected repertoire moves (Invariant §2.1)
+    // Validate move against expected repertoire moves (Invariant §2.1),
+    // else the transposed line's incoming move (INV-065).
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    var expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
-    RepertoireNode? transposedStart;
-    if (expectedMatch == null && transposeAccept) {
-      // Transposition (INV-065): book from another in-scope line, graded via its incoming move.
-      final target = _findTransposedNode(prompt, movePlayed);
-      final incoming = target?.incomingMove;
-      if (incoming != null && incoming.matches(movePlayed)) {
-        expectedMatch = incoming;
-        transposedStart = target;
-      }
-    }
+    final resolved = _resolvePlayedMove(prompt, movePlayed);
+    final expectedMatch = resolved?.expected;
+    final transposedStart = resolved?.start;
 
     final now = clock.now();
 
@@ -446,16 +440,9 @@ class ReviewSession {
     }
 
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    var expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
-    RepertoireNode? transposedStart;
-    if (expectedMatch == null && transposeAccept) {
-      final target = _findTransposedNode(prompt, movePlayed);
-      final incoming = target?.incomingMove;
-      if (incoming != null && incoming.matches(movePlayed)) {
-        expectedMatch = incoming;
-        transposedStart = target;
-      }
-    }
+    final resolved = _resolvePlayedMove(prompt, movePlayed);
+    final expectedMatch = resolved?.expected;
+    final transposedStart = resolved?.start;
 
     final currentState =
         _reviewStates[prompt.decision.canonicalId] ??
@@ -719,11 +706,28 @@ class ReviewSession {
     }
   }
 
+  /// Resolves the played move: the expected match, else the transposed
+  /// line's incoming move when the scope covers it (else null).
+  ({RepertoireMove expected, RepertoireNode? start})? _resolvePlayedMove(
+    ReviewPrompt prompt,
+    RepertoireMove movePlayed,
+  ) {
+    final direct = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    if (direct != null) return (expected: direct, start: null);
+    if (transposeScope == TransposeScope.off) return null;
+    final target = _findTransposedNode(prompt, movePlayed);
+    final incoming = target?.incomingMove;
+    if (incoming == null || !incoming.matches(movePlayed)) return null;
+    return (expected: incoming, start: target);
+  }
+
   /// Transposition acceptance (P-TRANSPOSE, INV-065): returns the in-scope
   /// node at the position the played move reaches, or null. Illegal moves,
   /// out-of-scope targets, and targets without their own repertoire move
   /// fail closed, preserving ordinary incorrect handling exactly.
+  /// Within-study scope additionally requires the target's study.
   RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
+    if (transposeScope == TransposeScope.off) return null;
     // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
     Position position;
     try {
@@ -731,13 +735,8 @@ class ReviewSession {
     } catch (_) {
       return null;
     }
-    final Role? promotion = switch (movePlayed.promotion) {
-      'q' => Role.queen,
-      'r' => Role.rook,
-      'b' => Role.bishop,
-      'n' => Role.knight,
-      _ => null,
-    };
+    const promotions = {'q': Role.queen, 'r': Role.rook, 'b': Role.bishop, 'n': Role.knight};
+    final promotion = promotions[movePlayed.promotion ?? ''];
     if (movePlayed.promotion != null && promotion == null) return null;
     late final Position next;
     try {
@@ -763,7 +762,8 @@ class ReviewSession {
             studyId: chapter.studyId,
             chapterId: chapter.id,
             openingFamily: chapter.opening,
-          )) {
+          ) ||
+          (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
         continue;
       }
       return node;

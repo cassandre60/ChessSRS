@@ -11,6 +11,7 @@ import 'package:chess_srs/src/domain/review/review_mode.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
 import 'package:chess_srs/src/domain/review/review_session.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
 import 'package:chess_srs/src/domain/study.dart';
@@ -35,7 +36,7 @@ class ReviewEngine {
     ReviewScope scope = const ReviewScope.all(),
     ReviewMode mode = ReviewMode.srs,
     ReviewOrder order = ReviewOrder.dueDate,
-    bool transposeAccept = true,
+    TransposeScope transposeScope = TransposeScope.inScope,
     int? prefetchBatchSize = 25,
     int prefetchRefillThreshold = 3,
     int? remainingDailyQuota,
@@ -50,7 +51,7 @@ class ReviewEngine {
       scope: scope,
       mode: mode,
       order: order,
-      transposeAccept: transposeAccept,
+      transposeScope: transposeScope,
       scheduler: scheduler,
       clock: clock,
       prefetchBatchSize: prefetchBatchSize,

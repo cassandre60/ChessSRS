@@ -158,22 +158,154 @@ void main() {
       return (study, chapterA, chapterB, decisions);
     }
 
+    // Same shared position as above, but the Bc4 line lives in a second
+    // study with no decisions of its own.
+    (Study, Chapter, Study, Chapter, List<RepertoireDecision>) buildCrossStudyRepertoire() {
+      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      const afterE4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+      const afterE4Key = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -';
+      const afterE5Fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2';
+      const afterE5Key = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -';
+      const afterBc4Fen = 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2';
+      const afterBc4Key = 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq -';
+      const afterNf6Fen = 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3';
+      const afterNf6Key = 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq -';
+
+      final study1 = Study(
+        id: 'study-one',
+        title: 'Study One',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      final study2 = Study(
+        id: 'study-two',
+        title: 'Study Two',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+
+      final chapterA = Chapter(
+        id: 'chapter-a',
+        studyId: 'study-one',
+        sourceOrder: 0,
+        title: 'Nf3 line',
+        startingFen: startFen,
+        createdAt: baseTime,
+        root: const RepertoireNode(
+          id: 'node-a-root',
+          fen: startFen,
+          fenKey: startKey,
+          children: [
+            RepertoireNode(
+              id: 'node-a-e4',
+              fen: afterE4Fen,
+              fenKey: afterE4Key,
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'node-a-e5',
+                  fen: afterE5Fen,
+                  fenKey: afterE5Key,
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      final chapterC = Chapter(
+        id: 'chapter-c',
+        studyId: 'study-two',
+        sourceOrder: 0,
+        title: 'Bc4 line',
+        startingFen: startFen,
+        createdAt: baseTime,
+        root: const RepertoireNode(
+          id: 'node-c-root',
+          fen: startFen,
+          fenKey: startKey,
+          children: [
+            RepertoireNode(
+              id: 'node-c-e4',
+              fen: afterE4Fen,
+              fenKey: afterE4Key,
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'node-c-e5',
+                  fen: afterE5Fen,
+                  fenKey: afterE5Key,
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'node-c-bc4',
+                      fen: afterBc4Fen,
+                      fenKey: afterBc4Key,
+                      incomingMove: RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+                      children: [
+                        RepertoireNode(
+                          id: 'node-c-nf6',
+                          fen: afterNf6Fen,
+                          fenKey: afterNf6Key,
+                          incomingMove: RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      const decisions = [
+        RepertoireDecision(
+          id: 'dec-a-root',
+          studyId: 'study-one',
+          chapterId: 'chapter-a',
+          nodeId: 'node-a-root',
+          expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        ),
+        RepertoireDecision(
+          id: 'dec-a-2',
+          studyId: 'study-one',
+          chapterId: 'chapter-a',
+          nodeId: 'node-a-e5',
+          expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+        ),
+        RepertoireDecision(
+          id: 'dec-c-3',
+          studyId: 'study-two',
+          chapterId: 'chapter-c',
+          nodeId: 'node-c-nf6',
+          expectedMoves: [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+        ),
+      ];
+
+      return (study1, chapterA, study2, chapterC, decisions);
+    }
+
     ReviewSession startSession(
       Study study,
       Chapter chapterA,
       Chapter chapterB,
       List<RepertoireDecision> decisions, {
       ReviewScope scope = const ReviewScope.all(),
-      bool transposeAccept = true,
+      TransposeScope transposeScope = TransposeScope.inScope,
+      List<Study>? allStudies,
+      List<Chapter>? allChapters,
     }) {
       final engine = ReviewEngine(clock: clock);
       return engine.createSession(
-        studies: [study],
-        chapters: [chapterA, chapterB],
+        studies: allStudies ?? [study],
+        chapters: allChapters ?? [chapterA, chapterB],
         decisions: decisions,
         reviewStates: const {},
         scope: scope,
-        transposeAccept: transposeAccept,
+        transposeScope: transposeScope,
         random: Random(0),
       );
     }
@@ -223,7 +355,13 @@ void main() {
 
     test('with acceptance off, a transposed move stays incorrect', () {
       final (study, chapterA, chapterB, decisions) = buildTransposedRepertoire();
-      final session = startSession(study, chapterA, chapterB, decisions, transposeAccept: false);
+      final session = startSession(
+        study,
+        chapterA,
+        chapterB,
+        decisions,
+        transposeScope: TransposeScope.off,
+      );
 
       session.submitMove(from: 'e2', to: 'e4');
       expect(session.currentPrompt?.nodeId, 'node-a-e5');
@@ -249,6 +387,64 @@ void main() {
       expect(retry.isCorrect, isTrue);
       expect(retry.event, isNull);
       expect(retry.nextPrompt?.nodeId, 'node-b-nf6');
+    });
+
+    test('within-study scope accepts same-study transpositions', () {
+      final (study, chapterA, chapterB, decisions) = buildTransposedRepertoire();
+      final session = startSession(
+        study,
+        chapterA,
+        chapterB,
+        decisions,
+        transposeScope: TransposeScope.withinStudy,
+      );
+
+      session.submitMove(from: 'e2', to: 'e4');
+      final result = session.submitMove(from: 'f1', to: 'c4');
+
+      expect(result.isCorrect, isTrue);
+      expect(result.nextPrompt?.chapterId, 'chapter-b');
+    });
+
+    test('within-study scope rejects cross-study transpositions', () {
+      final (study1, chapterA, study2, chapterC, decisions) = buildCrossStudyRepertoire();
+      final session = startSession(
+        study1,
+        chapterA,
+        chapterC,
+        decisions,
+        transposeScope: TransposeScope.withinStudy,
+        allStudies: [study1, study2],
+        allChapters: [chapterA, chapterC],
+      );
+
+      session.submitMove(from: 'e2', to: 'e4');
+      expect(session.currentPrompt?.nodeId, 'node-a-e5');
+
+      // Bc4 exists only in study 2: out of the within-study scope.
+      final result = session.submitMove(from: 'f1', to: 'c4');
+
+      expect(result.isCorrect, isFalse);
+      expect(session.currentPrompt?.nodeId, 'node-a-e5');
+    });
+
+    test('in-scope transpositions jump across studies', () {
+      final (study1, chapterA, study2, chapterC, decisions) = buildCrossStudyRepertoire();
+      final session = startSession(
+        study1,
+        chapterA,
+        chapterC,
+        decisions,
+        allStudies: [study1, study2],
+        allChapters: [chapterA, chapterC],
+      );
+
+      session.submitMove(from: 'e2', to: 'e4');
+      final result = session.submitMove(from: 'f1', to: 'c4');
+
+      expect(result.isCorrect, isTrue);
+      expect(result.nextPrompt?.nodeId, 'node-c-nf6');
+      expect(result.nextPrompt?.chapterId, 'chapter-c');
     });
   });
 }

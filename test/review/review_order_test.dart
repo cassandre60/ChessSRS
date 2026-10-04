@@ -222,6 +222,41 @@ void main() {
       expect(session.currentPrompt?.nodeId, 'node-b-root');
     });
 
+    List<String> walkToEnd(ReviewSession session) {
+      final seen = <String>[];
+      for (var i = 0; i < 10 && session.currentPrompt != null; i++) {
+        final prompt = session.currentPrompt!;
+        seen.add(prompt.nodeId);
+        final move = prompt.expectedMoves.first;
+        session.submitMove(from: move.from, to: move.to, promotion: move.promotion);
+      }
+      return seen;
+    }
+
+    test('random order is deterministic per seed and covers the due set', () {
+      final (study, chapterA, chapterB, decisions) = buildTwoLines();
+      ReviewSession startSeeded() {
+        final engine = ReviewEngine(clock: clock);
+        return engine.createSession(
+          studies: [study],
+          chapters: [chapterA, chapterB],
+          decisions: decisions,
+          reviewStates: scrambledStates(decisions),
+          order: ReviewOrder.random,
+          random: Random(0),
+        );
+      }
+
+      final first = startSeeded();
+      final second = startSeeded();
+      final seenFirst = walkToEnd(first);
+      final seenSecond = walkToEnd(second);
+
+      expect(seenFirst, seenSecond);
+      expect(seenFirst.toSet(), {'node-a-root', 'node-a-e5', 'node-b-root', 'node-b-d5'});
+      expect(first.isComplete, isTrue);
+    });
+
     test('the daily quota still cuts the most overdue first under by-line order', () {
       final (study, chapterA, chapterB, decisions) = buildTwoLines();
       final session = startSession(

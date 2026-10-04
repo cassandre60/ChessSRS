@@ -1,4 +1,5 @@
 import 'package:chess_srs/src/domain/review/review_order.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/model/analysis/common_analysis_prefs.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
@@ -145,8 +146,8 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     return save(state.copyWith(reviewOrder: order));
   }
 
-  Future<void> toggleTransposeAccept() {
-    return save(state.copyWith(transposeAccept: !state.transposeAccept));
+  Future<void> setTransposeScope(TransposeScope scope) {
+    return save(state.copyWith(transposeScope: scope));
   }
 }
 
@@ -188,10 +189,9 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Presentation order of the due queue (P-ORDER). The due set never
     // depends on this: urgency filtering and the quota cut apply first.
     @JsonKey(defaultValue: ReviewOrder.byLine) required ReviewOrder reviewOrder,
-    // Accept moves from other reviewed lines (P-TRANSPOSE follow-up). On
-    // (default) a book move from another in-scope line counts as correct and
-    // review jumps there; off requires the expected line's moves.
-    @JsonKey(defaultValue: true) required bool transposeAccept,
+    // Transposed-move acceptance scope (INV-065): off, within the same
+    // study, or anywhere in scope. Stored on/off installs migrate.
+    @JsonKey(defaultValue: TransposeScope.inScope) required TransposeScope transposeScope,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -215,10 +215,17 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,
-    transposeAccept: true,
+    transposeScope: TransposeScope.inScope,
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {
-    return _$StudyPrefsFromJson(json);
+    // The on/off transpose switch became a three-way scope: carry the old
+    // choice across instead of silently resetting it.
+    final fixed = Map<String, dynamic>.of(json);
+    final legacy = fixed.remove('transposeAccept');
+    if (legacy is bool && !fixed.containsKey('transposeScope')) {
+      fixed['transposeScope'] = legacy ? 'inScope' : 'off';
+    }
+    return _$StudyPrefsFromJson(fixed);
   }
 }

@@ -292,7 +292,8 @@ of the same castling match each other in grading and tree lookup.
 A legal move that matches no expected continuation is still graded correct
 when the position it reaches exists in the active scope's repertoire tree;
 review continues from the transposed line. Out-of-scope targets and illegal
-moves stay incorrect, exactly as before.
+moves stay incorrect, exactly as before. The `Transposed moves` setting
+narrows this to the same study, or off to strict expected-line grading.
 - Oracle: transposition acceptance tests in
   `test/review/review_transposition_test.dart`.
 - Gates: review engine suite, G05 traceability.
@@ -305,7 +306,8 @@ moves stay incorrect, exactly as before.
 With `ReviewOrder.byLine`, consecutive prompts follow study, then chapter,
 then tree order over the due set selected by urgency — no position is added
 or dropped by the ordering, and the daily quota still cuts the most overdue
-first. `ReviewOrder.dueDate` keeps most-overdue-first.
+first. `ReviewOrder.dueDate` keeps most-overdue-first; `ReviewOrder.random`
+shuffles the same set deterministically per session seed.
 - Oracle: queue-order tests in `test/review/review_order_test.dart`.
 - Gates: review engine suite, G05 traceability.
 - Tier: T1. Covering: `test/review/review_order_test.dart`.
@@ -416,3 +418,5 @@ and appear only after grading (or never, when annotations are disabled).
 | 2026-10-03 | INV-064 | Added: socket handshake carries session sri (escape #129) | (owner, on merge) |
 | 2026-10-03 | INV-065 | Added: out-of-line repertoire moves accepted when in scope (P-TRANSPOSE) | (owner, on merge) |
 | 2026-10-03 | INV-066 | Added: by-line queue order over the urgency-selected due set (P-ORDER) | (owner, on merge) |
+| 2026-10-04 | INV-065 | Amended: transposition scope Off/Within study/In scope (owner options) | (owner, on merge) |
+| 2026-10-04 | INV-066 | Amended: Random order over the same due set (owner options) | (owner, on merge) |

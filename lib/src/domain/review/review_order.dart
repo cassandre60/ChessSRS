@@ -11,15 +11,8 @@ enum ReviewOrder {
 
   /// Walk each line in order: study, then chapter, then tree order.
   /// Same due cards, fewer jumps between unrelated positions.
-  byLine;
+  byLine,
 
-  String get label => switch (this) {
-    ReviewOrder.dueDate => 'Due date',
-    ReviewOrder.byLine => 'By line',
-  };
-
-  String get description => switch (this) {
-    ReviewOrder.dueDate => 'Most overdue positions first, wherever they fall.',
-    ReviewOrder.byLine => 'Walk each line in order; same due cards, less jumping.',
-  };
+  /// Same due cards in shuffled order, for variety across sessions.
+  random,
 }

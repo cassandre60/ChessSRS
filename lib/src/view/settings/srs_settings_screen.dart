@@ -7,6 +7,7 @@ import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
@@ -218,24 +219,29 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                 _SettingRow(
                                   label: 'Review order',
                                   help:
-                                      'Same due cards either way. Due date serves the most overdue first, wherever they fall; By line walks each line in order.',
+                                      'Same due cards in every mode. Due date serves the most overdue first; By line walks each line in order; Random shuffles the queue.',
                                   control: SrsSegmented<ReviewOrder>(
                                     options: const {
                                       ReviewOrder.dueDate: 'Due date',
                                       ReviewOrder.byLine: 'By line',
+                                      ReviewOrder.random: 'Random',
                                     },
                                     value: studyPrefs.reviewOrder,
                                     onChanged: (order) => studyNotifier.setReviewOrder(order),
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Accept transposed moves',
+                                  label: 'Transposed moves',
                                   help:
-                                      'A move from another reviewed line counts as correct and review jumps there. Off: only the expected line\u2019s moves count.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.transposeAccept,
-                                    semanticLabel: 'Accept transposed moves',
-                                    onChanged: (_) => studyNotifier.toggleTransposeAccept(),
+                                      'A move from another reviewed line counts as correct and review jumps there. Within study limits it to the same study; Off requires the expected line\u2019s moves.',
+                                  control: SrsSegmented<TransposeScope>(
+                                    options: const {
+                                      TransposeScope.off: 'Off',
+                                      TransposeScope.withinStudy: 'Within study',
+                                      TransposeScope.inScope: 'In scope',
+                                    },
+                                    value: studyPrefs.transposeScope,
+                                    onChanged: (scope) => studyNotifier.setTransposeScope(scope),
                                   ),
                                 ),
                                 if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
