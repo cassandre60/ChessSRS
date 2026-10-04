@@ -5,10 +5,12 @@
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
+import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
@@ -191,6 +193,59 @@ void main() {
 
       // Session is now complete (0 due)
       expect(find.text('Nothing due.'), findsOneWidget);
+    });
+
+    testWidgets('a lapse offers Open in analysis at the drilled position', (tester) async {
+      // A correction state is a dead end today: the answer is shown but there is no way to
+      // explore *why* it is the move. The bridge must open the analysis board at the exact
+      // position being drilled, not at the start position.
+      final importResult = importPgn(
+        '1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Prompt state shows no escape hatch: the button must not leak a way out of recall.
+      expect(find.text('Open in analysis'), findsNothing);
+
+      // Play incorrect move: e2 -> e4 instead of d2 -> d4
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+
+      // Lapse state shows the bridge under the answer.
+      expect(find.text('Open in analysis'), findsOneWidget);
+
+      await tester.tap(find.text('Open in analysis'));
+      await pumpAsync(tester, 200);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Analysis opens at the drilled decision point: the lapse happened on move 1, so
+      // boardPosition is still the start position (the wrong e4 never became state).
+      final screen = tester.widget<AnalysisScreen>(find.byType(AnalysisScreen));
+      final options = screen.options;
+      expect(options, isA<Pgn>());
+      expect(
+        (options as Pgn).pgn,
+        contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'),
+      );
     });
 
     testWidgets('a screen reader is told whether the answer was right', (tester) async {

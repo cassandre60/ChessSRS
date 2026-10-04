@@ -10,6 +10,8 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
+import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
@@ -812,10 +814,18 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             const SizedBox(height: 16),
             _NoteSlot(comment: comment.trim(), wide: wide),
           ],
+          _OpenInAnalysisButton(state: state),
         ],
       );
     } else if (state.isAwaitingAdvance && comment != null && comment.trim().isNotEmpty) {
-      content = _NoteSlot(comment: comment.trim(), wide: wide);
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _NoteSlot(comment: comment.trim(), wide: wide),
+          _OpenInAnalysisButton(state: state),
+        ],
+      );
     }
 
     final verdict = _verdictAnnouncement(state, isLapse: isLapse, expectedMoveSan: expectedMoveSan);
@@ -1031,6 +1041,34 @@ class _NoteSlot extends StatelessWidget {
 
 void _showOverflowSheet(BuildContext context) {
   SrsLibrarySheet.show(context);
+}
+
+/// Quiet bridge from a drill position into the analysis board, for the "why is this the
+/// move?" moment. Shown under the correction answer and under study notes — never in the
+/// prompt state, where it would leak a way out of recall, and never in the actions row,
+/// which owns exactly Skip/Continue. Reuses the hub's position options so the board that
+/// opens is the one the hub would open for the same FEN.
+class _OpenInAnalysisButton extends StatelessWidget {
+  const _OpenInAnalysisButton({required this.state});
+
+  final ReviewScreenState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final fen = state.boardPosition?.fen;
+    if (fen == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SrsTextButton(
+        label: 'Open in analysis',
+        onPressed: () => Navigator.of(context, rootNavigator: true).push(
+          AnalysisScreen.buildRoute(
+            analysisOptionsForReviewPosition(fen: fen, orientation: state.boardOrientation),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 String _computeScopeTitle(ReviewScreenState state) {
