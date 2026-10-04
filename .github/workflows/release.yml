@@ -149,13 +149,31 @@ jobs:
           mv "$APK" "release/chesssrs-${TAG}-android-testing.apk"
           mv "$TGZ" "release/chesssrs-${TAG}-linux-x64.tar.gz"
 
+      - name: Compose release notes
+        # Generated notes plus the permanent file guide, so every release
+        # explains its own downloads without a manual edit afterwards.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            -f target_commitish="${GITHUB_SHA}" \
+            --jq .body > notes.md
+          cat >> notes.md <<EOF
+
+          ## Which file do I download?
+
+          - **Linux** (\`chesssrs-${GITHUB_REF_NAME}-linux-x64.tar.gz\`) — the desktop app. Unpack and run; needs system GTK/SQLite libraries (standard Flutter Linux prerequisites).
+          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.apk\`) — installs directly on a phone for trying the app. Test-signed: it can never upgrade into a future store version, so expect to uninstall before switching to a store build.
+          - **Android AAB** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.aab\`) — not installable. This is Google's store-upload format, published here only to prove that pipeline works; ignore it unless you publish to Play.
+          EOF
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        # Beta: marked pre-release until the owner declares stable. Release
-        # notes are generated from the merged PR titles since the last tag.
+        # Beta: marked pre-release until the owner declares stable.
         run: |
           gh release create "${GITHUB_REF_NAME}" release/* \
             --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
+            --notes-file notes.md \
             --prerelease
