@@ -164,6 +164,7 @@ void main() {
       Chapter chapterB,
       List<RepertoireDecision> decisions, {
       ReviewScope scope = const ReviewScope.all(),
+      bool transposeAccept = true,
     }) {
       final engine = ReviewEngine(clock: clock);
       return engine.createSession(
@@ -172,6 +173,7 @@ void main() {
         decisions: decisions,
         reviewStates: const {},
         scope: scope,
+        transposeAccept: transposeAccept,
         random: Random(0),
       );
     }
@@ -212,6 +214,21 @@ void main() {
       expect(session.currentPrompt?.nodeId, 'node-a-e5');
 
       // Bc4 reaches chapter B, which is out of scope: still a lapse.
+      final result = session.submitMove(from: 'f1', to: 'c4');
+
+      expect(result.isCorrect, isFalse);
+      expect(result.event?.result, ReviewResult.incorrect);
+      expect(session.currentPrompt?.nodeId, 'node-a-e5');
+    });
+
+    test('with acceptance off, a transposed move stays incorrect', () {
+      final (study, chapterA, chapterB, decisions) = buildTransposedRepertoire();
+      final session = startSession(study, chapterA, chapterB, decisions, transposeAccept: false);
+
+      session.submitMove(from: 'e2', to: 'e4');
+      expect(session.currentPrompt?.nodeId, 'node-a-e5');
+
+      // Bc4 is book in chapter B, but the switch is off: still a lapse.
       final result = session.submitMove(from: 'f1', to: 'c4');
 
       expect(result.isCorrect, isFalse);

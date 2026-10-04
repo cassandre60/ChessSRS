@@ -64,6 +64,12 @@ void main() {
     await tester.tap(find.text('Collapsible list groups'));
     await tester.pumpAndSettle();
 
+    // Accept transposed moves: the P-TRANSPOSE follow-up switch (default on).
+    await tester.scrollUntilVisible(find.text('Accept transposed moves'), 200);
+    expect(find.text('Accept transposed moves'), findsOneWidget);
+    await tester.tap(find.text('Accept transposed moves'));
+    await tester.pumpAndSettle();
+
     // Toggle arrows -- the design's label for the row that gates showAnnotations.
     await tester.scrollUntilVisible(find.text('Show arrows and circles'), 200);
     await tester.tap(find.text('Show arrows and circles'));

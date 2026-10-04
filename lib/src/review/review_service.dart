@@ -35,6 +35,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final scheduler = ref.watch(schedulerProvider);
   final clock = ref.watch(clockProvider);
   final reviewOrder = ref.watch(studyPreferencesProvider.select((p) => p.reviewOrder));
+  final transposeAccept = ref.watch(studyPreferencesProvider.select((p) => p.transposeAccept));
 
   if (repo == null) {
     throw StateError('StudyRepository is not yet initialized');
@@ -45,6 +46,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
     scheduler: scheduler,
     clock: clock,
     reviewOrder: reviewOrder,
+    transposeAccept: transposeAccept,
   );
 });
 
@@ -74,6 +76,7 @@ class ReviewService {
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.reviewOrder = ReviewOrder.dueDate,
+    this.transposeAccept = true,
   });
 
   final StudyRepository repository;
@@ -83,6 +86,9 @@ class ReviewService {
   /// Presentation order of the due queue. The domain default stays due-date;
   /// the product default (StudyPrefs) is by-line.
   final ReviewOrder reviewOrder;
+
+  /// Whether off-line-but-book moves are accepted (INV-065).
+  final bool transposeAccept;
 
   ReviewSession? _activeSession;
   ReviewSession? get activeSession => _activeSession;
@@ -185,6 +191,7 @@ class ReviewService {
       scope: scope,
       mode: mode,
       order: reviewOrder,
+      transposeAccept: transposeAccept,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,

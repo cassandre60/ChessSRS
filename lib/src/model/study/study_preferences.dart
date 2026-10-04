@@ -144,6 +144,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
   Future<void> setReviewOrder(ReviewOrder order) {
     return save(state.copyWith(reviewOrder: order));
   }
+
+  Future<void> toggleTransposeAccept() {
+    return save(state.copyWith(transposeAccept: !state.transposeAccept));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -184,6 +188,10 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Presentation order of the due queue (P-ORDER). The due set never
     // depends on this: urgency filtering and the quota cut apply first.
     @JsonKey(defaultValue: ReviewOrder.byLine) required ReviewOrder reviewOrder,
+    // Accept moves from other reviewed lines (P-TRANSPOSE follow-up). On
+    // (default) a book move from another in-scope line counts as correct and
+    // review jumps there; off requires the expected line's moves.
+    @JsonKey(defaultValue: true) required bool transposeAccept,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -207,6 +215,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,
+    transposeAccept: true,
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {

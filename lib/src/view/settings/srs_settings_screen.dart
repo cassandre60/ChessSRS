@@ -218,7 +218,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                 _SettingRow(
                                   label: 'Review order',
                                   help:
-                                      'Due date jumps to the most overdue position; By line walks each line in order.',
+                                      'Same due cards either way. Due date serves the most overdue first, wherever they fall; By line walks each line in order.',
                                   control: SrsSegmented<ReviewOrder>(
                                     options: const {
                                       ReviewOrder.dueDate: 'Due date',
@@ -226,6 +226,16 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                     },
                                     value: studyPrefs.reviewOrder,
                                     onChanged: (order) => studyNotifier.setReviewOrder(order),
+                                  ),
+                                ),
+                                _SettingRow(
+                                  label: 'Accept transposed moves',
+                                  help:
+                                      'A move from another reviewed line counts as correct and review jumps there. Off: only the expected line\u2019s moves count.',
+                                  control: SrsSwitch(
+                                    value: studyPrefs.transposeAccept,
+                                    semanticLabel: 'Accept transposed moves',
+                                    onChanged: (_) => studyNotifier.toggleTransposeAccept(),
                                   ),
                                 ),
                                 if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
