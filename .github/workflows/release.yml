@@ -123,6 +123,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # gh release create needs git context (tag resolution, generated notes).
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v6.0.0
         with:
