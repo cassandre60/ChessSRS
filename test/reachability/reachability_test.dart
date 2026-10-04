@@ -71,6 +71,14 @@ const _knownUnreachable = <String, String>{
       'Account preferences, with a test but no importer. Whether to keep it is a product '
       'decision now that PR #84 revived the account cluster, not a cleanup — do not '
       'delete it on the strength of this test.',
+  'lib/src/view/settings/board_settings_screen.dart':
+      'Hidden, not deleted: the Folio settings trim inlines the kept board rows into '
+      'SrsSettingsScreen and curates the pickers, so nothing navigates here. Retained with '
+      'its tests for reversibility (full Lichess row set, brightness/hue, shape colour).',
+  'lib/src/view/settings/theme_settings_screen.dart':
+      'Hidden, not deleted: the Folio settings trim keeps Theme/Accent inline, so nothing '
+      'navigates here. Retained with its tests for reversibility (AMOLED, board preview, '
+      'brightness/hue sliders, shape colour).',
   'lib/src/view/user/user_profile.dart': 'Inherited from the cut user/profile surfaces.',
   'lib/src/view/user/user_activity.dart': 'Inherited from the cut user-activity surfaces.',
   'lib/src/view/study/study_list_screen.dart':
