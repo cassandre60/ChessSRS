@@ -4,6 +4,7 @@ import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
+import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/explorer/opening_explorer.dart';
 import 'package:chess_srs/src/model/explorer/opening_explorer_preferences.dart';
@@ -470,6 +471,48 @@ void main() {
       expect(selectedMove, isA<DropMove>());
       expect((selectedMove as DropMove?)?.role, Role.pawn);
       expect(selectedMove?.to, Square.c4);
+    });
+  });
+
+  group('Explorer chrome reads tokens', () {
+    testWidgets('loading skeleton bars use the hairline colour', (tester) async {
+      // Black skeleton bars vanished on dark boards; the hairline reads on both themes.
+      // Fails on base, which painted the bars Colors.black.
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const Scaffold(body: OpeningExplorerMoveTable.loading()),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final barColors = tester
+          .widgetList<Container>(find.byType(Container))
+          .map((c) => (c.decoration as BoxDecoration?)?.color)
+          .whereType<Color>()
+          .toSet();
+      expect(barColors, isNotEmpty);
+      expect(barColors, everyElement(SrsColors.light(kSrsDefaultAccent).hairline));
+    });
+
+    testWidgets('opening name header is a hairline band', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const Scaffold(
+          body: OpeningNameHeader(
+            opening: LightOpening(eco: 'C50', name: 'Italian Game'),
+          ),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final band = tester.widget<Container>(
+        find.ancestor(of: find.text('C50 Italian Game'), matching: find.byType(Container)).first,
+      );
+      expect(
+        (band.decoration! as BoxDecoration).color,
+        SrsColors.light(kSrsDefaultAccent).hairlineSoft,
+      );
     });
   });
 }

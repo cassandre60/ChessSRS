@@ -21,9 +21,13 @@ class OpeningNameHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Container(
       padding: kExplorerTableRowPadding,
-      decoration: BoxDecoration(color: ColorScheme.of(context).surfaceDim),
+      decoration: BoxDecoration(
+        color: c.hairlineSoft,
+        border: Border(bottom: BorderSide(color: c.hairline)),
+      ),
       child: GestureDetector(
         onTap: opening.name == context.l10n.startPosition
             ? null
@@ -31,16 +35,13 @@ class OpeningNameHeader extends StatelessWidget {
         child: Row(
           children: [
             if (opening.name != context.l10n.startPosition) ...[
-              Icon(Icons.open_in_browser_outlined, color: ColorScheme.of(context).onSurface),
+              Icon(Icons.open_in_browser_outlined, color: c.ink2),
               const SizedBox(width: 6.0),
             ],
             Expanded(
               child: Text(
                 opening.eco.isNotEmpty ? '${opening.eco} ${opening.name}' : opening.name,
-                style: TextStyle(
-                  color: ColorScheme.of(context).onSurface,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: c.ink, fontWeight: FontWeight.bold),
                 maxLines: 1,
               ),
             ),
@@ -106,11 +107,34 @@ class OpeningExplorerMoveTable extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.srs;
     if (_isLoading) {
-      return loadingTable;
+      // Skeleton bars in the hairline colour: visible on both themes, unlike the old
+      // black bars that vanished on dark boards.
+      return Table(
+        columnWidths: columnWidths,
+        children: List.generate(
+          10,
+          (int index) => TableRow(
+            children: [
+              for (var i = 0; i < 3; i++)
+                Padding(
+                  padding: kExplorerTableRowPadding,
+                  child: Container(
+                    height: 20,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: c.hairline,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
     }
 
-    final c = context.srs;
     final pieceNotation = ref
         .watch(pieceNotationProvider)
         .maybeWhen(data: (value) => value, orElse: () => defaultAccountPreferences.pieceNotation);
@@ -258,50 +282,6 @@ class OpeningExplorerMoveTable extends ConsumerWidget {
       ],
     );
   }
-
-  static final loadingTable = Table(
-    columnWidths: columnWidths,
-    children: List.generate(
-      10,
-      (int index) => TableRow(
-        children: [
-          Padding(
-            padding: kExplorerTableRowPadding,
-            child: Container(
-              height: 20,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-          ),
-          Padding(
-            padding: kExplorerTableRowPadding,
-            child: Container(
-              height: 20,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-          ),
-          Padding(
-            padding: kExplorerTableRowPadding,
-            child: Container(
-              height: 20,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class IndexingIndicator extends StatefulWidget {
@@ -352,10 +332,11 @@ class OpeningExplorerHeaderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Container(
       width: double.infinity,
       padding: kExplorerTableRowPadding,
-      decoration: BoxDecoration(color: ColorScheme.of(context).surfaceDim),
+      decoration: BoxDecoration(color: c.hairlineSoft),
       child: child,
     );
   }
@@ -385,12 +366,13 @@ class _OpeningExplorerGameTileState extends ConsumerState<OpeningExplorerGameTil
   Widget build(BuildContext context) {
     const widthResultBox = 50.0;
     const paddingResultBox = EdgeInsets.all(5);
+    final c = context.srs;
 
     return Container(
       padding: kExplorerTableRowPadding,
       color: widget.color,
-      child: InkWell(
-        onTap: () async {
+      child: SrsPressable(
+        onPressed: () async {
           final client = ref.read(defaultClientProvider);
           await client.get(lichessUri('/import/master/${widget.game.id}/${widget.pov.name}'));
           if (!context.mounted) return;
@@ -404,84 +386,89 @@ class _OpeningExplorerGameTileState extends ConsumerState<OpeningExplorerGameTil
             ),
           );
         },
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.game.white.rating.toString()),
-                Text(widget.game.black.rating.toString()),
-              ],
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
+        semanticLabel: '${widget.game.white.name} versus ${widget.game.black.name}',
+        radius: 8,
+        builder: (_, hover, _) => ColoredBox(
+          color: hover ? c.hairlineSoft : const Color(0x00000000),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.game.white.name, overflow: TextOverflow.ellipsis),
-                  Text(widget.game.black.name, overflow: TextOverflow.ellipsis),
+                  Text(widget.game.white.rating.toString()),
+                  Text(widget.game.black.rating.toString()),
                 ],
               ),
-            ),
-            Row(
-              children: [
-                if (widget.game.winner == 'white')
-                  Container(
-                    width: widthResultBox,
-                    padding: paddingResultBox,
-                    decoration: BoxDecoration(
-                      color: whiteBoxColor(context),
-                      borderRadius: BorderRadius.circular(5),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.game.white.name, overflow: TextOverflow.ellipsis),
+                    Text(widget.game.black.name, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  if (widget.game.winner == 'white')
+                    Container(
+                      width: widthResultBox,
+                      padding: paddingResultBox,
+                      decoration: BoxDecoration(
+                        color: whiteBoxColor(context),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text(
+                        '1-0',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black),
+                      ),
+                    )
+                  else if (widget.game.winner == 'black')
+                    Container(
+                      width: widthResultBox,
+                      padding: paddingResultBox,
+                      decoration: BoxDecoration(
+                        color: blackBoxColor(context),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text(
+                        '0-1',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: widthResultBox,
+                      padding: paddingResultBox,
+                      decoration: BoxDecoration(
+                        color: Colors.grey,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: const Text(
+                        '½-½',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
-                    child: const Text(
-                      '1-0',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.black),
+                  if (widget.game.month != null) ...[
+                    const SizedBox(width: 10.0),
+                    Text(
+                      widget.game.month!,
+                      style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                     ),
-                  )
-                else if (widget.game.winner == 'black')
-                  Container(
-                    width: widthResultBox,
-                    padding: paddingResultBox,
-                    decoration: BoxDecoration(
-                      color: blackBoxColor(context),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: const Text(
-                      '0-1',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  )
-                else
-                  Container(
-                    width: widthResultBox,
-                    padding: paddingResultBox,
-                    decoration: BoxDecoration(
-                      color: Colors.grey,
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: const Text(
-                      '½-½',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                if (widget.game.month != null) ...[
-                  const SizedBox(width: 10.0),
-                  Text(
-                    widget.game.month!,
-                    style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-                  ),
+                  ],
+                  if (widget.game.speed != null) ...[
+                    const SizedBox(width: 10.0),
+                    Icon(widget.game.speed!.icon, size: 20),
+                  ],
                 ],
-                if (widget.game.speed != null) ...[
-                  const SizedBox(width: 10.0),
-                  Icon(widget.game.speed!.icon, size: 20),
-                ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -6,7 +6,6 @@ import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/theme.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_widgets.dart';
-import 'package:chess_srs/src/widgets/shimmer.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -95,7 +94,10 @@ class _OpeningExplorerState extends ConsumerState<OpeningExplorerView> {
     switch (openingExplorerAsync) {
       case AsyncData(:final value):
         if (value == null) {
-          return _buildListView(isLoading: true, children: lastExplorerWidgets ?? _loadingChildren);
+          return _buildListView(
+            isLoading: true,
+            children: lastExplorerWidgets ?? const [OpeningExplorerMoveTable.loading()],
+          );
         }
 
         final topGames = value.entry.topGames;
@@ -154,13 +156,12 @@ class _OpeningExplorerState extends ConsumerState<OpeningExplorerView> {
             : context.l10n.mobileOpeningExplorerNotAvailableOffline;
         return _buildListView(children: [ExplorerMessage(message)]);
       case _:
-        return _buildListView(isLoading: true, children: lastExplorerWidgets ?? _loadingChildren);
+        return _buildListView(
+          isLoading: true,
+          children: lastExplorerWidgets ?? const [OpeningExplorerMoveTable.loading()],
+        );
     }
   }
-
-  static const List<Widget> _loadingChildren = [
-    Shimmer(child: ShimmerLoading(isLoading: true, child: OpeningExplorerMoveTable.loading())),
-  ];
 
   /// Builds the explorer list, always prepending the [OpeningNameHeader] (when
   /// an opening is known) so the opening name stays visible in every state.
