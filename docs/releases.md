@@ -31,6 +31,19 @@ not re-test.
   builds. Needs a research spike and replacements first.
 - **Windows/macOS**: no platform directories exist (upstream never had them).
 
+## Pipeline dry-run (no tag, no publish)
+
+Validate the entire release pipeline locally without creating a tag or
+publishing:
+
+```bash
+gh workflow run Release -f dry_run=true
+```
+
+This runs the Linux and Android build jobs exactly as a real release would,
+but skips artifact upload and the `gh release create` step. Use it to
+verify that the pipeline passes before cutting a real tag.
+
 ## Local release builds
 
 Never run on a dev machine (`flutter build appbundle/apk --release` OOMs,
