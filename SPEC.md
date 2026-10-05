@@ -149,6 +149,20 @@ all-studies queue asks it once.
   `test/review/review_service_test.dart`,
   `test/review/review_engine_test.dart`.
 
+### INV-067 An opening hub is a family name, not a title that mentions one
+An opening family either leads its name or closes it behind a category noun.
+A stored opening that merely mentions a family — a study title such as
+`White vs French` — is never presented as an opening hub, and a name this build
+does not recognise is left alone rather than erased.
+- Oracle: classification tests plus the repair-migration tests, including one
+  asserting every family the ECO fallback can produce survives the repair.
+- Gates: import suite, persistence suite, G05 traceability.
+- Tier: T1. Covering: `test/persistence/opening_name_repair_migration_test.dart`,
+  `test/import/pgn_importer_test.dart`.
+- History: 2026-10-05, a study title appeared as an opening hub (owner report
+  2026-10-05). P-OPENNAME had already stopped the importer creating these; the
+  rows it created before that fix were still in the database.
+
 ### INV-017 Accepted-reply sets distinguish memories
 The same position with different expected replies is a different question
 with independent history; scheduling follows the asked question, never a
@@ -253,7 +267,9 @@ sibling's difficulty; other wrong moves cause no coupling.
 ### INV-030 Scopes filter exactly
 `all()` and the due count see active studies only; `opening()` aggregates
 across studies with name normalization; `chapter()` isolates one chapter;
-inactive studies stay openable directly.
+`white()` and `black()` aggregate across active studies by the repertoire side
+their chapters train, counting a position as belonging to the side it is queued
+for; inactive studies stay openable directly.
 - Oracle: scope-filter and normalization tests.
 - Gates: review service suite, scope suite, controller toggle tests.
 - Tier: T1. Covering: `test/review/review_service_test.dart`,
@@ -420,3 +436,5 @@ and appear only after grading (or never, when annotations are disabled).
 | 2026-10-03 | INV-066 | Added: by-line queue order over the urgency-selected due set (P-ORDER) | (owner, on merge) |
 | 2026-10-04 | INV-065 | Amended: transposition scope Off/Within study/In scope (owner options) | (owner, on merge) |
 | 2026-10-04 | INV-066 | Amended: Random order over the same due set (owner options) | (owner, on merge) |
+| 2026-10-05 | INV-030 | Amended: `white()`/`black()` side scopes aggregate by chapter orientation | (owner, on merge) |
+| 2026-10-05 | INV-067 | Added: an opening hub is a family name, not a title that mentions one (spurious hubs) | (owner, on merge) |
