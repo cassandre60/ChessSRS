@@ -14,7 +14,6 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
 import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
-import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
@@ -180,8 +179,8 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      expect(find.byIcon(AnalysisTab.moveTimes.icon), findsOneWidget);
-      await tester.tap(find.byIcon(AnalysisTab.moveTimes.icon));
+      expect(find.text('Times'), findsOneWidget);
+      await tester.tap(find.text('Times'));
       await tester.pumpAndSettle();
 
       final chart = tester.widget<MoveTimesChart>(find.byType(MoveTimesChart));
@@ -216,7 +215,7 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      expect(find.byIcon(AnalysisTab.moveTimes.icon), findsNothing);
+      expect(find.text('Times'), findsNothing);
     });
 
     testWidgets('Variations bar displays variations and can be tapped', (tester) async {

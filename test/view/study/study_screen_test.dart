@@ -161,7 +161,7 @@ void main() {
       expect(find.text('pgn 2'), findsNothing);
 
       // First chapter does not allow opening explorer
-      expect(find.bySemanticsLabel(RegExp('Opening explorer & tablebase')), findsNothing);
+      expect(find.text('Explorer'), findsNothing);
 
       // Open chapter selection dialog
       await tester.tap(findByTooltip('2 Chapters'));
@@ -188,7 +188,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Second chapter allows opening explorer, so tab should be displayed now.
-      expect(find.bySemanticsLabel(RegExp('Opening explorer & tablebase')), findsOneWidget);
+      expect(find.text('Explorer'), findsOneWidget);
 
       expect(find.text('1. Chapter 1'), findsNothing);
       expect(find.text('2. Chapter 2'), findsOneWidget);
@@ -923,7 +923,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Server analysis tab should not be displayed
-      expect(find.bySemanticsLabel(RegExp('Computer analysis')), findsNothing);
+      expect(find.text('Summary'), findsNothing);
     });
   });
 }

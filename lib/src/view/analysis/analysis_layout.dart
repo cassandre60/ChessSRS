@@ -1,6 +1,6 @@
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/constants.dart';
-import 'package:chess_srs/src/design/tokens.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -495,56 +495,26 @@ class _AnalysisTabView extends StatelessWidget {
                 bottom: BorderSide(color: srs?.hairline ?? Theme.of(context).dividerColor),
               ),
             ),
-            child: TabBar(
-              controller: controller,
-              indicator: BoxDecoration(
-                color: srs?.ink ?? ColorScheme.of(context).primary,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              labelColor: srs?.ground ?? ColorScheme.of(context).onPrimary,
-              unselectedLabelColor: srs?.ink2 ?? ColorScheme.of(context).onSurfaceVariant,
-              labelStyle: const TextStyle(
-                fontFamily: SrsText.ui,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.1,
-              ),
-              unselectedLabelStyle: const TextStyle(
-                fontFamily: SrsText.ui,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.1,
-              ),
-              tabs: tabs!
-                  .map(
-                    (tab) => Tooltip(
-                      message: tab.l10n(context.l10n),
-                      child: Semantics(
-                        label: tab.l10n(context.l10n),
-                        child: Tab(
-                          height: 32,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(tab.icon, size: 14),
-                              const SizedBox(width: 5),
-                              Flexible(
-                                child: Text(
-                                  tab.shortLabel(context.l10n),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+            // A segmented switch instead of the Material tab bar: same tabs, same swipeable
+            // pages below, no icon vocabulary. The controller animates on tap and reports
+            // swipes back through the same object, so both directions stay in sync.
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Builder(
+                builder: (context) {
+                  final ctrl = controller ?? DefaultTabController.of(context);
+                  return AnimatedBuilder(
+                    animation: ctrl,
+                    builder: (context, _) => SrsSegmented<int>(
+                      options: {
+                        for (var i = 0; i < tabs!.length; i++) i: tabs![i].shortLabel(context.l10n),
+                      },
+                      value: ctrl.index,
+                      onChanged: ctrl.animateTo,
                     ),
-                  )
-                  .toList(),
+                  );
+                },
+              ),
             ),
           ),
         Expanded(
