@@ -1,4 +1,5 @@
 import 'package:chess_srs/l10n/l10n.dart';
+import 'package:chess_srs/src/design/folio_board_schemes.dart';
 import 'package:chess_srs/src/design/piece_set.dart';
 import 'package:chess_srs/src/design/srs_board_color_scheme.dart';
 import 'package:chess_srs/src/design/tokens.dart';
@@ -280,6 +281,8 @@ enum ShapeColor {
 enum BoardTheme {
   diagram('Diagram', 'brown'),
   system('System', 'system'),
+  paper('Paper', 'brown'),
+  slate('Slate', 'blue'),
   brown('Brown', 'brown'),
   wood('Wood', 'wood'),
   wood2('Wood 2', 'wood2'),
@@ -315,6 +318,10 @@ enum BoardTheme {
     switch (this) {
       case BoardTheme.diagram:
         return ChessboardColorScheme.brown;
+      case BoardTheme.paper:
+        return paperBoardScheme;
+      case BoardTheme.slate:
+        return slateBoardScheme;
       case BoardTheme.system:
         return getBoardColorScheme() ?? ChessboardColorScheme.brown;
       case BoardTheme.blue:

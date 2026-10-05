@@ -65,17 +65,19 @@ void main() {
   });
 
   group('curated choices', () {
-    // The picker shows only the curated themes (Diagram + Wood).
+    // The picker shows only the curated themes (Diagram + Wood + Paper + Slate).
     // Fails on base, which listed all 28 Lichess themes.
     testWidgets('board choice shows only the curated themes', (tester) async {
       await open(tester, const BoardChoiceScreen());
 
       final rows = tester.widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow)).toList();
-      expect(rows.length, 2);
+      expect(rows.length, 4);
 
       final labels = rows.map((r) => r.label).toSet();
       expect(labels, contains('Diagram'));
       expect(labels, contains('Wood'));
+      expect(labels, contains('Paper'));
+      expect(labels, contains('Slate'));
     });
 
     // Fails on base, which listed all ~40 piece sets.

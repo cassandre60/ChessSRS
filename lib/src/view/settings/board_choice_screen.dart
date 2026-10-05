@@ -41,7 +41,12 @@ class _Body extends ConsumerWidget {
     // Only show the curated board themes — the full Lichess set is kept in the
     // enum for data compatibility but hidden from the picker. To restore a
     // theme, add it to this list.
-    const allowedBoardThemes = {BoardTheme.diagram, BoardTheme.wood};
+    const allowedBoardThemes = {
+      BoardTheme.diagram,
+      BoardTheme.wood,
+      BoardTheme.paper,
+      BoardTheme.slate,
+    };
 
     final choices = BoardTheme.values.where((t) => allowedBoardThemes.contains(t)).toList();
 

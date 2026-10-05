@@ -54,12 +54,27 @@ void main() {
   });
 
   testWidgets('other themes preview their own squares', (tester) async {
-    for (final theme in [BoardTheme.blue, BoardTheme.wood, BoardTheme.green]) {
+    for (final theme in [
+      BoardTheme.blue,
+      BoardTheme.wood,
+      BoardTheme.green,
+      BoardTheme.paper,
+      BoardTheme.slate,
+    ]) {
       expect(
         await previewColors(tester, theme),
         contains(theme.colors.lightSquare),
         reason: theme.name,
       );
     }
+  });
+
+  testWidgets('folio themes use the demo board colours', (tester) async {
+    // The exact fills from the look-judge demo (visual-demo.html board switch). A drift
+    // here means the picker and the demo disagree about what Paper/Slate are.
+    expect(BoardTheme.paper.colors.lightSquare, const Color(0xfffff9f1));
+    expect(BoardTheme.paper.colors.darkSquare, const Color(0xffeee6d3));
+    expect(BoardTheme.slate.colors.lightSquare, const Color(0xffe9eef3));
+    expect(BoardTheme.slate.colors.darkSquare, const Color(0xffd6dee8));
   });
 }
