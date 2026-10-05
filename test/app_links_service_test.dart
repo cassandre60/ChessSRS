@@ -401,7 +401,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Pressing back must return to the home widget — no extra StudyScreen in the stack.
-      await tester.pageBack();
+      // The head uses a custom chevron rather than a platform back button, so pageBack()
+      // (which looks for BackButton/CupertinoNavigationBarBackButton) cannot see it.
+      await tester.tap(find.bySemanticsLabel('Back to Review'));
       await tester.pumpAndSettle();
 
       expect(find.text('go to study'), findsOneWidget);

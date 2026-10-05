@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
@@ -924,6 +925,36 @@ void main() {
 
       // Server analysis tab should not be displayed
       expect(find.text('Summary'), findsNothing);
+    });
+
+    testWidgets('Study menu opens a sheet of share rows', (tester) async {
+      // The platform context menu is gone: one ⋯ button opens a sheet of text rows
+      // (like toggle for signed-in users, then the share and export rows). Fails on
+      // base, which built a ContextMenuIconButton with a nested adaptive menu.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, 'e4 e5 Nf3 Nc6'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Study menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SrsSheetSurface), findsOneWidget);
+      expect(find.text('Study URL'), findsOneWidget);
+      expect(find.text('Current chapter URL'), findsOneWidget);
+      expect(find.text('Study PGN'), findsOneWidget);
+      expect(find.text('Chapter PGN'), findsOneWidget);
     });
   });
 }
