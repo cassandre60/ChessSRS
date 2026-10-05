@@ -64,6 +64,10 @@ const _knownUnreachable = <String, String>{
   'lib/src/utils/image.dart':
       'Zero references. Image colour extraction for a cut feature; nothing calls '
       'imageWorkerFactoryProvider or extractColorsFromImageProvider.',
+  'lib/chess_srs.dart':
+      'Dartdoc library entry point for the domain API. Not imported by the app; '
+      'exists solely so dartdoc can generate documentation for the domain layer.',
+
   'lib/src/import/opening_name.dart':
       'Test helper for INV-067 predicates. Consumed by the feature PR that imports it '
       'into the importer and the repair migration; not yet used by live app code.',
