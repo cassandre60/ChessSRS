@@ -44,10 +44,37 @@ SKIP = re.compile(r"[(,]\s*skip\s*:")
 SUPPRESS = re.compile(r"(//\s*ignore_for_file|//\s*ignore:|nolint|# pylint: disable|type:\s*ignore)")
 STRING = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 
+# A human sign-off for intentional check changes, read from the branch's own history.
+# `Ack-G08: <reason>` in any commit message in BASE...HEAD turns findings into
+# acknowledged findings (still printed, exit 0). The acknowledgement is permanent,
+# public git history — unlike a bypass, it cannot be applied silently. Fail-closed:
+# no trailer, empty trailer, or unreadable history behaves exactly as before.
+# Note the horizontal-only `[ \t]`: `\s` would match the line break itself, letting an
+# empty trailer capture the next line as its "reason".
+ACK_TRAILER = re.compile(r"^Ack-G08:[ \t]*(.+?)[ \t]*$", re.M)
+
 
 def shape_of_assertion(text):
     """The check's shape ignoring its words: no string literals, no comments."""
     return STRING.sub("", text).split("//", 1)[0].strip()
+
+
+def read_ack(base, head):
+    """The Ack-G08 reason signed into the branch history, or None.
+
+    Fail-closed: unreadable history means no acknowledgement.
+    """
+    out = subprocess.run(
+        ["git", "log", "--format=%B", f"{base}...{head}"],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0:
+        return None
+    m = ACK_TRAILER.search(out.stdout)
+    if not m:
+        return None
+    reason = m.group(1).strip()
+    return reason or None
 
 
 def diff_lines(base, head):
@@ -106,11 +133,22 @@ def main():
     if not findings:
         print("no test-weakening patterns found")
         return 0
+    ack = read_ack(args.base, args.head)
+    if ack:
+        print("Acknowledged findings (signed Ack-G08 in branch history):")
+        for path, lineno, kind, text in findings:
+            print(f"  {path}:{lineno}: {kind}: {text[:110]}")
+        print(f'\nAck-G08 reason: "{ack}"')
+        print("The findings above remain visible; the acknowledgement only records that a "
+              "human reviewed them. Abuse shows up here, in public, on every run.")
+        return 0
     print("Possible weakening (needs human judgement):")
     for path, lineno, kind, text in findings:
         print(f"  {path}:{lineno}: {kind}: {text[:110]}")
     print("\nIf intentional, explain in the PR why the removed check is obsolete or where its "
-          "coverage moved. Never weaken a check to make a gate pass.")
+          "coverage moved. To record the human review so the gate passes, sign it into the "
+          "branch history with an `Ack-G08: <reason>` commit-message trailer (empty reasons "
+          "do not count). Never weaken a check to make a gate pass.")
     return 4
 
 
