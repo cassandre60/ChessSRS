@@ -383,7 +383,7 @@ abstract final class SrsText {
 
   /// Notation line size.
   static double lineSize({required bool wide, double wideWidth = 0}) =>
-      wide ? (wideWidth * 0.024).clamp(23.0, 31.0) : 21;
+      wide ? (wideWidth * 0.024).clamp(23.0, 31.0) : 24;
   static TextStyle lineMove(double size, Color c) =>
       _ui(size, FontWeight.w600, c, em: -0.012, height: _wideLineHeight(size), tab: true);
   static TextStyle lineNumber(double size, Color c) =>

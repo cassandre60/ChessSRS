@@ -25,6 +25,12 @@ void main() {
   }
 
   group('SrsNotationLine', () {
+    test('the narrow line is headline-sized', () {
+      // The line is billed as the headline of the review screen; 24 narrow keeps it
+      // present under the board's weight. Fails if the size regresses to body text.
+      expect(SrsText.lineSize(wide: false), 24.0);
+    });
+
     testWidgets('a line that fits is shown whole, with no ellipsis', (tester) async {
       final tokens = await render(tester, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6']);
 

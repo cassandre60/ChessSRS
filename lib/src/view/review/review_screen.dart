@@ -786,7 +786,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           ),
           side: (context, wide, appWidth) => SrsReviewSide(
             wide: wide,
-            lineFontSize: wide ? 28.0 : 22.0,
+            lineFontSize: wide ? 28.0 : 24.0,
             meta: _MetaView(
               contextLabel: prompt.chapterTitle ?? prompt.studyTitle ?? '',
               orientation: state.boardOrientation,
