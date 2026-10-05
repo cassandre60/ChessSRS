@@ -122,11 +122,23 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         ? reviewState.studies
         : reviewState.studies.where((study) => study.title.toLowerCase().contains(query)).toList();
 
+    // Split studies by color based on title suffix
+    final whiteStudies = <Study>[];
+    final blackStudies = <Study>[];
+    for (final study in filteredStudies) {
+      // Simple heuristic: if title contains (Black), it's a black repertoire
+      if (study.title.contains('(Black)')) {
+        blackStudies.add(study);
+      } else {
+        whiteStudies.add(study);
+      }
+    }
     final hasNoResults =
         query.isNotEmpty &&
         !showAllStudies &&
         filteredOpeningHubs.isEmpty &&
-        filteredStudies.isEmpty;
+        whiteStudies.isEmpty &&
+        blackStudies.isEmpty;
 
     final content = Align(
       alignment: isWide ? Alignment.topLeft : Alignment.bottomCenter,
@@ -306,18 +318,19 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                       ),
                                 ],
 
-                                // Group: Studies
-                                if (filteredStudies.isNotEmpty) ...[
+                                // Group: White Repertoire
+                                if (whiteStudies.isNotEmpty) ...[
                                   _buildGroupHeader(
                                     ref,
                                     c,
-                                    group: 'studies',
-                                    title: 'Studies',
-                                    collapsed: collapsedGroups.contains('studies'),
+                                    group: 'white_repertoire',
+                                    title: 'White Repertoire',
+                                    collapsed: collapsedGroups.contains('white_repertoire'),
                                     plain: !collapseEnabled,
                                   ),
-                                  if (!collapseEnabled || !collapsedGroups.contains('studies'))
-                                    for (final study in filteredStudies)
+                                  if (!collapseEnabled ||
+                                      !collapsedGroups.contains('white_repertoire'))
+                                    for (final study in whiteStudies)
                                       Builder(
                                         builder: (context) {
                                           final due = reviewState.studyDueCounts[study.id] ?? 0;
@@ -490,6 +503,28 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           }
           if (context.mounted) {
             ExportPgnDialog.show(context, title: study.title, pgnText: pgn);
+          }
+        },
+        onFlipColors: () async {
+          Navigator.of(dialogContext).pop();
+          Navigator.of(context).pop();
+          final result = await ref
+              .read(reviewControllerProvider.notifier)
+              .flipStudyColors(study.id);
+          if (context.mounted) {
+            if (result != null) {
+              showSnackBar(
+                context,
+                'Created flipped study \u201c${result.study.title}\u201d',
+                type: SnackBarType.success,
+              );
+            } else {
+              showSnackBar(
+                context,
+                'Could not flip colors for this study',
+                type: SnackBarType.error,
+              );
+            }
           }
         },
         onRename: () {
@@ -758,6 +793,7 @@ class StudyActionsSheet extends StatelessWidget {
     required this.onAnalyze,
     required this.onPractice,
     required this.onExport,
+    required this.onFlipColors,
     required this.onRename,
     required this.onDelete,
     this.anchor,
@@ -773,6 +809,7 @@ class StudyActionsSheet extends StatelessWidget {
   final VoidCallback onAnalyze;
   final VoidCallback onPractice;
   final VoidCallback onExport;
+  final VoidCallback onFlipColors;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
@@ -816,6 +853,11 @@ class StudyActionsSheet extends StatelessWidget {
             onPressed: onExport,
           ),
           SrsSheetRow(
+            label: 'Flip Colors',
+            subtitle: 'Create flipped version for opposite side',
+            onPressed: onFlipColors,
+          ),
+          SrsSheetRow(
             label: study.isActive ? 'Pause' : 'Resume',
             subtitle: study.isActive
                 ? 'Suspend from active review pool'
@@ -829,22 +871,6 @@ class StudyActionsSheet extends StatelessWidget {
           // §12 is explicit that the dialogs carry no red, and this row only opens one.
           SrsSheetRow(label: 'Delete', onPressed: onDelete),
         ]),
-      ],
-    );
-
-    final title = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-          child: Text(
-            study.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: SrsText.groupTitle(c.ink3),
-          ),
-        ),
       ],
     );
 
@@ -864,7 +890,7 @@ class StudyActionsSheet extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [title, rows],
+                children: [rows],
               ),
             ),
           ),
