@@ -12,6 +12,7 @@ import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
@@ -122,14 +123,15 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         ? reviewState.studies
         : reviewState.studies.where((study) => study.title.toLowerCase().contains(query)).toList();
 
-    // Split studies by color based on title suffix
+    // Split studies by actual chapter orientation from loaded state
     final whiteStudies = <Study>[];
     final blackStudies = <Study>[];
     for (final study in filteredStudies) {
-      // Simple heuristic: if title contains (Black), it's a black repertoire
-      if (study.title.contains('(Black)')) {
+      final orientation = reviewState.studyOrientations[study.id];
+      if (orientation == Side.black) {
         blackStudies.add(study);
       } else {
+        // Default to white if orientation is unknown or explicitly white
         whiteStudies.add(study);
       }
     }

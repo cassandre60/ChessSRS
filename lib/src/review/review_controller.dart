@@ -356,6 +356,19 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
   }
 
+  /// Computes the orientation map for all studies by checking their first chapter.
+  Future<Map<String, Side>> _computeStudyOrientations(List<Study> studies) async {
+    final orientations = <String, Side>{};
+    for (final study in studies) {
+      final chapters = await _repository.getChaptersByStudy(study.id);
+      if (chapters.isNotEmpty) {
+        // Use the orientation of the first chapter as the study's orientation
+        orientations[study.id] = chapters.first.orientation;
+      }
+    }
+    return orientations;
+  }
+
   /// Returns null when [generation] has been superseded, in which case the caller must not
   /// publish what it was loading.
   Future<ReviewScreenState?> _loadState({
@@ -370,6 +383,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final remainingQuota = _remainingQuotaFor(mode, dailyReviewedCount);
 
     final studies = await _repository.getAllStudies();
+    final studyOrientations = await _computeStudyOrientations(studies);
     final summary = await _service.getDueSummary(
       studies: studies,
       scope: scope,
@@ -388,6 +402,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         studyProgress: summary.studyProgress,
         chapterProgress: summary.chapterProgress,
         openingProgress: summary.openingProgress,
+        studyOrientations: const {},
         dailyReviewedCount: dailyReviewedCount,
         maxDailyReviews: maxDailyReviews,
       );
@@ -451,6 +466,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       studyProgress: summary.studyProgress,
       chapterProgress: summary.chapterProgress,
       openingProgress: summary.openingProgress,
+      studyOrientations: studyOrientations,
       dailyReviewedCount: dailyReviewedCount,
       maxDailyReviews: maxDailyReviews,
       session: session,
