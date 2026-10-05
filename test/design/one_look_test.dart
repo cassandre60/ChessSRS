@@ -37,6 +37,9 @@ void main() {
       'lib/src/view/settings/',
       'lib/src/view/auth/sign_in_options.dart',
       'lib/src/view/account/account_menu.dart',
+      // The study bottom bar is the exception to the study-is-a-cut-candidate rule above:
+      // it renders on the reachable StudyScreen and was converted off CupertinoIcons.
+      'lib/src/view/study/study_bottom_bar.dart',
     ];
 
     /// Widgets that are a *look*, as opposed to `cupertino_ui` the package.
