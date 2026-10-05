@@ -125,7 +125,8 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Board is rendered with Chessboard
+      // Board is rendered with Chessboard. The default scope is still the everywhere scope, so
+      // the top bar keeps naming it `All studies`; the side buttons only exist in the drawer.
       expect(find.byType(Chessboard), findsOneWidget);
       expect(find.text('All studies'), findsOneWidget);
 
@@ -738,7 +739,7 @@ void main() {
       await pumpAsync(tester);
 
       // Verify the Openings section exists (design/docs/01-identity.md: scope groups are
-      // `Everywhere`, `Openings`, `Studies`)
+      // `Repertoires`, `Openings`, `Studies`)
       expect(find.text('Openings'), findsOneWidget);
       expect(find.text('Sicilian Defense'), findsOneWidget);
       expect(find.text('French Defense'), findsOneWidget);
@@ -1064,8 +1065,9 @@ void main() {
       await pumpAsync(tester);
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
-      // the memory mini-bar beside it, not in the text.
-      expect(find.text('2 positions'), findsNWidgets(2)); // All studies & the study row
+      // the memory mini-bar beside it, not in the text. The study row shows "2 positions";
+      // the repertoire buttons show just the numeral due count.
+      expect(find.text('2 positions'), findsOneWidget);
       List<SrsMemoryBar> drawerBars() => tester
           .widgetList<SrsMemoryBar>(
             find.descendant(
@@ -1074,12 +1076,18 @@ void main() {
             ),
           )
           .toList();
-      expect(drawerBars().map((b) => b.learning), everyElement(2));
+      // Two repertoire buttons + one study row. White repertoire & study row have learning=2;
+      // Black repertoire has learning=0. All have retained=0.
       expect(drawerBars().map((b) => b.retained), everyElement(0));
+      expect(drawerBars().map((b) => b.learning).where((v) => v == 2).length, 2);
+      expect(drawerBars().map((b) => b.learning).where((v) => v == 0).length, 1);
 
-      // Close drawer by tapping the All studies row (scoped: the top bar shows the same name)
+      // Close drawer by tapping the White repertoire button (the study is White)
       await tester.tap(
-        find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('All studies')),
+        find.descendant(
+          of: find.byType(ReviewScopeDrawer),
+          matching: find.text('White repertoire'),
+        ),
       );
       await pumpAsync(tester);
 
@@ -1100,9 +1108,12 @@ void main() {
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
-      expect(find.text('2 positions'), findsNWidgets(2));
+      expect(find.text('2 positions'), findsOneWidget);
       expect(drawerBars().map((b) => b.learning), everyElement(0));
-      expect(drawerBars().map((b) => b.retained), everyElement(2));
+      // White repertoire and the study row hold both positions as retained; the Black
+      // repertoire is empty, so its bar has no segments at all.
+      expect(drawerBars().where((b) => b.retained == 2).length, 2);
+      expect(drawerBars().where((b) => b.retained == 0).length, 1);
     });
 
     testWidgets('RepertoireImportDialog indicates when imported PGN is already up to date', (
@@ -1313,23 +1324,35 @@ void main() {
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
-      // Both studies and the All studies row are visible initially. Scope every assertion to
-      // the drawer: the top bar carries the same scope name, so an unscoped text finder sees two.
+      // Verify drawer is open by the group header.
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
+      // Both studies and both repertoire buttons are visible initially.
+      expect(inDrawer('Repertoires'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All studies'), findsOneWidget);
+
+      // A query naming one side keeps that button and hides the other: the label is
+      // what the search matches on, exactly as for a study title.
+      await tester.enterText(find.widgetWithText(TextField, 'Search'), 'black');
+      await tester.pumpAndSettle();
+
+      expect(inDrawer('Black repertoire'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsNothing);
 
       // Type "French" into the search field
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'French');
       await tester.pumpAndSettle();
 
-      // "French Defense Repertoire" is visible, "Sicilian" and the All studies row are hidden
+      // "French Defense Repertoire" is visible; the Sicilian study and both repertoire
+      // buttons are hidden — neither label matches "French".
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
-      expect(inDrawer('All studies'), findsNothing);
+      expect(inDrawer('White repertoire'), findsNothing);
+      expect(inDrawer('Black repertoire'), findsNothing);
 
       // Type a query that matches nothing
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'Nonexistent');
@@ -1338,15 +1361,18 @@ void main() {
       expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
       expect(find.text('Sicilian Dragon Repertoire'), findsNothing);
+      expect(inDrawer('White repertoire'), findsNothing);
+      expect(inDrawer('Black repertoire'), findsNothing);
 
       // Tap clear search button
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
 
-      // Both studies and the All studies row reappear
+      // Both studies and both repertoire buttons reappear
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
     });
 
     testWidgets('ReviewScopeDrawer groups collapse and expand on header tap', (tester) async {
@@ -1380,7 +1406,8 @@ void main() {
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
       expect(inDrawer('Sicilian Lines'), findsOneWidget);
 
@@ -1388,29 +1415,33 @@ void main() {
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Lines'), findsNothing);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Defense'), findsNothing);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
 
-      await tester.tap(inDrawer('Everywhere'));
+      await tester.tap(inDrawer('Repertoires'));
       await pumpAsync(tester);
 
-      expect(inDrawer('All studies'), findsNothing);
+      expect(inDrawer('White repertoire'), findsNothing);
+      expect(inDrawer('Black repertoire'), findsNothing);
 
-      await tester.tap(inDrawer('Everywhere'));
+      await tester.tap(inDrawer('Repertoires'));
       await pumpAsync(tester);
 
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
     });
 
     testWidgets('ReviewScopeDrawer collapse survives closing and reopening', (tester) async {
@@ -1449,14 +1480,14 @@ void main() {
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
       // Choosing a scope closes the drawer; reopening must keep the collapse.
-      await tester.tap(inDrawer('All studies'));
+      await tester.tap(inDrawer('White repertoire'));
       await pumpAsync(tester);
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
       expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       expect(inDrawer('King Pawn Lines'), findsNothing);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
     });
 
     testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {
@@ -1540,7 +1571,8 @@ void main() {
       await tester.tap(inDrawer('Studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
 
       // Switching it back on restores collapsing without losing the state.
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
@@ -1548,7 +1580,8 @@ void main() {
       await tester.tap(inDrawer('Studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
-      expect(inDrawer('All studies'), findsOneWidget);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
     });
 
     testWidgets(

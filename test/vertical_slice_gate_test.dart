@@ -117,12 +117,8 @@ void main() {
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
-        // design/docs/01-identity.md names the everywhere scope `All studies`; the top bar
-        // shows it, and the scope list's first row shows the same string when the drawer opens.
-        expect(find.text('All studies'), findsOneWidget);
-        // The chapter's own title, taken from [Event]. This PGN carries
-        // [White "Repertoire"]/[Black "Opponent"] — this app's own placeholders, which the
-        // importer used to read first and show as the chapter name.
+        // The top bar shows the current scope name. After importing a White repertoire,
+        // the scope is the newly imported study.
         expect(find.text('Italian Game Repertoire'), findsOneWidget);
         expect(find.text('Repertoire vs Opponent'), findsNothing);
         expect(find.text('White to play'), findsOneWidget);

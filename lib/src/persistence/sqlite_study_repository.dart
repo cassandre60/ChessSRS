@@ -339,6 +339,15 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<Map<String, Side>> getChapterOrientations() async {
+    final rows = await _db.query(kTableSrsChapter, columns: ['id', 'orientation']);
+    return {
+      for (final r in rows)
+        r['id']! as String: (r['orientation'] as String?) == 'black' ? Side.black : Side.white,
+    };
+  }
+
+  @override
   Future<void> deleteChapter(String id) async {
     await _db.transaction((txn) async {
       final decisions = await txn.query(

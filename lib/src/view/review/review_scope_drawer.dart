@@ -12,6 +12,7 @@ import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
@@ -95,12 +96,28 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       );
     }
 
+    // The two repertoire buttons are the only scopes that span studies and no
+    // particular opening, so "no study and no opening" is not enough to call one
+    // of them selected — `side` is what tells the two apart. The unscoped
+    // `all()` marks *both* cards selected, because that is exactly what it
+    // covers: neither side is excluded from it, and the pair reads at a glance
+    // as "tap one to narrow this down".
+    final activeScope = reviewState.scope;
     final isAllSelected =
-        reviewState.scope.studyId == null && reviewState.scope.openingFamily == null;
+        activeScope.studyId == null &&
+        activeScope.openingFamily == null &&
+        activeScope.side == null;
+    bool isSideSelected(Side side) =>
+        isAllSelected ||
+        (activeScope.studyId == null &&
+            activeScope.openingFamily == null &&
+            activeScope.side == side);
 
     final query = _searchQuery.trim().toLowerCase();
-    // The row is labelled `All studies` (design/docs/01-identity.md), so match that.
-    final showAllStudies = query.isEmpty || 'all studies'.contains(query);
+    // The buttons are labelled `White repertoire` / `Black repertoire`, so a query
+    // naming either one keeps that button visible; everything else hides both.
+    final showWhiteRepertoire = query.isEmpty || 'white repertoire'.contains(query);
+    final showBlackRepertoire = query.isEmpty || 'black repertoire'.contains(query);
     // While searching, every match shows regardless of collapse: the query,
     // not the persisted state, decides what is visible.
     final searching = query.isNotEmpty;
@@ -124,7 +141,8 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
 
     final hasNoResults =
         query.isNotEmpty &&
-        !showAllStudies &&
+        !showWhiteRepertoire &&
+        !showBlackRepertoire &&
         filteredOpeningHubs.isEmpty &&
         filteredStudies.isEmpty;
 
@@ -241,31 +259,78 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
-                                // Group: Everywhere (All studies)
-                                if (showAllStudies) ...[
+                                // Group: Repertoires — one button per side, side by side.
+                                if (showWhiteRepertoire || showBlackRepertoire) ...[
                                   _buildGroupHeader(
                                     ref,
                                     c,
-                                    group: 'everywhere',
-                                    title: 'Everywhere',
-                                    collapsed: collapsedGroups.contains('everywhere'),
+                                    group: 'repertoires',
+                                    title: 'Repertoires',
+                                    collapsed: collapsedGroups.contains('repertoires'),
                                     plain: !collapseEnabled,
                                   ),
-                                  if (!collapseEnabled || !collapsedGroups.contains('everywhere'))
-                                    _ScopeRow(
-                                      name: 'All studies',
-                                      semanticLabel:
-                                          'All studies, ${reviewState.totalDueCount} due',
-                                      dueCount: reviewState.totalDueCount,
-                                      isPaused: false,
-                                      isSelected: isAllSelected,
-                                      progress: reviewState.totalProgress,
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                        ref
-                                            .read(reviewControllerProvider.notifier)
-                                            .changeScope(const ReviewScope.all());
-                                      },
+                                  if (!collapseEnabled || !collapsedGroups.contains('repertoires'))
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 18.0,
+                                        vertical: 4.0,
+                                      ),
+                                      child: Row(
+                                        // Not `stretch`: the row sits in a ListView, so its
+                                        // height is unbounded and stretching a child to it
+                                        // throws during layout. `start` keeps both cards at
+                                        // their natural height, which is what makes them read
+                                        // as one pair — the labels are the same two lines.
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          if (showWhiteRepertoire)
+                                            Expanded(
+                                              child: _SideScopeButton(
+                                                side: Side.white,
+                                                dueCount:
+                                                    reviewState
+                                                        .sideProgress[Side.white]
+                                                        ?.dueDecisions ??
+                                                    0,
+                                                progress:
+                                                    reviewState.sideProgress[Side.white] ??
+                                                    RepertoireProgress.zero,
+                                                isSelected: isSideSelected(Side.white),
+                                                onPressed: () {
+                                                  Navigator.of(context).pop();
+                                                  ref
+                                                      .read(reviewControllerProvider.notifier)
+                                                      .changeScope(const ReviewScope.white());
+                                                },
+                                              ),
+                                            ),
+                                          // The gap only exists when both buttons are shown, so a
+                                          // single button keeps the row's full width.
+                                          if (showWhiteRepertoire && showBlackRepertoire)
+                                            const SizedBox(width: 8.0),
+                                          if (showBlackRepertoire)
+                                            Expanded(
+                                              child: _SideScopeButton(
+                                                side: Side.black,
+                                                dueCount:
+                                                    reviewState
+                                                        .sideProgress[Side.black]
+                                                        ?.dueDecisions ??
+                                                    0,
+                                                progress:
+                                                    reviewState.sideProgress[Side.black] ??
+                                                    RepertoireProgress.zero,
+                                                isSelected: isSideSelected(Side.black),
+                                                onPressed: () {
+                                                  Navigator.of(context).pop();
+                                                  ref
+                                                      .read(reviewControllerProvider.notifier)
+                                                      .changeScope(const ReviewScope.black());
+                                                },
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                 ],
 
@@ -561,6 +626,109 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   }
 }
 
+/// One repertoire button: the side, its due numeral, and its memory mini-bar.
+///
+/// Built to the same spec as [_ScopeRow] (§6.3) and sharing its vocabulary —
+/// `SrsPressable`, the accent fill and 3px bar for selection, the same memory
+/// bar — but as a bordered card rather than a full-width row, because two of
+/// them sit side by side (INV-030). The numeral sits under the label rather than
+/// at the opposite edge: at half the drawer's width there is no room for a
+/// left/right split, and a numeral floating away from its label reads as a count
+/// for the row next to it.
+class _SideScopeButton extends StatelessWidget {
+  const _SideScopeButton({
+    required this.side,
+    required this.dueCount,
+    required this.progress,
+    required this.isSelected,
+    required this.onPressed,
+  });
+
+  final Side side;
+  final int dueCount;
+  final RepertoireProgress progress;
+  final bool isSelected;
+  final VoidCallback onPressed;
+
+  static const String _whiteLabel = 'White repertoire';
+  static const String _blackLabel = 'Black repertoire';
+
+  String get label => side == Side.white ? _whiteLabel : _blackLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final ink = isSelected ? c.accent : c.ink;
+    return SrsPressable(
+      onPressed: onPressed,
+      semanticLabel: '$label, $dueCount due',
+      radius: 10,
+      builder: (context, hovered, pressed) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: isSelected ? c.accentSoft : (hovered ? c.hairlineSoft : c.surface),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? c.accent : c.hairlineSoft,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Padding(
+            // 12/10 keeps the card's content inside the 44px minimum target the
+            // pressable already guarantees, rather than padding the target out
+            // to a size the two-across row cannot afford on a narrow phone.
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: SrsText.ui,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w500,
+                    color: ink,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$dueCount',
+                  style: TextStyle(
+                    fontFamily: SrsText.ui,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? c.accent : c.ink2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SrsMemoryBar(
+                  // Full width of the card rather than the row's fixed 96: the
+                  // bar is the card's whole bottom edge here, and at half width a
+                  // fixed 96 would overhang on a wide layout.
+                  width: double.infinity,
+                  height: 5,
+                  gap: 2,
+                  radius: 1,
+                  retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
+                    0,
+                    progress.totalDecisions,
+                  ),
+                  learning: progress.dueDecisions,
+                  fresh: progress.unlearnedDecisions.clamp(0, progress.totalDecisions),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// One row of the scope list, built to design/docs/03-components.md §6.3 and the demo's `.row`:
 /// a full-width button with 9/18 padding and a 14px gap, the name over a sub line on the left, and
 /// the due numeral on the right. Hover fills `hairlineSoft`; the current scope fills `accentSoft`
@@ -832,22 +1000,9 @@ class StudyActionsSheet extends StatelessWidget {
       ],
     );
 
-    final title = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-          child: Text(
-            study.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: SrsText.groupTitle(c.ink3),
-          ),
-        ),
-      ],
-    );
-
+    // No title. The sheet is anchored to the row that opened it, and that row
+    // already carries the study name one row-height above — repeating it here
+    // spent a line of a short popover to say nothing (owner report 2026-10-05).
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -864,7 +1019,7 @@ class StudyActionsSheet extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [title, rows],
+                children: [rows],
               ),
             ),
           ),
@@ -872,12 +1027,22 @@ class StudyActionsSheet extends StatelessWidget {
       ],
     );
 
+    // The popover's band: the whole strip it may occupy, clear of the top bar
+    // and the window's bottom edge. The sheet is laid out *inside* this band
+    // rather than positioned by a top edge of its own, so it cannot end up
+    // taller than the space it was given — which is what used to push the last
+    // row off the bottom of a wide window with no way to reach it (owner report
+    // 2026-10-05).
+    const bandTop = 56.0;
+    const bandBottomMargin = 16.0;
+    final bandHeight = math.max(0.0, size.height - bandTop - bandBottomMargin);
+
     final sheet = SrsSheetSurface(
       radius: isWide ? 16 : 22,
       // The popover needs an explicit width: anchored with only a left and a top, its constraints
       // are loose, and the stretching column inside then lays out against an unbounded width.
       width: isWide ? _popoverWidth : null,
-      maxHeight: isWide ? size.height - 80 : math.min(size.height * 0.82, 720),
+      maxHeight: isWide ? bandHeight : math.min(size.height * 0.82, 720),
       child: body,
     );
 
@@ -892,13 +1057,31 @@ class StudyActionsSheet extends StatelessWidget {
         if (isWide)
           Positioned(
             left: _popoverLeft(size),
-            top: _popoverTop(size),
-            child: SrsSheetDismissible(child: sheet),
+            top: bandTop,
+            height: bandHeight,
+            width: _popoverWidth,
+            // Hangs off whichever end of the band the row is nearer, which is
+            // what §12's "anchored to the row" means on a list that scrolls:
+            // a row in the top half gets a sheet below it, a row near the bottom
+            // gets one above, and either way all of it is on screen.
+            child: Align(
+              alignment: _popoverAlignment(size),
+              child: SrsSheetDismissible(child: sheet),
+            ),
           )
         else
           Positioned(left: 8, right: 8, bottom: 8, child: SrsSheetDismissible(child: sheet)),
       ],
     );
+  }
+
+  /// Which end of the band the sheet should hang from: below the row when the row
+  /// is in the upper half, above it when it is in the lower half.
+  Alignment _popoverAlignment(Size size) {
+    final a = anchor!;
+    // Measured against the row's own middle, not its top: a row straddling the
+    // middle opens downwards, where the space is.
+    return a.center.dy < size.height / 2 ? Alignment.topLeft : Alignment.bottomLeft;
   }
 
   /// Beside the row that opened the sheet, on whichever side has room.
@@ -909,13 +1092,6 @@ class StudyActionsSheet extends StatelessWidget {
     if (right + _popoverWidth <= size.width - 20) return right;
     final left = a.left - gap - _popoverWidth;
     return math.max(20.0, left);
-  }
-
-  /// Level with the row's top, kept clear of the top bar and the bottom edge.
-  double _popoverTop(Size size) {
-    final a = anchor!;
-    final maxTop = math.max(56.0, size.height - 80 - 320);
-    return a.top.clamp(56.0, math.max(56.0, maxTop));
   }
 }
 

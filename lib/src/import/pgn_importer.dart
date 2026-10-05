@@ -11,6 +11,7 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/study.dart';
+import 'package:chess_srs/src/import/opening_name.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
@@ -662,116 +663,4 @@ void _deriveDecisions(
       _deriveDecisions(child, studyId, chapterId, nextSide, repertoireSide, out);
     }
   }
-}
-
-/// Automatically extracts a normalized opening family name from PGN headers.
-String? extractOpeningFamily(PgnHeaders headers) {
-  // 1. Direct Opening header (e.g. "Sicilian Defense: Najdorf Variation")
-  final opening = headers['Opening'];
-  if (opening != null && opening.trim().isNotEmpty && opening != '?') {
-    return _simplifyOpeningName(opening.trim());
-  }
-
-  // 2. Check Event header (e.g. "Sicilian Defense", "French Defence - Winawer")
-  final event = headers['Event'];
-  if (event != null && event.trim().isNotEmpty && event != '?' && !event.startsWith('Game ')) {
-    final simplified = _simplifyOpeningName(event.trim());
-    if (_isLikelyOpeningName(simplified)) {
-      return simplified;
-    }
-  }
-
-  // 3. Fallback: ECO code classification (standard FIDE/ChessBase ECO families)
-  final eco = headers['ECO'];
-  if (eco != null && eco.trim().isNotEmpty && eco != '?') {
-    return _ecoToOpeningFamily(eco.trim().toUpperCase());
-  }
-
-  return null;
-}
-
-String _simplifyOpeningName(String raw) {
-  // Split on ':' and ',' always, and on '-' only when spaced: "French Defence
-  // - Winawer" separates family from variation, but "Caro-Kann" is one name.
-  final splitColon = raw.split(RegExp(r':|,|\s+-\s+'));
-  if (splitColon.isNotEmpty && splitColon.first.trim().isNotEmpty) {
-    return splitColon.first.trim();
-  }
-  return raw.trim();
-}
-
-bool _isLikelyOpeningName(String name) {
-  // The family must LEAD the name or CLOSE it: "French Defence - Winawer",
-  // "Petrov Defense", and "Queen's Gambit Declined" are families, but
-  // "White vs French" and "My Custom French Repertoire" merely mention one.
-  // A bare `contains` check turns every such Event title into a bogus
-  // opening hub (P-OPENNAME), so never invent a hub when uncertain: bare
-  // category words ('game', 'system', ...) match nothing on their own.
-  final lower = name.toLowerCase().replaceAll('-', ' ');
-  const familyLeads = [
-    'sicilian',
-    'french',
-    'caro kann',
-    'ruy lopez',
-    'italian',
-    'scotch',
-    "king's indian",
-    'kings indian',
-    "queen's indian",
-    'queens indian',
-    "queen's gambit",
-    'queens gambit',
-    "king's gambit",
-    'kings gambit',
-    'open game',
-    'nimzo',
-    'gruenfeld',
-    'grunfeld',
-    'dutch',
-    'english',
-    'reti',
-    'slav',
-    'london',
-    'catalan',
-    'scandinavian',
-    'pirc',
-    'modern',
-    'alekhine',
-    'vienna',
-  ];
-  if (familyLeads.any((k) => lower == k || lower.startsWith('$k '))) {
-    return true;
-  }
-  const categoryTails = ['defense', 'defence', 'gambit', 'attack', 'system', 'opening'];
-  return categoryTails.any((n) => lower.endsWith(' $n'));
-}
-
-String? _ecoToOpeningFamily(String eco) {
-  if (eco.length < 3) return null;
-  final letter = eco[0];
-  final number = int.tryParse(eco.substring(1, 3)) ?? -1;
-  if (number < 0) return null;
-
-  if (letter == 'B') {
-    if (number >= 20 && number <= 99) return 'Sicilian Defense';
-    if (number >= 10 && number <= 19) return 'Caro-Kann Defense';
-    if (number >= 0 && number <= 9) return 'Scandinavian / Alekhine';
-  } else if (letter == 'C') {
-    if (number >= 0 && number <= 19) return 'French Defense';
-    if (number >= 20 && number <= 59) return 'Open Game';
-    if (number >= 60 && number <= 99) return 'Ruy Lopez';
-  } else if (letter == 'D') {
-    if (number >= 10 && number <= 19) return 'Slav Defense';
-    if (number >= 0 && number <= 69) return "Queen's Gambit";
-    if (number >= 70 && number <= 99) return 'Grünfeld Defense';
-  } else if (letter == 'E') {
-    if (number >= 20 && number <= 59) return 'Nimzo-Indian Defense';
-    if (number >= 60 && number <= 99) return "King's Indian Defense";
-    if (number >= 0 && number <= 9) return 'Catalan Opening';
-  } else if (letter == 'A') {
-    if (number >= 10 && number <= 39) return 'English Opening';
-    if (number >= 40 && number <= 44) return "Queen's Pawn Game";
-    if (number >= 80 && number <= 99) return 'Dutch Defense';
-  }
-  return null;
 }

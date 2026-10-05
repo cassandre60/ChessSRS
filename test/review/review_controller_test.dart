@@ -293,6 +293,53 @@ void main() {
       expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
     });
 
+    // SPEC INV-030: the two repertoire buttons count the review queue by side, so a tally has to
+    // move as the session is worked through. The controller patches these optimistically instead of
+    // reloading the whole summary, and the patch is easy to forget when a new per-scope tally is
+    // added: without it the drawer keeps showing the count the session started with until the app
+    // is restarted.
+    test('per-side tallies follow the session as moves are reviewed', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Two Repertoires"]
+1. e4 e5 2. Nf3 Nc6 *
+''';
+
+      // Two repertoires over the same tree, so both buttons start non-zero and answering the White
+      // one must leave the Black one untouched.
+      await controller.importPgnText(pgnText: pgn, title: 'White book', repertoireSide: Side.white);
+      await controller.importPgnText(pgnText: pgn, title: 'Black book', repertoireSide: Side.black);
+
+      // The import scoped to the study it just created; the side totals are all-scope figures, so
+      // switch to a side scope and read them there. Awaited: changeScope reloads the summary, and
+      // an unawaited reload would land after the move and overwrite the patched tally.
+      await controller.changeScope(const ReviewScope.white());
+      var state = container.read(reviewControllerProvider).requireValue;
+
+      expect(state.sideProgress[Side.white]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.white]!.learnedDecisions, 0);
+      expect(state.sideProgress[Side.black]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
+
+      // Play 1. e4 in the White repertoire.
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+
+      state = container.read(reviewControllerProvider).requireValue;
+
+      // White's button has one less due and one more learned.
+      expect(state.sideProgress[Side.white]!.dueDecisions, 1);
+      expect(state.sideProgress[Side.white]!.learnedDecisions, 1);
+      // Black's button is untouched — answering one repertoire must not debit the other.
+      expect(
+        state.sideProgress[Side.black]!.dueDecisions,
+        2,
+        reason: "the other side's button moved when only this repertoire was reviewed",
+      );
+      expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
+    });
+
     test('handles incorrect move (lapse) and allows user to reguess on the board', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);

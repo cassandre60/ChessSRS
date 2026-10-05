@@ -43,6 +43,14 @@ abstract class StudyRepository {
   Future<Chapter?> getChapter(String id);
   Future<List<Chapter>> getChaptersByStudy(String studyId);
   Future<Map<String, String?>> getChapterOpenings();
+
+  /// The repertoire side of every chapter, keyed by chapter id.
+  ///
+  /// One indexed read of two columns, so a side-scoped due count costs the same
+  /// single pass as the opening one rather than a query per study. `Chapter`
+  /// defaults to White when the column is absent or unreadable, matching the
+  /// column's own default.
+  Future<Map<String, Side>> getChapterOrientations();
   Future<void> deleteChapter(String id);
 
   // Position Trees
