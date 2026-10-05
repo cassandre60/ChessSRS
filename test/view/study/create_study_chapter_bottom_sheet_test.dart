@@ -1,9 +1,9 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/study/create_study_chapter_bottom_sheet.dart';
-import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/material.dart';
@@ -154,7 +154,7 @@ void main() {
       await tester.pumpAndSettle(); // wait for content to switch to FEN input
 
       mockClipboard(fen);
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid FEN'), findsNothing);
 
@@ -233,7 +233,7 @@ void main() {
       await tester.pumpAndSettle(); // wait for content to switch to PGN input
 
       mockClipboard(pgn);
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
 
       // Change orientation
@@ -278,7 +278,7 @@ void main() {
       await tester.pumpAndSettle(); // wait for content to switch to FEN input
 
       mockClipboard('not a valid FEN');
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid FEN'), findsOneWidget);
     });
@@ -307,7 +307,7 @@ void main() {
 
       // a standard position, valid under the default Standard variant
       mockClipboard('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3');
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid FEN'), findsNothing);
 
@@ -388,13 +388,13 @@ void main() {
       // `PgnGame.parseMultiGameLazy` parses arbitrary text into a single game with no moves, so
       // this only shows an error if the moves are actually looked at.
       mockClipboard('this is not a pgn at all');
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid PGN'), findsOneWidget);
 
       // a bare FEN header and no moves is a legitimate chapter: a starting position
       mockClipboard('[FEN "8/8/8/8/8/8/8/K6k w - - 0 1"]\n\n*');
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid PGN'), findsNothing);
     });
@@ -441,10 +441,13 @@ void main() {
       await tester.tap(find.text('Create chapter'));
       await tester.pump(); // start the request, button goes into its submitting state
 
-      // a second tap while the request is in flight must not send another one: the button is
-      // disabled and shows a spinner in place of its label
-      expect(find.byType(ButtonLoadingIndicator), findsOneWidget);
-      await tester.tap(find.byType(ButtonLoadingIndicator));
+      // a second tap while the request is in flight must not send another one: the pill
+      // is disabled until the request settles.
+      final pill = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Create chapter'),
+      );
+      expect(pill.onPressed, isNull);
+      await tester.tap(find.text('Create chapter'));
 
       await tester.pump(const Duration(milliseconds: 100)); // let the request fail
       await tester.pumpAndSettle();

@@ -106,6 +106,7 @@ class SrsTextInput extends StatelessWidget {
     this.readOnly = false,
     this.keyboardType,
     this.inputFormatters,
+    this.maxLines = 1,
   });
 
   final TextEditingController controller;
@@ -120,30 +121,38 @@ class SrsTextInput extends StatelessWidget {
   final bool readOnly;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
     final textStyle = TextStyle(fontFamily: SrsText.ui, fontSize: 16, color: c.ink);
-    final field = TextField(
-      controller: controller,
-      autofocus: autofocus,
-      readOnly: readOnly,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      onTap: onTap,
-      style: textStyle,
-      cursorColor: c.accent,
-      onSubmitted: onSubmitted,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        hintText: hintText,
-        hintStyle: textStyle.copyWith(color: c.ink3),
-        border: UnderlineInputBorder(borderSide: BorderSide(color: c.hairline)),
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.hairline)),
-        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.ink, width: 2)),
+    // A Material of its own: TextField requires a Material ancestor, and this input is
+    // also rendered bare (tests, previews), not only inside the dialog/sheet surfaces
+    // that already provide one. Nested transparent Materials are harmless.
+    final field = Material(
+      type: MaterialType.transparency,
+      child: TextField(
+        controller: controller,
+        autofocus: autofocus,
+        readOnly: readOnly,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        maxLines: maxLines,
+        onTap: onTap,
+        style: textStyle,
+        cursorColor: c.accent,
+        onSubmitted: onSubmitted,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          hintText: hintText,
+          hintStyle: textStyle.copyWith(color: c.ink3),
+          border: UnderlineInputBorder(borderSide: BorderSide(color: c.hairline)),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.hairline)),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.ink, width: 2)),
+        ),
       ),
     );
     if (semanticLabel == null) return field;
