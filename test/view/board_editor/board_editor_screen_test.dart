@@ -4,6 +4,7 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/chess960.dart';
 import 'package:chess_srs/src/model/engine/engine_spec.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/board_editor/board_editor_positions.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
@@ -542,13 +543,13 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.byKey(SrsDialog.cardKey), findsOneWidget);
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
         // Dialog is gone, board editor is still on screen
-        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byKey(SrsDialog.cardKey), findsNothing);
         expect(find.byType(BoardEditorScreen), findsOneWidget);
 
         // Board reflects the new position
@@ -567,7 +568,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
         final container = ProviderScope.containerOf(tester.element(find.byType(BoardEditorScreen)));
@@ -587,7 +588,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
         final container = ProviderScope.containerOf(tester.element(find.byType(BoardEditorScreen)));
@@ -608,10 +609,10 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
-        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byKey(SrsDialog.cardKey), findsNothing);
         expect(find.text('Invalid FEN'), findsOneWidget);
       });
 
@@ -627,7 +628,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
         expect(find.text('Invalid FEN'), findsNothing);
@@ -651,7 +652,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.edit));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byIcon(Icons.paste));
+        await tester.tap(find.text('Paste from clipboard'));
         await tester.pumpAndSettle();
 
         expect(find.text('Invalid FEN'), findsNothing);
@@ -730,7 +731,7 @@ void main() {
     await tester.tap(find.text('Chess960 Position'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(SrsDialog.cardKey), findsOneWidget);
 
     // Enter a valid FRC ID
     await tester.enterText(find.byType(TextField), '0');
@@ -741,7 +742,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify the dialog closes successfully
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(SrsDialog.cardKey), findsNothing);
 
     // Verify the board state has updated to match the FEN for ID 0
     final container = ProviderScope.containerOf(tester.element(find.byType(ChessboardEditor)));
@@ -774,11 +775,95 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify the 'Load position' button is actually disabled
-    final loadButton = tester.widget<TextButton>(find.widgetWithText(TextButton, 'Load position'));
+    final loadButton = tester.widget<SrsPillButton>(
+      find.widgetWithText(SrsPillButton, 'Load position'),
+    );
     expect(loadButton.onPressed, isNull);
 
     // The dialog should remain open because validation failed
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(SrsDialog.cardKey), findsOneWidget);
+  });
+
+  group('Filters sheet', () {
+    testWidgets('side to move and castling rights use Diagram controls', (tester) async {
+      // The sheet replaced Material filter chips: side-to-move is a segmented control
+      // and each castling wing a switch row. Fails on base, which built ChoiceChips
+      // with ColorScheme fallbacks.
+      //
+      // The default editor board is empty, on which every wing is (correctly)
+      // impossible, so the test loads the start position first: only then are the
+      // switches enabled and toggling meaningful.
+      const params = (
+        initialVariant: Variant.standard,
+        initialFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        initialOrientation: null,
+      );
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(params: params),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Filters'));
+      await tester.pumpAndSettle();
+
+      // Scoped to the sheet: the status panel owns a side-to-move segmented of its own.
+      final sheet = find.byKey(SrsSheetSurface.surfaceKey);
+      expect(find.descendant(of: sheet, matching: find.byType(SrsSegmented<Side>)), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNothing);
+
+      // Toggling a castling wing through the switch flips the right. The tap goes to
+      // the switch itself: tapping the row label hits nothing (the row has no onTap).
+      // Reads use the screen's params record: a null record is a different provider
+      // instance with its own default state.
+      final container = ProviderScope.containerOf(tester.element(find.byType(BoardEditorScreen)));
+      final controller = boardEditorControllerProvider(params);
+      expect(container.read(controller).isCastlingAllowed(Side.white, CastlingSide.king), isTrue);
+      final whiteKing = tester
+          .widgetList<SrsSwitch>(find.descendant(of: sheet, matching: find.byType(SrsSwitch)))
+          .firstWhere((s) => s.semanticLabel == 'White O-O');
+      await tester.tap(find.byWidget(whiteKing));
+      await tester.pumpAndSettle();
+      expect(container.read(controller).isCastlingAllowed(Side.white, CastlingSide.king), isFalse);
+    });
+  });
+
+  group('Positions library', () {
+    testWidgets('segmented switch swaps the openings and endgames lists', (tester) async {
+      // The Material tab bar is gone: one segmented control over swipeable pages.
+      // Fails on base, which built a TabBar/TabBarView with ListTiles.
+      String? selected;
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: BoardEditorPositionsScreen(onPositionSelected: (p) => selected = p.fen),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TabBar), findsNothing);
+      expect(find.byType(SrsSegmented<int>), findsOneWidget);
+
+      final openingsFirst = tester
+          .widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow))
+          .first
+          .label;
+      expect(openingsFirst, isNotEmpty);
+
+      // Tapping a row selects that position.
+      await tester.tap(find.text(openingsFirst).first);
+      await tester.pumpAndSettle();
+      expect(selected, isNotNull);
+
+      // Switching to endgames swaps the list.
+      await tester.tap(find.text('Endgame positions'));
+      await tester.pumpAndSettle();
+      final endgamesFirst = tester
+          .widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow))
+          .first
+          .label;
+      expect(endgamesFirst, isNot(openingsFirst));
+    });
   });
 }
 

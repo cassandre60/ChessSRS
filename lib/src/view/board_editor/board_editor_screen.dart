@@ -84,7 +84,7 @@ class BoardEditorScreen extends ConsumerWidget {
                   IconButton(
                     icon: const Icon(Icons.edit),
                     tooltip: 'FEN',
-                    onPressed: () => showDialog<void>(
+                    onPressed: () => SrsDialog.show<void>(
                       context: context,
                       builder: (_) => _FenDialog(
                         onFenLoaded: (fen) =>
@@ -539,7 +539,7 @@ class _BottomBar extends ConsumerWidget {
                       BottomSheetAction(
                         makeLabel: (context) => const Text('Chess960 Position'),
                         onPressed: () {
-                          showDialog<void>(
+                          SrsDialog.show<void>(
                             context: context,
                             builder: (_) => _Chess960PositionDialog(
                               onFenLoaded: (fen) {
@@ -628,11 +628,9 @@ class _BottomBar extends ConsumerWidget {
               ),
               SrsTextButton(
                 label: 'Filters',
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  builder: (BuildContext context) => BoardEditorFilters(params: params),
-                  showDragHandle: true,
-                  constraints: BoxConstraints(minHeight: MediaQuery.heightOf(context) * 0.5),
+                onPressed: () => showSrsSheet<void>(
+                  context,
+                  SrsSheetSurface(child: BoardEditorFilters(params: params)),
                 ),
               ),
             ],
@@ -725,20 +723,25 @@ class _FenDialogState extends State<_FenDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      content: TextField(
+    // Same contract as before, in the dialog family: read-only field, tapping it pastes
+    // from the clipboard, validates, loads and closes (or toasts on invalid FEN).
+    // The explicit actions say the same thing for users who do not discover the tap.
+    return SrsDialog(
+      title: 'FEN',
+      content: SrsTextInput(
         controller: _controller,
+        hintText: context.l10n.pasteTheFenStringHere,
+        semanticLabel: context.l10n.pasteTheFenStringHere,
         readOnly: true,
         onTap: _pasteFromClipboard,
-        decoration: InputDecoration(
-          hintText: context.l10n.pasteTheFenStringHere,
-          suffixIcon: IconButton(
-            icon: const Icon(Icons.paste),
-            onPressed: _pasteFromClipboard,
-            tooltip: 'Paste from clipboard',
-          ),
-        ),
       ),
+      actions: [
+        SrsTextButton(
+          label: context.l10n.cancel,
+          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+        ),
+        SrsPillButton(label: 'Paste from clipboard', onPressed: _pasteFromClipboard),
+      ],
     );
   }
 }
@@ -773,8 +776,8 @@ class _Chess960PositionDialogState extends State<_Chess960PositionDialog> {
   void _validateInput(String value) {
     final id = int.tryParse(value);
     setState(() {
-      if (id != null && id > 959) {
-        _errorText = 'Max ID is 959';
+      if (value.isNotEmpty && (id == null || id > 959)) {
+        _errorText = id == null ? 'Enter a number 0-959' : 'Max ID is 959';
       } else {
         _errorText = null;
       }
@@ -792,37 +795,38 @@ class _Chess960PositionDialogState extends State<_Chess960PositionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Chess960 Position'),
+    final loadEnabled = _errorText == null && _controller.text.isNotEmpty;
+    return SrsDialog(
+      title: 'Chess960 Position',
       content: Column(
-        mainAxisSize: .min,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          SrsTextInput(
             controller: _controller,
-            keyboardType: .number,
-            onChanged: _validateInput,
-            decoration: InputDecoration(
-              hintText: 'Position ID (0-959)',
-              errorText: _errorText,
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.casino_outlined),
-                onPressed: _generateRandom,
-                tooltip: context.l10n.randomChess960Position,
-              ),
-            ),
+            hintText: 'Position ID (0-959)',
+            semanticLabel: 'Position ID (0-959)',
+            keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: _validateInput,
             onSubmitted: (_) => _loadPosition(),
           ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(_errorText!, style: SrsText.settingHelp(context.srs.ink2)),
+          ],
+          const SizedBox(height: 16),
+          SrsTextButton(label: context.l10n.randomChess960Position, onPressed: _generateRandom),
         ],
       ),
       actions: [
-        TextButton(
+        SrsTextButton(
+          label: context.l10n.cancel,
           onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
-          child: Text(context.l10n.cancel),
         ),
-        TextButton(
-          onPressed: _errorText == null && _controller.text.isNotEmpty ? _loadPosition : null,
-          child: Text(context.l10n.loadPosition),
+        SrsPillButton(
+          label: context.l10n.loadPosition,
+          onPressed: loadEnabled ? _loadPosition : null,
         ),
       ],
     );

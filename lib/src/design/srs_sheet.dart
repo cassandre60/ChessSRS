@@ -3,6 +3,7 @@
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/design/tokens.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// The surface a bottom sheet or popover is painted on.
@@ -100,6 +101,11 @@ class SrsTextInput extends StatelessWidget {
     this.semanticLabel,
     this.autofocus = false,
     this.onSubmitted,
+    this.onChanged,
+    this.onTap,
+    this.readOnly = false,
+    this.keyboardType,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -109,6 +115,11 @@ class SrsTextInput extends StatelessWidget {
   final String? semanticLabel;
   final bool autofocus;
   final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onTap;
+  final bool readOnly;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -117,9 +128,14 @@ class SrsTextInput extends StatelessWidget {
     final field = TextField(
       controller: controller,
       autofocus: autofocus,
+      readOnly: readOnly,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      onTap: onTap,
       style: textStyle,
       cursorColor: c.accent,
       onSubmitted: onSubmitted,
+      onChanged: onChanged,
       decoration: InputDecoration(
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
