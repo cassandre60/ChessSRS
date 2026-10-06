@@ -25,11 +25,13 @@ void main() {
     void Function(Side)? onSidePressed,
     String? wordmark,
     Size size = const Size(390, 844),
+    Brightness brightness = Brightness.light,
   }) async {
     await tester.pumpWidget(
       await makeTestProviderScopeApp(
         tester,
         surfaceSize: size,
+        brightness: brightness,
         home: Center(
           child: SrsTopBar(
             activeSide: activeSide,
@@ -112,5 +114,47 @@ void main() {
     expect(find.text('ChessSRS'), findsOneWidget);
     expect(square(Side.white), findsNothing);
     expect(square(Side.black), findsNothing);
+  });
+
+  testWidgets('White square is light and Black square is dark in dark mode (not flipped)', (
+    tester,
+  ) async {
+    await pumpBar(tester, activeSide: Side.white, brightness: Brightness.dark);
+
+    BoxDecoration decoration(Side side) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(of: square(side), matching: find.byType(DecoratedBox)).last,
+      );
+      return box.decoration as BoxDecoration;
+    }
+
+    final whiteLum = decoration(Side.white).color!.computeLuminance();
+    final blackLum = decoration(Side.black).color!.computeLuminance();
+
+    expect(
+      whiteLum,
+      greaterThan(blackLum),
+      reason: 'White square must be brighter than Black square in dark mode, not flipped',
+    );
+    expect(whiteLum, greaterThan(0.5));
+    expect(blackLum, lessThan(0.1));
+  });
+
+  testWidgets('White square is light and Black square is dark in light mode', (tester) async {
+    await pumpBar(tester, activeSide: Side.white, brightness: Brightness.light);
+
+    BoxDecoration decoration(Side side) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(of: square(side), matching: find.byType(DecoratedBox)).last,
+      );
+      return box.decoration as BoxDecoration;
+    }
+
+    final whiteLum = decoration(Side.white).color!.computeLuminance();
+    final blackLum = decoration(Side.black).color!.computeLuminance();
+
+    expect(whiteLum, greaterThan(blackLum));
+    expect(whiteLum, greaterThan(0.8));
+    expect(blackLum, lessThan(0.1));
   });
 }

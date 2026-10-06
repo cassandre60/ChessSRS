@@ -152,11 +152,10 @@ class SrsTopBar extends StatelessWidget {
 /// One square of the colour switch: white or black, ringed when it is the
 /// colour being reviewed.
 ///
-/// The white square is filled `surface` with a hairline border rather than
-/// literal white, because on a light theme a white box on a white bar is
-/// invisible. The black square is filled `ink`. Selection is the accent ring
-/// alone — no fill change, since changing the fill of a square whose fill *is*
-/// its meaning would hide the very thing the ring is pointing at.
+/// The white square is light in both light and dark themes (with a hairline
+/// border so it stays distinct on a light bar). The black square is dark in
+/// both themes (with a hairline border so it stays distinct on a dark bar).
+/// The active square carries an accent ring (width 2).
 class _ColourSquare extends StatelessWidget {
   const _ColourSquare({required this.side, required this.isActive, this.onPressed});
 
@@ -171,6 +170,9 @@ class _ColourSquare extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.srs;
     final label = side == Side.white ? 'White repertoire' : 'Black repertoire';
+    final fillColor = side == Side.white
+        ? (c.isDark ? const Color(0xFFECEEF1) : const Color(0xFFFFFFFF))
+        : (c.isDark ? const Color(0xFF10141B) : const Color(0xFF151A22));
 
     return Tooltip(
       message: label,
@@ -190,7 +192,7 @@ class _ColourSquare extends StatelessWidget {
           ),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: side == Side.white ? c.surface : c.ink,
+              color: fillColor,
               borderRadius: BorderRadius.circular(_radius),
               border: Border.all(color: isActive ? c.accent : c.hairline, width: isActive ? 2 : 1),
             ),
