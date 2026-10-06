@@ -31,6 +31,11 @@ class ReviewScope {
   final String? openingFamily;
 
   /// The repertoire side this scope is restricted to, or null for no restriction.
+  ///
+  /// Set on every scope a drawer can produce — a colour, a study, an opening —
+  /// because the top bar's squares read it to show which drawer is live. A scope
+  /// with no side is one the colour switch has nothing to say about: the initial
+  /// `all()`, and nothing the user reached by tapping.
   final Side? side;
 
   bool matches({

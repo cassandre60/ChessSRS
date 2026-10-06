@@ -224,9 +224,9 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
     return Column(
       children: [
         SrsTopBar(
-          scopeTitle: 'ChessSRS',
+          activeSide: Side.white,
           dueCount: 0,
-          onScopePressed: () => ReviewScopeDrawer.show(context),
+          onSidePressed: (side) => _openColourDrawer(context, side),
           onOverflowPressed: () => _showOverflowSheet(context),
         ),
         Expanded(
@@ -367,10 +367,10 @@ class _NothingDueView extends ConsumerWidget {
         child: Column(
           children: [
             SrsTopBar(
-              scopeTitle: _computeScopeTitle(state),
+              activeSide: state.activeSide,
               dueCount: 0,
               isPracticeMode: state.isPracticeMode,
-              onScopePressed: () => ReviewScopeDrawer.show(context),
+              onSidePressed: (side) => _openColourDrawer(context, side),
               onOverflowPressed: () => _showOverflowSheet(context),
               onExitPractice: state.isPracticeMode
                   ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -522,7 +522,12 @@ class _NothingDueView extends ConsumerWidget {
                             ),
                             SrsTextButton(
                               label: context.l10n.reviewNothingDueChooseRepertoire,
-                              onPressed: () => ReviewScopeDrawer.show(context),
+                              // Opens the live colour's drawer rather than
+                              // switching colour: this button is about choosing
+                              // what to review next, and the squares are what
+                              // change colour.
+                              onPressed: () =>
+                                  ReviewScopeDrawer.show(context, state.scope.side ?? Side.white),
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
@@ -746,10 +751,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
         child: SrsReviewLayout(
           whiteAtBottom: state.boardOrientation == Side.white,
           topBar: SrsTopBar(
-            scopeTitle: _computeScopeTitle(state),
+            activeSide: state.activeSide,
             dueCount: state.totalDueCount,
             isPracticeMode: state.isPracticeMode,
-            onScopePressed: () => ReviewScopeDrawer.show(context),
+            onSidePressed: (side) => _openColourDrawer(context, side),
             onOverflowPressed: () => _showOverflowSheet(context),
             onExitPractice: state.isPracticeMode
                 ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -1111,31 +1116,17 @@ class _OpenInAnalysisButton extends StatelessWidget {
   }
 }
 
-String _computeScopeTitle(ReviewScreenState state) {
-  if (state.scope.openingFamily != null) {
-    return state.scope.openingFamily!;
-  }
-  // A side scope names no study and no opening, so it would otherwise fall
-  // through to `All studies` below — claiming a narrowed queue is the
-  // everywhere scope, which is the one thing the two repertoire buttons
-  // (INV-030) exist to let the user leave.
-  final side = state.scope.side;
-  if (side != null) {
-    return ReviewScopeDrawer.sideLabel(side);
-  }
-  if (state.scope.studyId != null) {
-    final study = state.studies.firstWhere(
-      (s) => s.id == state.scope.studyId,
-      orElse: () => const Study(id: '', title: 'Study'),
-    );
-    if (state.scope.chapterId != null && state.currentPrompt?.chapterTitle != null) {
-      return '${study.title} • ${state.currentPrompt!.chapterTitle}';
-    }
-    return study.title;
-  }
-  // design/docs/01-identity.md names the everywhere scope `All studies`, and the demo's top bar
-  // shows the same string the scope list row uses.
-  return 'All studies';
+/// Switches to [side]'s colour and opens its drawer.
+///
+/// Shared by all three top-bar placements, so switching colour and opening the
+/// matching drawer stay one gesture wherever the bar appears: the squares are
+/// the only way into a drawer, so tapping one and leaving the previous colour's
+/// drawer on screen would land somewhere the user did not ask for.
+Future<void> _openColourDrawer(BuildContext context, Side side) async {
+  final container = ProviderScope.containerOf(context);
+  await container.read(reviewControllerProvider.notifier).selectSide(side);
+  if (!context.mounted) return;
+  await ReviewScopeDrawer.show(context, side);
 }
 
 class _SrsDiagnosticsOverlay extends StatelessWidget {

@@ -63,6 +63,8 @@ class DueCountsSummary {
     this.openingProgress = const {},
     this.sideProgress = const {},
     this.studySideProgress = const {},
+    this.studyIdsBySide = const {},
+    this.openingsBySide = const {},
   });
 
   final int totalDueCount;
@@ -90,6 +92,13 @@ class DueCountsSummary {
   /// trains nothing from that side.
   RepertoireProgress studyProgressForSide(String studyId, Side side) =>
       studySideProgress[studyId]?[side] ?? RepertoireProgress.zero;
+
+  /// Which studies and which opening families belong to each colour, so a drawer
+  /// can list only its own. Grouped by chapter rather than by decision: a study
+  /// with nothing due yet still has to appear in the drawer, and a paused study
+  /// has to stay findable so it can be resumed.
+  final Map<Side, List<String>> studyIdsBySide;
+  final Map<Side, List<String>> openingsBySide;
 
   /// Due positions for [side], or 0 when the summary predates this field.
   int dueCountForSide(Side side) => sideProgress[side]?.dueDecisions ?? 0;
@@ -397,6 +406,7 @@ class ReviewService {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = await repository.getChapterOrientations();
+    final chapterStudyIds = await repository.getChapterStudyIds();
     final allDecisions = await repository.getAllDecisions();
     final reviewStatesList = await repository.getAllReviewStates();
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
@@ -441,6 +451,38 @@ class ReviewService {
       Side.white: <String>{},
       Side.black: <String>{},
     };
+
+    // Which colour each drawer lists. Derived from chapters, not from decisions,
+    // and deliberately including paused studies: a drawer that hid a paused study
+    // would be a place the user could not go to resume one. Insertion order
+    // follows the chapter order, which is the order the library already shows.
+    final studyIdsBySide = <Side, List<String>>{Side.white: <String>[], Side.black: <String>[]};
+    final openingsBySide = <Side, List<String>>{Side.white: <String>[], Side.black: <String>[]};
+    final seenStudyPerSide = <Side, Set<String>>{Side.white: {}, Side.black: {}};
+    final seenOpeningPerSide = <Side, Set<String>>{Side.white: {}, Side.black: {}};
+    for (final entry in chapterSides.entries) {
+      final side = entry.value;
+      final studyId = chapterStudyIds[entry.key];
+      if (studyId != null && seenStudyPerSide[side]!.add(studyId)) {
+        studyIdsBySide[side]!.add(studyId);
+      }
+      final opening = chapterOpenings[entry.key]?.trim();
+      if (opening != null && opening.isNotEmpty && seenOpeningPerSide[side]!.add(opening)) {
+        openingsBySide[side]!.add(opening);
+      }
+    }
+    // A study with no chapters is in neither list. It still has to be reachable,
+    // so it goes to both: it trains no colour, and hiding it from both drawers
+    // would strand it.
+    for (final s in studies) {
+      final known =
+          seenStudyPerSide[Side.white]!.contains(s.id) ||
+          seenStudyPerSide[Side.black]!.contains(s.id);
+      if (!known) {
+        studyIdsBySide[Side.white]!.add(s.id);
+        studyIdsBySide[Side.black]!.add(s.id);
+      }
+    }
 
     var totalDueCount = 0;
     final accountedDueCanonicalIds = <String>{};
@@ -607,6 +649,8 @@ class ReviewService {
       openingProgress: openingProgress,
       sideProgress: sideProgress,
       studySideProgress: studySideProgress,
+      studyIdsBySide: studyIdsBySide,
+      openingsBySide: openingsBySide,
     );
   }
 

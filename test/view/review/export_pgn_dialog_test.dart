@@ -147,7 +147,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('Black repertoire'));
       await tester.pumpAndSettle();
 
       expect(

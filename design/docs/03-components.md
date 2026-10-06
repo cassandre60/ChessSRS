@@ -17,16 +17,13 @@ roles from `02-tokens.md`. Behaviour details live in `04-screens-and-flows.md`.
 
 Height: narrow 56, wide 60. Padding: narrow L16 R4; wide L50 R20. Items centred vertically, gap 6 (narrow).
 
-Left to right: **Scope button**, **due count**, spacer, **overflow button**.
+Left to right: **Colour squares (White / Black)**, **due count**, spacer, **overflow button**.
 
-- **Scope button**: a text button with no border. Text = current scope name (17/600, single line, ellipsis) + a 12px
-  chevron-down (stroke 1.8, `ink2`) with gap 8. Padding 7/10, margin-left -10 (so the text aligns with the content edge),
-  radius 10, hover fill `hairlineSoft`. Tapping toggles the scope list. `aria-haspopup="dialog"`, expanded state exposed.
-  Must shrink (flex 0 1 auto) so the due count and overflow button never get pushed off narrow screens.
+- **Colour squares**: two 20x20 squares side by side (White and Black), padded to a 44x44 tap target each. No text label. The active colour carries a 2px `accent` border. Tapping a square switches to that colour's review queue and opens its independent drawer.
 - **Due count**: `{n} due`, 14, `ink2`; the numeral is 600 `ink`, tabular. In Practice mode show `Practice` (accent, 600) instead — as a **tappable label with a 44px hit area and semantics `Exit practice`**, since it occupies this slot and is the only exit from the mode (`00` open decision 3, resolved 2026-09-28). The visible text is `ExcludeSemantics`-wrapped so the announcement is the action, not "Exit practice Practice".
 - **Overflow button**: 44x44 circular hit area, three dots (20px icon, `ink` fill, dots r=1.7 at x=4,10,16), hover fill `hairlineSoft`.
   Label "Library and settings". Opens the Library sheet.
-- Hidden per screen: on *first launch* the scope button and due count are hidden (overflow stays); on *settings* the whole bar is hidden.
+- Hidden per screen: on *first launch* when no studies exist a wordmark is shown; on *settings* the whole bar is hidden.
 
 ## 3. Board
 
@@ -137,7 +134,9 @@ The wide column's height equals the board's height and its bottom edge aligns wi
 - **Accent dots**: see `02` §4. Two places: Settings row and (prototype only) the toolbar.
 - All interactive: 2px accent focus ring at offset 2, keyboard activation with Enter/Space, `Semantics` button/toggled.
 
-## 6. Scope list (replaces the drawer)
+## 6. Scope list (colour-specific drawer)
+
+One drawer per colour (White drawer and Black drawer), opened by the matching colour square in the top bar. Each drawer lists only the material that trains that colour.
 
 Presentation: **wide** → popover anchored under the top bar, left 26, top = top bar height (56), width `min(470, W - 52)`, max-height `H - 80`,
 radius 16. **Narrow** → bottom sheet, left/right/bottom inset 8, radius 22, max-height `min(82% of H, 720)`, with a 36x4 grabber (`hairline`, top margin 8).
@@ -145,16 +144,16 @@ Background `surface`, sheet shadow (`02` §4). Scrim behind (`scrim`, 140 ms). D
 
 Contents:
 1. **Search field** (fixed): padding 14/18, magnifier icon 18px stroke `ink3`, input 16, placeholder `Search` (`ink3`), bottom hairline. Autofocus on
-   devices with a hardware keyboard only (avoid raising the soft keyboard on touch). Filters rows by case-insensitive substring; empty result: `Nothing matches “{q}”.` (`ink2` 15, padding 28/18).
-2. **Scrollable list** with group titles `Everywhere`, `Openings`, `Repertoires` (12.5/500 `ink3`, padding 14/18/4).
+   devices with a hardware keyboard only (avoid raising the soft keyboard on touch). Filters rows by case-insensitive substring within this drawer's colour; empty result: `Nothing matches “{q}”.` (`ink2` 15, padding 28/18).
+2. **Scrollable list** with group titles `Openings`, `Studies` (12.5/500 `ink3`, padding 14/18/4). No combined `Everywhere` or `Repertoires` group — the colour is established by the drawer.
 3. **Row** (full width button, padding 9/18, gap 14): left column = **name** (15.5/500, one line, ellipsis) and, 6px below, a **sub line**: a 96x5 memory
    mini-bar (see §8) + text `{n} positions` (12.5 `ink3`) or `Paused`; right = due numeral (17/600, tabular) + `due` (12.5 `ink3`) baseline-aligned.
    - Hover: `hairlineSoft` fill. **Current** scope: `accentSoft` fill + 3px accent bar at the left.
    - Zero due: numeral `ink3`, weight 500. Paused: name and numeral `ink3`.
-4. Row actions (pause, rename, delete, chapters, export) are NOT in the list row. Reveal them via long-press / secondary click / an
-   `…` affordance that appears on hover (desktop), opening the existing study actions in the new sheet style. (Extrapolation, see §12.)
+4. Row actions (Create opposite colour repertoire, pause, rename, delete, analyze, practice, export) are NOT in the list row. Reveal them via long-press / secondary click / an
+   `…` affordance that appears on hover (desktop), opening the study actions sheet. (Extrapolation, see §12.)
 
-Data order: Everywhere (All repertoires) → Openings (hubs) → Repertoires (studies). Same data as the old drawer.
+Data order: Openings (hubs for this colour) → Studies (studies for this colour).
 
 ## 7. Library sheet (replaces the "More" tab)
 
@@ -217,7 +216,7 @@ Apply the system; keep them obviously the same family; **send screenshots to the
   text button (cancel) then pill (confirm). **No red.** Destructive copy must name the item: `Delete “{name}” and its {n} positions? This cannot be undone.`, confirm label `Delete`.
   Text inputs: 16px, 1px `hairline` bottom border (2px `ink` when focused), no filled/outlined boxes.
 - **Study chapters screen:** same layout as Settings (back button, big title = study name) with rows like scope rows (name, memory mini-bar, positions, due numeral).
-- **Study actions** (Chapters, Analyze, Practice, Export, Rename, Delete): a Library-style sheet of text rows (16/500, no icons), anchored to the row that opened it on wide layouts.
+- **Study actions** (Create {opposite colour} repertoire, Analyze, Practice, Export, Pause/Resume, Rename, Delete): a Library-style sheet of text rows (16/500, no icons), anchored to the row that opened it on wide layouts.
 - **Toast:** ink pill (`ink` bg, `ground` text 14/500), bottom 24, centered, padding 11/18, fades in 160 ms (translate 10px), visible 2.4 s. One line, no actions.
 - **Analysis / Explorer / Board editor:** reuse `SrsBoardBackground`, tokens and primitives; drop Lichess widgets and icons. Reached from the Library sheet's single `Analysis` row, which opens `AnalysisHubScreen` (open decision 1, resolved 2026-09-28).
 - **Practice mode banner:** none. The top bar shows `Practice` in the due-count slot, tappable, as the exit (see `00` open decision 3).

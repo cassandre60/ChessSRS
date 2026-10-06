@@ -39,12 +39,12 @@ Why it looks different from Lichess (and from Chess.com, and from the app's prev
 
 | Previous build | New design |
 |---|---|
-| Drawer: search, "All Studies", "Opening Hubs", per-study rows with tonal chips, pause toggle, three-dot menu | One **scope list**: popover on wide layouts, bottom sheet on narrow. Due count is a plain numeral. |
+| Drawer: search, "All Studies", "Opening Hubs", per-study rows with tonal chips, pause toggle, three-dot menu | Two independent **colour drawers** (White and Black), opened by the two colour squares in the top bar. No combined drawer. |
 | Bottom navigation "Review / More" | **None.** A `⋯` button opens the **Library** sheet (Import, Explore, Settings, About). |
 | More tab headed by a `lichess.org` logo and account icon | Gone. No account, no branding. |
 | Brown board, heavy-outline stock pieces | Print-diagram board (hatched dark squares, ink frame) + original piece set. |
 | Orange/peach Material tones on every control | One accent, used only for the answer move, the arrow, selection, the note rule. |
-| App bar: menu, title + chip, eye toggle, tune, exit-practice | Scope title + due count + `⋯`. Preferences moved into Settings. |
+| App bar: menu, title + chip, eye toggle, tune, exit-practice | Two **colour squares** (White / Black) + due count + `⋯`. No text label for the menu opener. |
 | Header row (side piece icon + chapter title) + "Your move (White)" | Small context line + "White to play" + the **notation line** as the headline. |
 | Tonal feedback card with icon, title, Continue button, comment truncated after ~6 lines | **Note**: full text in a reading face, 2px accent rule at left, one Continue pill. |
 | Red lapse card with a sentence | **Correction**: pen-stroke arrow on the board + the move set large in accent. No red. |
@@ -82,12 +82,13 @@ Hard-coded English first (repo convention), then localise later. `{}` = dynamic.
 | Idle legend | `{n} retained`, `{n} learning`, `{n} new` |
 | Idle actions | `Practice`, `Choose a study` |
 | Idle footnote | `Practice never changes your schedule.` |
+| Top bar colour switch | White square / Black square (ringed when active); tooltip/semantics: `White repertoire` / `Black repertoire` |
 | Scope search | placeholder `Search` |
-| Scope groups | `Everywhere`, `Openings`, `Studies` |
-| Scope first row | `All studies` |
+| Scope groups | `Openings`, `Studies` |
 | Scope row sub | `{n} positions` or `Paused` |
 | Scope row due | `{n}` + `due` |
 | Scope empty | `Nothing matches “{query}”.` |
+| Study actions | `Create {opposite colour} repertoire` (sub: `Same positions, in the other drawer`), `Analyze`, `Practice`, `Export PGN`, `Pause`/`Resume`, `Rename`, `Delete` |
 | Library rows | `Import PGN` (sub: `From a file, pasted text or a Lichess study`), group `Explore`: `Analysis` (sub: `Analysis board, explorer, editor, chapters`); `Settings`; `About and licences` |
 | First launch | wordmark `ChessSRS`; `Bring your study.`; `Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.`; drop area `Drop a PGN file here`; button `Choose file`; links `Paste PGN text`, `Import a Lichess study`; `Train as` `Auto` `White` `Black` |
 | Import success toast | `Imported {n} positions from {file}.` |

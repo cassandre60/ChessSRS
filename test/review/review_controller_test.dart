@@ -293,6 +293,99 @@ void main() {
       expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
     });
 
+    // SPEC INV-030: the two drawers are independent, so a White repertoire has no
+    // Black counterpart until the user makes one. "I imported everything as
+    // White" is the ordinary way a Black library ends up empty.
+    test('a study can be created in the opposite colour', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 Nc6 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+
+      final blackOrNull = await controller.createStudyInSide(white.study.id, Side.black);
+      expect(blackOrNull, isNotNull, reason: 'the Black copy was not created');
+
+      final studies = await repo.getAllStudies();
+      expect(studies.length, 2);
+      final black = studies.where((s) => s.id == blackOrNull!.id).first;
+      final blackChapters = await repo.getChaptersByStudy(black.id);
+      expect(
+        blackChapters.map((c) => c.orientation),
+        everyElement(Side.black),
+        reason: 'the copy must land in the other drawer, not beside the original',
+      );
+
+      // Its positions are its own, not the White one's: the same tree answered in
+      // the other colour is a different question (there is a test for that on
+      // import, and this is the same rule reached through a different door).
+      final blackDecisions = await repo.getDecisionsByStudy(black.id);
+      final whiteDecisions = await repo.getDecisionsByStudy(white.study.id);
+      expect(blackDecisions.length, whiteDecisions.length);
+      final blackIds = blackDecisions.map((d) => d.id).toSet();
+      final whiteIds = whiteDecisions.map((d) => d.id).toSet();
+      expect(blackIds.intersection(whiteIds), isEmpty);
+    });
+
+    test('creating the opposite colour twice does not duplicate it', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+
+      await controller.createStudyInSide(white.study.id, Side.black);
+      // Null rather than a second copy: the import is deduplicated per side, so
+      // the row is a no-op the user can press twice without consequence.
+      final again = await controller.createStudyInSide(white.study.id, Side.black);
+
+      expect(again, isNull);
+      expect((await repo.getAllStudies()).length, 2);
+    });
+
+    test('creating the opposite colour leaves the user on what they were reviewing', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      await controller.createStudyInSide(white.study.id, Side.black);
+
+      // Creating the Black copy while reviewing the White one is a setup action,
+      // not a change of intention: yanking the session across colours would
+      // throw away the White queue the user was part-way through.
+      final state = container.read(reviewControllerProvider).value;
+      expect(state?.scope.studyId, white.study.id);
+      expect(state?.activeSide, Side.white);
+    });
+
+    test('the starting drawer is the colour that has material', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: "Queen's Pawn",
+        repertoireSide: Side.black,
+      );
+
+      // A fresh session on a library of nothing but Black material must open
+      // on Black rather than on an empty White drawer.
+      final container2 = createContainer();
+      await container2.read(reviewControllerProvider.future);
+      expect(container2.read(reviewControllerProvider).value?.scope, const ReviewScope.black());
+      expect(container2.read(reviewControllerProvider).value?.activeSide, Side.black);
+    });
+
     // SPEC INV-030: the two repertoire buttons count the review queue by side, so a tally has to
     // move as the session is worked through. The controller patches these optimistically instead of
     // reloading the whole summary, and the patch is easy to forget when a new per-scope tally is

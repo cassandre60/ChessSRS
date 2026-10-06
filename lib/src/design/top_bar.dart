@@ -1,33 +1,50 @@
-// Top bar: Scope button, due count, spacer, overflow button.
+// Top bar: colour squares, due count, spacer, overflow button.
 // Follows design/docs/03-components.md §2 and reference/index.html.
 import 'package:chess_srs/src/design/primitives.dart';
 import 'package:chess_srs/src/design/tokens.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 
-/// Top bar with Scope selector, due count, and overflow menu.
+/// Top bar with the two colour switches, due count, and overflow menu.
+///
+/// The opener is a white square and a black square rather than the scope's
+/// name: the app trains one repertoire colour at a time, and a name would have
+/// to change as the user moved between them ("All studies", "French Defence",
+/// a study title). The squares say the same two things forever.
 class SrsTopBar extends StatelessWidget {
   const SrsTopBar({
     super.key,
-    this.scopeTitle = '',
+    this.wordmark,
+    this.activeSide,
+    this.onSidePressed,
     this.dueCount = 0,
     this.showScopeAndDue = true,
     this.isPracticeMode = false,
-    this.onScopePressed,
     this.onOverflowPressed,
     this.onExitPractice,
-    this.isScopeExpanded = false,
     this.wide = false,
   });
 
-  final String scopeTitle;
+  /// Shown in place of the squares on a screen with no scope to switch, such as
+  /// first launch, where the two colours would be an offer with nothing behind
+  /// it.
+  final String? wordmark;
+
+  /// The colour whose drawer is open and whose positions are being reviewed.
+  /// Null when the current scope names neither colour, which only happens
+  /// before the first study is loaded.
+  final Side? activeSide;
+
+  /// Called with the square that was tapped. Selecting the colour already
+  /// active re-opens its drawer rather than doing nothing.
+  final void Function(Side side)? onSidePressed;
+
   final int dueCount;
   final bool showScopeAndDue;
   final bool isPracticeMode;
-  final VoidCallback? onScopePressed;
   final VoidCallback? onOverflowPressed;
   final VoidCallback? onExitPractice;
-  final bool isScopeExpanded;
   final bool wide;
 
   @override
@@ -37,46 +54,27 @@ class SrsTopBar extends StatelessWidget {
     return Row(
       children: [
         if (showScopeAndDue) ...[
-          // 1. Scope button
-          Flexible(
-            fit: FlexFit.loose,
-            child: Transform.translate(
-              offset: const Offset(-10, 0),
-              child: Tooltip(
-                message: 'Studies & Scope',
-                child: SrsPressable(
-                  onPressed: onScopePressed,
-                  semanticLabel: scopeTitle,
-                  semanticsToggled: isScopeExpanded,
-                  radius: 10,
-                  builder: (context, hovered, pressed) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: hovered ? c.hairlineSoft : const Color(0x00000000),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            scopeTitle,
-                            style: SrsText.scopeName(c.ink),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        CustomPaint(
-                          size: const Size(12, 12),
-                          painter: _ChevronPainter(color: c.ink2, isExpanded: isScopeExpanded),
-                        ),
-                      ],
-                    ),
+          // 1. Colour squares
+          Transform.translate(
+            offset: const Offset(-10, 0),
+            child: wordmark != null
+                ? Text(wordmark!, style: SrsText.scopeName(c.ink))
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ColourSquare(
+                        side: Side.white,
+                        isActive: activeSide == Side.white,
+                        onPressed: onSidePressed,
+                      ),
+                      const SizedBox(width: 2),
+                      _ColourSquare(
+                        side: Side.black,
+                        isActive: activeSide == Side.black,
+                        onPressed: onSidePressed,
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
           ),
 
           const SizedBox(width: 6),
@@ -151,39 +149,57 @@ class SrsTopBar extends StatelessWidget {
   }
 }
 
-/// 12x12 chevron-down icon with stroke width 1.8.
-class _ChevronPainter extends CustomPainter {
-  const _ChevronPainter({required this.color, required this.isExpanded});
-  final Color color;
-  final bool isExpanded;
+/// One square of the colour switch: white or black, ringed when it is the
+/// colour being reviewed.
+///
+/// The white square is filled `surface` with a hairline border rather than
+/// literal white, because on a light theme a white box on a white bar is
+/// invisible. The black square is filled `ink`. Selection is the accent ring
+/// alone — no fill change, since changing the fill of a square whose fill *is*
+/// its meaning would hide the very thing the ring is pointing at.
+class _ColourSquare extends StatelessWidget {
+  const _ColourSquare({required this.side, required this.isActive, this.onPressed});
+
+  final Side side;
+  final bool isActive;
+  final void Function(Side side)? onPressed;
+
+  static const double _edge = 20;
+  static const double _radius = 5;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final label = side == Side.white ? 'White repertoire' : 'Black repertoire';
 
-    final path = Path();
-    if (isExpanded) {
-      // Chevron up: 2.5 7.5 -> 6 4 -> 9.5 7.5
-      path.moveTo(size.width * 0.21, size.height * 0.62);
-      path.lineTo(size.width * 0.5, size.height * 0.33);
-      path.lineTo(size.width * 0.79, size.height * 0.62);
-    } else {
-      // Chevron down: 2.5 4.5 -> 6 8 -> 9.5 4.5
-      path.moveTo(size.width * 0.21, size.height * 0.38);
-      path.lineTo(size.width * 0.5, size.height * 0.67);
-      path.lineTo(size.width * 0.79, size.height * 0.38);
-    }
-
-    canvas.drawPath(path, paint);
+    return Tooltip(
+      message: label,
+      child: SrsPressable(
+        onPressed: onPressed == null ? null : () => onPressed!(side),
+        semanticLabel: label,
+        semanticsToggled: isActive,
+        radius: 8,
+        builder: (context, hovered, pressed) => Container(
+          // The padding is what carries the square to the 44px minimum target
+          // (`03-components.md` §6); the square itself stays small so the two
+          // read as a pair rather than as two buttons.
+          padding: const EdgeInsets.all((SrsLayout.minTouchTarget - _edge) / 2),
+          decoration: BoxDecoration(
+            color: hovered ? c.hairlineSoft : const Color(0x00000000),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: side == Side.white ? c.surface : c.ink,
+              borderRadius: BorderRadius.circular(_radius),
+              border: Border.all(color: isActive ? c.accent : c.hairline, width: isActive ? 2 : 1),
+            ),
+            child: const SizedBox(width: _edge, height: _edge),
+          ),
+        ),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(_ChevronPainter old) => old.color != color || old.isExpanded != isExpanded;
 }
 
 /// 20x20 horizontal 3-dots painter (dots r=1.7 at x=4, 10, 16, y=10).

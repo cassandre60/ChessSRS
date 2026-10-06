@@ -44,6 +44,13 @@ abstract class StudyRepository {
   Future<List<Chapter>> getChaptersByStudy(String studyId);
   Future<Map<String, String?>> getChapterOpenings();
 
+  /// Chapter id to the study it belongs to, for every chapter.
+  ///
+  /// Needed to group material by repertoire colour without walking every
+  /// study's chapters: the colour lives on the chapter, and the drawer's list
+  /// is of studies.
+  Future<Map<String, String>> getChapterStudyIds();
+
   /// The repertoire side of every chapter, keyed by chapter id.
   ///
   /// One indexed read of two columns, so a side-scoped due count costs the same
