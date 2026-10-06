@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review.review_engine;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Review scheduling and traversal engine.
+library;
 
 import 'dart:math';
 

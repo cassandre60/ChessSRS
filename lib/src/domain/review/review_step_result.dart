@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review.review_engine;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Review step result evaluations and verdicts.
+library;
 
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';

@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.position_knowledge_state;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Knowledge state and memory retention models for board positions.
+library;
 
 import 'dart:convert';
 

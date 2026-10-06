@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review_result;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Outcome and grading models for recall reviews.
+library;
 
 /// The outcome of a single review attempt.
 enum ReviewResult {

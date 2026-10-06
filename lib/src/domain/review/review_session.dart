@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review.review_session;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Review session lifecycle and card queue state.
+library;
 
 import 'dart:math';
 

@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review.review_engine;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Review mode definitions (SRS recall vs free practice).
+library;
 
 /// The operational mode for a [ReviewSession].
 enum ReviewMode {

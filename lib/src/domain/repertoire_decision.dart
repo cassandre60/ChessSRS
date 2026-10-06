@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.repertoire_decision;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Repertoire decision points and card structures.
+library;
 
 import 'package:chess_srs/src/domain/ids.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';

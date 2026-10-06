@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.repertoire_move;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Repertoire move representations and metadata.
+library;
 
 /// A chess move in UCI notation stored in the domain layer.
 ///

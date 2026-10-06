@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review.review_engine;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// Review scope models (all studies, side-scoped, or specific study/opening).
+library;
 
 import 'package:dartchess/dartchess.dart' show Side;
 

@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
-library chess_srs.domain.review_state;
-
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/// State container for active review sessions.
+library;
 
 import 'package:chess_srs/src/domain/review_result.dart';
 
