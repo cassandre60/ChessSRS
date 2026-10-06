@@ -1115,6 +1115,14 @@ String _computeScopeTitle(ReviewScreenState state) {
   if (state.scope.openingFamily != null) {
     return state.scope.openingFamily!;
   }
+  // A side scope names no study and no opening, so it would otherwise fall
+  // through to `All studies` below — claiming a narrowed queue is the
+  // everywhere scope, which is the one thing the two repertoire buttons
+  // (INV-030) exist to let the user leave.
+  final side = state.scope.side;
+  if (side != null) {
+    return ReviewScopeDrawer.sideLabel(side);
+  }
   if (state.scope.studyId != null) {
     final study = state.studies.firstWhere(
       (s) => s.id == state.scope.studyId,

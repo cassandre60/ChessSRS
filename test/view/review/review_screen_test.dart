@@ -1091,6 +1091,14 @@ void main() {
       );
       await pumpAsync(tester);
 
+      // The top bar names the scope the user picked. A side scope names no study
+      // and no opening, so it falls through to the everywhere title unless it is
+      // handled: the bar would claim `All studies` while the queue holds White
+      // positions only, which is precisely what the button was tapped to avoid
+      // (INV-030).
+      expect(find.text('All studies'), findsNothing);
+      expect(find.text('White repertoire'), findsOneWidget);
+
       // Play 1. e4 (first move)
       await playMove(tester, 'e2', 'e4');
       await pumpAsync(tester, 700);

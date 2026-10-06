@@ -23,6 +23,15 @@ import 'package:material_ui/material_ui.dart';
 class ReviewScopeDrawer extends ConsumerStatefulWidget {
   const ReviewScopeDrawer({super.key});
 
+  /// Label for the side-scoped scope, as the top bar names it too.
+  ///
+  /// Lives here rather than beside [_computeScopeTitle] because the drawer's two
+  /// buttons and the top bar have to say the same thing: a scope the user
+  /// picked from the drawer whose name changes when it is shown elsewhere reads
+  /// as two different scopes.
+  static String sideLabel(Side side) =>
+      side == Side.white ? _SideScopeButton._whiteLabel : _SideScopeButton._blackLabel;
+
   /// Displays the scope selector sheet.
   static Future<void> show(BuildContext context) {
     final c = context.srs;
