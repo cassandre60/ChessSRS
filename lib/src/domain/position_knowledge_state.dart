@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 library chess_srs.domain.position_knowledge_state;
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:convert';

@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 library chess_srs.domain.clock;
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /// Clock abstraction for injectable time source in SRS logic.

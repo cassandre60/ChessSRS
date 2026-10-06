@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 library chess_srs.domain.repertoire_progress;
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:meta/meta.dart';
