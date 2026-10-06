@@ -26,11 +26,14 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
   /// Label for the side-scoped scope, as the top bar names it too.
   ///
   /// Lives here rather than beside [_computeScopeTitle] because the drawer's two
-  /// buttons and the top bar have to say the same thing: a scope the user
+  /// menus and the top bar have to say the same thing: a scope the user
   /// picked from the drawer whose name changes when it is shown elsewhere reads
   /// as two different scopes.
+  static const String whiteRepertoireLabel = 'White repertoire';
+  static const String blackRepertoireLabel = 'Black repertoire';
+
   static String sideLabel(Side side) =>
-      side == Side.white ? _SideScopeButton._whiteLabel : _SideScopeButton._blackLabel;
+      side == Side.white ? whiteRepertoireLabel : blackRepertoireLabel;
 
   /// Displays the scope selector sheet.
   static Future<void> show(BuildContext context) {
@@ -105,10 +108,10 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       );
     }
 
-    // The two repertoire buttons are the only scopes that span studies and no
+    // The two repertoire menus are the only scopes that span studies and no
     // particular opening, so "no study and no opening" is not enough to call one
     // of them selected — `side` is what tells the two apart. The unscoped
-    // `all()` marks *both* cards selected, because that is exactly what it
+    // `all()` marks *both* scope rows selected, because that is exactly what it
     // covers: neither side is excluded from it, and the pair reads at a glance
     // as "tap one to narrow this down".
     final activeScope = reviewState.scope;
@@ -123,10 +126,13 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
             activeScope.side == side);
 
     final query = _searchQuery.trim().toLowerCase();
-    // The buttons are labelled `White repertoire` / `Black repertoire`, so a query
-    // naming either one keeps that button visible; everything else hides both.
-    final showWhiteRepertoire = query.isEmpty || 'white repertoire'.contains(query);
-    final showBlackRepertoire = query.isEmpty || 'black repertoire'.contains(query);
+    // The scope rows are labelled `White repertoire` / `Black repertoire`, so a
+    // query naming either one keeps that menu visible; everything else hides
+    // both scope rows while its studies still filter by title below.
+    final showWhiteMenu =
+        query.isEmpty || ReviewScopeDrawer.whiteRepertoireLabel.toLowerCase().contains(query);
+    final showBlackMenu =
+        query.isEmpty || ReviewScopeDrawer.blackRepertoireLabel.toLowerCase().contains(query);
     // While searching, every match shows regardless of collapse: the query,
     // not the persisted state, decides what is visible.
     final searching = query.isNotEmpty;
@@ -148,10 +154,26 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         ? reviewState.studies
         : reviewState.studies.where((study) => study.title.toLowerCase().contains(query)).toList();
 
+    // Each study sits under the menu of every side it trains (INV-030). Most
+    // studies train one side; a both-sides study appears in both menus with
+    // that side's figures, and a study with no decisions yet defaults to White,
+    // the same default the summary applies to an unresolvable chapter.
+    Set<Side> sidesForStudy(Study study) {
+      final sides = reviewState.studySideProgress[study.id]?.keys.toSet();
+      if (sides != null && sides.isNotEmpty) return sides;
+      return const {Side.white};
+    }
+
+    List<Study> studiesForSide(Side side) =>
+        filteredStudies.where((study) => sidesForStudy(study).contains(side)).toList();
+
+    final whiteStudies = studiesForSide(Side.white);
+    final blackStudies = studiesForSide(Side.black);
+
     final hasNoResults =
         query.isNotEmpty &&
-        !showWhiteRepertoire &&
-        !showBlackRepertoire &&
+        !showWhiteMenu &&
+        !showBlackMenu &&
         filteredOpeningHubs.isEmpty &&
         filteredStudies.isEmpty;
 
@@ -268,80 +290,76 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
-                                // Group: Repertoires — one button per side, side by side.
-                                if (showWhiteRepertoire || showBlackRepertoire) ...[
-                                  _buildGroupHeader(
-                                    ref,
-                                    c,
-                                    group: 'repertoires',
-                                    title: 'Repertoires',
-                                    collapsed: collapsedGroups.contains('repertoires'),
-                                    plain: !collapseEnabled,
+                                // Each repertoire is a menu: a scope row heading the
+                                // studies that train that side, so the colour split
+                                // reads as two lists rather than two cards (INV-030).
+                                if (showWhiteMenu || whiteStudies.isNotEmpty)
+                                  _RepertoireMenu(
+                                    side: Side.white,
+                                    scopeRowVisible: showWhiteMenu,
+                                    studies: whiteStudies,
+                                    isSelected: isSideSelected(Side.white),
+                                    collapsed:
+                                        collapseEnabled &&
+                                        collapsedGroups.contains('white_repertoire'),
+                                    collapseEnabled: collapseEnabled,
+                                    onToggleCollapse: () => ref
+                                        .read(studyPreferencesProvider.notifier)
+                                        .toggleScopeGroupCollapsed('white_repertoire'),
+                                    onSelectScope: () {
+                                      Navigator.of(context).pop();
+                                      ref
+                                          .read(reviewControllerProvider.notifier)
+                                          .changeScope(const ReviewScope.white());
+                                    },
+                                    sideProgress:
+                                        reviewState.sideProgress[Side.white] ??
+                                        RepertoireProgress.zero,
+                                    studySideProgress: reviewState.studySideProgress,
+                                    selectedStudyId: reviewState.scope.studyId,
+                                    onSelectStudy: (study) {
+                                      Navigator.of(context).pop();
+                                      ref
+                                          .read(reviewControllerProvider.notifier)
+                                          .changeScope(ReviewScope.study(study.id));
+                                    },
+                                    onShowStudyActions: (study, anchor) =>
+                                        _showStudyActionsSheet(context, ref, study, anchor: anchor),
                                   ),
-                                  if (!collapseEnabled || !collapsedGroups.contains('repertoires'))
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 18.0,
-                                        vertical: 4.0,
-                                      ),
-                                      child: Row(
-                                        // Not `stretch`: the row sits in a ListView, so its
-                                        // height is unbounded and stretching a child to it
-                                        // throws during layout. `start` keeps both cards at
-                                        // their natural height, which is what makes them read
-                                        // as one pair — the labels are the same two lines.
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          if (showWhiteRepertoire)
-                                            Expanded(
-                                              child: _SideScopeButton(
-                                                side: Side.white,
-                                                dueCount:
-                                                    reviewState
-                                                        .sideProgress[Side.white]
-                                                        ?.dueDecisions ??
-                                                    0,
-                                                progress:
-                                                    reviewState.sideProgress[Side.white] ??
-                                                    RepertoireProgress.zero,
-                                                isSelected: isSideSelected(Side.white),
-                                                onPressed: () {
-                                                  Navigator.of(context).pop();
-                                                  ref
-                                                      .read(reviewControllerProvider.notifier)
-                                                      .changeScope(const ReviewScope.white());
-                                                },
-                                              ),
-                                            ),
-                                          // The gap only exists when both buttons are shown, so a
-                                          // single button keeps the row's full width.
-                                          if (showWhiteRepertoire && showBlackRepertoire)
-                                            const SizedBox(width: 8.0),
-                                          if (showBlackRepertoire)
-                                            Expanded(
-                                              child: _SideScopeButton(
-                                                side: Side.black,
-                                                dueCount:
-                                                    reviewState
-                                                        .sideProgress[Side.black]
-                                                        ?.dueDecisions ??
-                                                    0,
-                                                progress:
-                                                    reviewState.sideProgress[Side.black] ??
-                                                    RepertoireProgress.zero,
-                                                isSelected: isSideSelected(Side.black),
-                                                onPressed: () {
-                                                  Navigator.of(context).pop();
-                                                  ref
-                                                      .read(reviewControllerProvider.notifier)
-                                                      .changeScope(const ReviewScope.black());
-                                                },
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
+
+                                if (showBlackMenu || blackStudies.isNotEmpty)
+                                  _RepertoireMenu(
+                                    side: Side.black,
+                                    scopeRowVisible: showBlackMenu,
+                                    studies: blackStudies,
+                                    isSelected: isSideSelected(Side.black),
+                                    collapsed:
+                                        collapseEnabled &&
+                                        collapsedGroups.contains('black_repertoire'),
+                                    collapseEnabled: collapseEnabled,
+                                    onToggleCollapse: () => ref
+                                        .read(studyPreferencesProvider.notifier)
+                                        .toggleScopeGroupCollapsed('black_repertoire'),
+                                    onSelectScope: () {
+                                      Navigator.of(context).pop();
+                                      ref
+                                          .read(reviewControllerProvider.notifier)
+                                          .changeScope(const ReviewScope.black());
+                                    },
+                                    sideProgress:
+                                        reviewState.sideProgress[Side.black] ??
+                                        RepertoireProgress.zero,
+                                    studySideProgress: reviewState.studySideProgress,
+                                    selectedStudyId: reviewState.scope.studyId,
+                                    onSelectStudy: (study) {
+                                      Navigator.of(context).pop();
+                                      ref
+                                          .read(reviewControllerProvider.notifier)
+                                          .changeScope(ReviewScope.study(study.id));
+                                    },
+                                    onShowStudyActions: (study, anchor) =>
+                                        _showStudyActionsSheet(context, ref, study, anchor: anchor),
+                                  ),
 
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
@@ -375,50 +393,6 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                                   .read(reviewControllerProvider.notifier)
                                                   .changeScope(ReviewScope.opening(entry.key));
                                             },
-                                          );
-                                        },
-                                      ),
-                                ],
-
-                                // Group: Studies
-                                if (filteredStudies.isNotEmpty) ...[
-                                  _buildGroupHeader(
-                                    ref,
-                                    c,
-                                    group: 'studies',
-                                    title: 'Studies',
-                                    collapsed: collapsedGroups.contains('studies'),
-                                    plain: !collapseEnabled,
-                                  ),
-                                  if (!collapseEnabled || !collapsedGroups.contains('studies'))
-                                    for (final study in filteredStudies)
-                                      Builder(
-                                        builder: (context) {
-                                          final due = reviewState.studyDueCounts[study.id] ?? 0;
-                                          final progress =
-                                              reviewState.studyProgress[study.id] ??
-                                              RepertoireProgress.zero;
-                                          return _ScopeRow(
-                                            name: study.title,
-                                            semanticLabel:
-                                                '${study.title}, $due due'
-                                                '${study.isActive ? '' : ', paused'}',
-                                            dueCount: due,
-                                            isPaused: !study.isActive,
-                                            isSelected: reviewState.scope.studyId == study.id,
-                                            progress: progress,
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                              ref
-                                                  .read(reviewControllerProvider.notifier)
-                                                  .changeScope(ReviewScope.study(study.id));
-                                            },
-                                            onShowActions: (anchor) => _showStudyActionsSheet(
-                                              context,
-                                              ref,
-                                              study,
-                                              anchor: anchor,
-                                            ),
                                           );
                                         },
                                       ),
@@ -526,6 +500,41 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   void _showStudyActionsSheet(BuildContext context, WidgetRef ref, Study study, {Rect? anchor}) {
     final c = context.srs;
 
+    // The flip rows offer the sides worth deriving: re-deriving a side the
+    // study already trains standalone would be a copy, not a counterpart, so
+    // a White study offers only Black and vice versa (INV-030). A both-sides
+    // study offers both, splitting either side out into its own single-side
+    // study; a study with no decisions yet offers neither. An already-existing
+    // counterpart is reported, not duplicated, by the import underneath.
+    final trainedSides =
+        ref.read(reviewControllerProvider).value?.studySideProgress[study.id]?.keys.toSet() ??
+        const <Side>{};
+    final offerWhiteVersion = trainedSides.contains(Side.black);
+    final offerBlackVersion = trainedSides.contains(Side.white);
+
+    Future<void> flipTo(Side targetSide) async {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .flipStudyColors(study.id, targetSide: targetSide);
+      if (!context.mounted) return;
+      final sideName = targetSide == Side.white ? 'White' : 'Black';
+      if (result == null) {
+        showSnackBar(
+          context,
+          'Could not create a $sideName version — this study has no moves to flip.',
+          type: SnackBarType.error,
+        );
+      } else if (result.isDuplicate) {
+        showSnackBar(context, 'The $sideName version already exists.', type: SnackBarType.info);
+      } else {
+        showSnackBar(
+          context,
+          'Created \u201c${result.study.title}\u201d in your $sideName repertoire.',
+          type: SnackBarType.success,
+        );
+      }
+    }
+
     Future<void> show() => showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -566,6 +575,18 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
             ExportPgnDialog.show(context, title: study.title, pgnText: pgn);
           }
         },
+        onCreateWhiteVersion: offerWhiteVersion
+            ? () {
+                Navigator.of(dialogContext).pop();
+                flipTo(Side.white);
+              }
+            : null,
+        onCreateBlackVersion: offerBlackVersion
+            ? () {
+                Navigator.of(dialogContext).pop();
+                flipTo(Side.black);
+              }
+            : null,
         onRename: () {
           Navigator.of(dialogContext).pop();
           _showRenameDialog(context, ref, study);
@@ -635,102 +656,220 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   }
 }
 
-/// One repertoire button: the side, its due numeral, and its memory mini-bar.
+/// One repertoire menu: a scope row heading the studies that train that side.
 ///
-/// Built to the same spec as [_ScopeRow] (§6.3) and sharing its vocabulary —
-/// `SrsPressable`, the accent fill and 3px bar for selection, the same memory
-/// bar — but as a bordered card rather than a full-width row, because two of
-/// them sit side by side (INV-030). The numeral sits under the label rather than
-/// at the opposite edge: at half the drawer's width there is no room for a
-/// left/right split, and a numeral floating away from its label reads as a count
-/// for the row next to it.
-class _SideScopeButton extends StatelessWidget {
-  const _SideScopeButton({
+/// The scope row selects the side aggregate (`White repertoire` reviews every
+/// White position across studies); the chevron at its trailing edge collapses
+/// the study list beneath it, persisted per side in the study preferences. A
+/// study training both sides appears under both menus with that side's figures
+/// (INV-030); study rows are indented one step so the nesting reads without a
+/// second copy of the menu's name above them.
+class _RepertoireMenu extends StatelessWidget {
+  const _RepertoireMenu({
     required this.side,
-    required this.dueCount,
-    required this.progress,
+    required this.scopeRowVisible,
+    required this.studies,
     required this.isSelected,
-    required this.onPressed,
+    required this.collapsed,
+    required this.collapseEnabled,
+    required this.onToggleCollapse,
+    required this.onSelectScope,
+    required this.sideProgress,
+    required this.studySideProgress,
+    required this.selectedStudyId,
+    required this.onSelectStudy,
+    required this.onShowStudyActions,
   });
 
   final Side side;
-  final int dueCount;
+  final bool scopeRowVisible;
+  final List<Study> studies;
+  final bool isSelected;
+  final bool collapsed;
+
+  /// Master collapse switch (and not searching): off means the scope row drops
+  /// its chevron and the list always shows, like the old plain group titles.
+  final bool collapseEnabled;
+  final VoidCallback onToggleCollapse;
+  final VoidCallback onSelectScope;
+
+  /// Aggregate figures for the scope row.
+  final RepertoireProgress sideProgress;
+
+  /// Per-study figures partitioned by side, for the study rows.
+  final Map<String, Map<Side, RepertoireProgress>> studySideProgress;
+
+  final String? selectedStudyId;
+  final void Function(Study study) onSelectStudy;
+  final void Function(Study study, Rect? anchor) onShowStudyActions;
+
+  String get label => ReviewScopeDrawer.sideLabel(side);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (scopeRowVisible)
+          _RepertoireScopeRow(
+            label: label,
+            side: side,
+            progress: sideProgress,
+            isSelected: isSelected,
+            collapsed: collapsed,
+            collapseEnabled: collapseEnabled,
+            onPressed: onSelectScope,
+            onToggleCollapse: onToggleCollapse,
+          ),
+        if (!collapsed)
+          for (final study in studies)
+            Builder(
+              builder: (rowContext) {
+                final progress = studySideProgress[study.id]?[side] ?? RepertoireProgress.zero;
+                final due = progress.dueDecisions;
+                return Padding(
+                  padding: const EdgeInsets.only(left: 14.0),
+                  child: _ScopeRow(
+                    name: study.title,
+                    semanticLabel:
+                        '${study.title}, $due due'
+                        '${study.isActive ? '' : ', paused'}',
+                    dueCount: due,
+                    isPaused: !study.isActive,
+                    isSelected: selectedStudyId == study.id,
+                    progress: progress,
+                    onPressed: () => onSelectStudy(study),
+                    onShowActions: (anchor) => onShowStudyActions(study, anchor),
+                  ),
+                );
+              },
+            ),
+      ],
+    );
+  }
+}
+
+/// The scope row heading a repertoire menu, built to the same spec as
+/// [_ScopeRow] (design/docs/03-components.md §6.3) with one addition: a
+/// trailing chevron collapsing the menu's study list, so the row selects the
+/// side aggregate and the chevron hides its studies without a second header
+/// repeating the menu's name.
+class _RepertoireScopeRow extends StatelessWidget {
+  const _RepertoireScopeRow({
+    required this.label,
+    required this.side,
+    required this.progress,
+    required this.isSelected,
+    required this.collapsed,
+    required this.collapseEnabled,
+    required this.onPressed,
+    required this.onToggleCollapse,
+  });
+
+  final String label;
+  final Side side;
   final RepertoireProgress progress;
   final bool isSelected;
+  final bool collapsed;
+  final bool collapseEnabled;
   final VoidCallback onPressed;
-
-  static const String _whiteLabel = 'White repertoire';
-  static const String _blackLabel = 'Black repertoire';
-
-  String get label => side == Side.white ? _whiteLabel : _blackLabel;
+  final VoidCallback onToggleCollapse;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
-    final ink = isSelected ? c.accent : c.ink;
+    final dueCount = progress.dueDecisions;
     return SrsPressable(
       onPressed: onPressed,
       semanticLabel: '$label, $dueCount due',
-      radius: 10,
+      radius: 8,
       builder: (context, hovered, pressed) {
         return DecoratedBox(
           decoration: BoxDecoration(
-            color: isSelected ? c.accentSoft : (hovered ? c.hairlineSoft : c.surface),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? c.accent : c.hairlineSoft,
-              width: isSelected ? 1.5 : 1,
-            ),
+            color: isSelected
+                ? c.accentSoft
+                : hovered
+                ? c.hairlineSoft
+                : const Color(0x00000000),
           ),
-          child: Padding(
-            // 12/10 keeps the card's content inside the 44px minimum target the
-            // pressable already guarantees, rather than padding the target out
-            // to a size the two-across row cannot afford on a narrow phone.
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: SrsText.ui,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w500,
-                    color: ink,
-                    height: 1.15,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: SrsText.rowName(c.ink),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              SrsMemoryBar(
+                                width: 96,
+                                height: 5,
+                                gap: 2,
+                                radius: 1,
+                                retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
+                                  0,
+                                  progress.totalDecisions,
+                                ),
+                                learning: progress.dueDecisions,
+                                fresh: progress.unlearnedDecisions.clamp(
+                                  0,
+                                  progress.totalDecisions,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Text(
+                                  '${progress.totalDecisions} positions',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: SrsText.rowSub(c.ink3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    _DueCell(count: dueCount, isActive: true),
+                    if (collapseEnabled) ...[
+                      const SizedBox(width: 2),
+                      SrsIconButton(
+                        icon: collapsed ? Symbols.expand_more_rounded : Symbols.expand_less_rounded,
+                        tooltip: collapsed ? 'Expand $label studies' : 'Collapse $label studies',
+                        onPressed: onToggleCollapse,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // The current scope carries a 3px accent bar, inset to the row's own padding.
+              if (isSelected)
+                Positioned(
+                  left: 0,
+                  top: 9,
+                  bottom: 9,
+                  width: 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: c.accent,
+                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(2)),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '$dueCount',
-                  style: TextStyle(
-                    fontFamily: SrsText.ui,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? c.accent : c.ink2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SrsMemoryBar(
-                  // Full width of the card rather than the row's fixed 96: the
-                  // bar is the card's whole bottom edge here, and at half width a
-                  // fixed 96 would overhang on a wide layout.
-                  width: double.infinity,
-                  height: 5,
-                  gap: 2,
-                  radius: 1,
-                  retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
-                    0,
-                    progress.totalDecisions,
-                  ),
-                  learning: progress.dueDecisions,
-                  fresh: progress.unlearnedDecisions.clamp(0, progress.totalDecisions),
-                ),
-              ],
-            ),
+            ],
           ),
         );
       },
@@ -937,6 +1076,8 @@ class StudyActionsSheet extends StatelessWidget {
     required this.onExport,
     required this.onRename,
     required this.onDelete,
+    this.onCreateWhiteVersion,
+    this.onCreateBlackVersion,
     this.anchor,
   });
 
@@ -953,6 +1094,12 @@ class StudyActionsSheet extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
+  /// Derives the other-side version of this study in its own repertoire menu.
+  /// Null renders no row, so a study that already trains that side (or trains
+  /// nothing yet) offers nothing to derive.
+  final VoidCallback? onCreateWhiteVersion;
+  final VoidCallback? onCreateBlackVersion;
+
   static const double _wideBreakpoint = 768;
   static const double _popoverWidth = 300;
 
@@ -961,6 +1108,10 @@ class StudyActionsSheet extends StatelessWidget {
     final c = context.srs;
     final size = MediaQuery.sizeOf(context);
     final isWide = size.width >= _wideBreakpoint && anchor != null;
+
+    // Promoted to locals so the null checks below promote too.
+    final createWhiteVersion = onCreateWhiteVersion;
+    final createBlackVersion = onCreateBlackVersion;
 
     // The demo's `openActs`: three hairline-separated groups, in this order, with these labels and
     // sub lines. §12 says "no icons", so no row carries the chevron the Library sheet's rows do.
@@ -992,6 +1143,18 @@ class StudyActionsSheet extends StatelessWidget {
             subtitle: 'Share or copy standard PGN notation',
             onPressed: onExport,
           ),
+          if (createWhiteVersion != null)
+            SrsSheetRow(
+              label: 'Create White version',
+              subtitle: 'Train the same lines as White in its own study',
+              onPressed: createWhiteVersion,
+            ),
+          if (createBlackVersion != null)
+            SrsSheetRow(
+              label: 'Create Black version',
+              subtitle: 'Train the same lines as Black in its own study',
+              onPressed: createBlackVersion,
+            ),
           SrsSheetRow(
             label: study.isActive ? 'Pause' : 'Resume',
             subtitle: study.isActive

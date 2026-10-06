@@ -57,6 +57,7 @@ class ReviewScreenState {
     this.chapterProgress = const {},
     this.openingProgress = const {},
     this.sideProgress = const {},
+    this.studySideProgress = const {},
     this.lastStepResult,
     this.dailyReviewedCount = 0,
     this.maxDailyReviews = 100,
@@ -78,6 +79,13 @@ class ReviewScreenState {
   /// hand, so a second derivation in the controller would be a second pass over
   /// the same table to produce a number the first pass could have produced.
   final Map<Side, RepertoireProgress> sideProgress;
+
+  /// Study progress partitioned by side, for the repertoire menus (INV-030).
+  ///
+  /// `studySideProgress[studyId]` carries only the sides the study trains, so
+  /// its keys are also what places a study under the White menu, the Black
+  /// menu, or both.
+  final Map<String, Map<Side, RepertoireProgress>> studySideProgress;
 
   final ReviewSession? session;
   final ReviewPrompt? currentPrompt;
@@ -183,6 +191,7 @@ class ReviewScreenState {
     Map<String, RepertoireProgress>? chapterProgress,
     Map<String, RepertoireProgress>? openingProgress,
     Map<Side, RepertoireProgress>? sideProgress,
+    Map<String, Map<Side, RepertoireProgress>>? studySideProgress,
     ReviewSession? session,
     ReviewPrompt? currentPrompt,
     bool clearPrompt = false,
@@ -213,6 +222,7 @@ class ReviewScreenState {
       chapterProgress: chapterProgress ?? this.chapterProgress,
       openingProgress: openingProgress ?? this.openingProgress,
       sideProgress: sideProgress ?? this.sideProgress,
+      studySideProgress: studySideProgress ?? this.studySideProgress,
       session: session ?? this.session,
       currentPrompt: clearPrompt ? null : (currentPrompt ?? this.currentPrompt),
       boardPosition: boardPosition ?? this.boardPosition,
@@ -397,6 +407,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         chapterProgress: summary.chapterProgress,
         openingProgress: summary.openingProgress,
         sideProgress: summary.sideProgress,
+        studySideProgress: summary.studySideProgress,
         dailyReviewedCount: dailyReviewedCount,
         maxDailyReviews: maxDailyReviews,
       );
@@ -461,6 +472,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       chapterProgress: summary.chapterProgress,
       openingProgress: summary.openingProgress,
       sideProgress: summary.sideProgress,
+      studySideProgress: summary.studySideProgress,
       dailyReviewedCount: dailyReviewedCount,
       maxDailyReviews: maxDailyReviews,
       session: session,
@@ -568,6 +580,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         chapterProgress: summary.chapterProgress,
         openingProgress: summary.openingProgress,
         sideProgress: summary.sideProgress,
+        studySideProgress: summary.studySideProgress,
         session: newSession,
         currentPrompt: newPrompt,
         clearPrompt: newPrompt == null,
@@ -632,6 +645,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             chapterProgress: summary.chapterProgress,
             openingProgress: summary.openingProgress,
             sideProgress: summary.sideProgress,
+            studySideProgress: summary.studySideProgress,
             session: newSession,
             currentPrompt: prompt,
             clearPrompt: prompt == null,
@@ -662,6 +676,61 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
     final study = await _repository.getStudy(chapter.studyId);
     return chapterToPgn(fullChapter, studyTitle: study?.title);
+  }
+
+  /// Creates the [targetSide] version of a study: the same lines, trained from
+  /// the other side (INV-030).
+  ///
+  /// A White French and its Black counterpart are different sets of questions
+  /// over the same move trees, so the flipped study is a real re-import with
+  /// fresh SRS memory — no review states are copied, and its canonical
+  /// position keys (which include the side to move) cannot collide with the
+  /// original's. When that version already exists the import reports a
+  /// duplicate and this returns it, so the caller can say so instead of
+  /// claiming a second copy was made.
+  ///
+  /// Returns null when the study has no trainable moves to flip.
+  Future<ImportResult?> flipStudyColors(String studyId, {required Side targetSide}) async {
+    final study = await _repository.getStudy(studyId);
+    if (study == null) return null;
+    final storedChapters = await _repository.getChaptersByStudy(studyId);
+    if (storedChapters.isEmpty) return null;
+
+    // The chapter rows may carry their trees already; hydrate the ones that do
+    // not, because a header-only export would re-import as an empty study and
+    // be rejected as having nothing to train.
+    final chapters = <Chapter>[];
+    for (final chapter in storedChapters) {
+      if (chapter.root != null) {
+        chapters.add(chapter);
+      } else {
+        chapters.add(chapter.copyWith(root: await _repository.getPositionTree(chapter.id)));
+      }
+    }
+
+    final pgn = studyToPgn(study, chapters);
+    try {
+      return await importPgnText(
+        pgnText: pgn,
+        title: _flippedStudyTitle(study.title, targetSide),
+        repertoireSide: targetSide,
+      );
+    } on FormatException catch (e) {
+      _logger.warning('Flipping study $studyId to $targetSide produced nothing to train: $e');
+      return null;
+    }
+  }
+
+  /// Titles the flipped study after the side it trains, replacing a stale side
+  /// suffix rather than stacking a second one (`French (White)` becomes
+  /// `French (Black)`, not `French (White) (Black)`).
+  String _flippedStudyTitle(String title, Side targetSide) {
+    final suffix = targetSide == Side.black ? ' (Black)' : ' (White)';
+    final stripped = title.replaceFirst(
+      RegExp(r'\s*\((white|black)\)\s*$', caseSensitive: false),
+      '',
+    );
+    return '$stripped$suffix';
   }
 
   /// Advances to the next prompt after pausing to display move commentary or shapes.
@@ -832,6 +901,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final chapterProgressMap = Map<String, RepertoireProgress>.from(currentState.chapterProgress);
     final openingProgressMap = Map<String, RepertoireProgress>.from(currentState.openingProgress);
     final sideProgressMap = Map<Side, RepertoireProgress>.from(currentState.sideProgress);
+    final studySideProgressMap = Map<String, Map<Side, RepertoireProgress>>.from(
+      currentState.studySideProgress,
+    );
     final currentChapterId = currentState.currentPrompt!.chapterId;
     if (isFirstAttempt) {
       final isNewlyLearned =
@@ -886,6 +958,21 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             dueDecisions: (sideProg.dueDecisions - 1).clamp(0, sideProg.totalDecisions),
           );
         }
+        // The repertoire menu the study sits under reads this map, not the
+        // study-wide one, so it needs the same optimistic decrement or its
+        // due figure lags the session until the next reload (INV-030).
+        final perSide = studySideProgressMap[currentStudyId]?[currentSide];
+        if (perSide != null) {
+          studySideProgressMap[currentStudyId] =
+              Map<Side, RepertoireProgress>.from(studySideProgressMap[currentStudyId]!)
+                ..[currentSide] = RepertoireProgress(
+                  totalDecisions: perSide.totalDecisions,
+                  learnedDecisions: isNewlyLearned
+                      ? (perSide.learnedDecisions + 1).clamp(0, perSide.totalDecisions)
+                      : perSide.learnedDecisions,
+                  dueDecisions: (perSide.dueDecisions - 1).clamp(0, perSide.totalDecisions),
+                );
+        }
       }
     }
 
@@ -906,6 +993,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         chapterProgress: chapterProgressMap,
         openingProgress: openingProgressMap,
         sideProgress: sideProgressMap,
+        studySideProgress: studySideProgressMap,
         session: session,
         currentPrompt: nextPrompt,
         clearPrompt: nextPrompt == null,

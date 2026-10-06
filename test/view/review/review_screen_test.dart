@@ -1065,9 +1065,9 @@ void main() {
       await pumpAsync(tester);
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
-      // the memory mini-bar beside it, not in the text. The study row shows "2 positions";
-      // the repertoire buttons show just the numeral due count.
-      expect(find.text('2 positions'), findsOneWidget);
+      // the memory mini-bar beside it, not in the text. The White scope row and the study row
+      // each show "2 positions" — the menu heading carries its side's figures, not just a numeral.
+      expect(find.text('2 positions'), findsNWidgets(2));
       List<SrsMemoryBar> drawerBars() => tester
           .widgetList<SrsMemoryBar>(
             find.descendant(
@@ -1076,13 +1076,13 @@ void main() {
             ),
           )
           .toList();
-      // Two repertoire buttons + one study row. White repertoire & study row have learning=2;
+      // Two repertoire scope rows + one study row. White repertoire & study row have learning=2;
       // Black repertoire has learning=0. All have retained=0.
       expect(drawerBars().map((b) => b.retained), everyElement(0));
       expect(drawerBars().map((b) => b.learning).where((v) => v == 2).length, 2);
       expect(drawerBars().map((b) => b.learning).where((v) => v == 0).length, 1);
 
-      // Close drawer by tapping the White repertoire button (the study is White)
+      // Close drawer by tapping the White repertoire scope row (the study is White)
       await tester.tap(
         find.descendant(
           of: find.byType(ReviewScopeDrawer),
@@ -1116,7 +1116,7 @@ void main() {
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
-      expect(find.text('2 positions'), findsOneWidget);
+      expect(find.text('2 positions'), findsNWidgets(2));
       expect(drawerBars().map((b) => b.learning), everyElement(0));
       // White repertoire and the study row hold both positions as retained; the Black
       // repertoire is empty, so its bar has no segments at all.
@@ -1332,12 +1332,11 @@ void main() {
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
-      // Verify drawer is open by the group header.
+      // Verify drawer is open by a scope row.
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
-      // Both studies and both repertoire buttons are visible initially.
-      expect(inDrawer('Repertoires'), findsOneWidget);
+      // Both studies and both repertoire scope rows are visible initially.
       expect(inDrawer('White repertoire'), findsOneWidget);
       expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
@@ -1376,7 +1375,7 @@ void main() {
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
 
-      // Both studies and both repertoire buttons reappear
+      // Both studies and both repertoire scope rows reappear
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
       expect(inDrawer('White repertoire'), findsOneWidget);
@@ -1413,19 +1412,28 @@ void main() {
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      Finder inDrawerChevron(String label) =>
+          find.descendant(of: drawer, matching: find.bySemanticsLabel(label));
 
       expect(inDrawer('White repertoire'), findsOneWidget);
       expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
       expect(inDrawer('Sicilian Lines'), findsOneWidget);
 
-      await tester.tap(inDrawer('Studies'));
+      // The Black menu's chevron collapses its study list; the scope rows and
+      // the opening hub stay put.
+      await tester.tap(inDrawerChevron('Collapse Black repertoire studies'));
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Lines'), findsNothing);
       expect(inDrawer('White repertoire'), findsOneWidget);
       expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
+
+      await tester.tap(inDrawerChevron('Expand Black repertoire studies'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Lines'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
       await pumpAsync(tester);
@@ -1439,13 +1447,15 @@ void main() {
 
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
 
-      await tester.tap(inDrawer('Repertoires'));
+      // Collapsing the White menu hides nothing (its list is empty) but the
+      // chevron still toggles, and the scope row stays behind as the menu.
+      await tester.tap(inDrawerChevron('Collapse White repertoire studies'));
       await pumpAsync(tester);
 
-      expect(inDrawer('White repertoire'), findsNothing);
-      expect(inDrawer('Black repertoire'), findsNothing);
+      expect(inDrawer('White repertoire'), findsOneWidget);
+      expect(inDrawer('Black repertoire'), findsOneWidget);
 
-      await tester.tap(inDrawer('Repertoires'));
+      await tester.tap(inDrawerChevron('Expand White repertoire studies'));
       await pumpAsync(tester);
 
       expect(inDrawer('White repertoire'), findsOneWidget);
@@ -1482,8 +1492,10 @@ void main() {
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      Finder inDrawerChevron(String label) =>
+          find.descendant(of: drawer, matching: find.bySemanticsLabel(label));
 
-      await tester.tap(inDrawer('Studies'));
+      await tester.tap(inDrawerChevron('Collapse White repertoire studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
@@ -1528,8 +1540,10 @@ void main() {
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      Finder inDrawerChevron(String label) =>
+          find.descendant(of: drawer, matching: find.bySemanticsLabel(label));
 
-      await tester.tap(inDrawer('Studies'));
+      await tester.tap(inDrawerChevron('Collapse White repertoire studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
@@ -1539,7 +1553,7 @@ void main() {
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
     });
 
-    testWidgets('collapse toggle off keeps groups expanded and headers plain', (tester) async {
+    testWidgets('collapse toggle off keeps lists expanded and drops the chevrons', (tester) async {
       final study = importPgn(
         '1. e4 e5 *',
         studyTitle: 'King Pawn Lines',
@@ -1566,26 +1580,31 @@ void main() {
 
       final element = tester.element(find.byType(ReviewScreen));
       final container = ProviderScope.containerOf(element);
-      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
-      await pumpAsync(tester);
 
       await tester.tap(find.byTooltip('Studies & Scope'));
       await pumpAsync(tester);
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      Finder inDrawerChevron(String label) =>
+          find.descendant(of: drawer, matching: find.bySemanticsLabel(label));
 
-      // With the master switch off, tapping a header does nothing.
-      await tester.tap(inDrawer('Studies'));
+      // Collapse first, so the master switch has a state to preserve.
+      await tester.tap(inDrawerChevron('Collapse White repertoire studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+
+      // With the master switch off, the lists stay expanded, the chevrons go
+      // away, and the scope rows remain.
+      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
       expect(inDrawer('White repertoire'), findsOneWidget);
       expect(inDrawer('Black repertoire'), findsOneWidget);
+      expect(inDrawerChevron('Collapse White repertoire studies'), findsNothing);
 
       // Switching it back on restores collapsing without losing the state.
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
-      await pumpAsync(tester);
-      await tester.tap(inDrawer('Studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
       expect(inDrawer('White repertoire'), findsOneWidget);

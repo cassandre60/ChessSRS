@@ -24,13 +24,13 @@ import '../../binding.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
 
-/// Owner request 2026-10-05: the drawer's single `All studies` row becomes two
-/// side-by-side buttons, `White repertoire` and `Black repertoire`.
+/// Owner request 2026-10-06: the two side-by-side repertoire buttons become
+/// two menus, each heading the studies that train its side.
 ///
 /// The assertion is deliberately on the rendered drawer rather than on
 /// `ReviewScope` alone: a scope that exists but is never offered is not a
-/// feature, and `All studies` surviving as a third row would give the user a
-/// third way to review the same pool.
+/// feature, and a study sitting outside its colour's menu is the layout this
+/// replaces.
 void main() {
   setUpAll(() {
     TestLichessBinding.ensureInitialized();
@@ -43,17 +43,24 @@ void main() {
   late FixedClock clock;
 
   setUp(() async {
-    tempDir = Directory.systemTemp.createTempSync('chess_srs_scope_buttons_');
-    db = await openAppDatabase(databaseFactoryFfi, p.join(tempDir.path, 'buttons.db'));
+    tempDir = Directory.systemTemp.createTempSync('chess_srs_scope_menus_');
+    db = await openAppDatabase(databaseFactoryFfi, p.join(tempDir.path, 'menus.db'));
     repo = SqliteStudyRepository(db);
     clock = FixedClock(DateTime.utc(2026, 10, 5, 12));
 
-    // One study per side, so both buttons have material to show.
+    // One study per side, plus one training both, so every menu has material
+    // and the both-sides study exercises appearing under both menus.
     await repo.saveImportResult(
       importPgn('[Orientation "white"]\n1. e4 e5 *', studyTitle: 'White book'),
     );
     await repo.saveImportResult(
       importPgn('[Orientation "black"]\n1. d4 d5 *', studyTitle: 'Black book'),
+    );
+    await repo.saveImportResult(
+      importPgn(
+        '[Orientation "white"]\n1. c4 e5 *\n\n[Orientation "black"]\n1. e4 c5 *',
+        studyTitle: 'Mixed lines',
+      ),
     );
   });
 
@@ -88,7 +95,7 @@ void main() {
   Finder inDrawer(Finder matching) =>
       find.descendant(of: find.byType(ReviewScopeDrawer), matching: matching);
 
-  testWidgets('both repertoire buttons are offered', (tester) async {
+  testWidgets('both repertoire menus are offered', (tester) async {
     await pumpDrawer(tester);
 
     expect(inDrawer(find.text('White repertoire')), findsOneWidget);
@@ -101,26 +108,30 @@ void main() {
     expect(
       inDrawer(find.text('All studies')),
       findsNothing,
-      reason: 'the two side buttons replace it; keeping it would be a third path to the same pool',
+      reason: 'the two side menus replace it; keeping it would be a third path to the same pool',
     );
   });
 
-  testWidgets('the two buttons sit side by side, not stacked', (tester) async {
+  testWidgets('menus stack vertically with each study under its own menu', (tester) async {
     await pumpDrawer(tester);
 
-    final white = tester.getRect(inDrawer(find.text('White repertoire')));
-    final black = tester.getRect(inDrawer(find.text('Black repertoire')));
+    final whiteMenu = tester.getRect(inDrawer(find.text('White repertoire')));
+    final whiteBook = tester.getRect(inDrawer(find.text('White book')));
+    final blackMenu = tester.getRect(inDrawer(find.text('Black repertoire')));
+    final blackBook = tester.getRect(inDrawer(find.text('Black book')));
 
-    // Side by side means the same vertical band and no horizontal overlap: a
-    // stacked pair shares x and differs in y, which is the layout this replaced.
-    expect(white.center.dy, closeTo(black.center.dy, 12.0));
-    expect(white.right, lessThanOrEqualTo(black.left));
+    // The scope row heads its menu and the study sits inside it: the study's
+    // row falls between its own menu's scope row and the other menu's.
+    expect(whiteBook.top, greaterThan(whiteMenu.bottom));
+    expect(whiteBook.bottom, lessThan(blackMenu.top));
+    expect(blackBook.top, greaterThan(blackMenu.bottom));
+    expect(whiteMenu.right, greaterThan(whiteMenu.left + 200));
   });
 
-  testWidgets('each button shows only its own side’s due count', (tester) async {
+  testWidgets('each menu shows only its own side’s figures', (tester) async {
     await pumpDrawer(tester);
 
-    // Expected counts come from the repository, not from the widget, so a button
+    // Expected counts come from the repository, not from the widget, so a menu
     // that showed the total instead of its own half fails here. Read inside
     // runAsync: these are real SQLite futures, and a testWidgets body runs in a
     // fake-async zone where awaiting one never completes.
@@ -145,12 +156,12 @@ void main() {
     expect(expected['Black repertoire'], greaterThan(0));
 
     String countUnder(String label) {
-      final card = find.ancestor(
+      final row = find.ancestor(
         of: inDrawer(find.text(label)),
         matching: find.byType(SrsPressable),
       );
       final numerals = tester
-          .widgetList<Text>(find.descendant(of: card.first, matching: find.byType(Text)))
+          .widgetList<Text>(find.descendant(of: row.first, matching: find.byType(Text)))
           .map((t) => t.data)
           .whereType<String>()
           .where((s) => int.tryParse(s) != null);
@@ -163,7 +174,30 @@ void main() {
     }
   });
 
-  testWidgets('tapping a button selects that side’s scope', (tester) async {
+  testWidgets('a both-sides study appears under both menus', (tester) async {
+    await pumpDrawer(tester);
+
+    expect(
+      inDrawer(find.text('Mixed lines')),
+      findsNWidgets(2),
+      reason: 'the study trains both sides, so it belongs to both menus',
+    );
+
+    final blackMenu = tester.getRect(inDrawer(find.text('Black repertoire')));
+    final rows = inDrawer(find.text('Mixed lines')).evaluate().map((element) {
+      final box = element.renderObject! as RenderBox;
+      return box.localToGlobal(Offset.zero) & box.size;
+    }).toList()..sort((Rect a, Rect b) => a.top.compareTo(b.top));
+    expect(rows, hasLength(2));
+    expect(rows[0].bottom, lessThan(blackMenu.top), reason: 'first copy sits in the White menu');
+    expect(
+      rows[1].top,
+      greaterThan(blackMenu.bottom),
+      reason: 'second copy sits in the Black menu',
+    );
+  });
+
+  testWidgets('tapping a scope row selects that side’s scope', (tester) async {
     await pumpDrawer(tester);
 
     // Captured before the tap: the drawer pops itself on selection, so its element
@@ -174,7 +208,7 @@ void main() {
     await pumpAsync(tester);
 
     // Read through the container rather than the fill colour: any highlight at all
-    // would satisfy a colour assertion, but only the scope proves the button did
+    // would satisfy a colour assertion, but only the scope proves the row did
     // its job.
     final scope = await tester.runAsync(
       () async => container.read(reviewControllerProvider).value?.scope,
@@ -182,13 +216,25 @@ void main() {
     expect(scope?.side, Side.black);
   });
 
-  testWidgets('both buttons stay reachable on a narrow phone', (tester) async {
+  testWidgets('collapsing a menu hides its studies but keeps its scope row', (tester) async {
+    await pumpDrawer(tester);
+
+    expect(inDrawer(find.text('White book')), findsOneWidget);
+    await tester.tap(inDrawer(find.bySemanticsLabel('Collapse White repertoire studies')));
+    await pumpAsync(tester);
+
+    expect(inDrawer(find.text('White repertoire')), findsOneWidget);
+    expect(inDrawer(find.text('White book')), findsNothing);
+    expect(inDrawer(find.text('Black book')), findsOneWidget);
+  });
+
+  testWidgets('both menus stay reachable on a narrow phone', (tester) async {
     await pumpDrawer(tester, size: const Size(360, 640));
 
     expect(inDrawer(find.text('White repertoire')), findsOneWidget);
     expect(inDrawer(find.text('Black repertoire')), findsOneWidget);
 
-    // Neither card may be pushed off the side of a phone-sized window.
+    // Neither menu may be pushed off the side of a phone-sized window.
     for (final label in ['White repertoire', 'Black repertoire']) {
       final box = tester.getRect(inDrawer(find.text(label)));
       expect(box.left, greaterThanOrEqualTo(0), reason: label);
@@ -196,7 +242,7 @@ void main() {
     }
   });
 
-  testWidgets('searching for one side keeps only its button', (tester) async {
+  testWidgets('searching for one side keeps only its menu', (tester) async {
     await pumpDrawer(tester);
 
     await tester.enterText(find.byType(TextField).first, 'black');
@@ -204,5 +250,52 @@ void main() {
 
     expect(inDrawer(find.text('Black repertoire')), findsOneWidget);
     expect(inDrawer(find.text('White repertoire')), findsNothing);
+    expect(inDrawer(find.text('Black book')), findsOneWidget);
+    expect(inDrawer(find.text('White book')), findsNothing);
+  });
+
+  testWidgets('a White study offers only the Black version, which lands in the Black menu', (
+    tester,
+  ) async {
+    await pumpDrawer(tester);
+
+    // The `…` of the White book's own row, not another study's: the rows share
+    // a tooltip, so pick the button riding next to this study's row.
+    Future<void> openOptionsFor(String studyTitle) async {
+      final row = tester.getRect(inDrawer(find.text(studyTitle)));
+      final matches = inDrawer(find.bySemanticsLabel('Study options')).evaluate().where((element) {
+        final box = element.renderObject! as RenderBox;
+        final rect = box.localToGlobal(Offset.zero) & box.size;
+        return (rect.center.dy - row.center.dy).abs() < 30;
+      }).toList();
+      expect(matches, hasLength(1), reason: 'one options button per study row');
+      await tester.tap(find.byWidget(matches.first.widget));
+      await pumpAsync(tester);
+    }
+
+    await openOptionsFor('White book');
+
+    expect(find.text('Create Black version'), findsOneWidget);
+    expect(find.text('Create White version'), findsNothing);
+
+    await tester.tap(find.text('Create Black version'));
+    await pumpAsync(tester);
+    // The re-import hits real SQLite from the fake-async test zone, so give it
+    // real time to land before asserting on the rebuilt list.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await pumpAsync(tester);
+
+    expect(
+      inDrawer(find.text('White book (Black)')),
+      findsOneWidget,
+      reason: 'the counterpart study is created',
+    );
+    final blackMenu = tester.getRect(inDrawer(find.text('Black repertoire')));
+    final flipped = tester.getRect(inDrawer(find.text('White book (Black)')));
+    expect(
+      flipped.top,
+      greaterThan(blackMenu.bottom),
+      reason: 'the counterpart lands in the Black menu',
+    );
   });
 }

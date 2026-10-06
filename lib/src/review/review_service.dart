@@ -62,6 +62,7 @@ class DueCountsSummary {
     this.chapterProgress = const {},
     this.openingProgress = const {},
     this.sideProgress = const {},
+    this.studySideProgress = const {},
   });
 
   final int totalDueCount;
@@ -75,6 +76,20 @@ class DueCountsSummary {
   /// repertoire buttons. Always carries both sides, so a button can render its
   /// memory bar at zero instead of guessing whether it has any material.
   final Map<Side, RepertoireProgress> sideProgress;
+
+  /// Progress per study partitioned by the side its chapters train, so each
+  /// repertoire menu shows only its own side's figures (INV-030). A study
+  /// training both sides appears under both menus; a study with no decisions
+  /// has no entry. The per-side figures sum to the study-wide ones.
+  final Map<String, Map<Side, RepertoireProgress>> studySideProgress;
+
+  /// Sides trained by [studyId]. Empty when the study has no decisions.
+  Set<Side> sidesForStudy(String studyId) => studySideProgress[studyId]?.keys.toSet() ?? const {};
+
+  /// Progress for [studyId] restricted to [side], or zero when the study
+  /// trains nothing from that side.
+  RepertoireProgress studyProgressForSide(String studyId, Side side) =>
+      studySideProgress[studyId]?[side] ?? RepertoireProgress.zero;
 
   /// Due positions for [side], or 0 when the summary predates this field.
   int dueCountForSide(Side side) => sideProgress[side]?.dueDecisions ?? 0;
@@ -391,6 +406,14 @@ class ReviewService {
     final studyTotals = <String, int>{for (final s in studies) s.id: 0};
     final studyLearned = <String, int>{for (final s in studies) s.id: 0};
 
+    // Per-study figures partitioned by side, so each repertoire menu shows
+    // only its own side's numbers (INV-030). Keyed sparsely: a side with no
+    // decisions in the study has no entry, which is also how the drawer
+    // decides which menu a study belongs to.
+    final studySideTotals = <String, Map<Side, int>>{};
+    final studySideLearned = <String, Map<Side, int>>{};
+    final studySideDue = <String, Map<Side, int>>{};
+
     final chapterTotals = <String, int>{};
     final chapterLearned = <String, int>{};
     final chapterDue = <String, int>{};
@@ -446,6 +469,24 @@ class ReviewService {
       final isActiveStudy = activeStudyIds.contains(d.studyId);
       final side = chapterSides[d.chapterId] ?? Side.white;
 
+      // Per-study figures partitioned by side (INV-030). Totals and learned
+      // cover every study like the study-wide maps do; due counts below cover
+      // every due decision the same way studyDueCounts does.
+      if (studyTotals.containsKey(d.studyId)) {
+        final totalsForStudy = studySideTotals.putIfAbsent(
+          d.studyId,
+          () => {Side.white: 0, Side.black: 0},
+        );
+        totalsForStudy[side] = totalsForStudy[side]! + 1;
+        if (isLearned) {
+          final learnedForStudy = studySideLearned.putIfAbsent(
+            d.studyId,
+            () => {Side.white: 0, Side.black: 0},
+          );
+          learnedForStudy[side] = learnedForStudy[side]! + 1;
+        }
+      }
+
       if (isActiveStudy && opening != null && opening.isNotEmpty) {
         if (openingTotals.containsKey(opening)) {
           openingTotals[opening] = (openingTotals[opening] ?? 0) + 1;
@@ -466,6 +507,11 @@ class ReviewService {
 
       if (studyDueCounts.containsKey(d.studyId)) {
         studyDueCounts[d.studyId] = (studyDueCounts[d.studyId] ?? 0) + 1;
+        final dueForStudy = studySideDue.putIfAbsent(
+          d.studyId,
+          () => {Side.white: 0, Side.black: 0},
+        );
+        dueForStudy[side] = dueForStudy[side]! + 1;
       }
 
       if (isActiveStudy && opening != null && opening.isNotEmpty) {
@@ -534,6 +580,20 @@ class ReviewService {
         ),
     };
 
+    // Sparse: only sides with at least one decision in the study get an entry.
+    final studySideProgress = <String, Map<Side, RepertoireProgress>>{
+      for (final entry in studySideTotals.entries)
+        entry.key: {
+          for (final side in Side.values)
+            if ((entry.value[side] ?? 0) > 0)
+              side: RepertoireProgress(
+                totalDecisions: entry.value[side] ?? 0,
+                learnedDecisions: studySideLearned[entry.key]?[side] ?? 0,
+                dueDecisions: studySideDue[entry.key]?[side] ?? 0,
+              ),
+        },
+    };
+
     final effectiveTotalDue = remainingDailyQuota != null && remainingDailyQuota >= 0
         ? math.min(totalDueCount, remainingDailyQuota)
         : totalDueCount;
@@ -546,6 +606,7 @@ class ReviewService {
       chapterProgress: chapterProgress,
       openingProgress: openingProgress,
       sideProgress: sideProgress,
+      studySideProgress: studySideProgress,
     );
   }
 

@@ -28,6 +28,8 @@ void main() {
     VoidCallback? onExport,
     VoidCallback? onRename,
     VoidCallback? onDelete,
+    VoidCallback? onCreateWhiteVersion,
+    VoidCallback? onCreateBlackVersion,
   }) {
     return StudyActionsSheet(
       study: study,
@@ -39,6 +41,8 @@ void main() {
       onExport: onExport ?? () {},
       onRename: onRename ?? () {},
       onDelete: onDelete ?? () {},
+      onCreateWhiteVersion: onCreateWhiteVersion,
+      onCreateBlackVersion: onCreateBlackVersion,
     );
   }
 
@@ -165,6 +169,38 @@ void main() {
 
       expect(find.text('Delete'), findsOneWidget);
       expect(tester.getRect(find.text('Delete')).bottom, lessThanOrEqualTo(700));
+    });
+  });
+
+  group('other-side versions', () {
+    // Owner report 2026-10-06: a White study's `...` menu offered no way to
+    // generate its Black counterpart into the Black menu (INV-030). The sheet
+    // renders exactly the derivations the drawer offers — nothing more.
+    testWidgets('renders only the offered derivations', (tester) async {
+      var createdBlack = false;
+
+      await tester.pumpWidget(
+        await makeTestProviderScopeApp(
+          tester,
+          home: sheet(onCreateBlackVersion: () => createdBlack = true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Black version'), findsOneWidget);
+      expect(find.text('Create White version'), findsNothing);
+
+      await tester.tap(find.text('Create Black version'));
+      await tester.pumpAndSettle();
+      expect(createdBlack, isTrue);
+    });
+
+    testWidgets('renders neither derivation when none is offered', (tester) async {
+      await tester.pumpWidget(await makeTestProviderScopeApp(tester, home: sheet()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create Black version'), findsNothing);
+      expect(find.text('Create White version'), findsNothing);
     });
   });
 }
