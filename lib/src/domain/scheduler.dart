@@ -83,7 +83,10 @@ class SimpleScheduler implements Scheduler {
               ? Duration(milliseconds: previous.stability.round())
               : baseInterval;
           nextInterval = _clamp(
-            Duration(milliseconds: (current.inMilliseconds * intervalMultiplier).round()),
+            Duration(
+              milliseconds: (current.inMilliseconds * intervalMultiplier)
+                  .round(),
+            ),
           );
         }
         return previous.copyWith(
@@ -105,6 +108,23 @@ class SimpleScheduler implements Scheduler {
         );
     }
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SimpleScheduler &&
+          firstInterval == other.firstInterval &&
+          baseInterval == other.baseInterval &&
+          intervalMultiplier == other.intervalMultiplier &&
+          maximumInterval == other.maximumInterval;
+
+  @override
+  int get hashCode => Object.hash(
+    firstInterval,
+    baseInterval,
+    intervalMultiplier,
+    maximumInterval,
+  );
 }
 
 /// Parametric spaced repetition scheduler adapted from chessrs SpacedRepetitionService.
@@ -163,14 +183,18 @@ class EaseScalingScheduler implements Scheduler {
           nextInterval = _clamp(firstInterval);
         } else if (previous.repetitionCount == 1) {
           nextInterval = _clamp(
-            Duration(milliseconds: (firstInterval.inMilliseconds * ease).round()),
+            Duration(
+              milliseconds: (firstInterval.inMilliseconds * ease).round(),
+            ),
           );
         } else {
           final baseMs = (firstInterval.inMilliseconds * ease).round();
           final current = previous.stability > 0
               ? Duration(milliseconds: previous.stability.round())
               : Duration(milliseconds: baseMs);
-          nextInterval = _clamp(Duration(milliseconds: (current.inMilliseconds * scaling).round()));
+          nextInterval = _clamp(
+            Duration(milliseconds: (current.inMilliseconds * scaling).round()),
+          );
         }
         return previous.copyWith(
           firstReviewedAt: firstSeen,
@@ -202,7 +226,8 @@ class EaseScalingScheduler implements Scheduler {
           maximumInterval == other.maximumInterval;
 
   @override
-  int get hashCode => Object.hash(firstInterval, ease, scaling, maximumInterval);
+  int get hashCode =>
+      Object.hash(firstInterval, ease, scaling, maximumInterval);
 }
 
 /// Convenience: returns only items that are currently due.
