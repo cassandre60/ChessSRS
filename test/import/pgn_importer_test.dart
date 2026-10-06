@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
+import 'package:chess_srs/src/import/opening_name.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart';

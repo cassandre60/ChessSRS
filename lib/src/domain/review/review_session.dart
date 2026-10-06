@@ -96,6 +96,7 @@ class ReviewSession {
         studyId: d.studyId,
         chapterId: d.chapterId,
         openingFamily: chapter?.opening,
+        side: chapter?.orientation,
       )) {
         continue;
       }
@@ -762,6 +763,7 @@ class ReviewSession {
             studyId: chapter.studyId,
             chapterId: chapter.id,
             openingFamily: chapter.opening,
+            side: chapter.orientation,
           ) ||
           (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
         continue;

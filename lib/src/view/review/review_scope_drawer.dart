@@ -12,18 +12,33 @@ import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Modal scope selector (hybrid of Diagram bottom sheet and rich repertoire list).
-/// Allows the user to select the review scope (all studies vs one study vs opening hub),
-/// view study progress metrics, toggle active review pool status, or trigger a new PGN import.
+///
+/// One drawer per repertoire colour, opened by the matching square in the top
+/// bar. A drawer lists only the openings and studies that train the colour it
+/// belongs to, so the colour is never spelled out inside it: the square that
+/// opened it already says which one this is. The two drawers share no state
+/// beyond that colour, and selecting anything in one leaves the other
+/// untouched.
 class ReviewScopeDrawer extends ConsumerStatefulWidget {
-  const ReviewScopeDrawer({super.key});
+  const ReviewScopeDrawer({super.key, required this.side});
 
-  /// Displays the scope selector sheet.
-  static Future<void> show(BuildContext context) {
+  /// The repertoire colour this drawer belongs to.
+  final Side side;
+
+  /// A colour's name. The top bar's squares use it as their tooltip and
+  /// semantics label, and the study actions sheet uses it to name the drawer a
+  /// study would be copied into, so the three can never disagree.
+  static String sideLabel(Side side) =>
+      side == Side.white ? 'White repertoire' : 'Black repertoire';
+
+  /// Displays the scope selector sheet for [side].
+  static Future<void> show(BuildContext context, Side side) {
     final c = context.srs;
     return showGeneralDialog<void>(
       context: context,
@@ -32,7 +47,7 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
       barrierColor: c.scrim,
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
-        return const ReviewScopeDrawer();
+        return ReviewScopeDrawer(side: side);
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
         final isWide = MediaQuery.of(dialogContext).size.width >= 768;
@@ -95,12 +110,14 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       );
     }
 
-    final isAllSelected =
-        reviewState.scope.studyId == null && reviewState.scope.openingFamily == null;
+    // A drawer belongs to one colour and lists only that colour's material. The
+    // membership comes from the summary rather than from the current scope: the
+    // scope may be a single study or a single opening by the time the drawer is
+    // reopened, and a study's own colour is not always the scope's.
+    final side = widget.side;
+    final activeScope = reviewState.scope;
 
     final query = _searchQuery.trim().toLowerCase();
-    // The row is labelled `All studies` (design/docs/01-identity.md), so match that.
-    final showAllStudies = query.isEmpty || 'all studies'.contains(query);
     // While searching, every match shows regardless of collapse: the query,
     // not the persisted state, decides what is visible.
     final searching = query.isNotEmpty;
@@ -112,21 +129,20 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final collapseEnabled =
         ref.watch(studyPreferencesProvider.select((p) => p.collapsibleScopeGroups)) && !searching;
 
-    final filteredOpeningHubs = query.isEmpty
-        ? reviewState.openingDueCounts.entries.toList()
-        : reviewState.openingDueCounts.entries
-              .where((entry) => entry.key.toLowerCase().contains(query))
-              .toList();
+    final myOpenings = reviewState.openingsBySide[side] ?? const <String>[];
+    final myStudyIds = reviewState.studyIdsBySide[side] ?? const <String>[];
 
-    final filteredStudies = query.isEmpty
-        ? reviewState.studies
-        : reviewState.studies.where((study) => study.title.toLowerCase().contains(query)).toList();
+    final filteredOpeningHubs = myOpenings
+        .where((name) => query.isEmpty || name.toLowerCase().contains(query))
+        .map((name) => MapEntry(name, reviewState.openingDueCounts[name] ?? 0))
+        .toList();
 
-    final hasNoResults =
-        query.isNotEmpty &&
-        !showAllStudies &&
-        filteredOpeningHubs.isEmpty &&
-        filteredStudies.isEmpty;
+    final filteredStudies = reviewState.studies
+        .where((s) => myStudyIds.contains(s.id))
+        .where((s) => query.isEmpty || s.title.toLowerCase().contains(query))
+        .toList();
+
+    final hasNoResults = query.isNotEmpty && filteredOpeningHubs.isEmpty && filteredStudies.isEmpty;
 
     final content = Align(
       alignment: isWide ? Alignment.topLeft : Alignment.bottomCenter,
@@ -241,34 +257,6 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
-                                // Group: Everywhere (All studies)
-                                if (showAllStudies) ...[
-                                  _buildGroupHeader(
-                                    ref,
-                                    c,
-                                    group: 'everywhere',
-                                    title: 'Everywhere',
-                                    collapsed: collapsedGroups.contains('everywhere'),
-                                    plain: !collapseEnabled,
-                                  ),
-                                  if (!collapseEnabled || !collapsedGroups.contains('everywhere'))
-                                    _ScopeRow(
-                                      name: 'All studies',
-                                      semanticLabel:
-                                          'All studies, ${reviewState.totalDueCount} due',
-                                      dueCount: reviewState.totalDueCount,
-                                      isPaused: false,
-                                      isSelected: isAllSelected,
-                                      progress: reviewState.totalProgress,
-                                      onPressed: () {
-                                        Navigator.of(context).pop();
-                                        ref
-                                            .read(reviewControllerProvider.notifier)
-                                            .changeScope(const ReviewScope.all());
-                                      },
-                                    ),
-                                ],
-
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
                                   _buildGroupHeader(
@@ -292,8 +280,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                                 '${entry.key} opening, ${entry.value} due',
                                             dueCount: entry.value,
                                             isPaused: false,
-                                            isSelected:
-                                                reviewState.scope.openingFamily == entry.key,
+                                            isSelected: activeScope.openingFamily == entry.key,
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
@@ -331,7 +318,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                                 '${study.isActive ? '' : ', paused'}',
                                             dueCount: due,
                                             isPaused: !study.isActive,
-                                            isSelected: reviewState.scope.studyId == study.id,
+                                            isSelected: activeScope.studyId == study.id,
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
@@ -343,6 +330,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                               context,
                                               ref,
                                               study,
+                                              side: side,
                                               anchor: anchor,
                                             ),
                                           );
@@ -449,7 +437,13 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   ///
   /// [anchor] is the row's global rect, or null when it could not be measured, in which case a wide
   /// layout falls back to the same top-right placement the Library sheet uses.
-  void _showStudyActionsSheet(BuildContext context, WidgetRef ref, Study study, {Rect? anchor}) {
+  void _showStudyActionsSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Study study, {
+    required Side side,
+    Rect? anchor,
+  }) {
     final c = context.srs;
 
     Future<void> show() => showGeneralDialog<void>(
@@ -460,6 +454,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) => StudyActionsSheet(
         study: study,
+        side: side,
         anchor: anchor,
         onDismiss: () => Navigator.of(dialogContext).pop(),
         onTogglePause: () {
@@ -478,6 +473,34 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           ref
               .read(reviewControllerProvider.notifier)
               .startPracticeMode(scope: ReviewScope.study(study.id));
+        },
+        onCreateOpposite: () {
+          Navigator.of(dialogContext).pop();
+          final other = side == Side.white ? Side.black : Side.white;
+          ref
+              .read(reviewControllerProvider.notifier)
+              .createStudyInSide(study.id, other)
+              .then((created) {
+                if (!context.mounted) return;
+                if (created == null) {
+                  showSnackBar(
+                    context,
+                    'Already in the ${ReviewScopeDrawer.sideLabel(other).toLowerCase()}',
+                    type: SnackBarType.info,
+                  );
+                } else {
+                  showSnackBar(
+                    context,
+                    'Created ${ReviewScopeDrawer.sideLabel(other).toLowerCase()}',
+                    type: SnackBarType.success,
+                  );
+                }
+              })
+              .catchError((Object e) {
+                if (!context.mounted) return null;
+                showSnackBar(context, 'Could not create it: $e', type: SnackBarType.error);
+                return null;
+              });
         },
         onExport: () async {
           Navigator.of(dialogContext).pop();
@@ -753,6 +776,7 @@ class _DueCell extends StatelessWidget {
 class StudyActionsSheet extends StatelessWidget {
   const StudyActionsSheet({
     required this.study,
+    required this.side,
     required this.onDismiss,
     required this.onTogglePause,
     required this.onAnalyze,
@@ -760,10 +784,15 @@ class StudyActionsSheet extends StatelessWidget {
     required this.onExport,
     required this.onRename,
     required this.onDelete,
+    required this.onCreateOpposite,
     this.anchor,
   });
 
   final Study study;
+
+  /// The colour of the drawer this study was opened from, which decides which
+  /// colour "the opposite one" is.
+  final Side side;
 
   /// The row's global rect, on wide layouts. Null falls back to the Library sheet's placement.
   final Rect? anchor;
@@ -775,6 +804,11 @@ class StudyActionsSheet extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+
+  /// Creates this same study's positions in the other colour, which is where
+  /// most imports go wrong: a whole repertoire imported as White when the lines
+  /// are replies.
+  final VoidCallback onCreateOpposite;
 
   static const double _wideBreakpoint = 768;
   static const double _popoverWidth = 300;
@@ -792,10 +826,24 @@ class StudyActionsSheet extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: rows),
     );
 
+    // The two drawers are independent, so a study in one has no counterpart in
+    // the other until the user makes one. This is the row that does that, and it
+    // is first: a repertoire in the wrong colour is the most common reason the
+    // other drawer is empty, and it is a one-tap fix.
+    final otherLabel = ReviewScopeDrawer.sideLabel(side == Side.white ? Side.black : Side.white);
+
     final rows = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        group([
+          SrsSheetRow(
+            label: 'Create $otherLabel',
+            subtitle: 'Same positions, in the other drawer',
+            onPressed: onCreateOpposite,
+          ),
+        ]),
+        Container(height: 1, color: c.hairline),
         group([
           SrsSheetRow(
             label: 'Analyze',
@@ -832,22 +880,9 @@ class StudyActionsSheet extends StatelessWidget {
       ],
     );
 
-    final title = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-          child: Text(
-            study.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: SrsText.groupTitle(c.ink3),
-          ),
-        ),
-      ],
-    );
-
+    // No title. The sheet is anchored to the row that opened it, and that row
+    // already carries the study name one row-height above — repeating it here
+    // spent a line of a short popover to say nothing (owner report 2026-10-05).
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -864,7 +899,7 @@ class StudyActionsSheet extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [title, rows],
+                children: [rows],
               ),
             ),
           ),
@@ -872,12 +907,22 @@ class StudyActionsSheet extends StatelessWidget {
       ],
     );
 
+    // The popover's band: the whole strip it may occupy, clear of the top bar
+    // and the window's bottom edge. The sheet is laid out *inside* this band
+    // rather than positioned by a top edge of its own, so it cannot end up
+    // taller than the space it was given — which is what used to push the last
+    // row off the bottom of a wide window with no way to reach it (owner report
+    // 2026-10-05).
+    const bandTop = 56.0;
+    const bandBottomMargin = 16.0;
+    final bandHeight = math.max(0.0, size.height - bandTop - bandBottomMargin);
+
     final sheet = SrsSheetSurface(
       radius: isWide ? 16 : 22,
       // The popover needs an explicit width: anchored with only a left and a top, its constraints
       // are loose, and the stretching column inside then lays out against an unbounded width.
       width: isWide ? _popoverWidth : null,
-      maxHeight: isWide ? size.height - 80 : math.min(size.height * 0.82, 720),
+      maxHeight: isWide ? bandHeight : math.min(size.height * 0.82, 720),
       child: body,
     );
 
@@ -892,13 +937,31 @@ class StudyActionsSheet extends StatelessWidget {
         if (isWide)
           Positioned(
             left: _popoverLeft(size),
-            top: _popoverTop(size),
-            child: SrsSheetDismissible(child: sheet),
+            top: bandTop,
+            height: bandHeight,
+            width: _popoverWidth,
+            // Hangs off whichever end of the band the row is nearer, which is
+            // what §12's "anchored to the row" means on a list that scrolls:
+            // a row in the top half gets a sheet below it, a row near the bottom
+            // gets one above, and either way all of it is on screen.
+            child: Align(
+              alignment: _popoverAlignment(size),
+              child: SrsSheetDismissible(child: sheet),
+            ),
           )
         else
           Positioned(left: 8, right: 8, bottom: 8, child: SrsSheetDismissible(child: sheet)),
       ],
     );
+  }
+
+  /// Which end of the band the sheet should hang from: below the row when the row
+  /// is in the upper half, above it when it is in the lower half.
+  Alignment _popoverAlignment(Size size) {
+    final a = anchor!;
+    // Measured against the row's own middle, not its top: a row straddling the
+    // middle opens downwards, where the space is.
+    return a.center.dy < size.height / 2 ? Alignment.topLeft : Alignment.bottomLeft;
   }
 
   /// Beside the row that opened the sheet, on whichever side has room.
@@ -909,13 +972,6 @@ class StudyActionsSheet extends StatelessWidget {
     if (right + _popoverWidth <= size.width - 20) return right;
     final left = a.left - gap - _popoverWidth;
     return math.max(20.0, left);
-  }
-
-  /// Level with the row's top, kept clear of the top bar and the bottom edge.
-  double _popoverTop(Size size) {
-    final a = anchor!;
-    final maxTop = math.max(56.0, size.height - 80 - 320);
-    return a.top.clamp(56.0, math.max(56.0, maxTop));
   }
 }
 

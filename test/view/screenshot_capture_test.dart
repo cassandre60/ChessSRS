@@ -306,7 +306,7 @@ void main() {
           label: label,
           // The capture harness rejects a frame with no Scaffold, and the drawer is dialog content
           // that normally arrives inside one.
-          home: const Scaffold(body: ReviewScopeDrawer()),
+          home: const Scaffold(body: ReviewScopeDrawer(side: Side.white)),
           surface: surface,
           brightness: brightness,
           overrides: repoOverrides(),
@@ -336,6 +336,7 @@ void main() {
           home: const Scaffold(
             body: StudyActionsSheet(
               study: Study(id: 'capture', title: 'Sicilian Defense Repertoire', isActive: true),
+              side: Side.white,
               // A stand-in for the scope row that would open this on a wide layout. Narrow
               // surfaces ignore it, so the desktop and tablet captures cover the popover placement
               // and the phone ones the bottom sheet.
@@ -347,6 +348,7 @@ void main() {
               onExport: _noop,
               onRename: _noop,
               onDelete: _noop,
+              onCreateOpposite: _noop,
             ),
           ),
           surface: surface,

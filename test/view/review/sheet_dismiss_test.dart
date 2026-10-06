@@ -4,6 +4,7 @@
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -22,7 +23,7 @@ void main() {
         builder: (context) => Scaffold(
           body: Center(
             child: ElevatedButton(
-              onPressed: () => ReviewScopeDrawer.show(context),
+              onPressed: () => ReviewScopeDrawer.show(context, Side.white),
               child: const Text('Open Scope'),
             ),
           ),

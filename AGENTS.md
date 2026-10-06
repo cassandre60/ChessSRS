@@ -313,33 +313,22 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
 
 ## 11. Releases: when to cut one (agent decides, owner doesn't)
 
-Releases are tags (`git tag vX.Y.Z && git push origin vX.Y.Z`); the release
-workflow builds + publishes automatically (see `docs/releases.md`). The
-owner has delegated the release decision to the agent: evaluate at the end
-of every merged work item, and cut one when worthy without asking.
+The release workflow (`.github/workflows/release.yml`) is the executable
+truth. Tags (`git tag vX.Y.Z && git push origin vX.Y.Z`) trigger automatic
+build + publish (see `docs/releases.md` for full policy). The agent
+evaluates after every merged green batch and cuts a release when ALL hold:
 
-Worth releasing when ALL hold:
+- Something the owner can feel changed (feature, fix, copy). Gate/CI/
+  refactor/test-only/docs-only deltas ride silently.
+- The work's PR went in green (T1 + Unit tests) with evidence intact.
+- Nothing known-broken is pending; no unverified claims in release notes.
 
-- Something the owner can feel changed: a user-visible feature, fix, or
-  copy. Gate/CI/refactor/test-only/docs-only deltas ride silently.
-- The work's own PR went in green (T1 + Unit tests) with its evidence
-  intact — never tag a red or unverified tree to "see what happens".
-- Nothing known-broken is pending: no just-merged change already known to
-  misbehave, and the release notes won't claim an unverified proof.
+Not worth releasing: invisible delta, same batch already tagged, or red tree.
 
-Not worth releasing:
-
-- The delta since the last tag is invisible to the owner.
-- A release already covers the same code (one tag per merged batch — batch
-  related PRs into one release, never tag per-PR).
-- The last tag was cut for the same batch (check `git tag --sort=-creatordate`
-  and what main has gained since before tagging).
-
-Versioning: patch (`x.y.Z`) for fixes/copy, minor (`x.Y.0`) for features or
-new settings/options. Major stays `0` until the owner declares otherwise.
-After tagging, watch the Release workflow to green and report what shipped
-with the download page link. Tags publish — never push one casually, and
-never move or delete a published tag.
+Versioning: patch (`x.y.Z`) fixes/copy, minor (`x.Y.0`) features/settings.
+Major stays `0` until owner declares otherwise. Watch Release workflow
+to green; report download link. Tags publish — never push casually,
+never move/delete a published tag.
 
 ## Lessons Learned
 

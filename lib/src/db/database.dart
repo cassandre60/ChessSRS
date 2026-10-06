@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
+import 'package:chess_srs/src/persistence/opening_name_repair_migration.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
@@ -68,7 +69,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 14,
+      version: 15,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -196,6 +197,18 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           _logger.info(
             'Canonical backfill: ${backfill.statesCreated} states created '
             '(${backfill.collisionsMerged} from collisions)',
+          );
+        }
+
+        // Also not a schema change: v15 clears opening names that P-OPENNAME's
+        // classifier now rejects, on chapters imported before that fix. Runs
+        // after the batch commit for the same reason as the v14 block above — it
+        // reads and writes the upgraded table.
+        if (oldVersion < 15) {
+          final repaired = await repairSpuriousOpeningNames(db);
+          _logger.info(
+            'Opening name repair: ${repaired.cleared} spurious names cleared, '
+            '${repaired.kept} kept',
           );
         }
 

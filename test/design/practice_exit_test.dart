@@ -3,6 +3,7 @@
 // SPEC coverage: INV-062.
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,7 +23,7 @@ void main() {
         tester,
         home: Center(
           child: SrsTopBar(
-            scopeTitle: 'Test',
+            activeSide: Side.white,
             isPracticeMode: true,
             onExitPractice: onExitPractice ?? () {},
           ),
@@ -90,11 +91,7 @@ void main() {
           tester,
           surfaceSize: const Size(390, 844),
           home: Center(
-            child: SrsTopBar(
-              scopeTitle: 'A long repertoire name that has to elide',
-              isPracticeMode: true,
-              onExitPractice: () {},
-            ),
+            child: SrsTopBar(activeSide: Side.white, isPracticeMode: true, onExitPractice: () {}),
           ),
         ),
       );

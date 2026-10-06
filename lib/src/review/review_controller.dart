@@ -56,6 +56,10 @@ class ReviewScreenState {
     this.studyProgress = const {},
     this.chapterProgress = const {},
     this.openingProgress = const {},
+    this.sideProgress = const {},
+    this.studySideProgress = const {},
+    this.studyIdsBySide = const {},
+    this.openingsBySide = const {},
     this.lastStepResult,
     this.dailyReviewedCount = 0,
     this.maxDailyReviews = 100,
@@ -69,6 +73,27 @@ class ReviewScreenState {
   final Map<String, RepertoireProgress> studyProgress;
   final Map<String, RepertoireProgress> chapterProgress;
   final Map<String, RepertoireProgress> openingProgress;
+
+  /// Progress over the chapters trained from each side, keyed by [Side].
+  ///
+  /// Read from [ReviewService.getDueSummary] rather than derived here: the
+  /// service already walks every decision with its chapter's orientation in
+  /// hand, so a second derivation in the controller would be a second pass over
+  /// the same table to produce a number the first pass could have produced.
+  final Map<Side, RepertoireProgress> sideProgress;
+
+  /// Study progress partitioned by side, for the repertoire menus (INV-030).
+  ///
+  /// `studySideProgress[studyId]` carries only the sides the study trains, so
+  /// its keys are also what places a study under the White menu, the Black
+  /// menu, or both.
+  final Map<String, Map<Side, RepertoireProgress>> studySideProgress;
+
+  /// Which studies and opening families each colour's drawer lists. Straight
+  /// from [ReviewService.getDueSummary].
+  final Map<Side, List<String>> studyIdsBySide;
+  final Map<Side, List<String>> openingsBySide;
+
   final ReviewSession? session;
   final ReviewPrompt? currentPrompt;
   final Position? boardPosition;
@@ -94,6 +119,20 @@ class ReviewScreenState {
       !isAwaitingAdvance &&
       ((totalDueCount == 0 && !isPracticeMode) || currentPrompt == null);
   bool get isPracticeMode => mode == ReviewMode.practice;
+
+  /// The active repertoire colour (for the top bar's colour squares).
+  Side get activeSide {
+    if (scope.side != null) return scope.side!;
+    if (scope.studyId != null) {
+      if (studyIdsBySide[Side.black]?.contains(scope.studyId) == true) return Side.black;
+      return Side.white;
+    }
+    if (scope.openingFamily != null) {
+      if (openingsBySide[Side.black]?.contains(scope.openingFamily) == true) return Side.black;
+      return Side.white;
+    }
+    return boardOrientation;
+  }
 
   /// Aggregated progress across all active studies in the review pool.
   RepertoireProgress get totalProgress {
@@ -172,6 +211,10 @@ class ReviewScreenState {
     Map<String, RepertoireProgress>? studyProgress,
     Map<String, RepertoireProgress>? chapterProgress,
     Map<String, RepertoireProgress>? openingProgress,
+    Map<Side, RepertoireProgress>? sideProgress,
+    Map<String, Map<Side, RepertoireProgress>>? studySideProgress,
+    Map<Side, List<String>>? studyIdsBySide,
+    Map<Side, List<String>>? openingsBySide,
     ReviewSession? session,
     ReviewPrompt? currentPrompt,
     bool clearPrompt = false,
@@ -201,6 +244,10 @@ class ReviewScreenState {
       studyProgress: studyProgress ?? this.studyProgress,
       chapterProgress: chapterProgress ?? this.chapterProgress,
       openingProgress: openingProgress ?? this.openingProgress,
+      sideProgress: sideProgress ?? this.sideProgress,
+      studySideProgress: studySideProgress ?? this.studySideProgress,
+      studyIdsBySide: studyIdsBySide ?? this.studyIdsBySide,
+      openingsBySide: openingsBySide ?? this.openingsBySide,
       session: session ?? this.session,
       currentPrompt: clearPrompt ? null : (currentPrompt ?? this.currentPrompt),
       boardPosition: boardPosition ?? this.boardPosition,
@@ -366,9 +413,17 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final remainingQuota = _remainingQuotaFor(mode, dailyReviewedCount);
 
     final studies = await _repository.getAllStudies();
+    // The two drawers cover everything the app can review, so the initial `all()`
+    // has to resolve to one of them before anything is counted: leaving it would
+    // show a queue the user cannot get back to, and blank both squares. Decided
+    // from chapter orientations — one indexed query — rather than from the
+    // summary, which would mean walking every decision a second time.
+    final effectiveScope = studies.isEmpty
+        ? scope
+        : _resolveInitialScope(scope, await _repository.getChapterOrientations());
     final summary = await _service.getDueSummary(
       studies: studies,
-      scope: scope,
+      scope: effectiveScope,
       remainingDailyQuota: remainingQuota,
     );
 
@@ -376,7 +431,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       if (generation != null && generation != _generation) return null;
       return ReviewScreenState(
         studies: studies,
-        scope: scope,
+        scope: effectiveScope,
         mode: mode,
         totalDueCount: 0,
         studyDueCounts: summary.studyDueCounts,
@@ -384,6 +439,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         studyProgress: summary.studyProgress,
         chapterProgress: summary.chapterProgress,
         openingProgress: summary.openingProgress,
+        sideProgress: summary.sideProgress,
+        studySideProgress: summary.studySideProgress,
+        studyIdsBySide: summary.studyIdsBySide,
+        openingsBySide: summary.openingsBySide,
         dailyReviewedCount: dailyReviewedCount,
         maxDailyReviews: maxDailyReviews,
       );
@@ -417,13 +476,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     if (prompt != null) {
       position = shouldAnimate ? _parseFen(prompt.parentFen!) : _parseFen(prompt.fen);
       orientation = prompt.sideToMove;
-    } else if (scope.chapterId != null) {
-      final chapter = await _repository.getChapter(scope.chapterId!);
+    } else if (effectiveScope.chapterId != null) {
+      final chapter = await _repository.getChapter(effectiveScope.chapterId!);
       if (chapter != null && chapter.orientation == Side.black) {
         orientation = Side.black;
       }
-    } else if (scope.studyId != null) {
-      final chapters = await _repository.getChaptersByStudy(scope.studyId!);
+    } else if (effectiveScope.studyId != null) {
+      final chapters = await _repository.getChaptersByStudy(effectiveScope.studyId!);
       if (chapters.isNotEmpty && chapters.first.orientation == Side.black) {
         orientation = Side.black;
       }
@@ -434,12 +493,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     _logger.info(
-      'ReviewState loaded for scope $scope: ${studies.length} studies, totalDue=${summary.totalDueCount}, mode=$mode, quota=$dailyReviewedCount/$maxDailyReviews',
+      'ReviewState loaded for scope $effectiveScope: ${studies.length} studies, totalDue=${summary.totalDueCount}, mode=$mode, quota=$dailyReviewedCount/$maxDailyReviews',
     );
 
     return ReviewScreenState(
       studies: studies,
-      scope: scope,
+      scope: effectiveScope,
       mode: mode,
       totalDueCount: summary.totalDueCount,
       studyDueCounts: summary.studyDueCounts,
@@ -447,6 +506,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       studyProgress: summary.studyProgress,
       chapterProgress: summary.chapterProgress,
       openingProgress: summary.openingProgress,
+      sideProgress: summary.sideProgress,
+      studySideProgress: summary.studySideProgress,
+      studyIdsBySide: summary.studyIdsBySide,
+      openingsBySide: summary.openingsBySide,
       dailyReviewedCount: dailyReviewedCount,
       maxDailyReviews: maxDailyReviews,
       session: session,
@@ -462,7 +525,76 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   /// Changes the active review scope (all studies or a specific study).
   Future<void> changeScope(ReviewScope scope) => _loadAndPublish(scope, ReviewMode.srs);
 
-  /// Reloads the session and due counts for the current scope.
+  /// Switches the active colour and its drawer.
+  ///
+  /// Re-selecting the colour already active is a no-op rather than a reload: the
+  /// top bar's squares are the only way into a drawer, and tapping the live one
+  /// to re-read that drawer's contents must not also throw away a narrower
+  /// scope the user had reached inside it.
+  Future<void> selectSide(Side side) async {
+    if (state.value?.scope.side == side) return;
+    await changeScope(_sideScope(side));
+  }
+
+  /// Creates a study's positions in the other colour, for the study actions
+  /// sheet's first row.
+  ///
+  /// The two drawers are independent, so a repertoire imported as White has no
+  /// Black counterpart until someone makes one — and "everything got imported
+  /// as White" is the ordinary way a Black library ends up empty. Returns the
+  /// new study, or null when the other colour already holds these lines: the
+  /// import is deduplicated per side, so re-running this is a no-op rather than
+  /// a second copy.
+  ///
+  /// Deliberately does *not* move the user to the study it creates. Creating the
+  /// Black copy while reviewing the White one is a setup action, not a change of
+  /// intention, and yanking the session across colours would throw away the
+  /// White queue the user was part-way through.
+  Future<Study?> createStudyInSide(String studyId, Side side) async {
+    final before = state.value?.scope;
+    final source = state.value?.studies.where((s) => s.id == studyId).firstOrNull;
+    if (source == null) {
+      _logger.warning('createStudyInSide: no study $studyId');
+      return null;
+    }
+    final pgn = await exportStudyPgn(studyId);
+    if (pgn == null || pgn.trim().isEmpty) {
+      throw StateError('that study has no moves to copy');
+    }
+    final result = await importPgnText(pgnText: pgn, title: source.title, repertoireSide: side);
+    if (result.isDuplicate) return null;
+    // `importPgnText` leaves the session on what it just created; put the user's
+    // own scope back, exactly as it was, so the copy is a background addition
+    // and a study they were part-way through stays part-way through.
+    if (before != null) {
+      await changeScope(before);
+    }
+    return result.study;
+  }
+
+  /// The colour scope for [side].
+  static ReviewScope _sideScope(Side side) =>
+      side == Side.white ? const ReviewScope.white() : const ReviewScope.black();
+
+  /// Picks the drawer the app opens on, for a load whose scope names no colour.
+  ///
+  /// Only the startup `all()` reaches this; every scope the user can pick
+  /// carries a side. White wins when the library holds any White chapter, which
+  /// is both the common case and the one the import default produces. A library
+  /// of nothing but Black material opens on Black rather than on an empty
+  /// drawer.
+  static ReviewScope _resolveInitialScope(ReviewScope scope, Map<String, Side> chapterSides) {
+    if (scope.studyId != null ||
+        scope.chapterId != null ||
+        scope.openingFamily != null ||
+        scope.side != null) {
+      return scope;
+    }
+    if (chapterSides.isEmpty) return scope;
+    return _sideScope(chapterSides.values.any((s) => s == Side.white) ? Side.white : Side.black);
+  }
+
+  /// Loads the session and due counts for the current scope.
   Future<void> reload() async {
     if (!ref.mounted) return;
     final currentState = state.value;
@@ -553,6 +685,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         studyProgress: summary.studyProgress,
         chapterProgress: summary.chapterProgress,
         openingProgress: summary.openingProgress,
+        sideProgress: summary.sideProgress,
+        studySideProgress: summary.studySideProgress,
+        studyIdsBySide: summary.studyIdsBySide,
+        openingsBySide: summary.openingsBySide,
         session: newSession,
         currentPrompt: newPrompt,
         clearPrompt: newPrompt == null,
@@ -584,46 +720,53 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // pool this is about to empty, so it must not be allowed to publish over the result.
     final generation = ++_generation;
     await _repository.deleteStudy(studyId);
-    if (state.value?.scope.studyId == studyId) {
-      await changeScope(const ReviewScope.all());
-    } else {
-      final currentState = state.value;
-      if (currentState != null) {
-        final updatedStudies = currentState.studies.where((s) => s.id != studyId).toList();
-        final remainingQuota = await _remainingDailyQuota(currentState.mode);
-        final summary = await _service.getDueSummary(
+    final currentState = state.value;
+    if (currentState?.scope.studyId == studyId) {
+      // Fall back to the deleted study's own colour rather than to `all()`: the
+      // top bar's squares have to keep showing which drawer is live, and a scope
+      // with no side leaves them blank. The study is gone by now, so its colour
+      // comes from the membership the last load recorded.
+      final wasWhite = currentState!.studyIdsBySide[Side.white]!.contains(studyId);
+      await changeScope(_sideScope(wasWhite ? Side.white : Side.black));
+    } else if (currentState != null) {
+      final updatedStudies = currentState.studies.where((s) => s.id != studyId).toList();
+      final remainingQuota = await _remainingDailyQuota(currentState.mode);
+      final summary = await _service.getDueSummary(
+        studies: updatedStudies,
+        scope: currentState.scope,
+        remainingDailyQuota: remainingQuota,
+      );
+      final newSession = await _service.startSession(
+        scope: currentState.scope,
+        mode: currentState.mode,
+        remainingDailyQuota: remainingQuota,
+        generation: generation,
+      );
+
+      // Superseded while the delete and the summary were being computed.
+      if (generation != _generation || !ref.mounted) return;
+
+      final prompt = newSession.currentPrompt;
+      state = AsyncData(
+        currentState.copyWith(
           studies: updatedStudies,
-          scope: currentState.scope,
-          remainingDailyQuota: remainingQuota,
-        );
-        final newSession = await _service.startSession(
-          scope: currentState.scope,
-          mode: currentState.mode,
-          remainingDailyQuota: remainingQuota,
-          generation: generation,
-        );
-
-        // Superseded while the delete and the summary were being computed.
-        if (generation != _generation || !ref.mounted) return;
-
-        final prompt = newSession.currentPrompt;
-        state = AsyncData(
-          currentState.copyWith(
-            studies: updatedStudies,
-            totalDueCount: summary.totalDueCount,
-            studyDueCounts: summary.studyDueCounts,
-            openingDueCounts: summary.openingDueCounts,
-            studyProgress: summary.studyProgress,
-            chapterProgress: summary.chapterProgress,
-            openingProgress: summary.openingProgress,
-            session: newSession,
-            currentPrompt: prompt,
-            clearPrompt: prompt == null,
-            boardPosition: prompt != null ? _parseFen(prompt.fen) : null,
-            boardOrientation: prompt?.sideToMove ?? Side.white,
-          ),
-        );
-      }
+          totalDueCount: summary.totalDueCount,
+          studyDueCounts: summary.studyDueCounts,
+          openingDueCounts: summary.openingDueCounts,
+          studyProgress: summary.studyProgress,
+          chapterProgress: summary.chapterProgress,
+          openingProgress: summary.openingProgress,
+          sideProgress: summary.sideProgress,
+          studySideProgress: summary.studySideProgress,
+          studyIdsBySide: summary.studyIdsBySide,
+          openingsBySide: summary.openingsBySide,
+          session: newSession,
+          currentPrompt: prompt,
+          clearPrompt: prompt == null,
+          boardPosition: prompt != null ? _parseFen(prompt.fen) : null,
+          boardOrientation: prompt?.sideToMove ?? Side.white,
+        ),
+      );
     }
   }
 
@@ -646,6 +789,61 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
     final study = await _repository.getStudy(chapter.studyId);
     return chapterToPgn(fullChapter, studyTitle: study?.title);
+  }
+
+  /// Creates the [targetSide] version of a study: the same lines, trained from
+  /// the other side (INV-030).
+  ///
+  /// A White French and its Black counterpart are different sets of questions
+  /// over the same move trees, so the flipped study is a real re-import with
+  /// fresh SRS memory — no review states are copied, and its canonical
+  /// position keys (which include the side to move) cannot collide with the
+  /// original's. When that version already exists the import reports a
+  /// duplicate and this returns it, so the caller can say so instead of
+  /// claiming a second copy was made.
+  ///
+  /// Returns null when the study has no trainable moves to flip.
+  Future<ImportResult?> flipStudyColors(String studyId, {required Side targetSide}) async {
+    final study = await _repository.getStudy(studyId);
+    if (study == null) return null;
+    final storedChapters = await _repository.getChaptersByStudy(studyId);
+    if (storedChapters.isEmpty) return null;
+
+    // The chapter rows may carry their trees already; hydrate the ones that do
+    // not, because a header-only export would re-import as an empty study and
+    // be rejected as having nothing to train.
+    final chapters = <Chapter>[];
+    for (final chapter in storedChapters) {
+      if (chapter.root != null) {
+        chapters.add(chapter);
+      } else {
+        chapters.add(chapter.copyWith(root: await _repository.getPositionTree(chapter.id)));
+      }
+    }
+
+    final pgn = studyToPgn(study, chapters);
+    try {
+      return await importPgnText(
+        pgnText: pgn,
+        title: _flippedStudyTitle(study.title, targetSide),
+        repertoireSide: targetSide,
+      );
+    } on FormatException catch (e) {
+      _logger.warning('Flipping study $studyId to $targetSide produced nothing to train: $e');
+      return null;
+    }
+  }
+
+  /// Titles the flipped study after the side it trains, replacing a stale side
+  /// suffix rather than stacking a second one (`French (White)` becomes
+  /// `French (Black)`, not `French (White) (Black)`).
+  String _flippedStudyTitle(String title, Side targetSide) {
+    final suffix = targetSide == Side.black ? ' (Black)' : ' (White)';
+    final stripped = title.replaceFirst(
+      RegExp(r'\s*\((white|black)\)\s*$', caseSensitive: false),
+      '',
+    );
+    return '$stripped$suffix';
   }
 
   /// Advances to the next prompt after pausing to display move commentary or shapes.
@@ -815,6 +1013,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final studyProgressMap = Map<String, RepertoireProgress>.from(currentState.studyProgress);
     final chapterProgressMap = Map<String, RepertoireProgress>.from(currentState.chapterProgress);
     final openingProgressMap = Map<String, RepertoireProgress>.from(currentState.openingProgress);
+    final sideProgressMap = Map<Side, RepertoireProgress>.from(currentState.sideProgress);
+    final studySideProgressMap = Map<String, Map<Side, RepertoireProgress>>.from(
+      currentState.studySideProgress,
+    );
     final currentChapterId = currentState.currentPrompt!.chapterId;
     if (isFirstAttempt) {
       final isNewlyLearned =
@@ -854,6 +1056,37 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           );
         }
       }
+      // The side the answer belonged to, not the side to move: a decision is stored against the
+      // repertoire's own orientation, so decrementing "the side now on the board" would move the
+      // wrong button's tally. Read it from the chapter, the same place the scope match does.
+      final currentSide = currentChapter?.orientation;
+      if (currentSide != null) {
+        final sideProg = sideProgressMap[currentSide];
+        if (sideProg != null) {
+          sideProgressMap[currentSide] = RepertoireProgress(
+            totalDecisions: sideProg.totalDecisions,
+            learnedDecisions: isNewlyLearned
+                ? (sideProg.learnedDecisions + 1).clamp(0, sideProg.totalDecisions)
+                : sideProg.learnedDecisions,
+            dueDecisions: (sideProg.dueDecisions - 1).clamp(0, sideProg.totalDecisions),
+          );
+        }
+        // The repertoire menu the study sits under reads this map, not the
+        // study-wide one, so it needs the same optimistic decrement or its
+        // due figure lags the session until the next reload (INV-030).
+        final perSide = studySideProgressMap[currentStudyId]?[currentSide];
+        if (perSide != null) {
+          studySideProgressMap[currentStudyId] =
+              Map<Side, RepertoireProgress>.from(studySideProgressMap[currentStudyId]!)
+                ..[currentSide] = RepertoireProgress(
+                  totalDecisions: perSide.totalDecisions,
+                  learnedDecisions: isNewlyLearned
+                      ? (perSide.learnedDecisions + 1).clamp(0, perSide.totalDecisions)
+                      : perSide.learnedDecisions,
+                  dueDecisions: (perSide.dueDecisions - 1).clamp(0, perSide.totalDecisions),
+                );
+        }
+      }
     }
 
     // Counted on completion, not on a first-try success. A position answered right only after a
@@ -872,6 +1105,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         studyProgress: studyProgressMap,
         chapterProgress: chapterProgressMap,
         openingProgress: openingProgressMap,
+        sideProgress: sideProgressMap,
+        studySideProgress: studySideProgressMap,
         session: session,
         currentPrompt: nextPrompt,
         clearPrompt: nextPrompt == null,
