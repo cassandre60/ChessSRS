@@ -1,4 +1,5 @@
 // Copyright (C) 2024 ChessSRS contributors
+library chess_srs.domain.chess_fsrs_scheduler;
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:math' as math;

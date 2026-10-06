@@ -1,4 +1,5 @@
 // Copyright (C) 2024 ChessSRS contributors
+library chess_srs.domain.study;
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/domain/ids.dart';

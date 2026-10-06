@@ -5,7 +5,7 @@
 ///
 /// Pure Dart — zero imports of Flutter, chessground, or sqflite.
 /// All domain contracts are defined and enforced here.
-library;
+library chess_srs.domain;
 
 export 'chapter.dart';
 export 'chess_fsrs_scheduler.dart';
