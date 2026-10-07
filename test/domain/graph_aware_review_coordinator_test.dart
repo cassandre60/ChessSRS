@@ -349,6 +349,45 @@ void main() {
       expect(result.stability, 0.0);
       expect(result.nextDueAt, isNull);
     });
+
+    test('exposure throttle treats one instant in any zone as one day', () {
+      // The same instant rendered in UTC and in local time can sit on
+      // different raw (year, month, day) fields near midnight in offset zones.
+      // The throttle must still see a single calendar day, matching the local
+      // day boundary used by the daily quota.
+      final utc = DateTime.utc(2026, 9, 18, 12, 0);
+      final local = utc.toLocal();
+      const node = GraphNode(
+        decisionId: 'zone_dec',
+        parentId: null,
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      const initialStability = 5.0 * 86400000;
+
+      repo.put(
+        'zone_dec',
+        ReviewState(
+          decisionId: 'zone_dec',
+          stability: initialStability,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: utc.subtract(const Duration(days: 5)),
+          nextDueAt: utc.add(const Duration(days: 5)),
+        ),
+      );
+
+      final first = coordinator.recordAutoTraversalExposure(node: node, now: utc)!;
+      expect(first.stability, greaterThan(initialStability));
+
+      // Same instant, local representation: must not grant a second bump.
+      final second = coordinator.recordAutoTraversalExposure(node: node, now: local)!;
+      expect(
+        second.stability,
+        equals(first.stability),
+        reason: 'one instant in two zones is still one calendar day',
+      );
+    });
     test('canonical lookup stays ambiguous-safe across divergent questions', () {
       const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
       // Same (position, move) claimed by two different canonical questions.

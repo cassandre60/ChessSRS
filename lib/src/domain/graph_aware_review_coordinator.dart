@@ -292,6 +292,13 @@ class GraphAwareReviewCoordinator {
     }
   }
 
-  bool _isSameCalendarDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSameCalendarDay(DateTime a, DateTime b) {
+    // Calendar days are local days, consistent with the daily quota boundary.
+    // Normalizing matters: stored timestamps mix UTC ('Z'-suffixed legacy rows)
+    // and local (current writes), and one instant can sit on different raw
+    // dates in each zone near midnight.
+    final localA = a.toLocal();
+    final localB = b.toLocal();
+    return localA.year == localB.year && localA.month == localB.month && localA.day == localB.day;
+  }
 }

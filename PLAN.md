@@ -13,5 +13,5 @@ Baseline: `flutter test test/review/review_engine_test.dart test/persistence/can
 - [x] 8. Opening scope matching is inconsistent: `startSession` uses exact `c.opening == openingFamily` while `getDueSummary` trims both sides (whitespace-only difference hides a scope)
 - [x] 9. `getDueReviewStates` queries only legacy `srs_review_state` and ignores `position_knowledge_state`, so it under-reports due items (currently unused, but part of the repository contract)
 - [x] 10. `rekeyCanonicalReviewState` rewrites `position_knowledge_state` + `srs_decision` but leaves orphaned canonical rows in `srs_review_state` under old keys (dead weight; `getDueReviewStates` would surface them as due)
-- [ ] 11. Graph exposure throttle `_isSameCalendarDay` compares calendar fields without normalizing `isUtc`, so the same instant in UTC vs local counts as different days (inconsistent with local-midnight daily quota)
-- [ ] 12. Targeted verification: run affected test files + `flutter analyze` on touched files per change; full suite left to CI per AGENTS.md §4
+- [x] 11. Graph exposure throttle `_isSameCalendarDay` compares calendar fields without normalizing `isUtc`, so the same instant in UTC vs local counts as different days (inconsistent with local-midnight daily quota)
+- [x] 12. Targeted verification: run affected test files + `flutter analyze` on touched files per change; full suite left to CI per AGENTS.md §4
