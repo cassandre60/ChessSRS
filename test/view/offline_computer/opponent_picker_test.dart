@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/engine/opponent_level.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
@@ -70,6 +71,10 @@ void main() {
     testWidgets('shows what each engine is', (tester) async {
       await openPicker(tester);
 
+      // The engine switch is a Diagram segmented control, not a Material one.
+      // Fails on base, which built a SegmentedButton.
+      expect(find.byType(SrsSegmented<OpponentEngine>), findsOneWidget);
+
       expect(find.textContaining('trusted by grandmasters'), findsOneWidget);
 
       await tester.tap(find.text('Maia'));
@@ -83,7 +88,7 @@ void main() {
       await openPicker(tester, variant: Variant.atomic);
 
       // The networks were trained on standard human games, so there is nothing to choose between.
-      expect(find.byType(SegmentedButton<OpponentEngine>), findsNothing);
+      expect(find.byType(SrsSegmented<OpponentEngine>), findsNothing);
       expect(find.textContaining('trusted by grandmasters'), findsOneWidget);
     });
 
