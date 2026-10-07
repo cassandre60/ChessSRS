@@ -404,7 +404,7 @@ class ReviewSession {
     final currentState =
         _reviewStates[prompt.decision.canonicalId] ??
         _reviewStates[prompt.decision.id] ??
-        ReviewState.initial(decisionId: prompt.decision.id);
+        ReviewState.initial(decisionId: prompt.decision.canonicalId);
 
     if (expectedMatch != null) {
       // The position counts toward the day's reviews whether it was answered right first time or

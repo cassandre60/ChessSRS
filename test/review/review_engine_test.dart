@@ -996,6 +996,40 @@ void main() {
       expect(stateAfterRetry.lapseCount, 1);
     });
 
+    test('retryMove fallback state is keyed by canonicalId, not occurrence id', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+
+      const canonId = 'canonical-dec-1';
+      final d0 = decisions[0];
+      final dec1WithCanon = RepertoireDecision(
+        id: d0.id,
+        studyId: d0.studyId,
+        chapterId: d0.chapterId,
+        nodeId: d0.nodeId,
+        expectedMoves: d0.expectedMoves,
+        canonicalStateId: canonId,
+      );
+      final updatedDecisions = [dec1WithCanon, decisions[1], decisions[2]];
+
+      // No review states at all: the fallback path in retryMove is exercised.
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: updatedDecisions,
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+      );
+
+      final retryResult = session.retryMove(from: 'e2', to: 'e4');
+      expect(retryResult.isCorrect, isTrue);
+      expect(
+        retryResult.updatedState.decisionId,
+        canonId,
+        reason: 'fallback must use canonical knowledge id like submitMove does',
+      );
+    });
+
     test('a position answered correctly only on retry still counts toward the daily quota', () {
       final (study, chapter, decisions) = buildTestRepertoire();
       final engine = ReviewEngine(clock: clock);
