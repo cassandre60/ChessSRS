@@ -1,11 +1,10 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/auth/auth_repository.dart';
 import 'package:chess_srs/src/model/user/user_repository.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/experimental/mutation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -61,31 +60,37 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: const Text('Sign in with an email'),
-        leading: step == _EmailLoginStep.code
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                onPressed: backToEmailStep,
-              )
-            : null,
-      ),
+    return Scaffold(
+      backgroundColor: context.srs.ground,
       body: PopScope(
         canPop: step == _EmailLoginStep.email,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) backToEmailStep();
         },
         child: SafeArea(
-          child: switch (step) {
-            .email => _EmailForm(
-              initialUsername: username,
-              initialEmail: email,
-              onCodeSent: onCodeSent,
-            ),
-            .code => _CodeForm(username: username!, email: email!),
-          },
+          child: Column(
+            children: [
+              // The head names where back goes: the email form on the second step, the screen
+              // itself on the first. On the second step it is a live control rather than a pop,
+              // because the code can be re-requested.
+              SrsPageHead(
+                label: step == _EmailLoginStep.email ? 'Sign in' : 'Email',
+                onBack: step == _EmailLoginStep.email
+                    ? () => Navigator.of(context).maybePop()
+                    : backToEmailStep,
+              ),
+              Expanded(
+                child: switch (step) {
+                  .email => _EmailForm(
+                    initialUsername: username,
+                    initialEmail: email,
+                    onCodeSent: onCodeSent,
+                  ),
+                  .code => _CodeForm(username: username!, email: email!),
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -170,22 +175,22 @@ class _EmailFormState extends ConsumerState<_EmailForm> {
     return Form(
       key: formKey,
       child: ListView(
-        padding: Styles.bodySectionPadding,
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
         children: [
-          const Text('We will email you a code to sign in with.'),
+          Text(
+            'We will email you a code to sign in with.',
+            style: SrsText.body(false, context.srs.ink2),
+          ),
           const SizedBox(height: 24.0),
-          TextFormField(
+          SrsFormField(
             controller: usernameController,
             autofocus: true,
             autofillHints: const [AutofillHints.username],
             textInputAction: TextInputAction.next,
             autocorrect: false,
             enableSuggestions: false,
-            textCapitalization: TextCapitalization.none,
-            decoration: InputDecoration(
-              labelText: context.l10n.username,
-              border: const OutlineInputBorder(),
-            ),
+            semanticLabel: context.l10n.username,
+            hintText: context.l10n.username,
             validator: (value) {
               final username = value?.trim() ?? '';
               if (username.isEmpty) {
@@ -200,16 +205,14 @@ class _EmailFormState extends ConsumerState<_EmailForm> {
             },
           ),
           const SizedBox(height: 16.0),
-          TextFormField(
+          SrsFormField(
             controller: emailController,
             autofillHints: const [AutofillHints.email],
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
             autocorrect: false,
-            decoration: InputDecoration(
-              labelText: context.l10n.email,
-              border: const OutlineInputBorder(),
-            ),
+            semanticLabel: context.l10n.email,
+            hintText: context.l10n.email,
             validator: (value) {
               final email = value?.trim() ?? '';
               if (!_emailRegExp.hasMatch(email)) {
@@ -220,12 +223,13 @@ class _EmailFormState extends ConsumerState<_EmailForm> {
             onFieldSubmitted: (_) => submit(),
           ),
           const SizedBox(height: 24.0),
-          FilledButton(
+          SrsPillButton(
+            expand: true,
+            label: 'Send me a code',
             onPressed: switch (requestState) {
               MutationPending() => null,
               _ => submit,
             },
-            child: const Text('Send me a code'),
           ),
         ],
       ),
@@ -291,26 +295,27 @@ class _CodeFormState extends ConsumerState<_CodeForm> {
     return Form(
       key: formKey,
       child: ListView(
-        padding: Styles.bodySectionPadding,
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
         children: [
           Text(
             'If an account matches ${widget.email}, a $_kLoginCodeLength character code was sent '
             'to it. Check your inbox and enter the code below.',
+            style: SrsText.body(false, context.srs.ink2),
           ),
           const SizedBox(height: 24.0),
-          TextFormField(
+          SrsFormField(
             controller: controller,
             autofocus: true,
             autofillHints: const [AutofillHints.oneTimeCode],
             textInputAction: TextInputAction.done,
             autocorrect: false,
             enableSuggestions: false,
-            textCapitalization: TextCapitalization.none,
+            semanticLabel: 'Code',
+            hintText: 'Code',
             inputFormatters: [
               FilteringTextInputFormatter.deny(RegExp(r'\s')),
               LengthLimitingTextInputFormatter(_kLoginCodeLength),
             ],
-            decoration: const InputDecoration(labelText: 'Code', border: OutlineInputBorder()),
             validator: (value) {
               if ((value?.trim() ?? '').length != _kLoginCodeLength) {
                 return 'The code is $_kLoginCodeLength characters long.';
@@ -320,17 +325,18 @@ class _CodeFormState extends ConsumerState<_CodeForm> {
             onFieldSubmitted: (_) => submit(),
           ),
           const SizedBox(height: 24.0),
-          FilledButton(
+          SrsPillButton(
+            expand: true,
+            label: context.l10n.signIn,
             onPressed: switch (signInState) {
               MutationPending() => null,
               _ => submit,
             },
-            child: Text(context.l10n.signIn),
           ),
           const SizedBox(height: 8.0),
           Text(
             'The code expires after 5 minutes and can only be used once.',
-            style: TextTheme.of(context).bodySmall,
+            style: SrsText.meta(context.srs.ink3),
           ),
         ],
       ),

@@ -22,6 +22,8 @@ void main() {
     // reskin. `view/retro` is Lichess's game-review screen and goes with them.
     // `view/offline_computer/` is one of the two ways into a game, so it is here: the bar, both
     // sheets and the result dialog were all converted off the inherited look in 2026-10.
+    // Sign-in and PGN import are on the list because they carry a real flow -- importing a private
+    // study is how the app is fed -- so a second design language on either is a visible defect.
     const reachable = <String>[
       'lib/src/app.dart',
       'lib/src/design/',
@@ -39,6 +41,8 @@ void main() {
       'lib/src/view/review/',
       'lib/src/view/settings/',
       'lib/src/view/auth/sign_in_options.dart',
+      'lib/src/view/auth/email_login_screen.dart',
+      'lib/src/view/more/import_pgn_screen.dart',
       'lib/src/view/account/account_menu.dart',
       // The study bottom bar is the exception to the study-is-a-cut-candidate rule above:
       // it renders on the reachable StudyScreen and was converted off CupertinoIcons.
