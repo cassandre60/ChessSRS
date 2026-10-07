@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -505,6 +506,38 @@ void main() {
       final importResult = importPgn(pgn);
       final treeHash = computeRepertoireTreeHash(importResult.chapters);
       expect(treeHash, equals(computePgnHash(pgn)));
+    });
+
+    test('computeRepertoireTreeHash distinguishes moves when SAN labels are missing', () {
+      Chapter chapterWithUci(String chapterId, String from, String to) {
+        return Chapter(
+          id: chapterId,
+          studyId: 'study-sanless',
+          sourceOrder: 0,
+          root: RepertoireNode(
+            id: 'root-$chapterId',
+            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+            children: [
+              RepertoireNode(
+                id: 'child-$chapterId',
+                fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+                // No SAN label: only coordinates are known.
+                incomingMove: RepertoireMove(from: from, to: to),
+              ),
+            ],
+          ),
+        );
+      }
+
+      final hashE4 = computeRepertoireTreeHash([chapterWithUci('ch-e4', 'e2', 'e4')]);
+      final hashD4 = computeRepertoireTreeHash([chapterWithUci('ch-d4', 'd2', 'd4')]);
+      expect(
+        hashE4,
+        isNot(equals(hashD4)),
+        reason: 'moves without SAN must fall back to UCI, never the literal "null"',
+      );
     });
 
     test('computePgnHashAsync and importPgnAsync work across isolate boundaries', () async {

@@ -8,7 +8,7 @@ Baseline: `flutter test test/review/review_engine_test.dart test/persistence/can
 - [x] 3. Incorrect-answer re-queue removes only by occurrence `id`, leaving a transposed duplicate (same canonicalId, different id) in queue so one position is asked twice
 - [x] 4. SRS queue dedupes transpositions only for global scope; single-study / chapter / opening scopes queue the same canonical position twice
 - [x] 5. `_canonicalByFenMove` (session) and `InMemoryReviewStateRepository` collide when two different questions share one FEN + one move but have different accepted sets; lookup prefers the map over the passed `decisionId` and can return the wrong canonical
-- [ ] 6. `computePgnHash` / `computeRepertoireTreeHash` write `san` directly; a null SAN hashes as the literal string "null" and collides across unrelated trees (should fall back to UCI)
+- [x] 6. `computePgnHash` / `computeRepertoireTreeHash` write `san` directly; a null SAN hashes as the literal string "null" and collides across unrelated trees (should fall back to UCI)
 - [ ] 7. `chapterToPgn` trusts stored `move.san` (writes literal "null" when missing) and crashes on corrupt `startingFen` via unguarded `Setup.parseFen` (should recompute SAN from position + handle bad FEN)
 - [ ] 8. Opening scope matching is inconsistent: `startSession` uses exact `c.opening == openingFamily` while `getDueSummary` trims both sides (whitespace-only difference hides a scope)
 - [ ] 9. `getDueReviewStates` queries only legacy `srs_review_state` and ignores `position_knowledge_state`, so it under-reports due items (currently unused, but part of the repository contract)

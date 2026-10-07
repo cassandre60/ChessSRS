@@ -87,8 +87,12 @@ String computeRepertoireTreeHash(List<Chapter> chapters) {
 
 void _appendRepertoireNodeMoves(RepertoireNode node, StringBuffer buffer) {
   for (final child in node.children) {
-    if (child.incomingMove != null) {
-      buffer.write(child.incomingMove!.san);
+    final move = child.incomingMove;
+    if (move != null) {
+      // SAN first so fingerprints stay identical to computePgnHash for imported
+      // trees; UCI fallback so a missing label never hashes as "null" and
+      // collides across unrelated moves.
+      buffer.write(move.san ?? move.uci);
       buffer.write(',');
     }
     _appendRepertoireNodeMoves(child, buffer);
