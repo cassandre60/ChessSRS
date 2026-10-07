@@ -5,7 +5,7 @@
 set -euo pipefail
 
 RUN_ID="${1:-}"
-REPO="${2:-cassandre60/chess-repertoire-srs}"
+REPO="${2:-cassandre60/ChessSRS}"
 
 if [[ -z "$RUN_ID" ]]; then
     echo "Usage: $0 <run_id> [repo]"
