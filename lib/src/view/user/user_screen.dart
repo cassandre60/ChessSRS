@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/game/game_filter.dart';
@@ -14,12 +15,8 @@ import 'package:chess_srs/src/view/user/perf_cards.dart';
 import 'package:chess_srs/src/view/user/recent_games.dart';
 import 'package:chess_srs/src/view/user/user_activity.dart';
 import 'package:chess_srs/src/view/user/user_profile.dart';
-import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/haptic_refresh_indicator.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/user.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' show ClientException;
 import 'package:material_ui/material_ui.dart';
@@ -47,45 +44,49 @@ class UserScreen extends ConsumerWidget {
       data: (data) => data.user.lightUser.copyWith(isOnline: data.isOnline),
       orElse: () => null,
     );
-    final seenAt = userScreenData.maybeWhen(data: (data) => data.user.seenAt, orElse: () => null);
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        titleSpacing: 0,
-        title: UserAppBarTitleWidget(
-          user: updatedLightUser ?? user,
-          isOnline: updatedLightUser?.isOnline == true,
-          seenAt: seenAt,
-        ),
-        actions: [
-          SemanticIconButton(
-            icon: const PlatformShareIcon(),
-            semanticsLabel: 'Share profile',
-            onPressed: () =>
-                launchShareDialog(context, ShareParams(uri: lichessUri('/@/${user.name}'))),
-          ),
-        ],
-      ),
-      body: userScreenData.when(
-        data: (data) => _UserProfileListView(
-          data,
-          onRefresh: () => ref.refresh(_userScreenDataProvider(user.id).future),
-        ),
-        loading: () => const Center(child: CircularProgressIndicator.adaptive()),
-        error: (error, _) {
-          if (error is ClientException && error.message.contains('404')) {
-            return Center(
-              child: Text(
-                textAlign: TextAlign.center,
-                context.l10n.usernameNotFound(user.name),
-                style: Styles.bold,
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: updatedLightUser?.name ?? user.name,
+              onBack: () => Navigator.of(context).maybePop(),
+              trailing: SrsIconButton(
+                icon: Icons.ios_share,
+                tooltip: 'Share profile',
+                onPressed: () =>
+                    launchShareDialog(context, ShareParams(uri: lichessUri('/@/${user.name}'))),
               ),
-            );
-          }
-          return FullScreenRetryRequest(
-            onRetry: () => ref.invalidate(_userScreenDataProvider(user.id)),
-          );
-        },
+            ),
+            Expanded(child: _body(context, userScreenData, ref)),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _body(BuildContext context, AsyncValue<UserScreenData> userScreenData, WidgetRef ref) {
+    return userScreenData.when(
+      data: (data) => _UserProfileListView(
+        data,
+        onRefresh: () => ref.refresh(_userScreenDataProvider(user.id).future),
+      ),
+      loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+      error: (error, _) {
+        if (error is ClientException && error.message.contains('404')) {
+          return Center(
+            child: Text(
+              textAlign: TextAlign.center,
+              context.l10n.usernameNotFound(user.name),
+              style: Styles.bold,
+            ),
+          );
+        }
+        return FullScreenRetryRequest(
+          onRetry: () => ref.invalidate(_userScreenDataProvider(user.id)),
+        );
+      },
     );
   }
 }
@@ -126,8 +127,8 @@ class _UserProfileListView extends ConsumerWidget {
         children: [
           UserProfileWidget(user: user),
           PerfCards(user: user, isMe: false),
-          ListSection(
-            hasLeading: true,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (authUser != null && crosstable != null && (crosstable.nbGames) > 0) ...[
                 () {
