@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -27,21 +28,14 @@ import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/game/status_l10n.dart';
 import 'package:chess_srs/src/view/offline_computer/opponent_picker.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
-import 'package:chess_srs/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/board_preview.dart';
-import 'package:chess_srs/src/widgets/bottom_bar.dart';
 import 'package:chess_srs/src/widgets/clock.dart';
 import 'package:chess_srs/src/widgets/game_layout.dart';
-import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/material_diff.dart';
-import 'package:chess_srs/src/widgets/misc.dart';
 import 'package:chess_srs/src/widgets/non_linear_slider.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
-import 'package:chess_srs/src/widgets/variant_app_bar_title.dart';
 import 'package:chess_srs/src/widgets/yes_no_dialog.dart';
 import 'package:chessground/chessground.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,23 +89,45 @@ class OfflineComputerGameScreen extends ConsumerWidget {
         ? context.l10n.practiceWithComputer
         : context.l10n.playAgainstComputer;
 
+    final c = context.srs;
+
     return Scaffold(
-      appBar: AppBar(
-        title: AppBarTitleText(title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: context.l10n.settingsSettings,
-            onPressed: () {
-              showModalBottomSheet<void>(
-                context: context,
-                builder: (_) => const _OfflineComputerGameSettingsSheet(),
-              );
-            },
-          ),
-        ],
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: 'Review',
+              onBack: () => Navigator.of(context).maybePop(),
+              trailing: SrsIconButton(
+                icon: Icons.settings,
+                tooltip: context.l10n.settingsSettings,
+                onPressed: () {
+                  showSrsSheet<void>(
+                    context,
+                    const SrsSheetSurface(child: _OfflineComputerGameSettingsSheet()),
+                  );
+                },
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SrsText.meta(c.ink2),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _Body(initialVariant: initialVariant, initialFen: initialFen),
+            ),
+          ],
+        ),
       ),
-      body: _Body(initialVariant: initialVariant, initialFen: initialFen),
     );
   }
 }
@@ -295,13 +311,14 @@ class _BodyState extends ConsumerState<_Body> {
   }
 
   void _showNewGameDialog({required Variant? initialVariant}) {
-    final double screenHeight = MediaQuery.heightOf(context);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      constraints: BoxConstraints(maxHeight: screenHeight - (screenHeight / 10)),
-      builder: (context) =>
-          _NewGameSheet(initialVariant: initialVariant, initialFen: widget.initialFen),
+    showSrsSheet<void>(
+      context,
+      SrsSheetSurface(
+        // Nine tenths of the screen, the same cap the sheet had as a modal bottom sheet: a
+        // full-height sheet would hide the board it is configuring.
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+        child: _NewGameSheet(initialVariant: initialVariant, initialFen: widget.initialFen),
+      ),
     );
   }
 
@@ -344,35 +361,35 @@ class _BottomBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final gameState = ref.watch(offlineComputerGameControllerProvider);
+    final notifier = ref.read(offlineComputerGameControllerProvider.notifier);
 
-    return BottomBar(
-      children: [
-        BottomBarButton(
-          label: context.l10n.menu,
-          onTap: () => _showGameMenu(context, ref),
-          icon: Icons.menu,
-        ),
-        BottomBarButton(
-          label: context.l10n.resign,
-          onTap: gameState.game.resignable ? () => _showResignDialog(context, ref) : null,
-          icon: CupertinoIcons.flag,
-        ),
-        BottomBarButton(
-          label: context.l10n.takeback,
-          onTap: gameState.canTakeback && (gameState.game.casual || gameState.game.practiceMode)
-              ? () => ref.read(offlineComputerGameControllerProvider.notifier).takeback()
-              : null,
-          icon: CupertinoIcons.arrow_uturn_left,
-        ),
-        BottomBarButton(
-          label: context.l10n.getAHint,
-          onTap: _canGetHint(gameState)
-              ? () => ref.read(offlineComputerGameControllerProvider.notifier).hint()
-              : null,
-          icon: CupertinoIcons.lightbulb,
-          highlighted: gameState.hintSquare != null,
-        ),
-      ],
+    // Plain text actions, like the analysis, editor and study bars: Menu, Resign,
+    // Takeback, Hint. The old bar put an icon above each word, which is the inherited look.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 0,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SrsTextButton(label: context.l10n.menu, onPressed: () => _showGameMenu(context, ref)),
+          SrsTextButton(
+            label: context.l10n.resign,
+            onPressed: gameState.game.resignable ? () => _showResignDialog(context, ref) : null,
+          ),
+          SrsTextButton(
+            label: context.l10n.takeback,
+            onPressed:
+                gameState.canTakeback && (gameState.game.casual || gameState.game.practiceMode)
+                ? () => notifier.takeback()
+                : null,
+          ),
+          SrsTextButton(
+            label: context.l10n.getAHint,
+            onPressed: _canGetHint(gameState) ? () => notifier.hint() : null,
+          ),
+        ],
+      ),
     );
   }
 
@@ -868,236 +885,237 @@ class _NewGameSheetState extends ConsumerState<_NewGameSheet> {
   Widget build(BuildContext context) {
     final boardPrefs = ref.watch(boardPreferencesProvider);
     final hasClock = !_practiceMode && _timeControlType == TimeControlType.clock;
+    final c = context.srs;
 
-    return BottomSheetScrollableContainer(
-      children: [
-        if (widget.initialFen != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: Center(
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SrsSheetGrabber(),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    width: 150,
-                    height: 150,
-                    child: StaticChessboard(
-                      size: 150,
-                      fen: widget.initialFen!,
-                      orientation: _selectedSideChoice.toSide(fen: widget.initialFen) ?? Side.white,
-                      settings: StaticChessboardSettings(
-                        pieceAssets: boardPrefs.pieceSet.assets,
-                        colorScheme: boardPrefs.boardTheme.colors,
-                        brightness: boardPrefs.brightness,
-                        hue: boardPrefs.hue,
-                        enableCoordinates: false,
-                        borderRadius: const BorderRadius.all(Radius.circular(4)),
+                  if (widget.initialFen != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: 150,
+                              height: 150,
+                              child: StaticChessboard(
+                                size: 150,
+                                fen: widget.initialFen!,
+                                orientation:
+                                    _selectedSideChoice.toSide(fen: widget.initialFen) ??
+                                    Side.white,
+                                settings: StaticChessboardSettings(
+                                  pieceAssets: boardPrefs.pieceSet.assets,
+                                  colorScheme: boardPrefs.boardTheme.colors,
+                                  brightness: boardPrefs.brightness,
+                                  hue: boardPrefs.hue,
+                                  enableCoordinates: false,
+                                  borderRadius: const BorderRadius.all(Radius.circular(4)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              Setup.parseFen(widget.initialFen!).turn == Side.white
+                                  ? context.l10n.whitePlays
+                                  : context.l10n.blackPlays,
+                              style: TextStyle(fontStyle: FontStyle.italic, color: c.ink2),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  SrsSettingsRow(
+                    label: context.l10n.opponent,
+                    value: _selectedOpponent.displayName,
+                    leading: OpponentIcon(_selectedOpponent, size: 32),
+                    onTap: _pickOpponent,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    Setup.parseFen(widget.initialFen!).turn == Side.white
-                        ? context.l10n.whitePlays
-                        : context.l10n.blackPlays,
-                    style: TextStyle(fontStyle: FontStyle.italic, color: textShade(context, 0.7)),
+                  SrsSettingsRow(
+                    label: context.l10n.timeControl,
+                    value: _timeControlType.label(context.l10n),
+                    help: _practiceMode ? 'Practice mode is played without a clock.' : null,
+                    enabled: !_practiceMode,
+                    onTap: _practiceMode
+                        ? null
+                        : () {
+                            showChoicePicker<TimeControlType>(
+                              context,
+                              title: Text(context.l10n.timeControl),
+                              choices: TimeControlType.values,
+                              selectedItem: _timeControlType,
+                              labelBuilder: (TimeControlType control) =>
+                                  Text(control.label(context.l10n)),
+                              onSelectedItemChanged: _setTimeControlType,
+                            );
+                          },
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
+                    alignment: Alignment.topCenter,
+                    child: hasClock
+                        ? Column(
+                            children: [
+                              _SliderRow(
+                                label: context.l10n.minutesPerSide,
+                                value: clockLabelInMinutes(_timeIncrement.time),
+                                slider: NonLinearSlider(
+                                  value: _timeIncrement.time,
+                                  values: kAvailableTimesInSeconds,
+                                  labelBuilder: clockLabelInMinutes,
+                                  onChange: _setTotalTime,
+                                  onChangeEnd: _setTotalTime,
+                                ),
+                              ),
+                              _SliderRow(
+                                label: context.l10n.incrementInSeconds,
+                                value: _timeIncrement.increment.toString(),
+                                slider: NonLinearSlider(
+                                  value: _timeIncrement.increment,
+                                  values: kAvailableIncrementsInSeconds,
+                                  onChange: _setIncrement,
+                                  onChangeEnd: _setIncrement,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.variant,
+                    value: _selectedVariant.label(context.l10n),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices: playSupportedVariants.toList(),
+                        selectedItem: _selectedVariant,
+                        labelBuilder: (variant) => Text(variant.label(context.l10n)),
+                        onSelectedItemChanged: (Variant variant) {
+                          setState(() {
+                            _selectedVariant = variant;
+                            if (variant == Variant.crazyhouse) {
+                              _practiceMode = false;
+                            }
+                            // Maia only knows standard chess, so picking a variant it cannot play hands
+                            // the game back to Stockfish rather than leaving an opponent that would
+                            // have to refuse to move.
+                            if (!_selectedOpponent.supportsVariant(variant)) {
+                              _selectedOpponent = OpponentSpec.defaultSpec;
+                            }
+                          });
+                          ref
+                              .read(offlineComputerGamePreferencesProvider.notifier)
+                              .setVariant(variant);
+                        },
+                      );
+                    },
+                  ),
+                  if (widget.initialFen == null)
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.fastOutSlowIn,
+                      child: _selectedVariant == Variant.fromPosition
+                          ? SmallBoardPreview(
+                              orientation:
+                                  _selectedSideChoice.toSide(fen: _fromPositionFen) ?? Side.white,
+                              fen: _fromPositionFen ?? kEmptyFEN,
+                              description: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  SrsTextInput(
+                                    controller: _fenController,
+                                    hintText: context.l10n.pasteTheFenStringHere,
+                                    semanticLabel: context.l10n.pasteTheFenStringHere,
+                                    readOnly: true,
+                                    maxLines: 5,
+                                    onTap: () => pasteFenFromClipboard(context, _fenController),
+                                  ),
+                                  SrsTextButton(
+                                    label: 'Paste from clipboard',
+                                    onPressed: () => pasteFenFromClipboard(context, _fenController),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  SrsSettingsRow(
+                    label: context.l10n.side,
+                    value: _sideChoiceLabel(context, _selectedSideChoice),
+                    onTap: () {
+                      showChoicePicker(
+                        context,
+                        choices:
+                            (widget.initialFen != null || _selectedVariant == Variant.fromPosition)
+                            ? SideChoice.values
+                            : SideChoice.values.where((c) => c != SideChoice.nextToPlay).toList(),
+                        selectedItem: _selectedSideChoice,
+                        labelBuilder: (SideChoice choice) =>
+                            Text(_sideChoiceLabel(context, choice)),
+                        onSelectedItemChanged: (SideChoice choice) {
+                          setState(() => _selectedSideChoice = choice);
+                          ref
+                              .read(offlineComputerGamePreferencesProvider.notifier)
+                              .setSideChoice(choice);
+                        },
+                      );
+                    },
+                  ),
+                  SrsSettingsRow(
+                    label: 'Practice mode',
+                    help: 'Get feedback on your moves',
+                    control: SrsSwitch(
+                      value: _practiceMode,
+                      semanticLabel: 'Practice mode',
+                      onChanged: _selectedVariant == Variant.crazyhouse ? null : _setPracticeMode,
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: context.l10n.casual,
+                    help: 'Allow takebacks and hints',
+                    control: SrsSwitch(
+                      value: _practiceMode || _casual,
+                      semanticLabel: context.l10n.casual,
+                      onChanged: _practiceMode
+                          ? null
+                          : (value) {
+                              setState(() => _casual = value);
+                              ref
+                                  .read(offlineComputerGamePreferencesProvider.notifier)
+                                  .setCasual(value);
+                            },
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        ListSection(
-          materialFilledCard: true,
-          children: [
-            SettingsListTile(
-              icon: OpponentIcon(_selectedOpponent, size: 32),
-              settingsLabel: Text(context.l10n.opponent),
-              settingsValue: _selectedOpponent.displayName,
-              onTap: _pickOpponent,
+          // The primary action is a footer rather than the last row: with a board preview, two
+          // sliders and six settings the sheet scrolls, and a Play button that scrolls out of
+          // reach is a dead end on a small screen.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 14),
+            child: SrsPillButton(
+              expand: true,
+              label: context.l10n.play,
+              onPressed: _isPlayEnabled ? _startGame : null,
             ),
-            SettingsListTile(
-              settingsLabel: Text(context.l10n.timeControl),
-              settingsValue: _timeControlType.label(context.l10n),
-              enabled: !_practiceMode,
-              explanation: _practiceMode ? 'Practice mode is played without a clock.' : null,
-              onTap: _practiceMode
-                  ? null
-                  : () {
-                      showChoicePicker<TimeControlType>(
-                        context,
-                        title: Text(context.l10n.timeControl),
-                        choices: TimeControlType.values,
-                        selectedItem: _timeControlType,
-                        labelBuilder: (TimeControlType control) =>
-                            Text(control.label(context.l10n)),
-                        onSelectedItemChanged: _setTimeControlType,
-                      );
-                    },
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              alignment: Alignment.topCenter,
-              child: hasClock
-                  ? Column(
-                      children: [
-                        ListTile(
-                          title: Text.rich(
-                            TextSpan(
-                              text: '${context.l10n.minutesPerSide}: ',
-                              children: [
-                                TextSpan(
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                                  text: clockLabelInMinutes(_timeIncrement.time),
-                                ),
-                              ],
-                            ),
-                          ),
-                          subtitle: NonLinearSlider(
-                            value: _timeIncrement.time,
-                            values: kAvailableTimesInSeconds,
-                            labelBuilder: clockLabelInMinutes,
-                            onChange: _setTotalTime,
-                            onChangeEnd: _setTotalTime,
-                          ),
-                        ),
-                        ListTile(
-                          title: Text.rich(
-                            TextSpan(
-                              text: '${context.l10n.incrementInSeconds}: ',
-                              children: [
-                                TextSpan(
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                                  text: _timeIncrement.increment.toString(),
-                                ),
-                              ],
-                            ),
-                          ),
-                          subtitle: NonLinearSlider(
-                            value: _timeIncrement.increment,
-                            values: kAvailableIncrementsInSeconds,
-                            onChange: _setIncrement,
-                            onChangeEnd: _setIncrement,
-                          ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            SettingsListTile(
-              settingsLabel: Text(context.l10n.variant),
-              settingsValue: _selectedVariant.label(context.l10n),
-              onTap: () {
-                showChoicePicker(
-                  context,
-                  choices: playSupportedVariants.toList(),
-                  selectedItem: _selectedVariant,
-                  labelBuilder: (variant) => VariantLabel(variant),
-                  onSelectedItemChanged: (Variant variant) {
-                    setState(() {
-                      _selectedVariant = variant;
-                      if (variant == Variant.crazyhouse) {
-                        _practiceMode = false;
-                      }
-                      // Maia only knows standard chess, so picking a variant it cannot play hands
-                      // the game back to Stockfish rather than leaving an opponent that would
-                      // have to refuse to move.
-                      if (!_selectedOpponent.supportsVariant(variant)) {
-                        _selectedOpponent = OpponentSpec.defaultSpec;
-                      }
-                    });
-                    ref.read(offlineComputerGamePreferencesProvider.notifier).setVariant(variant);
-                  },
-                );
-              },
-            ),
-            if (widget.initialFen == null)
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.fastOutSlowIn,
-                child: _selectedVariant == Variant.fromPosition
-                    ? SmallBoardPreview(
-                        orientation:
-                            _selectedSideChoice.toSide(fen: _fromPositionFen) ?? Side.white,
-                        fen: _fromPositionFen ?? kEmptyFEN,
-                        description: TextField(
-                          maxLines: 5,
-                          decoration: InputDecoration(
-                            labelText: context.l10n.pasteTheFenStringHere,
-                            suffixIcon: const Icon(Icons.paste),
-                          ),
-                          controller: _fenController,
-                          readOnly: true,
-                          onTap: () => pasteFenFromClipboard(context, _fenController),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            SettingsListTile(
-              settingsLabel: Text(context.l10n.side),
-              settingsValue: _sideChoiceLabel(context, _selectedSideChoice),
-              onTap: () {
-                showChoicePicker(
-                  context,
-                  choices: (widget.initialFen != null || _selectedVariant == Variant.fromPosition)
-                      ? SideChoice.values
-                      : SideChoice.values.where((c) => c != SideChoice.nextToPlay).toList(),
-                  selectedItem: _selectedSideChoice,
-                  labelBuilder: (SideChoice choice) => Text(_sideChoiceLabel(context, choice)),
-                  onSelectedItemChanged: (SideChoice choice) {
-                    setState(() => _selectedSideChoice = choice);
-                    ref.read(offlineComputerGamePreferencesProvider.notifier).setSideChoice(choice);
-                  },
-                );
-              },
-            ),
-            SwitchSettingTile(
-              title: const Text('Practice mode'),
-              subtitle: const Text('Get feedback on your moves'),
-              value: _practiceMode,
-              onChanged: _selectedVariant == Variant.crazyhouse ? null : _setPracticeMode,
-            ),
-            SwitchSettingTile(
-              title: Text(context.l10n.casual),
-              subtitle: const Text('Allow takebacks and hints'),
-              value: _practiceMode || _casual,
-              onChanged: _practiceMode
-                  ? null
-                  : (value) {
-                      setState(() => _casual = value);
-                      ref.read(offlineComputerGamePreferencesProvider.notifier).setCasual(value);
-                    },
-            ),
-          ],
-        ),
-        Padding(
-          padding: Styles.horizontalBodyPadding,
-          child: FilledButton(
-            onPressed: _isPlayEnabled
-                ? () {
-                    final effectiveFen =
-                        widget.initialFen ??
-                        (_selectedVariant == Variant.fromPosition ? _fromPositionFen : null);
-                    final side =
-                        _selectedSideChoice.toSide(fen: effectiveFen) ??
-                        Side.values[Random().nextInt(2)];
-                    ref
-                        .read(offlineComputerGameControllerProvider.notifier)
-                        .startNewGame(
-                          opponentSpec: _selectedOpponent,
-                          playerSide: side,
-                          casual: _practiceMode || _casual,
-                          practiceMode: _practiceMode,
-                          variant: _selectedVariant,
-                          initialFen: effectiveFen,
-                          timeIncrement: _timeIncrement,
-                        );
-                    Navigator.pop(context);
-                  }
-                : null,
-            child: Text(context.l10n.play, style: Styles.bold),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1112,10 +1130,60 @@ class _NewGameSheetState extends ConsumerState<_NewGameSheet> {
     await ref.read(offlineComputerGamePreferencesProvider.notifier).setOpponent(opponent);
   }
 
+  void _startGame() {
+    final effectiveFen =
+        widget.initialFen ?? (_selectedVariant == Variant.fromPosition ? _fromPositionFen : null);
+    final side = _selectedSideChoice.toSide(fen: effectiveFen) ?? Side.values[Random().nextInt(2)];
+    ref
+        .read(offlineComputerGameControllerProvider.notifier)
+        .startNewGame(
+          opponentSpec: _selectedOpponent,
+          playerSide: side,
+          casual: _practiceMode || _casual,
+          practiceMode: _practiceMode,
+          variant: _selectedVariant,
+          initialFen: effectiveFen,
+          timeIncrement: _timeIncrement,
+        );
+    Navigator.pop(context);
+  }
+
   bool get _isPlayEnabled =>
       _selectedVariant != Variant.fromPosition ||
       widget.initialFen != null ||
       (_fromPositionFen != null && _fromPositionFen!.isNotEmpty);
+}
+
+/// A labeled slider row for the new-game sheet: label with a bold value on top,
+/// control below.
+class _SliderRow extends StatelessWidget {
+  const _SliderRow({required this.label, required this.value, required this.slider});
+
+  final String label;
+  final String value;
+  final Widget slider;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text.rich(
+            TextSpan(
+              text: '$label: ',
+              style: SrsText.settingLabel(c.ink),
+              children: [TextSpan(style: SrsText.rowDue(c.ink), text: value)],
+            ),
+          ),
+          slider,
+        ],
+      ),
+    );
+  }
 }
 
 class _OfflineComputerGameSettingsSheet extends ConsumerWidget {
@@ -1127,42 +1195,51 @@ class _OfflineComputerGameSettingsSheet extends ConsumerWidget {
     final practiceMode = ref.watch(
       offlineComputerGameControllerProvider.select((s) => s.game.practiceMode),
     );
+    final notifier = ref.read(offlineComputerGamePreferencesProvider.notifier);
 
-    return BottomSheetScrollableContainer(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (practiceMode)
-          ListSection(
-            header: const Text('Practice settings'),
-            materialFilledCard: true,
-            children: [
-              SwitchSettingTile(
-                title: Text(context.l10n.hideBestMove),
-                value: prefs.hideBestMove,
-                onChanged: (_) {
-                  ref.read(offlineComputerGamePreferencesProvider.notifier).toggleHideBestMove();
-                },
-              ),
-              SwitchSettingTile(
-                title: const Text('Hide evaluation'),
-                value: prefs.hideEvaluation,
-                onChanged: (_) {
-                  ref.read(offlineComputerGamePreferencesProvider.notifier).toggleHideEvaluation();
-                },
-              ),
-            ],
-          ),
-        ListSection(
-          header: Text(context.l10n.settingsSettings),
-          materialFilledCard: true,
-          children: [
-            SwitchSettingTile(
-              title: Text(context.l10n.preferencesBlindfold),
-              value: prefs.blindfoldMode,
-              onChanged: (_) {
-                ref.read(offlineComputerGamePreferencesProvider.notifier).toggleBlindfoldMode();
-              },
+        const SrsSheetGrabber(),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (practiceMode) ...[
+                  const SrsGroupHeader('Practice settings'),
+                  SrsSettingsRow(
+                    label: context.l10n.hideBestMove,
+                    control: SrsSwitch(
+                      value: prefs.hideBestMove,
+                      semanticLabel: context.l10n.hideBestMove,
+                      onChanged: (_) => notifier.toggleHideBestMove(),
+                    ),
+                  ),
+                  SrsSettingsRow(
+                    label: 'Hide evaluation',
+                    control: SrsSwitch(
+                      value: prefs.hideEvaluation,
+                      semanticLabel: 'Hide evaluation',
+                      onChanged: (_) => notifier.toggleHideEvaluation(),
+                    ),
+                  ),
+                ],
+                SrsGroupHeader(context.l10n.settingsSettings),
+                SrsSettingsRow(
+                  label: context.l10n.preferencesBlindfold,
+                  control: SrsSwitch(
+                    value: prefs.blindfoldMode,
+                    semanticLabel: context.l10n.preferencesBlindfold,
+                    onChanged: (_) => notifier.toggleBlindfoldMode(),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ],
     );
@@ -1199,12 +1276,13 @@ class OfflineComputerGameResultDialog extends StatelessWidget {
       isThreefoldRepetition: game.isThreefoldRepetition,
     );
 
-    return AlertDialog.adaptive(
-      title: Text(title),
-      content: Text(subtitle),
+    return SrsDialog(
+      title: title,
+      body: subtitle,
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.close)),
-        TextButton(
+        SrsTextButton(label: context.l10n.close, onPressed: () => Navigator.pop(context)),
+        SrsTextButton(
+          label: context.l10n.analysis,
           onPressed: () {
             Navigator.pop(context);
             Navigator.of(context).push(
@@ -1219,9 +1297,8 @@ class OfflineComputerGameResultDialog extends StatelessWidget {
               ),
             );
           },
-          child: Text(context.l10n.analysis),
         ),
-        TextButton(onPressed: onNewGame, child: Text(context.l10n.mobileNewGame)),
+        SrsPillButton(label: context.l10n.mobileNewGame, onPressed: onNewGame),
       ],
     );
   }
