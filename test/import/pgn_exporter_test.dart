@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';
@@ -104,6 +105,66 @@ void main() {
       expect(exported, contains('[Orientation "white"]'));
       expect(exported, contains('[White "Repertoire"]'));
       expect(exported, contains('[Black "Opponent"]'));
+    });
+
+    test('exports playable SAN when the stored move label is missing', () {
+      const chapter = Chapter(
+        id: 'ch-sanless',
+        studyId: 'study-sanless',
+        sourceOrder: 0,
+        title: 'Sanless',
+        root: RepertoireNode(
+          id: 'root-sanless',
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          children: [
+            RepertoireNode(
+              id: 'node-sanless-e4',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              // Coordinates only: the label must be derived, never "null".
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4'),
+            ),
+          ],
+        ),
+      );
+
+      final exported = chapterToPgn(chapter);
+
+      expect(exported, isNot(contains('null')));
+      expect(exported, contains('1. e4'));
+
+      final parsed = PgnGame.parseMultiGamePgn(exported);
+      expect(parsed.length, 1);
+      expect(parsed.first.moves.mainline().map((m) => m.san).toList(), ['e4']);
+    });
+
+    test('corrupt starting FEN never crashes export and omits invalid headers', () {
+      const chapter = Chapter(
+        id: 'ch-badfen',
+        studyId: 'study-badfen',
+        sourceOrder: 0,
+        title: 'Bad FEN',
+        startingFen: 'not-a-fen',
+        root: RepertoireNode(
+          id: 'root-badfen',
+          fen: 'not-a-fen',
+          fenKey: 'not-a-fen',
+          children: [
+            RepertoireNode(
+              id: 'node-badfen-e4',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            ),
+          ],
+        ),
+      );
+
+      late String exported;
+      expect(() => exported = chapterToPgn(chapter), returnsNormally);
+      expect(exported, isNot(contains('not-a-fen')));
+      expect(exported, contains('1. e4'));
     });
   });
 }

@@ -30,7 +30,19 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
     buffer.writeln('[Chapter "${chapter.title!.trim()}"]');
   }
 
+  // A corrupt stored FEN must never crash export: fall back to the initial
+  // position and omit the SetUp/FEN headers rather than emitting lies.
+  var validStartingFen = false;
+  Position startPos = Chess.initial;
   if (chapter.startingFen != null && chapter.startingFen!.isNotEmpty) {
+    try {
+      startPos = Chess.fromSetup(Setup.parseFen(chapter.startingFen!));
+      validStartingFen = true;
+    } catch (_) {
+      startPos = Chess.initial;
+    }
+  }
+  if (validStartingFen) {
     buffer.writeln('[SetUp "1"]');
     buffer.writeln('[FEN "${chapter.startingFen}"]');
   }
@@ -38,10 +50,6 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   buffer.writeln();
 
   if (chapter.root != null && chapter.root!.children.isNotEmpty) {
-    final Position startPos = chapter.startingFen != null
-        ? Chess.fromSetup(Setup.parseFen(chapter.startingFen!))
-        : Chess.initial;
-
     _writeNodeMoves(buffer, chapter.root!, position: startPos);
   }
 
@@ -89,7 +97,7 @@ void _writeNodeMoves(
     } else if (forceMoveNumber) {
       buffer.write('${position.fullmoves}... ');
     }
-    buffer.write('${move.san} ');
+    buffer.write('${_exportSan(position, move)} ');
 
     if (mainline.comment != null && mainline.comment!.trim().isNotEmpty) {
       buffer.write('{${mainline.comment!.trim()}} ');
@@ -107,7 +115,7 @@ void _writeNodeMoves(
         } else {
           varBuffer.write('${position.fullmoves}... ');
         }
-        varBuffer.write('${varMove.san} ');
+        varBuffer.write('${_exportSan(position, varMove)} ');
 
         if (variation.comment != null && variation.comment!.trim().isNotEmpty) {
           varBuffer.write('{${variation.comment!.trim()}} ');
@@ -146,6 +154,26 @@ Position? _playMove(Position pos, RepertoireMove move) {
     return pos.play(NormalMove(from: from, to: to, promotion: promotion));
   } catch (_) {
     return null;
+  }
+}
+
+/// SAN label for [move] in [position] for export.
+///
+/// Stored labels are trusted when present; a missing label is derived from the
+/// position so export never writes the literal "null". An unplayable move
+/// falls back to UCI: the importer quarantines it with a structured error
+/// instead of the export silently dropping the line.
+String _exportSan(Position position, RepertoireMove move) {
+  final stored = move.san;
+  if (stored != null && stored.isNotEmpty) return stored;
+  try {
+    final from = Square.fromName(move.from);
+    final to = Square.fromName(move.to);
+    final promotion = move.promotion != null ? Role.fromChar(move.promotion!) : null;
+    final (_, san) = position.makeSan(NormalMove(from: from, to: to, promotion: promotion));
+    return san;
+  } catch (_) {
+    return move.uci;
   }
 }
 
