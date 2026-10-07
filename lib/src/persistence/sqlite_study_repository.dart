@@ -871,7 +871,10 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<int> getTodayReviewedPositionsCount(DateTime now) async {
-    final startOfDay = DateTime.utc(now.year, now.month, now.day).toIso8601String();
+    // Local calendar day, consistent with how event timestamps are stored
+    // (DateTime.now().toIso8601String() carries no zone) and with the
+    // exposure-throttle calendar-day check in the graph coordinator.
+    final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
     final result = await _db.rawQuery(
       '''
       SELECT COUNT(DISTINCT decisionId) as count

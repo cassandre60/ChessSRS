@@ -3,7 +3,7 @@
 Scope: `lib/src/domain/`, `lib/src/review/`, `lib/src/persistence/`, `lib/src/import/`.
 Baseline: `flutter test test/review/review_engine_test.dart test/persistence/canonical_rekey_migration_test.dart` green (29/29) after `build_runner` in this worktree. Full suite authority is CI.
 
-- [ ] 1. Daily quota day-boundary mixes UTC and local time (`getTodayReviewedPositionsCount` uses `DateTime.utc(y,m,d)` while events store local `toIso8601String`; exact-midnight local event compares smaller than UTC start and is excluded)
+- [x] 1. Daily quota day-boundary mixes UTC and local time (`getTodayReviewedPositionsCount` uses `DateTime.utc(y,m,d)` while events store local `toIso8601String`; exact-midnight local event compares smaller than UTC start and is excluded)
 - [ ] 2. `ReviewSession.retryMove` creates fallback `ReviewState.initial(decisionId: decision.id)` instead of canonicalId, diverging from `submitMove` which uses canonicalId
 - [ ] 3. Incorrect-answer re-queue removes only by occurrence `id`, leaving a transposed duplicate (same canonicalId, different id) in queue so one position is asked twice
 - [ ] 4. SRS queue dedupes transpositions only for global scope; single-study / chapter / opening scopes queue the same canonical position twice

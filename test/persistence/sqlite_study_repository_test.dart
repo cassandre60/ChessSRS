@@ -905,6 +905,32 @@ void main() {
       }
     });
 
+    test('getTodayReviewedPositionsCount includes event at local midnight start of day', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        // Local (non-UTC) times, matching production SystemClock storage
+        // which persists via DateTime.now().toIso8601String() without a zone.
+        final now = DateTime(2026, 9, 18, 12, 0, 0);
+        final midnight = DateTime(2026, 9, 18, 0, 0, 0);
+
+        final ev = ReviewEvent(
+          decisionId: 'dec-midnight',
+          when: midnight,
+          result: ReviewResult.correct,
+          oldState: const ReviewState(decisionId: 'dec-midnight'),
+          newState: const ReviewState(decisionId: 'dec-midnight', repetitionCount: 1),
+        );
+        await repo.saveReviewEvent(ev);
+
+        final count = await repo.getTodayReviewedPositionsCount(now);
+        expect(count, 1, reason: 'event exactly at local midnight starts today and must count');
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'saveAnswerBatch atomically commits knowledge states, legacy mirrors, and events',
       () async {
