@@ -149,3 +149,48 @@ amendment there). New screens use the primitives and tokens in the design
 package instead of `material_ui`/`cupertino_ui` components. This is a
 presentation-layer change only; it does not affect scheduling, persistence,
 import, or any domain logic.
+
+## D017 — Keep Firebase, pointed at Lichess, until reminders are actually built
+
+Decision: keep Firebase and notifications (C1, C2 in `CUT_PROPOSALS.md`). Do not
+strip them, and do not create a new Firebase project yet. `lib/firebase_options.dart`
+stays pointed at `lichessv2` / `org.lichess.mobileV2`.
+
+Date: 2026-09-29
+
+Context: C1 and C2 sat `[G]` GREY — undecided — through the whole audit, and the
+audit flagged the Firebase project as an open item. The owner's test for deciding
+was whether notifications need it, and they do: the FCM path starts at launch
+(`lib/src/app.dart:123`) and registers a device token, so removing Firebase would
+remove a live capability.
+
+But "notifications need Firebase" and "Firebase is correctly configured for
+ChessSRS" are two different claims, and only the first is true. What the plumbing
+delivers today is **Lichess's** push, registered against Lichess's backend:
+
+```dart
+// lib/src/model/notifications/notification_service.dart:475
+client.post(Uri(path: '/mobile/register/firebase/$token'))
+```
+
+The SRS review reminders that C2 was written for — "like Anki", the reason anyone
+would want notifications in a local-first trainer — were never built. No
+`zonedSchedule`, no topic subscription, nothing that schedules anything.
+
+Consequences:
+
+- FCM device tokens register on Lichess's backend, and Crashlytics non-fatals
+  (including sign-in failures, `lib/src/model/auth/sign_in_failure_reporter.dart`)
+  reach Lichess's console. Accepted knowingly for now, since the fork is not
+  distributed and both destinations are Lichess's own infrastructure.
+- The account menu being unreachable (fixed in PR #84) meant no user could sign in,
+  and `_registerToken` returns early without a signed-in user (`:471`) — so
+  notifications were fully unreachable too, not just study import. Worth knowing
+  when weighing how serious that bug was.
+- `lib/firebase_options.dart` is generated, so switching projects is a
+  console-and-regenerate task, never a hand edit. Recorded so nobody attempts the
+  edit.
+
+Revisit when: a daily review reminder is actually built. That feature needs a
+backend we own, and at that point owning the Firebase project stops being
+optional rather than merely preferable.

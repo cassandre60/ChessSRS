@@ -23,7 +23,17 @@ import 'package:material_ui/material_ui.dart';
 /// If the study has a single chapter, navigates directly to [AnalysisScreen].
 /// If the study has multiple chapters, opens [StudyChaptersScreen] so the user
 /// can choose which chapter to explore.
-Future<void> openStudyExplorer(BuildContext context, WidgetRef ref, {String? studyId}) async {
+///
+/// [navigator], when provided, is used for pushes instead of the context's
+/// root navigator: callers that dismiss their own sheets first hold no mounted
+/// context by the time the loads below complete, but a captured
+/// [NavigatorState] stays usable.
+Future<void> openStudyExplorer(
+  BuildContext context,
+  WidgetRef ref, {
+  String? studyId,
+  NavigatorState? navigator,
+}) async {
   final reviewState = ref.read(reviewControllerProvider).value;
   if (reviewState == null) return;
 
@@ -50,24 +60,33 @@ Future<void> openStudyExplorer(BuildContext context, WidgetRef ref, {String? stu
     return;
   }
 
-  if (!context.mounted) return;
+  if (!context.mounted && navigator == null) return;
 
   if (chapters.length == 1) {
-    await openChapterAnalysis(context, ref, study: study, chapter: chapters.first);
-  } else {
-    Navigator.of(
+    await openChapterAnalysis(
       context,
-      rootNavigator: true,
-    ).push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters, isExplorerMode: true));
+      ref,
+      study: study,
+      chapter: chapters.first,
+      navigator: navigator,
+    );
+  } else {
+    (navigator ?? Navigator.of(context, rootNavigator: true)).push(
+      StudyChaptersScreen.buildRoute(study: study, chapters: chapters, isExplorerMode: true),
+    );
   }
 }
 
 /// Opens [AnalysisScreen] for a specific chapter within [study].
+///
+/// [navigator], when provided, is used for the push instead of the context's
+/// root navigator: see [openStudyExplorer].
 Future<void> openChapterAnalysis(
   BuildContext context,
   WidgetRef ref, {
   required Study study,
   required Chapter chapter,
+  NavigatorState? navigator,
 }) async {
   Chapter fullChapter = chapter;
   if (fullChapter.root == null) {
@@ -84,9 +103,9 @@ Future<void> openChapterAnalysis(
     return;
   }
 
-  if (!context.mounted) return;
+  if (!context.mounted && navigator == null) return;
 
-  Navigator.of(context, rootNavigator: true).push(
+  (navigator ?? Navigator.of(context, rootNavigator: true)).push(
     AnalysisScreen.buildRoute(
       AnalysisOptions.pgn(
         id: StringId('study_${study.id}_${chapter.id}'),
@@ -224,22 +243,27 @@ class StudyChaptersScreen extends ConsumerWidget {
               children: [
                 IconButton(
                   icon: const Icon(Symbols.explore_rounded),
-                  tooltip: 'Analyze chapter',
+                  tooltip: 'Explore chapter',
                   onPressed: () =>
                       openChapterAnalysis(context, ref, study: study, chapter: chapter),
                 ),
-                IconButton(
-                  icon: const Icon(Symbols.fitness_center_rounded),
-                  tooltip: 'Practice chapter',
-                  onPressed: () {
-                    ref
-                        .read(reviewControllerProvider.notifier)
-                        .startPracticeMode(
-                          scope: ReviewScope.chapter(studyId: study.id, chapterId: chapter.id),
-                        );
-                    Navigator.of(context).pop();
-                  },
-                ),
+                // No Practice entry in explore mode: it re-scopes the review
+                // queue to this chapter, which is quizzing, not browsing
+                // (owner decision 2026-09-29 Q7). Practice stays where review
+                // lives — the scope drawer and the study actions sheet.
+                if (!isExplorerMode)
+                  IconButton(
+                    icon: const Icon(Symbols.fitness_center_rounded),
+                    tooltip: 'Practice chapter',
+                    onPressed: () {
+                      ref
+                          .read(reviewControllerProvider.notifier)
+                          .startPracticeMode(
+                            scope: ReviewScope.chapter(studyId: study.id, chapterId: chapter.id),
+                          );
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 IconButton(
                   icon: const Icon(Symbols.share_rounded),
                   tooltip: 'Export chapter PGN',

@@ -9,6 +9,9 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
+import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
+import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
@@ -130,7 +133,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 32.0),
           Text(
-            'Bring your repertoire.',
+            context.l10n.reviewNoStudiesHeadline,
             style: TextStyle(
               fontFamily: SrsText.ui,
               fontSize: headlineSize,
@@ -142,7 +145,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 16.0),
           Text(
-            'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.',
+            context.l10n.reviewNoStudiesSubtext,
             style: TextStyle(fontFamily: SrsText.ui, fontSize: 17, height: 1.45, color: c.ink2),
           ),
           const SizedBox(height: 28.0),
@@ -155,12 +158,12 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Drop a PGN file here',
+                    context.l10n.reviewNoStudiesDropZone,
                     style: TextStyle(fontFamily: SrsText.ui, fontSize: 15.5, color: c.ink),
                   ),
                   const SizedBox(height: 16.0),
                   SrsPillButton(
-                    label: 'Choose file',
+                    label: context.l10n.reviewNoStudiesChooseFile,
                     onPressed: () => RepertoireImportDialog.show(
                       context,
                       initialSource: ImportSource.file,
@@ -177,7 +180,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             runSpacing: 8.0,
             children: [
               SrsTextButton(
-                label: 'Paste PGN text',
+                label: context.l10n.reviewNoStudiesPastePgn,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.file,
@@ -185,7 +188,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 ),
               ),
               SrsTextButton(
-                label: 'Import a Lichess study',
+                label: context.l10n.reviewNoStudiesImportLichess,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.lichess,
@@ -199,12 +202,16 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Train as',
+                context.l10n.reviewNoStudiesTrainAs,
                 style: TextStyle(fontFamily: SrsText.ui, fontSize: 14, color: c.ink2),
               ),
               const SizedBox(width: 12.0),
               SrsSegmented<Side?>(
-                options: const {null: 'Auto', Side.white: 'White', Side.black: 'Black'},
+                options: {
+                  null: context.l10n.reviewNoStudiesAuto,
+                  Side.white: context.l10n.reviewNoStudiesWhite,
+                  Side.black: context.l10n.reviewNoStudiesBlack,
+                },
                 value: _trainSide,
                 onChanged: (val) => setState(() => _trainSide = val),
               ),
@@ -217,9 +224,9 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
     return Column(
       children: [
         SrsTopBar(
-          scopeTitle: 'ChessSRS',
+          activeSide: Side.white,
           dueCount: 0,
-          onScopePressed: () => ReviewScopeDrawer.show(context),
+          onSidePressed: (side) => _openColourDrawer(context, side),
           onOverflowPressed: () => _showOverflowSheet(context),
         ),
         Expanded(
@@ -360,10 +367,10 @@ class _NothingDueView extends ConsumerWidget {
         child: Column(
           children: [
             SrsTopBar(
-              scopeTitle: _computeScopeTitle(state),
+              activeSide: state.activeSide,
               dueCount: 0,
               isPracticeMode: state.isPracticeMode,
-              onScopePressed: () => ReviewScopeDrawer.show(context),
+              onSidePressed: (side) => _openColourDrawer(context, side),
               onOverflowPressed: () => _showOverflowSheet(context),
               onExitPractice: state.isPracticeMode
                   ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -507,19 +514,24 @@ class _NothingDueView extends ConsumerWidget {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             SrsPillButton(
-                              label: 'Practice',
+                              label: context.l10n.reviewNothingDuePractice,
                               shortcut: 'P',
                               onPressed: () {
                                 ref.read(reviewControllerProvider.notifier).startPracticeMode();
                               },
                             ),
                             SrsTextButton(
-                              label: 'Choose a repertoire',
-                              onPressed: () => ReviewScopeDrawer.show(context),
+                              label: context.l10n.reviewNothingDueChooseRepertoire,
+                              // Opens the live colour's drawer rather than
+                              // switching colour: this button is about choosing
+                              // what to review next, and the squares are what
+                              // change colour.
+                              onPressed: () =>
+                                  ReviewScopeDrawer.show(context, state.scope.side ?? Side.white),
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
-                                label: 'Change daily limit',
+                                label: context.l10n.reviewNothingDueChangeDailyLimit,
                                 onPressed: () => Navigator.push(
                                   context,
                                   MaterialPageRoute<void>(
@@ -532,8 +544,8 @@ class _NothingDueView extends ConsumerWidget {
                         const SizedBox(height: 18.0),
                         Text(
                           state.isDailyLimitReached
-                              ? 'Practice is still available and does not change your schedule.'
-                              : 'Practice never changes your schedule.',
+                              ? context.l10n.reviewNothingDuePracticeStillAvailable
+                              : context.l10n.reviewNothingDuePracticeDoesNotChangeSchedule,
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],
@@ -695,6 +707,30 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
 
     void onSkip() => ref.read(reviewControllerProvider.notifier).skip();
 
+    /// Plays the study move on the learner's behalf and continues through the normal
+    /// retry path — the lapse already stands, so this changes the flow, not the grade.
+    /// Only offered in the correction state, where recall has already failed and a bare
+    /// "Skip" mislabels what is left to do.
+    void onRevealAnswer() {
+      final expected = state.expectedMove;
+      if (expected == null) return;
+      ref
+          .read(reviewControllerProvider.notifier)
+          .onUserMove(
+            NormalMove(
+              from: Square.fromName(expected.from),
+              to: Square.fromName(expected.to),
+              promotion: switch (expected.promotion) {
+                'q' => Role.queen,
+                'r' => Role.rook,
+                'b' => Role.bishop,
+                'n' => Role.knight,
+                _ => null,
+              },
+            ),
+          );
+    }
+
     return Focus(
       focusNode: _focusNode,
       autofocus: true,
@@ -704,16 +740,21 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             if (state.isAwaitingAdvance) onContinue();
           },
           const SingleActivator(LogicalKeyboardKey.keyS): () {
-            if (!state.isAwaitingAdvance) onSkip();
+            if (state.isAwaitingAdvance) return;
+            if (isLapse && state.expectedMove != null) {
+              onRevealAnswer();
+            } else {
+              onSkip();
+            }
           },
         },
         child: SrsReviewLayout(
           whiteAtBottom: state.boardOrientation == Side.white,
           topBar: SrsTopBar(
-            scopeTitle: _computeScopeTitle(state),
+            activeSide: state.activeSide,
             dueCount: state.totalDueCount,
             isPracticeMode: state.isPracticeMode,
-            onScopePressed: () => ReviewScopeDrawer.show(context),
+            onSidePressed: (side) => _openColourDrawer(context, side),
             onOverflowPressed: () => _showOverflowSheet(context),
             onExitPractice: state.isPracticeMode
                 ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -750,7 +791,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           ),
           side: (context, wide, appWidth) => SrsReviewSide(
             wide: wide,
-            lineFontSize: wide ? 28.0 : 22.0,
+            lineFontSize: wide ? 28.0 : 24.0,
             meta: _MetaView(
               contextLabel: prompt.chapterTitle ?? prompt.studyTitle ?? '',
               orientation: state.boardOrientation,
@@ -777,7 +818,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             actions: _buildActions(
               context,
               isAwaitingAdvance: state.isAwaitingAdvance,
+              isLapse: isLapse,
+              canReveal: state.expectedMove != null,
               onSkip: onSkip,
+              onRevealAnswer: onRevealAnswer,
               onContinue: onContinue,
             ),
           ),
@@ -807,10 +851,18 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             const SizedBox(height: 16),
             _NoteSlot(comment: comment.trim(), wide: wide),
           ],
+          _OpenInAnalysisButton(state: state),
         ],
       );
     } else if (state.isAwaitingAdvance && comment != null && comment.trim().isNotEmpty) {
-      content = _NoteSlot(comment: comment.trim(), wide: wide);
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _NoteSlot(comment: comment.trim(), wide: wide),
+          _OpenInAnalysisButton(state: state),
+        ],
+      );
     }
 
     final verdict = _verdictAnnouncement(state, isLapse: isLapse, expectedMoveSan: expectedMoveSan);
@@ -840,10 +892,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   ///
   /// design/docs/04-screens-and-flows.md §6 requires announcing position changes through a live
   /// region, and design/docs/01-identity.md gives the wording: `Correct. {san}.` and `Not this
-  /// move. The repertoire move is {san}.` The demo does this through a visually hidden
+  /// move. The study move is {san}.` The demo does this through a visually hidden
   /// `aria-live` node; this is the same thing.
   ///
-  /// It matters most exactly where it is least visible. A wrong answer already puts the repertoire
+  /// It matters most exactly where it is least visible. A wrong answer already puts the study
   /// move on screen in large letters, so a sighted player is told. A *correct* answer shows
   /// nothing at all — the product is deliberately quiet on success — which left a screen-reader user
   /// with no confirmation that they had got it right, and no way to tell a right answer from a
@@ -851,7 +903,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   ///
   /// On a correct answer this announces the move that was played rather than the expected one,
   /// because `expectedMoves` is a list: a transposition can make an alternative equally correct, and
-  /// then the repertoire move is not the move the player made.
+  /// then the study move is not the move the player made.
   String? _verdictAnnouncement(
     ReviewScreenState state, {
     required bool isLapse,
@@ -870,20 +922,28 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     if (expectedMoveSan == null || expectedMoveSan.isEmpty) {
       return 'Not this move.';
     }
-    return 'Not this move. The repertoire move is $expectedMoveSan.';
+    return 'Not this move. The study move is $expectedMoveSan.';
   }
 
   Widget _buildActions(
     BuildContext context, {
     required bool isAwaitingAdvance,
+    required bool isLapse,
+    required bool canReveal,
     required VoidCallback onSkip,
+    required VoidCallback onRevealAnswer,
     required VoidCallback onContinue,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         if (!isAwaitingAdvance)
-          SrsTextButton(label: 'Skip', shortcut: 'S', onPressed: onSkip)
+          if (isLapse && canReveal)
+            // Recall has already failed, so "Skip" mislabels what is left: revealing the
+            // study move by playing it on the learner's behalf through the retry path.
+            SrsTextButton(label: 'Reveal answer', shortcut: 'S', onPressed: onRevealAnswer)
+          else
+            SrsTextButton(label: 'Skip', shortcut: 'S', onPressed: onSkip)
         else
           const SizedBox.shrink(),
         if (isAwaitingAdvance)
@@ -1028,23 +1088,45 @@ void _showOverflowSheet(BuildContext context) {
   SrsLibrarySheet.show(context);
 }
 
-String _computeScopeTitle(ReviewScreenState state) {
-  if (state.scope.openingFamily != null) {
-    return state.scope.openingFamily!;
-  }
-  if (state.scope.studyId != null) {
-    final study = state.studies.firstWhere(
-      (s) => s.id == state.scope.studyId,
-      orElse: () => const Study(id: '', title: 'Study'),
+/// Quiet bridge from a drill position into the analysis board, for the "why is this the
+/// move?" moment. Shown under the correction answer and under study notes — never in the
+/// prompt state, where it would leak a way out of recall, and never in the actions row,
+/// which owns exactly Skip/Continue. Reuses the hub's position options so the board that
+/// opens is the one the hub would open for the same FEN.
+class _OpenInAnalysisButton extends StatelessWidget {
+  const _OpenInAnalysisButton({required this.state});
+
+  final ReviewScreenState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final fen = state.boardPosition?.fen;
+    if (fen == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SrsTextButton(
+        label: 'Open in analysis',
+        onPressed: () => Navigator.of(context, rootNavigator: true).push(
+          AnalysisScreen.buildRoute(
+            analysisOptionsForReviewPosition(fen: fen, orientation: state.boardOrientation),
+          ),
+        ),
+      ),
     );
-    if (state.scope.chapterId != null && state.currentPrompt?.chapterTitle != null) {
-      return '${study.title} • ${state.currentPrompt!.chapterTitle}';
-    }
-    return study.title;
   }
-  // design/docs/01-identity.md names the everywhere scope `All repertoires`, and the demo's top bar
-  // shows the same string the scope list row uses.
-  return 'All repertoires';
+}
+
+/// Switches to [side]'s colour and opens its drawer.
+///
+/// Shared by all three top-bar placements, so switching colour and opening the
+/// matching drawer stay one gesture wherever the bar appears: the squares are
+/// the only way into a drawer, so tapping one and leaving the previous colour's
+/// drawer on screen would land somewhere the user did not ask for.
+Future<void> _openColourDrawer(BuildContext context, Side side) async {
+  final container = ProviderScope.containerOf(context);
+  await container.read(reviewControllerProvider.notifier).selectSide(side);
+  if (!context.mounted) return;
+  await ReviewScopeDrawer.show(context, side);
 }
 
 class _SrsDiagnosticsOverlay extends StatelessWidget {

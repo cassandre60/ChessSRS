@@ -10,9 +10,11 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
+import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
 import 'package:chess_srs/src/domain/review/review_step_result.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
@@ -36,6 +38,8 @@ class ReviewSession {
     required Map<String, ReviewState> reviewStates,
     this.scope = const ReviewScope.all(),
     this.mode = ReviewMode.srs,
+    this.order = ReviewOrder.dueDate,
+    this.transposeScope = TransposeScope.inScope,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.prefetchBatchSize = 25,
@@ -52,7 +56,7 @@ class ReviewSession {
     // Index all nodes across chapter trees for O(1) lookup
     for (final chapter in chapters) {
       if (chapter.root != null) {
-        _indexNodes(chapter.root!);
+        _indexNodes(chapter.root!, chapter.id);
       }
     }
 
@@ -65,22 +69,15 @@ class ReviewSession {
     // `_canonicalByFenMove` stays keyed by (FEN, single move) on purpose: the graph layer uses it
     // for position adjacency, where propagating between two questions asked at the same board is
     // the intent. It is not the scheduling identity — that is the canonical ID above.
-    // A key shared by two *different* questions (same FEN and move, different accepted sets)
-    // is ambiguous and left unmapped, so lookups fall back to the decision's own canonical ID
-    // instead of rerouting one question's answer into another's memory.
+    // Last writer wins: modern nodes bypass this map via `hasCanonicalIdentity`,
+    // while legacy occurrence ids (which predate complete-set keys) resolve through it.
     for (final d in decisions) {
       _decisionsByCanonicalId[d.canonicalId] = d;
       final node = _nodesById[d.nodeId];
       if (node != null) {
         _decisionsByFenKey.putIfAbsent(node.fenKey, () => []).add(d);
         for (final m in d.expectedMoves) {
-          final key = '${node.fenKey}|${m.uci}';
-          final existing = _canonicalByFenMove[key];
-          if (existing == null) {
-            _canonicalByFenMove[key] = d.canonicalId;
-          } else if (existing != d.canonicalId) {
-            _canonicalByFenMove.remove(key);
-          }
+          _canonicalByFenMove['${node.fenKey}|${m.uci}'] = d.canonicalId;
         }
       }
     }
@@ -101,6 +98,7 @@ class ReviewSession {
         studyId: d.studyId,
         chapterId: d.chapterId,
         openingFamily: chapter?.opening,
+        side: chapter?.orientation,
       )) {
         continue;
       }
@@ -128,11 +126,34 @@ class ReviewSession {
         return dueA.compareTo(dueB);
       });
 
-      if (remainingDailyQuota != null && _unbufferedQueue.length > remainingDailyQuota!) {
+      if (remainingDailyQuota != null &&
+          remainingDailyQuota! >= 0 &&
+          _unbufferedQueue.length > remainingDailyQuota!) {
         _logger.info(
           'Daily review quota ($remainingDailyQuota) reached, truncating queue to most urgent due items',
         );
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
+      }
+
+      // By-line order (INV-066): same set, walking study, chapter, tree order.
+      if (order == ReviewOrder.byLine) {
+        final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
+        var n = 0;
+        final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
+        _unbufferedQueue.sort((a, b) {
+          var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
+          if (c != 0) return c;
+          c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
+            _chapters[b.chapterId]?.sourceOrder ?? 0,
+          );
+          if (c != 0) return c;
+          return (nodeOrder[a.nodeId] ?? 0).compareTo(nodeOrder[b.nodeId] ?? 0);
+        });
+      }
+
+      // Random order: same set, shuffled with the session Random.
+      if (order == ReviewOrder.random) {
+        _unbufferedQueue.shuffle(_random);
       }
     }
 
@@ -146,6 +167,12 @@ class ReviewSession {
 
   final ReviewScope scope;
   final ReviewMode mode;
+
+  /// Presentation order of the due queue; the due set never depends on this.
+  final ReviewOrder order;
+
+  /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
+  final TransposeScope transposeScope;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;
@@ -169,6 +196,8 @@ class ReviewSession {
   final Map<String, RepertoireDecision> _decisionsByCanonicalId = {};
   final Map<String, List<RepertoireDecision>> _decisionsByFenKey = {};
   final Map<String, RepertoireNode> _nodesById = {};
+  final Map<String, List<RepertoireNode>> _nodesByFenKey = {};
+  final Map<String, String> _chapterOfNode = {};
   final Map<String, RepertoireNode> _parentOfNode = {};
   final Map<String, String> _canonicalByFenMove = {};
   final Map<String, int> _nodeCountCache = {};
@@ -267,9 +296,12 @@ class ReviewSession {
         _reviewStates[decision.id] ??
         ReviewState.initial(decisionId: decision.canonicalId);
 
-    // Validate move against expected repertoire moves (Invariant §2.1)
+    // Validate move against expected repertoire moves (Invariant §2.1),
+    // else the transposed line's incoming move (INV-065).
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    final expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    final resolved = _resolvePlayedMove(prompt, movePlayed);
+    final expectedMatch = resolved?.expected;
+    final transposedStart = resolved?.start;
 
     final now = clock.now();
 
@@ -290,6 +322,7 @@ class ReviewSession {
           parentId: null,
           fen4: prompt.fenKey,
           expectedMoveUci: expectedMatch.uci,
+          hasCanonicalIdentity: decision.canonicalStateId != null,
         );
         final graphResult = _coordinator.recordActiveReview(
           node: graphNode,
@@ -321,6 +354,7 @@ class ReviewSession {
         expectedMatch: expectedMatch,
         updatedState: nextState,
         event: event,
+        startNode: transposedStart,
       );
     } else {
       // -----------------------------------------------------------------------
@@ -341,6 +375,7 @@ class ReviewSession {
           parentId: null,
           fen4: prompt.fenKey,
           expectedMoveUci: prompt.expectedMoves.first.uci,
+          hasCanonicalIdentity: decision.canonicalStateId != null,
         );
         final siblings = _findSiblingGraphNodes(decision);
         final graphResult = _coordinator.recordActiveReview(
@@ -415,7 +450,9 @@ class ReviewSession {
     }
 
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
-    final expectedMatch = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    final resolved = _resolvePlayedMove(prompt, movePlayed);
+    final expectedMatch = resolved?.expected;
+    final transposedStart = resolved?.start;
 
     final currentState =
         _reviewStates[prompt.decision.canonicalId] ??
@@ -432,6 +469,7 @@ class ReviewSession {
         expectedMatch: expectedMatch,
         updatedState: currentState,
         event: null,
+        startNode: transposedStart,
       );
     } else {
       final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
@@ -453,11 +491,13 @@ class ReviewSession {
     required RepertoireMove expectedMatch,
     required ReviewState updatedState,
     required ReviewEvent? event,
+    RepertoireNode? startNode,
   }) {
     final now = clock.now();
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
-    var activeNode = _findChildForMove(prompt.currentNode, expectedMatch);
+    // A transposed acceptance traverses from the reached line instead.
+    var activeNode = startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
 
     while (activeNode != null) {
       if (activeNode.children.isEmpty) {
@@ -531,6 +571,7 @@ class ReviewSession {
             parentId: prompt.decision.canonicalId,
             fen4: opponentChild.fenKey,
             expectedMoveUci: userMove.uci,
+            hasCanonicalIdentity: nextDecision.canonicalStateId != null,
           );
           final exposedState = _coordinator.recordAutoTraversalExposure(node: expNode, now: now);
           if (exposedState != null) {
@@ -592,7 +633,7 @@ class ReviewSession {
         remainingDailyQuota != null &&
         _completedDecisionIds.length >= remainingDailyQuota!) {
       _logger.info(
-        'Daily review quota reached ($_completedDecisionIds.length / $remainingDailyQuota), concluding review session',
+        'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota), concluding review session',
       );
       _dueQueue.clear();
       _unbufferedQueue.clear();
@@ -642,7 +683,7 @@ class ReviewSession {
         chapter?.startingFen ??
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     final fenKey = node?.fenKey ?? fen;
-    final side = _sideFromFen(fen);
+    final side = sideFromFen(fen);
     final parentNode = node != null ? _parentOfNode[node.id] : null;
     final moveHistory = _moveHistoryForNode(node?.id);
 
@@ -684,22 +725,94 @@ class ReviewSession {
     return node.childForMove(move);
   }
 
-  void _indexNodes(RepertoireNode node, [RepertoireNode? parent]) {
+  void _indexNodes(RepertoireNode node, String chapterId, [RepertoireNode? parent]) {
     _nodesById[node.id] = node;
+    _chapterOfNode[node.id] = chapterId;
+    _nodesByFenKey.putIfAbsent(node.fenKey, () => []).add(node);
     if (parent != null) {
       _parentOfNode[node.id] = parent;
     }
     for (final child in node.children) {
-      _indexNodes(child, node);
+      _indexNodes(child, chapterId, node);
     }
   }
 
-  Side _sideFromFen(String fen) {
-    final parts = fen.trim().split(RegExp(r'\s+'));
-    if (parts.length > 1 && parts[1].toLowerCase() == 'b') {
-      return Side.black;
+  /// Resolves the played move: the expected match, else the transposed
+  /// line's incoming move when the scope covers it (else null).
+  ({RepertoireMove expected, RepertoireNode? start})? _resolvePlayedMove(
+    ReviewPrompt prompt,
+    RepertoireMove movePlayed,
+  ) {
+    final direct = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    if (direct != null) return (expected: direct, start: null);
+    if (transposeScope == TransposeScope.off) return null;
+    final target = _findTransposedNode(prompt, movePlayed);
+    final incoming = target?.incomingMove;
+    if (incoming == null || !incoming.matches(movePlayed)) return null;
+    return (expected: incoming, start: target);
+  }
+
+  /// Transposition acceptance (P-TRANSPOSE, INV-065): returns the in-scope
+  /// node at the position the played move reaches, or null. Illegal moves,
+  /// out-of-scope targets, and targets without their own repertoire move
+  /// fail closed, preserving ordinary incorrect handling exactly.
+  /// Within-study scope additionally requires the target's study.
+  RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
+    if (transposeScope == TransposeScope.off) return null;
+    // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
+    Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(prompt.fen));
+    } catch (_) {
+      return null;
     }
-    return Side.white;
+    const promotions = {'q': Role.queen, 'r': Role.rook, 'b': Role.bishop, 'n': Role.knight};
+    final promotion = promotions[movePlayed.promotion ?? ''];
+    if (movePlayed.promotion != null && promotion == null) return null;
+    late final Position next;
+    try {
+      next = position.play(
+        NormalMove(
+          from: Square.fromName(movePlayed.from),
+          to: Square.fromName(movePlayed.to),
+          promotion: promotion,
+        ),
+      );
+    } catch (_) {
+      return null; // illegal here: ordinary incorrect, unchanged behavior
+    }
+    final parts = next.fen.split(' ');
+    if (parts.length < 4) return null;
+    final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
+    for (final node in _nodesByFenKey[key] ?? const <RepertoireNode>[]) {
+      final incoming = node.incomingMove;
+      if (incoming == null || !incoming.matches(movePlayed)) continue;
+      final chapter = _chapters[_chapterOfNode[node.id]];
+      if (chapter == null ||
+          !scope.matches(
+            studyId: chapter.studyId,
+            chapterId: chapter.id,
+            openingFamily: chapter.opening,
+            side: chapter.orientation,
+          ) ||
+          (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
+        continue;
+      }
+      return node;
+    }
+    return null;
+  }
+
+  /// Parses the active side to move from [fen] using dartchess [Setup.parseFen].
+  ///
+  /// Falls back to [Side.white] if the FEN cannot be parsed.
+  static Side sideFromFen(String fen) {
+    try {
+      final pos = Setup.parseFen(fen.trim());
+      return pos.turn;
+    } catch (_) {
+      return Side.white;
+    }
   }
 
   /// Selects the opponent response among multiple children.
@@ -819,6 +932,7 @@ class ReviewSession {
             parentId: null,
             fen4: node.fenKey,
             expectedMoveUci: m.uci,
+            hasCanonicalIdentity: other.canonicalStateId != null,
           ),
         );
       }

@@ -151,6 +151,10 @@ class SrsPillButton extends StatelessWidget {
       pressScale: SrsMotion.pressScale,
       builder: (_, _, _) => Container(
         width: expand ? double.infinity : null,
+        // 46 per 03-components.md:129 and styles.css:238. Without it the pill shrink-wrapped to
+        // its label — 23px tall, against the 44px minimum every other control in this file
+        // holds — so the one filled button in the system had a target you could miss.
+        constraints: const BoxConstraints(minHeight: 46),
         padding: const EdgeInsets.symmetric(horizontal: 22),
         decoration: BoxDecoration(
           color: selected ? c.accent : c.ink,

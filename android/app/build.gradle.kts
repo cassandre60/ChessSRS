@@ -7,8 +7,6 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
 }
 
 val keystoreProperties = Properties()
@@ -20,15 +18,11 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "org.chesssrs.app"
     // compileSdk = flutter.compileSdkVersion
-    // home_widget pulls in glance-appwidget and remote-creation-android, both of which
-    // declare in their AAR metadata that all dependents (including the app) must compile
-    // against SDK 37+. This cannot be suppressed — it is enforced by AGP at build time.
-    compileSdk = 37
+    // flutter_plugin_android_lifecycle requires compileSdk 36+.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // Flag required by flutter_local_notifications package
-        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -41,9 +35,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
-        }
     }
 
     signingConfigs {
@@ -90,7 +81,5 @@ flutter {
 }
 
 dependencies {
-    // Dependency required by flutter_local_notifications package
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-splashscreen:1.0.1")
 }

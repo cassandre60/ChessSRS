@@ -1,10 +1,8 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/engine/opponent_level.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
-import 'package:chess_srs/src/widgets/adaptive_bottom_sheet.dart';
-import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/non_linear_slider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -66,10 +64,12 @@ Future<OpponentSpec?> showOpponentPicker(
   required OpponentSpec selected,
   required Variant variant,
 }) {
-  return showModalBottomSheet<OpponentSpec>(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => _OpponentPickerSheet(selected: selected, variant: variant),
+  return showSrsSheet<OpponentSpec>(
+    context,
+    SrsSheetSurface(
+      maxHeight: MediaQuery.heightOf(context) * 0.9,
+      child: _OpponentPickerSheet(selected: selected, variant: variant),
+    ),
   );
 }
 
@@ -163,51 +163,47 @@ class _OpponentPickerSheetState extends ConsumerState<_OpponentPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheetScrollableContainer(
-      children: [
-        if (_maiaAvailable)
-          Padding(
-            padding: Styles.horizontalBodyPadding,
-            child: SegmentedButton<OpponentEngine>(
-              segments: [
-                for (final engine in OpponentEngine.values)
-                  ButtonSegment(value: engine, label: Text(engine.name)),
-              ],
-              selected: {_engine},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) => setState(() => _engine = selection.first),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SrsSheetGrabber(),
+          if (_maiaAvailable) ...[
+            SrsSegmented<OpponentEngine>(
+              options: {for (final engine in OpponentEngine.values) engine: engine.name},
+              value: _engine,
+              onChanged: (engine) => setState(() => _engine = engine),
             ),
-          ),
-        Padding(padding: Styles.bodySectionPadding, child: _EngineDescription(_engine)),
-        ListSection(
-          materialFilledCard: true,
-          children: [
-            switch (_engine) {
-              OpponentEngine.stockfish => _StockfishLevelTile(
-                level: _level,
-                onChanged: (level) => setState(() => _level = level),
-              ),
-              OpponentEngine.maia => _MaiaRatingTile(
-                rating: _rating,
-                available: _available,
-                downloading: _downloading,
-                failed: _failed,
-                onChanged: (rating) {
-                  setState(() => _rating = rating);
-                  _ensure(rating);
-                },
-              ),
-            },
+            const SizedBox(height: 16),
           ],
-        ),
-        Padding(
-          padding: Styles.bodySectionPadding,
-          child: FilledButton(
+          _EngineDescription(_engine),
+          const SizedBox(height: 8),
+          switch (_engine) {
+            OpponentEngine.stockfish => _StockfishLevelTile(
+              level: _level,
+              onChanged: (level) => setState(() => _level = level),
+            ),
+            OpponentEngine.maia => _MaiaRatingTile(
+              rating: _rating,
+              available: _available,
+              downloading: _downloading,
+              failed: _failed,
+              onChanged: (rating) {
+                setState(() => _rating = rating);
+                _ensure(rating);
+              },
+            ),
+          },
+          const SizedBox(height: 16),
+          SrsPillButton(
+            expand: true,
+            label: context.l10n.ok,
             onPressed: _downloading != null ? null : () => Navigator.of(context).pop(_spec),
-            child: Text(context.l10n.ok, style: Styles.bold),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -219,6 +215,7 @@ class _EngineDescription extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -229,12 +226,9 @@ class _EngineDescription extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(engine.name, style: Theme.of(context).textTheme.titleMedium),
+              Text(engine.name, style: SrsText.titleSmall(c.ink)),
               const SizedBox(height: 4),
-              Text(
-                engine.description,
-                style: TextStyle(color: textShade(context, Styles.subtitleOpacity)),
-              ),
+              Text(engine.description, style: SrsText.settingHelp(c.ink2)),
             ],
           ),
         ),
@@ -251,24 +245,26 @@ class _StockfishLevelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Text.rich(
-        TextSpan(
-          text: '${context.l10n.level}: ',
-          children: [
-            TextSpan(
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              text: '${level.level}',
-            ),
-          ],
+    final c = context.srs;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text.rich(
+          TextSpan(
+            text: '${context.l10n.level}: ',
+            style: SrsText.rowName(c.ink),
+            children: [TextSpan(style: SrsText.rowDue(c.ink), text: '${level.level}')],
+          ),
         ),
-      ),
-      subtitle: NonLinearSlider(
-        value: level.level,
-        values: StockfishLevel.values.map((l) => l.level).toList(),
-        onChange: (value) => onChanged(StockfishLevel.values[value.toInt() - 1]),
-        onChangeEnd: (value) => onChanged(StockfishLevel.values[value.toInt() - 1]),
-      ),
+        const SizedBox(height: 8),
+        NonLinearSlider(
+          value: level.level,
+          values: StockfishLevel.values.map((l) => l.level).toList(),
+          onChange: (value) => onChanged(StockfishLevel.values[value.toInt() - 1]),
+          onChangeEnd: (value) => onChanged(StockfishLevel.values[value.toInt() - 1]),
+        ),
+      ],
     );
   }
 }
@@ -305,44 +301,51 @@ class _MaiaRatingTileState extends ConsumerState<_MaiaRatingTile> {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Text.rich(
-        TextSpan(
-          text: '${context.l10n.strength}: ',
+    final c = context.srs;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text.rich(
+          TextSpan(
+            text: '${context.l10n.strength}: ',
+            style: SrsText.rowName(c.ink),
+            children: [TextSpan(style: SrsText.rowDue(c.ink), text: '${_shown.rating}')],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            TextSpan(
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              text: '${_shown.rating}',
+            Expanded(
+              child: NonLinearSlider(
+                value: _shown.rating,
+                values: MaiaRating.values.map((r) => r.rating).toList(),
+                onChange: (value) =>
+                    setState(() => _dragged = MaiaRating.fromRating(value.toInt())),
+                onChangeEnd: (value) {
+                  setState(() => _dragged = null);
+                  widget.onChanged(MaiaRating.fromRating(value.toInt())!);
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            _MaiaWeightsStatus(
+              rating: _shown,
+              available: widget.available,
+              downloading: widget.downloading,
             ),
           ],
         ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          NonLinearSlider(
-            value: _shown.rating,
-            values: MaiaRating.values.map((r) => r.rating).toList(),
-            onChange: (value) => setState(() => _dragged = MaiaRating.fromRating(value.toInt())),
-            onChangeEnd: (value) {
-              setState(() => _dragged = null);
-              widget.onChanged(MaiaRating.fromRating(value.toInt())!);
-            },
+        if (widget.failed != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Maia ${widget.failed!.rating} could not be downloaded. Maia '
+            '${MaiaRating.defaultRating.rating} will play instead.',
+            style: SrsText.settingHelp(c.ink2),
           ),
-          if (widget.failed != null)
-            Text(
-              'Maia ${widget.failed!.rating} could not be downloaded. Maia '
-              '${MaiaRating.defaultRating.rating} will play instead.',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
         ],
-      ),
-      trailing: _MaiaWeightsStatus(
-        rating: _shown,
-        available: widget.available,
-        downloading: widget.downloading,
-      ),
+      ],
     );
   }
 }
@@ -381,7 +384,7 @@ class _MaiaWeightsStatus extends ConsumerWidget {
           const Icon(Icons.cloud_download_outlined),
           Text(
             '${(rating.expectedSize / (1024 * 1024)).toStringAsFixed(1)} MB',
-            style: TextStyle(fontSize: 12, color: textShade(context, Styles.subtitleOpacity)),
+            style: SrsText.settingHelp(context.srs.ink2),
           ),
         ],
       );

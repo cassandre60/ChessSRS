@@ -1,9 +1,13 @@
+// SPEC coverage: INV-006.
+
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/auth/email_login_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -21,6 +25,7 @@ const _autocompleteResponse = '["johndoe","johndoe2"]';
 /// Client that walks the happy path of the email login protocol.
 MockClientHandler happyPath({
   Uri Function(Uri url)? recordUrl,
+  void Function(http.Request request)? recordRequest,
   int emailStatus = 204,
   int bearerStatus = 200,
   String autocompleteResponse = _autocompleteResponse,
@@ -32,6 +37,7 @@ MockClientHandler happyPath({
       return mockResponse('', 200);
     }
     recordUrl?.call(request.url);
+    recordRequest?.call(request);
     switch (request.url.path) {
       case '/api/player/autocomplete':
         return mockResponse(autocompleteResponse, autocompleteStatus);
@@ -65,30 +71,23 @@ Future<void> submitEmail(WidgetTester tester, {String username = 'johndoe', Stri
     find.widgetWithText(TextFormField, 'Email'),
     email ?? 'johndoe@lichess.org',
   );
-  await tester.tap(find.widgetWithText(FilledButton, 'Send me a code'));
+  await tester.tap(find.widgetWithText(SrsPillButton, 'Send me a code'));
   await tester.pumpAndSettle();
 }
 
 void main() {
   testWidgets('moves to the code step once the code has been requested', (tester) async {
-    final urls = <Uri>[];
-    final app = await makeApp(
-      tester,
-      happyPath(
-        recordUrl: (url) {
-          urls.add(url);
-          return url;
-        },
-      ),
-    );
+    final requests = <http.Request>[];
+    final app = await makeApp(tester, happyPath(recordRequest: requests.add));
     await tester.pumpWidget(app);
 
     await submitEmail(tester);
 
-    final emailUrl = urls.firstWhere((url) => url.path == '/auth/mobile-code/email');
-    expect(emailUrl.queryParameters, {'email': 'johndoe@lichess.org', 'username': 'johndoe'});
+    final emailRequest = requests.firstWhere((r) => r.url.path == '/auth/mobile-code/email');
+    expect(emailRequest.url.hasQuery, isFalse);
+    expect(emailRequest.bodyFields, {'email': 'johndoe@lichess.org', 'username': 'johndoe'});
     expect(find.textContaining('johndoe@lichess.org'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Sign in'), findsOneWidget);
   });
 
   testWidgets('does not leave the email step when the request is rate limited', (tester) async {
@@ -97,7 +96,7 @@ void main() {
 
     await submitEmail(tester);
 
-    expect(find.widgetWithText(FilledButton, 'Send me a code'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Send me a code'), findsOneWidget);
     expect(find.text('Too many attempts. Please try again later.'), findsOneWidget);
   });
 
@@ -144,23 +143,15 @@ void main() {
       'johndoe@lichess.co.uk',
     ]) {
       testWidgets(email, (tester) async {
-        final urls = <Uri>[];
-        final app = await makeApp(
-          tester,
-          happyPath(
-            recordUrl: (url) {
-              urls.add(url);
-              return url;
-            },
-          ),
-        );
+        final requests = <http.Request>[];
+        final app = await makeApp(tester, happyPath(recordRequest: requests.add));
         await tester.pumpWidget(app);
 
         await submitEmail(tester, email: email);
 
         expect(find.text('Please enter a valid email address.'), findsNothing);
-        final emailUrl = urls.firstWhere((url) => url.path == '/auth/mobile-code/email');
-        expect(emailUrl.queryParameters['email'], email);
+        final emailRequest = requests.firstWhere((r) => r.url.path == '/auth/mobile-code/email');
+        expect(emailRequest.bodyFields['email'], email);
       });
     }
   });
@@ -201,7 +192,7 @@ void main() {
     expect(urls.single.path, '/api/player/autocomplete');
     expect(urls.single.queryParameters, {'term': 'johnd'});
     expect(find.text("We couldn't find any user by this name: johnd."), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Send me a code'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Send me a code'), findsOneWidget);
   });
 
   testWidgets('requests a code when the username differs only by case', (tester) async {
@@ -220,7 +211,7 @@ void main() {
     await submitEmail(tester, username: 'JohnDoe');
 
     expect(urls.any((url) => url.path == '/auth/mobile-code/email'), isTrue);
-    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Sign in'), findsOneWidget);
   });
 
   testWidgets('requests a code anyway when the existence check fails', (tester) async {
@@ -244,20 +235,12 @@ void main() {
 
     // A check that could not be made must never keep a real account from signing in.
     expect(urls.any((url) => url.path == '/auth/mobile-code/email'), isTrue);
-    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Sign in'), findsOneWidget);
   });
 
   testWidgets('signs the user in and pops when the code is accepted', (tester) async {
-    final urls = <Uri>[];
-    final app = await makeApp(
-      tester,
-      happyPath(
-        recordUrl: (url) {
-          urls.add(url);
-          return url;
-        },
-      ),
-    );
+    final requests = <http.Request>[];
+    final app = await makeApp(tester, happyPath(recordRequest: requests.add));
     await tester.pumpWidget(app);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(EmailLoginScreen)),
@@ -270,11 +253,12 @@ void main() {
     await submitEmail(tester);
 
     await tester.enterText(find.byType(TextFormField), 'xxxxxx');
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(SrsPillButton, 'Sign in'));
     await tester.pumpAndSettle();
 
-    final bearerUrl = urls.firstWhere((url) => url.path == '/auth/mobile-code/bearer');
-    expect(bearerUrl.queryParameters, {
+    final bearerRequest = requests.firstWhere((r) => r.url.path == '/auth/mobile-code/bearer');
+    expect(bearerRequest.url.hasQuery, isFalse);
+    expect(bearerRequest.bodyFields, {
       'email': 'johndoe@lichess.org',
       'username': 'johndoe',
       'code': 'xxxxxx',
@@ -295,7 +279,7 @@ void main() {
     await submitEmail(tester);
 
     await tester.enterText(find.byType(TextFormField), 'expire');
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(SrsPillButton, 'Sign in'));
     await tester.pumpAndSettle();
 
     expect(find.text('This code is invalid or has expired.'), findsOneWidget);
@@ -309,10 +293,11 @@ void main() {
 
     await submitEmail(tester);
 
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    // The head is the way back: a named control rather than a platform arrow.
+    await tester.tap(find.bySemanticsLabel('Back to Email'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, 'Send me a code'), findsOneWidget);
+    expect(find.widgetWithText(SrsPillButton, 'Send me a code'), findsOneWidget);
     // Both fields are kept, so a typo can be fixed without retyping it all.
     expect(
       tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Username')).controller?.text,

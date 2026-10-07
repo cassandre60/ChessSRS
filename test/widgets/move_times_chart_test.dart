@@ -61,7 +61,7 @@ Future<Widget> makeTestApp(WidgetTester tester, {List<int> clocks = _clocks}) {
 }
 
 Future<void> openMoveTimesTab(WidgetTester tester) async {
-  await tester.tap(find.bySemanticsLabel(RegExp('Move times')));
+  await tester.tap(find.text('Times'));
   await tester.pumpAndSettle();
 }
 
@@ -90,7 +90,7 @@ void main() {
       await tester.pumpWidget(await makeTestApp(tester, clocks: []));
       await tester.pumpAndSettle();
 
-      expect(find.bySemanticsLabel(RegExp('Move times')), findsNothing);
+      expect(find.text('Times'), findsNothing);
       expect(find.byType(MoveTimesChart), findsNothing);
     });
 

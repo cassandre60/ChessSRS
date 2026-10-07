@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-061, INV-062.
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -163,6 +164,30 @@ void main() {
         ),
       );
       expect(tester.getSize(paintedPill()).width, 300);
+    });
+
+    testWidgets('is as tall as the design says, so it can actually be tapped', (tester) async {
+      // 03-components.md:129 and design/reference/styles.css:238 both specify height 46. The
+      // pill had no height constraint at all, so it shrink-wrapped to its label's intrinsic
+      // height. Paired with a text button — which does hold the 44px minimum, primitives.dart:197
+      // — the one filled button in the system was both visibly smaller and, on a phone, a target
+      // well under the minimum.
+      await tester.pumpWidget(
+        _wrap(
+          const Row(
+            children: [
+              SrsTextButton(label: 'Skip', onPressed: null),
+              SrsPillButton(label: 'Continue', onPressed: null),
+            ],
+          ),
+        ),
+      );
+
+      final pill = tester.getSize(
+        find.descendant(of: find.byType(SrsPillButton), matching: find.byType(Container)).first,
+      );
+      expect(pill.height, 46);
+      expect(pill.height, greaterThanOrEqualTo(44));
     });
   });
 

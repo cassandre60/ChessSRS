@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/common/id.dart';
@@ -24,13 +25,10 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/offline_computer/offline_computer_game_screen.dart';
-import 'package:chess_srs/src/widgets/bottom_bar.dart';
 import 'package:chess_srs/src/widgets/clock.dart';
 import 'package:chess_srs/src/widgets/move_list.dart';
 import 'package:chess_srs/src/widgets/pockets.dart';
-import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:chessground/chessground.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,11 +112,10 @@ void main() {
       expect(find.byType(Chessboard), findsOneWidget);
       expect(find.text('Play against computer'), findsOneWidget);
 
-      expect(find.byType(BottomBar), findsOneWidget);
-      expect(find.byIcon(Icons.menu), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.arrow_uturn_left), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.flag), findsOneWidget);
-      expect(find.byIcon(CupertinoIcons.lightbulb), findsOneWidget);
+      expect(find.widgetWithText(SrsTextButton, 'Menu'), findsOneWidget);
+      expect(find.widgetWithText(SrsTextButton, 'Takeback'), findsOneWidget);
+      expect(find.widgetWithText(SrsTextButton, 'Resign'), findsOneWidget);
+      expect(find.widgetWithText(SrsTextButton, 'Get a hint'), findsOneWidget);
 
       // Verify Stockfish player info with default level (level 4)
       expect(find.textContaining('Stockfish'), findsOneWidget);
@@ -187,12 +184,9 @@ void main() {
       engine.emitDepthRange(toDepth: kPracticeUsableDepth);
       await tester.pump(kEngineEvalEmissionThrottleDelay * 2);
 
-      final hintButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.lightbulb),
-        matching: find.byType(BottomBarButton),
-      );
+      final hintButton = find.widgetWithText(SrsTextButton, 'Get a hint');
       expect(
-        tester.widget<BottomBarButton>(hintButton).onTap,
+        tester.widget<SrsTextButton>(hintButton).onPressed,
         isNotNull,
         reason: 'the hints unlock at the usable depth',
       );
@@ -314,7 +308,7 @@ void main() {
       expect(movesBefore, greaterThanOrEqualTo(1));
 
       // Tap takeback button
-      await tester.tap(find.byIcon(CupertinoIcons.arrow_uturn_left));
+      await tester.tap(find.text('Takeback'));
       await tester.pumpAndSettle();
 
       // Move count should decrease
@@ -335,7 +329,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap resign button
-      await tester.tap(find.byIcon(CupertinoIcons.flag));
+      await tester.tap(find.text('Resign'));
       await tester.pumpAndSettle();
 
       // Verify confirmation dialog is shown
@@ -358,7 +352,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap resign button
-      await tester.tap(find.byIcon(CupertinoIcons.flag));
+      await tester.tap(find.text('Resign'));
       await tester.pumpAndSettle();
 
       // Confirm resignation
@@ -380,7 +374,7 @@ void main() {
       await initOfflineComputerGame(tester);
 
       // Tap menu button
-      await tester.tap(find.byIcon(Icons.menu));
+      await tester.tap(find.text('Menu'));
       await tester.pumpAndSettle();
 
       // Tap new game in menu
@@ -397,7 +391,7 @@ void main() {
       await initOfflineComputerGame(tester);
 
       // Tap menu button
-      await tester.tap(find.byIcon(Icons.menu));
+      await tester.tap(find.text('Menu'));
       await tester.pumpAndSettle();
 
       // Verify action sheet with options
@@ -418,7 +412,7 @@ void main() {
 
         // In standard mode, only general settings (blindfold mode) are shown
         expect(find.text('Blindfold'), findsOneWidget);
-        expect(find.text('Practice settings'), findsNothing);
+        expect(find.text('PRACTICE SETTINGS'), findsNothing);
         expect(find.text('Hide best move'), findsNothing);
       },
     );
@@ -437,7 +431,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // In practice mode, practice settings appear before general settings (blindfold mode)
-        expect(find.text('Practice settings'), findsOneWidget);
+        expect(find.text('PRACTICE SETTINGS'), findsOneWidget);
         expect(find.text('Blindfold'), findsOneWidget);
       },
     );
@@ -474,30 +468,24 @@ void main() {
       await initOfflineComputerGame(tester);
 
       // Find the takeback button
-      final takebackButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.arrow_uturn_left),
-        matching: find.byType(BottomBarButton),
-      );
+      final takebackButton = find.widgetWithText(SrsTextButton, 'Takeback');
       expect(takebackButton, findsOneWidget);
 
       // At game start with no moves, takeback should be disabled
-      final button = tester.widget<BottomBarButton>(takebackButton);
-      expect(button.onTap, isNull);
+      final button = tester.widget<SrsTextButton>(takebackButton);
+      expect(button.onPressed, isNull);
     });
 
     testWidgets('Resign button is disabled at game start', (tester) async {
       await initOfflineComputerGame(tester);
 
       // Find the resign button
-      final resignButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.flag),
-        matching: find.byType(BottomBarButton),
-      );
+      final resignButton = find.widgetWithText(SrsTextButton, 'Resign');
       expect(resignButton, findsOneWidget);
 
       // At game start, resign should be disabled (need fullmoves > 1)
-      final button = tester.widget<BottomBarButton>(resignButton);
-      expect(button.onTap, isNull);
+      final button = tester.widget<SrsTextButton>(resignButton);
+      expect(button.onPressed, isNull);
     });
 
     testWidgets('A new game at the same level tells the engine it is a new game', (tester) async {
@@ -517,7 +505,7 @@ void main() {
       );
       opponentEngine.commands.clear();
 
-      await tester.tap(find.byIcon(Icons.menu));
+      await tester.tap(find.text('Menu'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New game'));
       await tester.pumpAndSettle();
@@ -541,7 +529,7 @@ void main() {
       await initOfflineComputerGame(tester);
 
       // Open menu and tap new game
-      await tester.tap(find.byIcon(Icons.menu));
+      await tester.tap(find.text('Menu'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New game'));
       await tester.pumpAndSettle();
@@ -662,7 +650,7 @@ void main() {
       expect(find.text('Allow takebacks and hints'), findsOneWidget);
       expect(find.text('Practice mode'), findsOneWidget);
       expect(find.text('Get feedback on your moves'), findsOneWidget);
-      expect(find.byType(Switch), findsNWidgets(2));
+      expect(find.byType(SrsSwitch), findsNWidgets(2));
     });
 
     testWidgets('Takeback and hint buttons are disabled in non-casual mode', (tester) async {
@@ -682,9 +670,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Turn off casual mode (find the switch that's part of the Casual setting tile)
-      final casualSwitch = find.descendant(
-        of: find.ancestor(of: find.text('Casual'), matching: find.byType(SwitchSettingTile)),
-        matching: find.byType(Switch),
+      final casualSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Casual',
       );
       await tester.tap(casualSwitch);
       await tester.pump();
@@ -700,22 +687,16 @@ void main() {
       await tester.pumpAndSettle();
 
       // Find the takeback button - should be disabled
-      final takebackButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.arrow_uturn_left),
-        matching: find.byType(BottomBarButton),
-      );
+      final takebackButton = find.widgetWithText(SrsTextButton, 'Takeback');
       expect(takebackButton, findsOneWidget);
-      final takebackWidget = tester.widget<BottomBarButton>(takebackButton);
-      expect(takebackWidget.onTap, isNull);
+      final takebackWidget = tester.widget<SrsTextButton>(takebackButton);
+      expect(takebackWidget.onPressed, isNull);
 
       // Find the hint button - should be disabled
-      final hintButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.lightbulb),
-        matching: find.byType(BottomBarButton),
-      );
+      final hintButton = find.widgetWithText(SrsTextButton, 'Get a hint');
       expect(hintButton, findsOneWidget);
-      final hintWidget = tester.widget<BottomBarButton>(hintButton);
-      expect(hintWidget.onTap, isNull);
+      final hintWidget = tester.widget<SrsTextButton>(hintButton);
+      expect(hintWidget.onPressed, isNull);
     });
 
     testWidgets('Loading saved game restores position', (tester) async {
@@ -913,8 +894,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Leaving an unfinished game asks nothing: it is saved on the way out, so it can be
-      // resumed or analysed later.
-      await tester.pageBack();
+      // resumed or analysed later. The head uses a custom chevron, not a platform
+      // back button, so pageBack() cannot see it.
+      await tester.tap(find.bySemanticsLabel('Back to Review'));
       await tester.pumpAndSettle();
 
       expect(find.byType(OfflineComputerGameScreen), findsNothing);
@@ -928,18 +910,11 @@ void main() {
       fakeEngine = MultiPvEngine();
     });
 
-    testWidgets('Hint button shows lightbulb icon', (tester) async {
+    testWidgets('Hint button shows its label', (tester) async {
       await initOfflineComputerGame(tester);
 
-      // Verify hint button with lightbulb icon is shown
-      expect(find.byIcon(CupertinoIcons.lightbulb), findsOneWidget);
-
-      // Verify the button has "Get a hint" label
-      final hintButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.lightbulb),
-        matching: find.byType(BottomBarButton),
-      );
-      expect(hintButton, findsOneWidget);
+      // The bar is text-only now: no icons, just the action words.
+      expect(find.widgetWithText(SrsTextButton, 'Get a hint'), findsOneWidget);
     });
 
     testWidgets('Hint button is disabled while hints are loading', (tester) async {
@@ -976,12 +951,9 @@ void main() {
 
       // If loading hint, the button should be disabled
       if (gameState.isLoadingHint) {
-        final hintButton = find.ancestor(
-          of: find.byIcon(CupertinoIcons.lightbulb),
-          matching: find.byType(BottomBarButton),
-        );
-        final button = tester.widget<BottomBarButton>(hintButton);
-        expect(button.onTap, isNull);
+        final hintButton = find.widgetWithText(SrsTextButton, 'Get a hint');
+        final button = tester.widget<SrsTextButton>(hintButton);
+        expect(button.onPressed, isNull);
       }
 
       // Let hints finish computing
@@ -1027,7 +999,7 @@ void main() {
         expect(gameState.hintSquare, isNull);
 
         // Press hint button
-        await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+        await tester.tap(find.text('Get a hint'));
         await tester.pump();
 
         // Hint square should now be set
@@ -1072,7 +1044,7 @@ void main() {
 
       if (gameState.hintMoves != null && gameState.hintMoves!.length > 1) {
         // Press hint button first time
-        await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+        await tester.tap(find.text('Get a hint'));
         await tester.pump();
 
         final firstHintState = ref.read(offlineComputerGameControllerProvider);
@@ -1080,7 +1052,7 @@ void main() {
         final firstHintSquare = firstHintState.hintSquare;
 
         // Press hint button second time
-        await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+        await tester.tap(find.text('Get a hint'));
         await tester.pump();
 
         final secondHintState = ref.read(offlineComputerGameControllerProvider);
@@ -1132,9 +1104,9 @@ void main() {
       expect(gameState.hintMoves, hasLength(2));
 
       // Cycle to the second hint.
-      await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+      await tester.tap(find.text('Get a hint'));
       await tester.pump();
-      await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+      await tester.tap(find.text('Get a hint'));
       await tester.pump();
 
       final shownState = ref.read(offlineComputerGameControllerProvider);
@@ -1188,7 +1160,7 @@ void main() {
 
       if (gameState.hintMoves != null && gameState.hintMoves!.isNotEmpty) {
         // Press hint button to show a hint
-        await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+        await tester.tap(find.text('Get a hint'));
         await tester.pump();
 
         final hintState = ref.read(offlineComputerGameControllerProvider);
@@ -1238,25 +1210,16 @@ void main() {
       final gameState = ref.read(offlineComputerGameControllerProvider);
 
       if (gameState.hintMoves != null && gameState.hintMoves!.isNotEmpty) {
-        // Before pressing hint, button should not be highlighted
-        var hintButton = find.ancestor(
-          of: find.byIcon(CupertinoIcons.lightbulb),
-          matching: find.byType(BottomBarButton),
-        );
-        var button = tester.widget<BottomBarButton>(hintButton);
-        expect(button.highlighted, isFalse);
-
-        // Press hint button
-        await tester.tap(find.byIcon(CupertinoIcons.lightbulb));
+        // The bar no longer highlights the button; the hint arrow on the board is the
+        // indicator. Pressing it still shows the hint.
+        await tester.tap(find.text('Get a hint'));
         await tester.pump();
 
-        // Button should now be highlighted
-        hintButton = find.ancestor(
-          of: find.byIcon(CupertinoIcons.lightbulb),
-          matching: find.byType(BottomBarButton),
+        expect(
+          ref.read(offlineComputerGameControllerProvider).hintSquare,
+          isNotNull,
+          reason: 'the hint arrow is drawn on the board',
         );
-        button = tester.widget<BottomBarButton>(hintButton);
-        expect(button.highlighted, isTrue);
       }
     });
 
@@ -1271,14 +1234,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Find the hint button
-      final hintButton = find.ancestor(
-        of: find.byIcon(CupertinoIcons.lightbulb),
-        matching: find.byType(BottomBarButton),
-      );
+      final hintButton = find.widgetWithText(SrsTextButton, 'Get a hint');
 
       // During engine's turn, hint button should be disabled
-      final button = tester.widget<BottomBarButton>(hintButton);
-      expect(button.onTap, isNull);
+      final button = tester.widget<SrsTextButton>(hintButton);
+      expect(button.onPressed, isNull);
 
       // Let the opponent answer and the analysis of the player's turn give up, so that nothing is
       // left running behind the test.
@@ -1416,18 +1376,17 @@ void main() {
       await tester.pumpAndSettle();
 
       await selectTimeControl(tester, 'Clock');
-      expect(timeControlTile(tester).settingsValue, 'Clock');
+      expect(timeControlTile(tester).value, 'Clock');
 
-      final practiceSwitch = find.descendant(
-        of: find.ancestor(of: find.text('Practice mode'), matching: find.byType(SwitchSettingTile)),
-        matching: find.byType(Switch),
+      final practiceSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
       );
       await tester.ensureVisible(find.text('Practice mode'));
       await tester.tap(practiceSwitch);
       await tester.pumpAndSettle();
 
       // Turning practice mode on takes the clock away, and there is no way to ask for one back.
-      expect(timeControlTile(tester).settingsValue, 'Unlimited');
+      expect(timeControlTile(tester).value, 'Unlimited');
       expect(timeControlTile(tester).enabled, false);
 
       await tester.ensureVisible(find.text('Play'));
@@ -1820,7 +1779,7 @@ void main() {
       expect(find.text('Next to play'), findsNothing);
 
       // Open side picker
-      await tester.tap(find.byType(SettingsListTile).first);
+      await tester.tap(find.text('Random side'));
       await tester.pumpAndSettle();
 
       // "Next to play" should not be in the picker
@@ -2137,9 +2096,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       // Enable practice mode
-      final practiceSwitch = find.descendant(
-        of: find.ancestor(of: find.text('Practice mode'), matching: find.byType(SwitchSettingTile)),
-        matching: find.byType(Switch),
+      final practiceSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
       );
       await tester.tap(practiceSwitch);
       await tester.pump();
@@ -2183,9 +2141,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      final practiceSwitch = find.descendant(
-        of: find.ancestor(of: find.text('Practice mode'), matching: find.byType(SwitchSettingTile)),
-        matching: find.byType(Switch),
+      final practiceSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
       );
       await tester.tap(practiceSwitch);
       await tester.pump();
@@ -2431,9 +2388,8 @@ Future<Rect> initPracticeModeGame(WidgetTester tester, {Side side = Side.white})
   await tester.pump(const Duration(milliseconds: 100));
 
   // Enable practice mode
-  final practiceSwitch = find.descendant(
-    of: find.ancestor(of: find.text('Practice mode'), matching: find.byType(SwitchSettingTile)),
-    matching: find.byType(Switch),
+  final practiceSwitch = find.byWidgetPredicate(
+    (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
   );
   await tester.tap(practiceSwitch);
   await tester.pump();
@@ -2450,9 +2406,9 @@ Future<Rect> initPracticeModeGame(WidgetTester tester, {Side side = Side.white})
   return tester.getRect(find.byType(Chessboard));
 }
 
-/// The "Time control" tile of the new game bottom sheet.
-SettingsListTile timeControlTile(WidgetTester tester) => tester.widget<SettingsListTile>(
-  find.ancestor(of: find.text('Time control'), matching: find.byType(SettingsListTile)),
+/// The "Time control" row of the new game bottom sheet.
+SrsSettingsRow timeControlTile(WidgetTester tester) => tester.widget<SrsSettingsRow>(
+  find.ancestor(of: find.text('Time control'), matching: find.byType(SrsSettingsRow)),
 );
 
 /// Picks [choice] ('Clock' or 'Unlimited') in the new game bottom sheet's time control picker.

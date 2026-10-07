@@ -30,8 +30,8 @@ These are the authoritative decisions from the owner. Do not override them.
 
 | # | Decision | Rationale |
 |---|---|---|
-| C1 Firebase | `[G]` GREY | Undecided — leave untouched |
-| C2 Notifications | `[G]` GREY | May be needed for SRS review reminders (like Anki) — leave untouched |
+| C1 Firebase | `[x]` DONE | Removed 2026-09-30 (Option B) — firebase_core, crashlytics, messaging dropped; app is 100% offline-first with zero cloud dependencies |
+| C2 Notifications | `[x]` DONE | Removed 2026-09-30 — FCM path and Lichess push models removed; app has no server-push dependencies |
 | C3 Auth/login | `[K]` KEEP | Login is optional but enables importing Lichess/chess.com studies; app is 100% functional offline without it |
 | C4 Online play | `[x]` DONE | Removed 2026-09-15 — lobby, seeks, challenges, view/play, model/lobby, model/challenge |
 | C5 Server games | `[x]` DONE | Removed 2026-09-15 — server game lifecycle, correspondence, GameScreen, ongoing games |
@@ -131,6 +131,51 @@ Step 18 [x]  C5/C6 — Dead Android system gestures exclusion utility & method c
 
 Steps beyond 12 (C12 offline computer, C13 engine) are blocked on owner
 GREY decisions and are not started until explicit approval.
+
+---
+
+## C1/C2 decided 2026-09-29 — keep, and what "keep" actually means here
+
+Owner decision: keep Firebase, because notifications need it. Recorded here because
+the decision and its consequences are easy to conflate, and only one of the two is
+a decision.
+
+**What is actually running.** The FCM path is live and started at launch
+(`lib/src/app.dart:123`). It requests permission, listens for token refresh, and
+registers on connectivity regain. It is real code doing real work.
+
+**What it delivers is not SRS reminders.** `CUT_PROPOSALS.md` C2 was written as
+"may be needed for SRS review reminders (like Anki)". That feature does not exist.
+There is no `zonedSchedule` and no topic subscription anywhere in `lib/`; the only
+display calls initialize the plugin (`lib/src/init.dart:71`). What the plumbing
+delivers today is Lichess's own push, registered against Lichess:
+
+```dart
+// lib/src/model/notifications/notification_service.dart:475
+client.post(Uri(path: '/mobile/register/firebase/$token'))
+```
+
+That request also returns early when no user is signed in (`:471`), so the whole
+notification path is gated behind sign-in — which is why the unreachable account
+menu (fixed in PR #84) was suppressing notifications as well as study import.
+
+**The consequence that is not a decision.** Keeping Firebase keeps
+`lib/firebase_options.dart` pointed at Lichess's project — `lichessv2`,
+`org.lichess.mobileV2`. So:
+
+- FCM device tokens are registered on **Lichess's** backend, not one we control.
+- Crashlytics non-fatals, including sign-in failures
+  (`lib/src/model/auth/sign_in_failure_reporter.dart`), go to **Lichess's**
+  console.
+
+`lib/firebase_options.dart` is generated, so this is a console-and-regeneration
+task, not a code edit. It stays open because it is a consequence of the decision,
+not a separate decision.
+
+**What would change the answer.** Building the Anki-style daily review reminder
+that C2 was written for would need a backend we own, and at that point owning the
+Firebase project stops being optional. That is the decision to revisit first if
+notifications are ever built for real.
 
 ---
 
@@ -353,3 +398,7 @@ or HTTP consumers outside auth and study-import paths.
 | 16 / C4-Playban | Dead playban dialog, notification model & account service monitoring | `c3e91b183` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
 | 17 / UI-Residue | Dead orphaned widgets, views & assets (UserContextMenu, ServerOutageDisplay, ExpandedSection, SideIndicator, TextBadge, BrightnessNotifier) | `8f0e8f7d3` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
 | 18 / Gestures | Dead Android system gestures exclusion utility & method channel handler | `bd4fa6c97` | 2026-09-24 | 1246 passing, analyze 0, linux build ok |
+| 19 / Android-Widgets | Dead Android broadcast widget (BroadcastWidgetProvider, layouts, preview drawables, strings, receiver) | `3ed89a5b7` | 2026-09-30 | analyze 0 |
+| 20 / Home-Widget-Plugin | Drop home_widget plugin dependency, board preference listener, AGP 9 workarounds | `f7ff59df9` | 2026-09-30 | analyze 0 |
+| 21 / iOS-Widgets | Dead iOS LichessWidgets extension (1830 LOC Swift, targets, schemes, FeedKit/flutter-chessground SPM deps) | `b8777bef8` | 2026-09-30 | pbxproj syntax valid |
+| 22 / Firebase-FCM | Strip Firebase, Crashlytics, FCM push models & local notifications (Option B) | pending | 2026-09-30 | analyze 0 |

@@ -1,0 +1,21 @@
+# One fnmatch glob per line ('#' comments allowed). '*' crosses '/'.
+# A PR touching these files edits the referee: what "passing" means.
+# Such a PR must be a separate gate-change/spec-change with human approval.
+SPEC.md
+GATES.md
+GATES_PLAN.md
+QUALITY.md
+TEST_STRATEGY.md
+docs/ESCAPE_TO_GATE.md
+CODEOWNERS
+verify
+.gates/*
+redteam/*
+scripts/gates/*
+.github/*
+AGENTS.md
+CLAUDE.md
+analysis_options.yaml
+pubspec.yaml
+test/fixtures/*
+test_fixtures/*

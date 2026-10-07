@@ -8,8 +8,10 @@ import 'package:chess_srs/src/domain/clock.dart';
 import 'package:chess_srs/src/domain/graph_aware_review_coordinator.dart';
 import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
+import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
 import 'package:chess_srs/src/domain/review/review_session.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
 import 'package:chess_srs/src/domain/study.dart';
@@ -33,6 +35,8 @@ class ReviewEngine {
     required Map<String, ReviewState> reviewStates,
     ReviewScope scope = const ReviewScope.all(),
     ReviewMode mode = ReviewMode.srs,
+    ReviewOrder order = ReviewOrder.dueDate,
+    TransposeScope transposeScope = TransposeScope.inScope,
     int? prefetchBatchSize = 25,
     int prefetchRefillThreshold = 3,
     int? remainingDailyQuota,
@@ -46,6 +50,8 @@ class ReviewEngine {
       reviewStates: reviewStates,
       scope: scope,
       mode: mode,
+      order: order,
+      transposeScope: transposeScope,
       scheduler: scheduler,
       clock: clock,
       prefetchBatchSize: prefetchBatchSize,

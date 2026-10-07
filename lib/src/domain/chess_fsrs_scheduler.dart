@@ -73,6 +73,51 @@ class ChessFsrsParams {
 
   final double minStabilityDays;
   final double maxStabilityDays;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChessFsrsParams &&
+          w0 == other.w0 &&
+          w2 == other.w2 &&
+          w4 == other.w4 &&
+          w5 == other.w5 &&
+          w6 == other.w6 &&
+          w7 == other.w7 &&
+          w8 == other.w8 &&
+          w9 == other.w9 &&
+          w10 == other.w10 &&
+          w11 == other.w11 &&
+          w12 == other.w12 &&
+          w13 == other.w13 &&
+          w14 == other.w14 &&
+          sameDayThresholdDays == other.sameDayThresholdDays &&
+          sameDayGainFactor == other.sameDayGainFactor &&
+          sameDayLapseFactor == other.sameDayLapseFactor &&
+          minStabilityDays == other.minStabilityDays &&
+          maxStabilityDays == other.maxStabilityDays;
+
+  @override
+  int get hashCode => Object.hash(
+    w0,
+    w2,
+    w4,
+    w5,
+    w6,
+    w7,
+    w8,
+    w9,
+    w10,
+    w11,
+    w12,
+    w13,
+    w14,
+    sameDayThresholdDays,
+    sameDayGainFactor,
+    sameDayLapseFactor,
+    minStabilityDays,
+    maxStabilityDays,
+  );
 }
 
 const double kFsrsDecay = -0.5;
@@ -232,12 +277,13 @@ class ChessFsrsScheduler implements Scheduler {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ChessFsrsScheduler &&
+          params == other.params &&
           targetRetention == other.targetRetention &&
           maxIntervalDays == other.maxIntervalDays &&
           minIntervalDays == other.minIntervalDays;
 
   @override
-  int get hashCode => Object.hash(targetRetention, maxIntervalDays, minIntervalDays);
+  int get hashCode => Object.hash(params, targetRetention, maxIntervalDays, minIntervalDays);
 }
 
 /// Generates a preview of the interval ladder (in days) for consecutive successful recalls

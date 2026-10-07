@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-010, INV-014.
 
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
@@ -165,6 +166,54 @@ void main() {
       expect(() => exported = chapterToPgn(chapter), returnsNormally);
       expect(exported, isNot(contains('not-a-fen')));
       expect(exported, contains('1. e4'));
+    });
+
+    test('opening classification survives export then re-import', () {
+      const pgn = '[Opening "Sicilian Defense"]\n\n1. e4 c5 2. Nf3 d6 *';
+      final importResult = importPgn(pgn, studyTitle: 'Sicilian');
+      expect(importResult.chapters.first.opening, 'Sicilian Defense');
+
+      final exported = chapterToPgn(importResult.chapters.first);
+      expect(exported, contains('[Opening "Sicilian Defense"]'));
+
+      final reimported = importPgn(exported);
+      expect(reimported.chapters.first.opening, 'Sicilian Defense');
+    });
+
+    test('a chapter keeps its own title through an export and re-import', () {
+      // The exporter writes the real title to [Event], and also to a [Chapter] tag, but always
+      // writes the player tags as the placeholders "Repertoire"/"Opponent". An importer that
+      // reads White/Black first therefore names every exported chapter "Repertoire vs
+      // Opponent", which is what the review screen shows as the position's context and what
+      // the scope list shows as the row name.
+      const pgn = '[Event "Italian Game"]\n1. e4 e5 2. Nf3 Nc6 *';
+      final original = importPgn(pgn, studyTitle: 'Repertoires');
+      expect(original.chapters.first.title, 'Italian Game');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      final reimported = importPgn(exported, studyTitle: 'Repertoires');
+
+      expect(
+        reimported.chapters.first.title,
+        'Italian Game',
+        reason: 'the chapter title is what the exporter wrote and the user named',
+      );
+    });
+
+    test('multi-chapter export keeps the chapters distinguishable after re-import', () {
+      const pgn = '[Event "Italian Game"]\n1. e4 e5 *\n\n[Event "Sicilian"]\n1. e4 c5 *';
+      final original = importPgn(pgn, studyTitle: 'Openings');
+      expect(original.chapters.length, 2);
+
+      final exported = studyToPgn(original.study, original.chapters);
+      final reimported = importPgn(exported, studyTitle: 'Openings');
+
+      expect(reimported.chapters.map((c) => c.title).toList(), ['Italian Game', 'Sicilian']);
+    });
+    test('falls back to Untitled Study when no title is available', () {
+      final chapter = Chapter.create(studyId: 'study-1', sourceOrder: 0);
+      final exported = chapterToPgn(chapter);
+      expect(exported, contains('[Event "Untitled Study"]'));
     });
   });
 }

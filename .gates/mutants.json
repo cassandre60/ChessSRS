@@ -1,0 +1,44 @@
+[
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "d.inMilliseconds > maximumInterval.inMilliseconds ? maximumInterval : d",
+    "replace": "d.inMilliseconds >= maximumInterval.inMilliseconds ? maximumInterval : d",
+    "occurrence": 1,
+    "note": "SimpleScheduler clamp boundary; SPEC INV-026; killed by maxInterval cap tests"
+  },
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "d.inMilliseconds > maximumInterval.inMilliseconds ? maximumInterval : d",
+    "replace": "d.inMilliseconds >= maximumInterval.inMilliseconds ? maximumInterval : d",
+    "occurrence": 2,
+    "note": "EaseScalingScheduler clamp boundary; SPEC INV-026; killed by maxInterval clamp tests"
+  },
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "if (previous.repetitionCount == 0) {",
+    "replace": "if (previous.repetitionCount == 1) {",
+    "occurrence": 1,
+    "note": "first-recall branch off-by-one; SPEC INV-025; killed by first-correct-interval tests"
+  },
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "repetitionCount: 0,",
+    "replace": "repetitionCount: 1,",
+    "occurrence": 1,
+    "note": "lapse fails to reset streak; SPEC INV-025; killed by lapse-reset tests"
+  },
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "lapseCount: previous.lapseCount + 1,",
+    "replace": "lapseCount: previous.lapseCount + 2,",
+    "occurrence": 1,
+    "note": "lapse double-count; SPEC INV-025; killed by lapseCount assertions"
+  },
+  {
+    "file": "lib/src/domain/scheduler.dart",
+    "find": "states.where((s) => s.isDueAt(clock.now())).toList(growable: false)",
+    "replace": "states.where((s) => !s.isDueAt(clock.now())).toList(growable: false)",
+    "occurrence": 1,
+    "note": "dueItems negated; SPEC INV-030; killed by dueItems filter tests"
+  }
+]

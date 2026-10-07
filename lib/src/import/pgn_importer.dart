@@ -11,6 +11,7 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/study.dart';
+import 'package:chess_srs/src/import/opening_name.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
@@ -30,9 +31,21 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
     if (parsed.isNotEmpty) {
       final buffer = StringBuffer();
       for (final game in parsed) {
-        final fen = game.headers['FEN'];
-        if (fen != null && fen.trim().isNotEmpty) {
-          buffer.write('FEN:${fenKey(fen)};');
+        // The starting position is resolved exactly as importPgn resolves it, rather than read
+        // off the header. dartchess rewrites a legal FEN on the way in — an en-passant square no
+        // pawn can capture becomes '-', castling rights come back in canonical order — and a
+        // Chapter stores that normalised form as its startingFen. Hashing the raw header text
+        // instead gave this function a different answer from computeRepertoireTreeHash for
+        // every PGN that starts from a FEN, which is what stopped a backfilled study from ever
+        // being recognised as a duplicate of the file it came from.
+        if (game.headers['FEN'] != null && game.headers['FEN']!.trim().isNotEmpty) {
+          try {
+            buffer.write('FEN:${fenKey(PgnGame.startingPosition(game.headers).fen)};');
+          } catch (_) {
+            // An unusable FEN makes the whole chapter unimportable, so it contributes no moves
+            // either; hashing it here would make this fingerprint depend on bytes the import
+            // path ignores.
+          }
         }
         _appendPgnNodeMoves(game.moves, buffer);
         buffer.write('|');
@@ -42,7 +55,9 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
         return sha256.convert(utf8.encode(canonicalStr)).toString();
       }
     }
-  } catch (_) {}
+  } catch (e, st) {
+    _logger.warning('Tree-based PGN hash failed, falling back to text hash', e, st);
+  }
 
   // Fallback if parsing fails
   final normalized = pgnText.trim();
@@ -398,8 +413,16 @@ Side resolveChapterOrientation(
     return Side.white;
   }
 
-  // 3. Event / ChapterName / StudyName keyword heuristics
-  final titleCandidates = [headers['ChapterName'], headers['Event'], headers['StudyName']];
+  // 3. Event / ChapterName / StudyName keyword heuristics. Also read the
+  // plain Chapter/Study tags our own exporter writes (Lichess uses
+  // ChapterName/StudyName), so self round-trips keep the signal.
+  final titleCandidates = [
+    headers['ChapterName'],
+    headers['Chapter'],
+    headers['Event'],
+    headers['StudyName'],
+    headers['Study'],
+  ];
   final blackKeywords = RegExp(
     r'(\bfor black\b|\bas black\b|\[black\]|\(black\)|\bblack repertoire\b|\bvs white\b)',
     caseSensitive: false,
@@ -458,11 +481,21 @@ Side resolveChapterOrientation(
 }
 
 String _chapterTitle(PgnHeaders headers, int index) {
-  // Prefer a meaningful player matchup, but only when both names are real.
-  final white = headers['White'];
-  final black = headers['Black'];
-  final playersReal = white != null && black != null && white != '?' && black != '?';
-  if (playersReal) return '$white vs $black';
+  // A dedicated title tag wins outright. This app's own exporter writes one ([Chapter], and
+  // [Study] for the parent), so reading it first is what makes export -> re-import preserve the
+  // name instead of collapsing every chapter onto the exporter's placeholder player tags.
+  for (final key in ['Chapter', 'ChapterName']) {
+    final v = headers[key];
+    if (v != null && v.trim().isNotEmpty && v != '?') return v.trim();
+  }
+
+  // Then a meaningful player matchup, but only when both names are real. The exporter always
+  // writes "Repertoire"/"Opponent" here, so those are placeholders, not a matchup to display.
+  final white = headers['White']?.trim();
+  final black = headers['Black']?.trim();
+  if (!_isPlaceholderPlayerTag(white) && !_isPlaceholderPlayerTag(black)) {
+    return '$white vs $black';
+  }
 
   // Fall back to Event or Site.
   for (final key in ['Event', 'Site']) {
@@ -471,6 +504,18 @@ String _chapterTitle(PgnHeaders headers, int index) {
   }
 
   return 'Game ${index + 1}';
+}
+
+/// Whether a PGN player tag is a placeholder rather than a person.
+///
+/// `?` and `*` are the PGN conventions. `Repertoire` and `Opponent` are this app's own: the
+/// exporter writes them into [White]/[Black] to record which side the chapter is about, and
+/// writes the real names nowhere else. Treating them as a matchup to display is what made every
+/// exported chapter come back as "Repertoire vs Opponent".
+bool _isPlaceholderPlayerTag(String? name) {
+  if (name == null || name.isEmpty) return true;
+  final n = name.toLowerCase();
+  return n == '?' || n == '*' || n == 'repertoire' || n == 'opponent';
 }
 
 /// Builds a [RepertoireNode] root from the PGN node tree, or null on fatal error.
@@ -490,6 +535,18 @@ RepertoireNode? _buildRoot(
   return result;
 }
 
+/// Counts the moves in the subtree rooted at [node], excluding [node] itself.
+///
+/// Used to tell the user how much of a line is dropped along with an
+/// unparseable or illegal move, whose whole continuation is skipped.
+int _countDescendantMoves(PgnNode<PgnNodeData> node) {
+  var count = 0;
+  for (final child in node.children) {
+    count += 1 + _countDescendantMoves(child);
+  }
+  return count;
+}
+
 /// Recursively builds children from a [PgnNode], returning the updated parent.
 RepertoireNode _buildChildren(
   PgnNode<PgnNodeData> pgnNode,
@@ -500,7 +557,6 @@ RepertoireNode _buildChildren(
   int moveIndex,
 ) {
   var current = parent;
-
   for (final pgnChild in pgnNode.children) {
     final data = pgnChild.data;
     final san = data.san;
@@ -510,22 +566,28 @@ RepertoireNode _buildChildren(
     try {
       parsed = position.parseSan(san);
     } catch (e) {
+      final skipped = _countDescendantMoves(pgnChild);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,
           moveIndex: moveIndex,
-          message: 'Could not parse move "$san": $e',
+          message:
+              'Could not parse move "$san": $e. '
+              'Skipping it and $skipped following move(s) in this line.',
         ),
       );
       continue;
     }
 
     if (parsed == null) {
+      final skipped = _countDescendantMoves(pgnChild);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,
           moveIndex: moveIndex,
-          message: 'Illegal or unrecognized move "$san" at position ${position.fen}',
+          message:
+              'Illegal or unrecognized move "$san" at position ${position.fen}. '
+              'Skipping it and $skipped following move(s) in this line.',
         ),
       );
       continue;
@@ -540,16 +602,15 @@ RepertoireNode _buildChildren(
     final nextPosition = position.play(parsed);
     final nextFen = nextPosition.fen;
 
-    // Extract comment (prefer post-move comment, fall back to starting comment).
-    final comment = data.comments?.join(' ').trim().isNotEmpty == true
-        ? data.comments!.join(' ').trim()
-        : data.startingComments?.join(' ').trim();
+    // Concatenate pre-move (starting) and post-move comments: studies
+    // routinely carry both ("{before} 1. e4 {after}"), and either/or drops one.
+    final comment = [...?data.startingComments, ...?data.comments].join(' ').trim();
 
     var childNode = RepertoireNode.child(
       fen: nextFen,
       fenKey: fenKey(nextFen),
       incomingMove: reperMove,
-      comment: comment?.isNotEmpty == true ? comment : null,
+      comment: comment.isNotEmpty ? comment : null,
     );
 
     // Recurse into this child's subtree.
@@ -606,107 +667,4 @@ void _deriveDecisions(
       _deriveDecisions(child, studyId, chapterId, nextSide, repertoireSide, out);
     }
   }
-}
-
-/// Automatically extracts a normalized opening family name from PGN headers.
-String? extractOpeningFamily(PgnHeaders headers) {
-  // 1. Direct Opening header (e.g. "Sicilian Defense: Najdorf Variation")
-  final opening = headers['Opening'];
-  if (opening != null && opening.trim().isNotEmpty && opening != '?') {
-    return _simplifyOpeningName(opening.trim());
-  }
-
-  // 2. Check Event header (e.g. "Sicilian Defense", "French Defence - Winawer")
-  final event = headers['Event'];
-  if (event != null && event.trim().isNotEmpty && event != '?' && !event.startsWith('Game ')) {
-    final simplified = _simplifyOpeningName(event.trim());
-    if (_isLikelyOpeningName(simplified)) {
-      return simplified;
-    }
-  }
-
-  // 3. Fallback: ECO code classification (standard FIDE/ChessBase ECO families)
-  final eco = headers['ECO'];
-  if (eco != null && eco.trim().isNotEmpty && eco != '?') {
-    return _ecoToOpeningFamily(eco.trim().toUpperCase());
-  }
-
-  return null;
-}
-
-String _simplifyOpeningName(String raw) {
-  final splitColon = raw.split(RegExp('[:,-]'));
-  if (splitColon.isNotEmpty && splitColon.first.trim().isNotEmpty) {
-    return splitColon.first.trim();
-  }
-  return raw.trim();
-}
-
-bool _isLikelyOpeningName(String name) {
-  final lower = name.toLowerCase();
-  const keywords = [
-    'defense',
-    'defence',
-    'game',
-    'gambit',
-    'opening',
-    'attack',
-    'system',
-    'sicilian',
-    'french',
-    'caro-kann',
-    'caro',
-    'ruy lopez',
-    'italian',
-    'scotch',
-    "king's indian",
-    'kings indian',
-    "queen's indian",
-    'queens indian',
-    'nimzo',
-    'gruenfeld',
-    'grunfeld',
-    'dutch',
-    'english',
-    'reti',
-    'slav',
-    'london',
-    'catalan',
-    'scandinavian',
-    'pirc',
-    'modern',
-    'alekhine',
-    'vienna',
-  ];
-  return keywords.any((k) => lower.contains(k));
-}
-
-String? _ecoToOpeningFamily(String eco) {
-  if (eco.length < 2) return null;
-  final letter = eco[0];
-  final number = int.tryParse(eco.substring(1, 3)) ?? -1;
-  if (number < 0) return null;
-
-  if (letter == 'B') {
-    if (number >= 20 && number <= 99) return 'Sicilian Defense';
-    if (number >= 10 && number <= 19) return 'Caro-Kann Defense';
-    if (number >= 0 && number <= 9) return 'Scandinavian / Alekhine';
-  } else if (letter == 'C') {
-    if (number >= 0 && number <= 19) return 'French Defense';
-    if (number >= 20 && number <= 59) return 'Open Game';
-    if (number >= 60 && number <= 99) return 'Ruy Lopez';
-  } else if (letter == 'D') {
-    if (number >= 10 && number <= 19) return 'Slav Defense';
-    if (number >= 0 && number <= 69) return "Queen's Gambit";
-    if (number >= 70 && number <= 99) return 'Grünfeld Defense';
-  } else if (letter == 'E') {
-    if (number >= 20 && number <= 59) return 'Nimzo-Indian Defense';
-    if (number >= 60 && number <= 99) return "King's Indian Defense";
-    if (number >= 0 && number <= 9) return 'Catalan Opening';
-  } else if (letter == 'A') {
-    if (number >= 10 && number <= 39) return 'English Opening';
-    if (number >= 40 && number <= 44) return "Queen's Pawn Game";
-    if (number >= 80 && number <= 99) return 'Dutch Defense';
-  }
-  return null;
 }

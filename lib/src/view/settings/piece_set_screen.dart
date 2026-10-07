@@ -51,10 +51,21 @@ class _PieceSetScreenState extends ConsumerState<PieceSetScreen> {
     ];
   }
 
+  // Only show curated piece sets — the full Lichess set is kept in the enum
+  // for data compatibility but hidden from the picker.
+  static const _allowedPieceSets = {
+    PieceSet.cburnett,
+    PieceSet.merida,
+    PieceSet.pirouetti,
+    PieceSet.alpha,
+    PieceSet.mpchess,
+  };
+
   @override
   Widget build(BuildContext context) {
     final boardPrefs = ref.watch(boardPreferencesProvider);
     final c = context.srs;
+    final visibleSets = PieceSet.values.where((s) => _allowedPieceSets.contains(s)).toList();
 
     return Scaffold(
       backgroundColor: c.ground,
@@ -77,9 +88,9 @@ class _PieceSetScreenState extends ConsumerState<PieceSetScreen> {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                itemCount: PieceSet.values.length,
+                itemCount: visibleSets.length,
                 itemBuilder: (context, index) {
-                  final pieceSet = PieceSet.values[index];
+                  final pieceSet = visibleSets[index];
                   return SrsSettingsRow(
                     label: pieceSet.label,
                     selected: boardPrefs.pieceSet == pieceSet,

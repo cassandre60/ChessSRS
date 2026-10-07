@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 
-import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/model/log/app_log_storage.dart';
 import 'package:chess_srs/src/model/settings/log_preferences.dart';
 import 'package:chess_srs/src/utils/lru_list.dart';
@@ -23,15 +22,6 @@ const _loggersToShowInTerminal = {
   'Database',
   'FsrsScheduler',
 };
-
-/// Loggers whose severe records are worth a non-fatal Crashlytics report on their own.
-///
-/// These are the engine plugins: they log the native diagnostics they can see — the lifecycle
-/// phase a start stalled in, the reason a write to the engine failed — and none of that reaches
-/// the app any other way. The app's own engine layer is deliberately absent: it reports its
-/// failures through `reportEngineFailure`, with the backend, variant and diagnostics attached as
-/// custom keys.
-const _loggersReportedToCrashlytics = {'Stockfish', 'Lc0'};
 
 /// Provides an instance of [AppLogService] using Riverpod.
 final appLogServiceProvider = Provider<AppLogService>(
@@ -82,23 +72,7 @@ class AppLogService {
           );
         }
       } else {
-        // The level check is what keeps credentials on the device. Records carrying a request URL
-        // are logged at INFO or WARNING, below this threshold, so they reach `app_log` and the
-        // in-app log viewer but are never forwarded to Crashlytics. Raising the threshold for a
-        // URL-bearing logger, or logging a URL at SEVERE, would ship it to a third party — so
-        // redact before logging (see `redactUriForLogging`) as well, and do not remove this gate
-        // believing the redaction covers it.
-        if (_loggersReportedToCrashlytics.contains(record.loggerName) &&
-            record.level >= Level.SEVERE) {
-          // Help debugging engine failures in production. The message carries the diagnostics, so
-          // it goes in as the reason, which Crashlytics shows on the report itself.
-          LichessBinding.instance.firebaseCrashlytics.recordError(
-            record.error ?? record.message,
-            record.stackTrace,
-            reason: '[${record.loggerName}] ${record.message}',
-            fatal: false,
-          );
-        }
+        // Redact credentials before persisting
       }
 
       _logs.put(record);

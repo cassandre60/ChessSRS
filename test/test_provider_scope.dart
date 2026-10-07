@@ -14,7 +14,6 @@ import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/engine/engine_factory.dart';
 import 'package:chess_srs/src/model/engine/thinking_time.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
-import 'package:chess_srs/src/model/notifications/notification_service.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/aggregator.dart';
@@ -41,7 +40,6 @@ import 'model/analysis/fake_opening_service.dart';
 import 'model/common/service/fake_sound_service.dart';
 import 'model/engine/fake_engine.dart';
 import 'model/engine/fake_weights_service.dart';
-import 'model/notifications/fake_notification_display.dart';
 import 'network/fake_http_client_factory.dart';
 import 'network/fake_websocket_channel.dart';
 import 'test_helpers.dart';
@@ -244,9 +242,6 @@ Future<Widget> makeTestProviderScope(
   FlutterError.onError = ignoreOverflowErrors;
 
   final Map<ProviderOrFamily, Override> overrideMap = {
-    notificationDisplayProvider: notificationDisplayProvider.overrideWith((ref) {
-      return FakeNotificationDisplay();
-    }),
     databaseProvider: databaseProvider.overrideWith((ref) async {
       final testDb = await openAppDatabase(databaseFactoryFfiNoIsolate, inMemoryDatabasePath);
       ref.onDispose(testDb.close);

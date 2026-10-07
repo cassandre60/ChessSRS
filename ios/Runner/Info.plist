@@ -194,8 +194,6 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>FirebaseMessagingAutoInitEnabled</key>
-	<false/>
 	<key>GCSupportsGameMode</key>
 	<false/>
 </dict>

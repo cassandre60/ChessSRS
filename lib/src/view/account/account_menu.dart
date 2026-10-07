@@ -6,7 +6,6 @@ import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/styles/lichess_icons.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/http_network_image.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -15,7 +14,6 @@ import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/account/profile_screen.dart';
 import 'package:chess_srs/src/view/auth/sign_in_error.dart';
 import 'package:chess_srs/src/view/auth/sign_in_options.dart';
-import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
@@ -178,16 +176,9 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
               ),
             ),
           ],
-          ListSection(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: Text(context.l10n.settingsSettings),
-                onTap: () {
-                  _navigate(context, SrsSettingsScreen.buildRoute());
-                },
-              ),
-              if (user != null)
+          if (user != null)
+            ListSection(
+              children: [
                 switch (signOutState) {
                   MutationPending() => const ListTile(
                     leading: Icon(Icons.logout_outlined),
@@ -201,29 +192,8 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                     onTap: () => _showSignOutConfirmDialog(context, ref),
                   ),
                 },
-            ],
-          ),
-          ListSection(
-            children: [
-              if (Theme.of(context).platform == TargetPlatform.android)
-                ListTile(
-                  leading: Icon(
-                    LichessIcons.patron,
-                    semanticLabel: context.l10n.patronLichessPatron,
-                  ),
-                  title: Text(context.l10n.patronDonate),
-                  enabled: isOnline,
-                  onTap: () => launchUrl(Uri.parse('https://lichess.org/patron')),
-                ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(context.l10n.about),
-                onTap: () {
-                  _navigate(context, AboutScreen.buildRoute());
-                },
-              ),
-            ],
-          ),
+              ],
+            ),
           const SocketPingRatingListTile(),
         ],
       ),
@@ -414,9 +384,13 @@ class AboutScreen extends ConsumerWidget {
                 onTap: () {
                   showLicensePage(
                     context: context,
-                    applicationName: 'Lichess',
+                    applicationName: 'ChessSRS',
                     applicationVersion: packageInfo.version,
-                    applicationIcon: const Icon(LichessIcons.logo_lichess),
+                    applicationIcon: Image.asset(
+                      'assets/brand/icon-1024.png',
+                      width: 48,
+                      height: 48,
+                    ),
                   );
                 },
               ),

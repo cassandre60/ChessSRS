@@ -14,6 +14,7 @@ class GraphNode {
     required this.parentId,
     required this.fen4,
     required this.expectedMoveUci,
+    this.hasCanonicalIdentity = false,
   });
 
   /// The decision ID.
@@ -27,6 +28,12 @@ class GraphNode {
 
   /// Expected repertoire move in UCI notation (e.g. `e2e4`).
   final String expectedMoveUci;
+
+  /// True when [decisionId] is a complete-set canonical id
+  /// ([RepertoireDecision.canonicalStateId]), i.e. it already identifies the
+  /// exact question being asked. False for legacy occurrence ids, which predate
+  /// complete-set keys and share memory through the single-move adjacency map.
+  final bool hasCanonicalIdentity;
 }
 
 /// Abstract storage interface providing the graph topology and state lookups
@@ -79,16 +86,7 @@ class InMemoryReviewStateRepository implements ReviewStateRepository {
       _canonicalKeys['$fen4|$expectedMoveUci'];
 
   void setCanonicalId(String fen4, String expectedMoveUci, String canonicalId) {
-    // A key claimed by two different canonical ids is ambiguous (same position
-    // and move, different accepted sets): unmap it so lookups fall back to the
-    // caller's own decision id instead of rerouting into another question.
-    final key = '$fen4|$expectedMoveUci';
-    final existing = _canonicalKeys[key];
-    if (existing == null) {
-      _canonicalKeys[key] = canonicalId;
-    } else if (existing != canonicalId) {
-      _canonicalKeys.remove(key);
-    }
+    _canonicalKeys['$fen4|$expectedMoveUci'] = canonicalId;
   }
 }
 
@@ -153,6 +151,19 @@ class GraphAwareReviewCoordinator {
 
   final Map<String, DateTime> _lastExposedAt = {};
 
+  /// Resolves the scheduling identity for [node].
+  ///
+  /// A node carrying a complete-set canonical id is already its own identity:
+  /// routing it through the single-move adjacency map can only agree with it
+  /// (redundant) or land on a *different* question that happens to share the
+  /// position and one move (wrong — two such questions must not share SRS
+  /// memory). Legacy occurrence ids keep the historical map-first resolution,
+  /// which is their only transposition-sharing mechanism.
+  String _resolveCanonicalId(GraphNode node) {
+    if (node.hasCanonicalIdentity) return node.decisionId;
+    return repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
+  }
+
   /// Snapshot of the transient exposure-throttle bookkeeping.
   ///
   /// Used to roll back side effects of a review answer whose persistence
@@ -174,7 +185,7 @@ class GraphAwareReviewCoordinator {
     String? playedMoveUci,
     List<GraphNode> siblings = const [],
   }) {
-    final canonicalId = repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
+    final canonicalId = _resolveCanonicalId(node);
     final previous = repo.get(canonicalId) ?? ReviewState.initial(decisionId: canonicalId);
 
     final updatedPrimary = scheduler.schedule(previous: previous, result: result, now: now);
@@ -203,7 +214,7 @@ class GraphAwareReviewCoordinator {
   /// Never touches repetitionCount, lapseCount, difficulty, or lastReviewedAt.
   /// Throttled to once per calendar day per decision.
   ReviewState? recordAutoTraversalExposure({required GraphNode node, required DateTime now}) {
-    final canonicalId = repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
+    final canonicalId = _resolveCanonicalId(node);
     final previous = repo.get(canonicalId);
     if (previous == null || previous.stability <= 0) {
       return previous ?? ReviewState.initial(decisionId: canonicalId);
@@ -281,7 +292,7 @@ class GraphAwareReviewCoordinator {
   }) {
     for (final sib in siblings) {
       if (sib.expectedMoveUci != playedMoveUci) continue;
-      final sibCanonicalId = repo.canonicalIdFor(sib.fen4, sib.expectedMoveUci) ?? sib.decisionId;
+      final sibCanonicalId = _resolveCanonicalId(sib);
       final sibState = repo.get(sibCanonicalId);
       if (sibState == null) continue;
 

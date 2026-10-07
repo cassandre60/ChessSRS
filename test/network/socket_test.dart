@@ -1,3 +1,4 @@
+// SPEC coverage: INV-064.
 import 'dart:convert';
 import 'dart:io';
 
@@ -26,12 +27,13 @@ import 'fake_websocket_channel.dart';
 final defaultSocketUri = Uri(path: kDefaultSocketRoute);
 
 SocketClient makeTestSocketClient({
+  Uri? route,
   WebSocketChannelFactory fakeChannelFactory = defaultFakeWebSocketChannelFactory,
   int? version,
   VoidCallback? onEventGapFailure,
 }) {
   final client = SocketClient(
-    defaultSocketUri,
+    route ?? defaultSocketUri,
     version: version,
     channelFactory: fakeChannelFactory,
     onEventGapFailure: onEventGapFailure,
@@ -77,11 +79,57 @@ class _SingleChannelFactory implements WebSocketChannelFactory {
   }) async => channel;
 }
 
+/// A [WebSocketChannelFactory] that records the URL of every connection it is asked for.
+///
+/// The fakes above key their channels by path alone, so a connection missing its query string is
+/// indistinguishable from one carrying it — which is how a handshake lila answers with a 400 went
+/// unnoticed: every test saw a channel open.
+class _RecordingUrlChannelFactory implements WebSocketChannelFactory {
+  final urls = <String>[];
+
+  @override
+  Future<WebSocketChannel> create(
+    String url, {
+    Map<String, dynamic>? headers,
+    Duration timeout = const Duration(seconds: 1),
+  }) async {
+    urls.add(url);
+    return createDefaultFakeWebSocketChannel(Uri.parse(url));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   TestLichessBinding.ensureInitialized();
 
   group('SocketClient', () {
+    test('connects with the sri in the query string', () async {
+      final factory = _RecordingUrlChannelFactory();
+
+      final socketClient = makeTestSocketClient(fakeChannelFactory: factory);
+      await socketClient.connect();
+      await socketClient.close();
+
+      expect(Uri.parse(factory.urls.single).queryParameters['sri'], 'testSri');
+    });
+
+    test('connects with the sri in the query string on the analysis route', () async {
+      // The F-CLOUDEVAL path: cloud eval goes out over /analysis/socket, and
+      // INV-064 holds per route, not just for the default one.
+      final factory = _RecordingUrlChannelFactory();
+
+      final socketClient = makeTestSocketClient(
+        route: Uri(path: '/analysis/socket/v5'),
+        fakeChannelFactory: factory,
+      );
+      await socketClient.connect();
+      await socketClient.close();
+
+      final url = Uri.parse(factory.urls.single);
+      expect(url.path, '/analysis/socket/v5');
+      expect(url.queryParameters['sri'], 'testSri');
+    });
+
     test('handles ping/pong', () async {
       final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
 

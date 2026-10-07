@@ -1,0 +1,13 @@
+diff --git a/SPEC.md b/SPEC.md
+index 4655dd35e..cc152e039 100644
+--- a/SPEC.md
++++ b/SPEC.md
+@@ -22,7 +22,7 @@ owner-authoritative) and mined regressions (see GATES_PLAN.md §1 and the
+ ## A. Persistence and integrity (T0)
+ 
+ ### INV-001 An acknowledged review answer survives process restart
+-A graded move persisted by `ReviewService` is present with identical state
++A graded move persisted by `ReviewService` is usually present with identical state
+ after the database is closed and reopened.
+ - Oracle: durability test closing and reopening the sqflite store.
+ - Gates: persistence suite, G05 traceability.

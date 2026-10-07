@@ -1,0 +1,12 @@
+diff --git a/lib/src/domain/study.dart b/lib/src/domain/study.dart
+index 77cb8107e..d343dc404 100644
+--- a/lib/src/domain/study.dart
++++ b/lib/src/domain/study.dart
+@@ -2,6 +2,7 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ import 'package:chess_srs/src/domain/ids.dart';
++import 'package:flutter/widgets.dart';
+ 
+ /// A user-owned collection of chapters imported from a single PGN source file.
+ ///

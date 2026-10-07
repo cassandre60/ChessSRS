@@ -1,13 +1,10 @@
 import 'package:chess_srs/src/design/design.dart';
-import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/socket.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/popover.dart';
-import 'package:chessground/chessground.dart';
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:material_ui/material_ui.dart';
@@ -252,54 +249,6 @@ class FullScreenRetryRequest extends StatelessWidget {
 }
 
 enum SnackBarType { error, info, success }
-
-/// Displays the side to move's king piece on a square matching the board's theme.
-///
-/// Moved from `view/puzzle/puzzle_feedback_widget.dart` during C6 (puzzle tab
-/// removal) because `view/analysis/retro_screen.dart` also uses it.
-class SideToPlayPiece extends ConsumerWidget {
-  const SideToPlayPiece({required this.side, super.key});
-
-  final Side side;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pieceSet = ref.watch(boardPreferencesProvider.select((value) => value.pieceSet));
-    final boardPrefs = ref.watch(boardPreferencesProvider);
-
-    final brightness = Theme.of(context).brightness;
-    final piece = side == Side.white ? PieceKind.whiteKing : PieceKind.blackKing;
-    final asset = pieceSet.assets[piece]!;
-
-    return Stack(
-      alignment: Alignment.center,
-      clipBehavior: Clip.none,
-      children: [
-        BrightnessHueFilter(
-          brightness: boardPrefs.brightness,
-          hue: boardPrefs.hue,
-          child: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4.0),
-              color: brightness == Brightness.light
-                  ? boardPrefs.boardTheme.colors.lightSquare
-                  : boardPrefs.boardTheme.colors.darkSquare,
-            ),
-          ),
-        ),
-        Image.asset(
-          asset.assetName,
-          width: 48,
-          height: 48,
-          bundle: asset.bundle,
-          package: asset.package,
-        ),
-      ],
-    );
-  }
-}
 
 class FeedbackTile extends StatelessWidget {
   const FeedbackTile({this.leading, required this.title, this.subtitle, super.key});

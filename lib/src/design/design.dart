@@ -4,6 +4,7 @@
 library;
 
 export 'board_background.dart';
+export 'folio_board_schemes.dart';
 export 'hatch.dart';
 export 'memory_bar.dart';
 export 'move_arrow.dart';

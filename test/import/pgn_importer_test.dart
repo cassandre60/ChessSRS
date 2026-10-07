@@ -1,10 +1,19 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-003, INV-010, INV-011, INV-012, INV-013, INV-014, INV-015, INV-016, INV-017.
 
+import 'dart:io';
+
+import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/domain/repertoire_node.dart';
+import 'package:chess_srs/src/import/opening_name.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   // ---------------------------------------------------------------------------
@@ -71,6 +80,15 @@ void main() {
 ''';
       final result = importPgn(pgn);
       expect(result.chapters.first.opening, 'French Defence');
+    });
+
+    test('ignores Event headers that merely mention an opening', () {
+      const pgn = '''
+[Event "White vs French"]
+1. e4 e6 2. d4 d5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, isNull);
     });
 
     test('classifies opening family from ECO header fallback', () {
@@ -540,6 +558,73 @@ void main() {
       );
     });
 
+    test('the two hash functions agree on a PGN that starts from a FEN', () {
+      // The equivalence above is the whole reason computeRepertoireTreeHash exists: it
+      // backfills the hash of a study stored before pgnHash existed, so a re-import can still
+      // recognise it as a duplicate (sqlite_study_repository.dart:130). It only holds if the
+      // two functions derive the starting position the same way.
+      //
+      // Every case here is a legal FEN that dartchess rewrites on the way in: an en-passant
+      // square no pawn can capture, castling rights not in canonical order.
+      const cases = <String, String>{
+        'en passant no pawn can capture':
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *',
+        'castling rights out of canonical order':
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w kqKQ - 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *',
+      };
+
+      cases.forEach((why, pgn) {
+        final result = importPgn(pgn, studyTitle: 'From FEN');
+        expect(result.errors, isEmpty, reason: why);
+        expect(
+          computeRepertoireTreeHash(result.chapters),
+          equals(computePgnHash(pgn)),
+          reason: why,
+        );
+      });
+    });
+
+    test(
+      'a backfilled study is still recognised as a duplicate of the file it came from',
+      () async {
+        // The end of the equivalence above. A study whose pgnHash predates the column is given
+        // one by computeRepertoireTreeHash; if that value cannot equal what the import path
+        // computes, the study is imported a second time and the user has two copies to delete.
+        final dir = Directory.systemTemp.createTempSync('chess_srs_hash_dup_');
+        final db = await openAppDatabase(databaseFactoryFfi, p.join(dir.path, 'dup.db'));
+        final repo = SqliteStudyRepository(db);
+
+        const pgn =
+            '[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2"]\n'
+            '[SetUp "1"]\n\n2. Nf3 d6 *';
+        final hash = computePgnHash(pgn);
+
+        try {
+          final result = importPgn(pgn, studyTitle: 'Sicilian', pgnHash: hash);
+          await repo.saveStudy(result.study);
+          for (final c in result.chapters) {
+            await repo.saveChapter(c);
+          }
+
+          // Before the backfill, the stored hash is the one the import path computes.
+          expect((await repo.getStudyByPgnHash(hash))?.id, result.study.id);
+
+          // Pretend it was stored before the column existed.
+          await db.update(kTableSrsStudy, {'pgnHash': null});
+          expect(
+            (await repo.getStudyByPgnHash(hash))?.id,
+            result.study.id,
+            reason: 'the backfilled hash must match the hash an import computes',
+          );
+        } finally {
+          await db.close();
+          dir.deleteSync(recursive: true);
+        }
+      },
+    );
+
     test('computePgnHashAsync and importPgnAsync work across isolate boundaries', () async {
       const pgn = '''
 [Event "Background Isolate Test"]
@@ -651,6 +736,63 @@ void main() {
 
       expect(result.errors, isEmpty);
       expect(result.decisions, isNotEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Import fidelity round 2: comments, titles, openings, hashes, error volume
+  // ---------------------------------------------------------------------------
+  group('importPgn — fidelity', () {
+    test('keeps both pre-move and post-move comments on a node', () {
+      // A comment between the move number and the SAN lands in
+      // startingComments; one after the SAN lands in comments. Either/or
+      // logic kept only the latter.
+      final result = importPgn('1. e4 e5 (1... {pre} c5 {post}) 2. Nf3 *');
+      expect(result.errors, isEmpty);
+      final root = result.chapters.single.root!;
+      RepertoireNode? walk(RepertoireNode node, String san) {
+        if (node.incomingMove?.san == san) return node;
+        for (final c in node.children) {
+          final found = walk(c, san);
+          if (found != null) return found;
+        }
+        return null;
+      }
+
+      final c5 = walk(root, 'c5');
+      expect(c5, isNotNull);
+      expect(c5!.comment, contains('pre'));
+      expect(c5.comment, contains('post'));
+    });
+
+    test('keeps hyphenated opening names intact', () {
+      // The old split on every '-' cut these to just 'Caro'.
+      expect(extractOpeningFamily({'Opening': 'Caro-Kann Defense'}), 'Caro-Kann Defense');
+      expect(
+        extractOpeningFamily({'Opening': 'Caro-Kann Defense: Advance Variation'}),
+        'Caro-Kann Defense',
+      );
+      expect(
+        extractOpeningFamily({'Opening': 'Sicilian Defense: Najdorf Variation'}),
+        'Sicilian Defense',
+      );
+      expect(extractOpeningFamily({'Opening': 'French Defence - Winawer'}), 'French Defence');
+    });
+
+    test('short ECO codes return null instead of throwing', () {
+      expect(extractOpeningFamily({'ECO': 'B9'}), isNull);
+      expect(extractOpeningFamily({'ECO': 'B'}), isNull);
+      expect(extractOpeningFamily({'ECO': 'B12'}), 'Caro-Kann Defense');
+    });
+
+    test('illegal move error reports how many following moves are skipped', () {
+      // 2. Nh4 is illegal (knight cannot reach h4 in one move); Nf6 and d4
+      // follow it in the line and are skipped along with it.
+      final result = importPgn('1. e4 e5 2. Nh4 Nf6 3. d4 *');
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('Skipping it and 2 following move(s)'));
+      // Only 1. e4 survives as a repertoire decision.
+      expect(result.decisions.map((d) => d.expectedMoves.first.san), ['e4']);
     });
   });
 }

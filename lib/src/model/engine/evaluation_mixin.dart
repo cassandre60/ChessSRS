@@ -126,6 +126,14 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
 
   StreamSubscription<SocketEvent>? _socketSubscription;
 
+  /// Subscription to the eval stream of the latest eval request.
+  ///
+  /// Kept so it can be cancelled when the request is replaced or the notifier is disposed: the
+  /// stream is a view of the evaluator's broadcast controller, which is closed only when the
+  /// evaluator itself is disposed, so an uncancelled subscription would be dispatched on every
+  /// emission (and retain the captured state) until then.
+  StreamSubscription<EvalResult>? _engineEvalSubscription;
+
   /// Called when a received evaluation is for the current path.
   ///
   /// If the evaluation string is the same for both the received and the current evaluation, the
@@ -138,6 +146,7 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
     ref.onDispose(() {
       _evalRequestDebounce.cancel();
       _localEngineAfterDelayDebounce.cancel();
+      _engineEvalSubscription?.cancel();
       _socketSubscription?.cancel();
       // Letting go of the evaluator disposes it, which releases the engine; the grace window is
       // what makes navigating to another analysis screen free.
@@ -419,7 +428,8 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
       steps: positionTree.branchesOn(curState.currentPath).map(Step.fromNode).toIList(),
     );
 
-    _evaluator.evaluate(work, goDeeper: goDeeper)?.forEach((event) {
+    _engineEvalSubscription?.cancel();
+    _engineEvalSubscription = _evaluator.evaluate(work, goDeeper: goDeeper)?.listen((event) {
       if (curState.engineInThreatMode) {
         return;
       }
@@ -436,11 +446,17 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
               evalWork.searchTime != kMaxEngineSearchTime) {
             final targetTime = evalWork.searchTime;
             final evalSearchTime = eval.searchTime;
-            final likelyNodes =
-                ((targetTime.inMilliseconds * eval.nodes) / evalSearchTime.inMilliseconds).round();
+            // Null means no rate can be established (e.g. zero elapsed time
+            // on the engine's first instant infos): keep the eval, skip the
+            // stop comparison rather than dividing by zero.
+            final likelyNodes = likelyNodesFor(
+              targetTime: targetTime,
+              nodes: eval.nodes,
+              elapsed: evalSearchTime,
+            );
             // if the cloud eval is likely better, stop the local engine
             // nps varies with positional complexity so this is rough, but save planet earth
-            if (likelyNodes < nodeEval.nodes) {
+            if (likelyNodes != null && likelyNodes < nodeEval.nodes) {
               _evaluator.stop();
             }
             return;
@@ -461,4 +477,17 @@ mixin EngineEvaluationMixin<T extends EvaluationMixinState<T>> on AnyNotifier<As
       }
     });
   }
+}
+
+/// Estimates the node count a local search would reach in [targetTime] at the
+/// observed rate ([nodes] in [elapsed]), or null when no rate can be
+/// established.
+///
+/// A zero elapsed time arrives with the engine's first near-instant infos.
+/// Dividing by it yields Infinity, and `Infinity.round()` throws — inside the
+/// eval listener, where the throw kills all later local evals for that work.
+/// Callers treat null as "cannot compare": keep the eval, skip the stop.
+int? likelyNodesFor({required Duration targetTime, required int nodes, required Duration elapsed}) {
+  if (elapsed.inMilliseconds <= 0 || nodes < 0) return null;
+  return ((targetTime.inMilliseconds * nodes) / elapsed.inMilliseconds).round();
 }

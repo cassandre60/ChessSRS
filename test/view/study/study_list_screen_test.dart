@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/study/study_list_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,8 +131,8 @@ void main() {
       expect(find.textContaining('tom-anders'), findsOneWidget);
 
       expect(requestedUrls, [
-        'https://lichess.dev/study/all/hot?page=1',
-        'https://lichess.dev/study/search?page=1&q=Magnus&order=hot',
+        'https://$kLichessHost/study/all/hot?page=1',
+        'https://$kLichessHost/study/search?page=1&q=Magnus&order=hot',
       ]);
     });
   });

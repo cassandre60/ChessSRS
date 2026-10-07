@@ -35,7 +35,7 @@ class ExportPgnDialog extends StatelessWidget {
 
   String get _safeFileName {
     final safe = title.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-    return safe.isNotEmpty ? '$safe.pgn' : 'repertoire.pgn';
+    return safe.isNotEmpty ? '$safe.pgn' : 'study.pgn';
   }
 
   Future<void> _saveToFile(BuildContext context) async {

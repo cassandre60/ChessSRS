@@ -1,18 +1,22 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-060, INV-062, INV-063.
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
+import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
@@ -53,15 +57,6 @@ void main() {
       await db.close();
     });
 
-    Future<void> pumpAsync(WidgetTester tester, [int ms = 80]) async {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(Duration(milliseconds: ms));
-      });
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 300));
-    }
-
     testWidgets('shows first launch empty state when no studies exist', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
@@ -78,7 +73,7 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester, 500);
 
-      expect(find.text('Bring your repertoire.'), findsOneWidget);
+      expect(find.text('Bring your study.'), findsOneWidget);
       expect(find.text('Choose file'), findsWidgets);
     });
 
@@ -131,9 +126,10 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Board is rendered with Chessboard
+      // Board is rendered with Chessboard and top bar shows colour squares
       expect(find.byType(Chessboard), findsOneWidget);
-      expect(find.text('All repertoires'), findsOneWidget);
+      expect(find.byTooltip('White repertoire'), findsOneWidget);
+      expect(find.byTooltip('Black repertoire'), findsOneWidget);
 
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
@@ -183,9 +179,12 @@ void main() {
         find.text('Play this move to continue. The position will come back soon.'),
         findsOneWidget,
       );
-      expect(find.text('Skip'), findsOneWidget);
+      // Recall has failed, so the action says what it does: reveal the study move by
+      // playing it on the learner's behalf. A bare "Skip" here mislabeled the action.
+      expect(find.text('Reveal answer'), findsOneWidget);
+      expect(find.text('Skip'), findsNothing);
 
-      // Reguess on the board by playing the correct repertoire move d2 -> d4
+      // Reguess on the board by playing the correct study move d2 -> d4
       await playMove(tester, 'd2', 'd4');
       await pumpAsync(tester, 700);
 
@@ -201,10 +200,112 @@ void main() {
       expect(find.text('Nothing due.'), findsOneWidget);
     });
 
+    testWidgets('a lapse offers Open in analysis at the drilled position', (tester) async {
+      // A correction state is a dead end today: the answer is shown but there is no way to
+      // explore *why* it is the move. The bridge must open the analysis board at the exact
+      // position being drilled, not at the start position.
+      final importResult = importPgn(
+        '1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Prompt state shows no escape hatch: the button must not leak a way out of recall.
+      expect(find.text('Open in analysis'), findsNothing);
+
+      // Play incorrect move: e2 -> e4 instead of d2 -> d4
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+
+      // Lapse state shows the bridge under the answer.
+      expect(find.text('Open in analysis'), findsOneWidget);
+
+      await tester.tap(find.text('Open in analysis'));
+      await pumpAsync(tester, 200);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Analysis opens at the drilled decision point: the lapse happened on move 1, so
+      // boardPosition is still the start position (the wrong e4 never became state).
+      final screen = tester.widget<AnalysisScreen>(find.byType(AnalysisScreen));
+      final options = screen.options;
+      expect(options, isA<Pgn>());
+      expect(
+        (options as Pgn).pgn,
+        contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'),
+      );
+    });
+
+    testWidgets('Reveal answer plays the study move and continues the session', (tester) async {
+      // The correction state offers no way out except replaying the move by hand or
+      // requeueing: tapping Reveal answer must do what a correct reguess does — advance
+      // through the retry path with the lapse standing — rather than swallowing the tap
+      // or requeueing silently.
+      final importResult = importPgn(
+        '1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Prompt state still says Skip: recall has not failed yet.
+      expect(find.text('Skip'), findsOneWidget);
+
+      // Play incorrect move: e2 -> e4 instead of d2 -> d4
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+
+      await tester.tap(find.text('Reveal answer'));
+      await pumpAsync(tester, 700);
+
+      // The correction is gone and the session continued (re-queued card re-prompted,
+      // exactly as after a manual correct reguess).
+      expect(
+        find.text('Play this move to continue. The position will come back soon.'),
+        findsNothing,
+      );
+      expect(find.byType(Chessboard), findsOneWidget);
+      expect(find.text('White to play'), findsOneWidget);
+    });
+
     testWidgets('a screen reader is told whether the answer was right', (tester) async {
       // design/docs/04-screens-and-flows.md §6 requires the verdict announced through a live
       // region, and this is the assertion that was missing. A wrong answer already puts the
-      // repertoire move on screen, so a sighted player is told; a *correct* one shows nothing at
+      // study move on screen, so a sighted player is told; a *correct* one shows nothing at
       // all, because the product is deliberately quiet on success. That left a screen-reader user
       // with no confirmation, and no way to tell a right answer from a wrong one.
       final sem = tester.ensureSemantics();
@@ -242,7 +343,7 @@ void main() {
       expect(find.bySemanticsLabel(RegExp('Not this move')), findsNothing);
 
       // The correct move, announced as the move that was played. Not the expected one: a
-      // transposition can make an alternative equally correct, in which case the repertoire move is
+      // transposition can make an alternative equally correct, in which case the study move is
       // not what the player actually played.
       await playMove(tester, 'e2', 'e4');
       await pumpAsync(tester, 100);
@@ -253,18 +354,18 @@ void main() {
       await pumpAsync(tester, 400);
       expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
 
-      // A wrong move, announced with the repertoire move. The repertoire's second move is Nf3, so
+      // A wrong move, announced with the study move. The study's second move is Nf3, so
       // d4 is the mistake here and Nf3 is what should have been played.
       await playMove(tester, 'd2', 'd4');
       await pumpAsync(tester, 100);
-      expect(find.bySemanticsLabel('Not this move. The repertoire move is Nf3.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Not this move. The study move is Nf3.'), findsOneWidget);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
       // addTearDown.
       sem.dispose();
     });
 
-    testWidgets('study actions sheet opens AnalysisScreen via Analyze', (tester) async {
+    testWidgets('study actions sheet opens StudyScreen via Analyze', (tester) async {
       final importResult = importPgn(
         '1. e4 e5 2. Nf3 Nc6 *',
         studyTitle: 'King Pawn Repertoire',
@@ -290,7 +391,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
@@ -301,15 +402,13 @@ void main() {
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // AnalysisScreen is now opened
-      expect(find.byType(AnalysisScreen), findsOneWidget);
+      // StudyScreen is now opened
+      expect(find.byType(StudyScreen), findsOneWidget);
     });
 
-    testWidgets('multi-chapter study opens StudyChaptersScreen and navigates to AnalysisScreen', (
-      tester,
-    ) async {
+    testWidgets('multi-chapter study opens StudyScreen via Analyze', (tester) async {
       const multiChapterPgn = '''
 [Event "Chapter 1: Open Games"]
 1. e4 e5 *
@@ -342,7 +441,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
@@ -353,20 +452,10 @@ void main() {
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
       await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // StudyChaptersScreen is now opened
-      expect(find.byType(StudyChaptersScreen), findsOneWidget);
-      expect(find.text('Chapter 1: Open Games'), findsOneWidget);
-      expect(find.text('Chapter 2: French Defense'), findsOneWidget);
-
-      // Tap Analyze icon on Chapter 1
-      await tester.tap(find.byTooltip('Analyze chapter').first);
-      await pumpAsync(tester, 200);
-      await tester.pumpAndSettle();
-
-      // AnalysisScreen is now opened
-      expect(find.byType(AnalysisScreen), findsOneWidget);
+      // StudyScreen is now opened
+      expect(find.byType(StudyScreen), findsOneWidget);
     });
 
     testWidgets(
@@ -539,7 +628,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       // Suspending is a row action, so it lives in the actions sheet (design/docs/03-components.md
@@ -646,12 +735,11 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      // Open Black drawer
+      await tester.tap(find.byTooltip('Black repertoire'));
       await pumpAsync(tester);
 
-      // Verify the Openings section exists (design/docs/01-identity.md: scope groups are
-      // `Everywhere`, `Openings`, `Repertoires`)
+      // Verify the Openings section exists
       expect(find.text('Openings'), findsOneWidget);
       expect(find.text('Sicilian Defense'), findsOneWidget);
       expect(find.text('French Defense'), findsOneWidget);
@@ -660,8 +748,13 @@ void main() {
       await tester.tap(find.text('Sicilian Defense'));
       await pumpAsync(tester);
 
-      // Verify AppBar now shows 'Sicilian Defense' as the active scope
-      expect(find.text('Sicilian Defense'), findsOneWidget);
+      // Verify scope changed to 'Sicilian Defense'
+      final element = tester.element(find.byType(ReviewScreen));
+      final container = ProviderScope.containerOf(element);
+      expect(
+        container.read(reviewControllerProvider).value?.scope.openingFamily,
+        'Sicilian Defense',
+      );
     });
 
     testWidgets('study options sheet renames and deletes study from drawer', (tester) async {
@@ -690,7 +783,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       // Open study options sheet (long-press: see the note at the first occurrence above)
@@ -737,8 +830,55 @@ void main() {
       await pumpAsync(tester);
 
       // Study is deleted -> empty state
-      expect(find.text('Bring your repertoire.'), findsOneWidget);
+      expect(find.text('Bring your study.'), findsOneWidget);
     });
+
+    testWidgets(
+      'study options Analyze navigates even when chapter load outlasts the dismiss animation',
+      (tester) async {
+        final importResult = importPgn(
+          '1. e4 e5 *',
+          studyTitle: 'King Pawn',
+          repertoireSide: Side.white,
+        );
+        // Dismiss transitions run 180ms; a 400ms chapter load guarantees the
+        // drawer is fully unmounted before the navigation decision is made.
+        final slowRepo = _SlowChaptersRepository(db);
+        await tester.runAsync(() => slowRepo.saveImportResult(importResult));
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => slowRepo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: slowRepo, clock: clock),
+            ),
+          },
+        );
+
+        await tester.pumpWidget(app);
+        // Slow chapter load delays the initial state too; settle twice.
+        await pumpAsync(tester, 600);
+        await pumpAsync(tester, 600);
+
+        // Open drawer and study options sheet
+        await tester.tap(find.byTooltip('White repertoire'));
+        await pumpAsync(tester, 600);
+        await tester.longPress(find.text('King Pawn'));
+        await pumpAsync(tester, 600);
+
+        // Tap Analyze: pops both sheets, loads chapters, then must navigate.
+        await tester.tap(find.text('Analyze'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 500));
+        await pumpAsync(tester, 600);
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.byType(StudyScreen), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'correct move with commentary/shapes pauses auto-advancement with Move Explanation and Continue button',
@@ -926,12 +1066,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer: before any reviews, both positions are still in the learning bucket.
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
       // the memory mini-bar beside it, not in the text.
-      expect(find.text('2 positions'), findsNWidgets(2)); // All repertoires & the study row
+      expect(find.text('2 positions'), findsOneWidget);
       List<SrsMemoryBar> drawerBars() => tester
           .widgetList<SrsMemoryBar>(
             find.descendant(
@@ -940,12 +1080,15 @@ void main() {
             ),
           )
           .toList();
-      expect(drawerBars().map((b) => b.learning), everyElement(2));
-      expect(drawerBars().map((b) => b.retained), everyElement(0));
+      expect(drawerBars().first.retained, 0);
+      expect(drawerBars().first.learning, 2);
 
-      // Close drawer by tapping the All repertoires row (scoped: the top bar shows the same name)
+      // Close drawer by tapping the study row
       await tester.tap(
-        find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('All repertoires')),
+        find.descendant(
+          of: find.byType(ReviewScopeDrawer),
+          matching: find.text('Progress Test Study'),
+        ),
       );
       await pumpAsync(tester);
 
@@ -963,12 +1106,12 @@ void main() {
       expect(find.byType(SrsMemoryBar), findsOneWidget);
 
       // Open drawer again: both positions have moved to retained
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
-      expect(find.text('2 positions'), findsNWidgets(2));
-      expect(drawerBars().map((b) => b.learning), everyElement(0));
-      expect(drawerBars().map((b) => b.retained), everyElement(2));
+      expect(find.text('2 positions'), findsOneWidget);
+      expect(drawerBars().first.learning, 0);
+      expect(drawerBars().first.retained, 2);
     });
 
     testWidgets('RepertoireImportDialog indicates when imported PGN is already up to date', (
@@ -1000,7 +1143,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer and click Import PGN
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       await tester.tap(find.text('Import PGN'));
@@ -1020,7 +1163,7 @@ void main() {
       // Dialog is dismissed and info snackbar is shown
       expect(find.byType(RepertoireImportDialog), findsNothing);
       expect(
-        find.text('Repertoire "King Pawn Repertoire" is already imported and up to date'),
+        find.text('Study "King Pawn Repertoire" is already imported and up to date'),
         findsOneWidget,
       );
     });
@@ -1060,7 +1203,7 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer and click Import PGN
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
       await tester.tap(find.text('Import PGN'));
@@ -1148,7 +1291,7 @@ void main() {
       final study1 = importPgn(
         '1. e4 e6 *',
         studyTitle: 'French Defense Repertoire',
-        repertoireSide: Side.black,
+        repertoireSide: Side.white,
       );
       final study2 = importPgn(
         '1. e4 c5 *',
@@ -1175,27 +1318,22 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      // Open White drawer
+      await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
-      // Both studies and the All repertoires row are visible initially. Scope every assertion to
-      // the drawer: the top bar carries the same scope name, so an unscoped text finder sees two.
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
+      // White drawer only shows the White study:
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
-      expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All repertoires'), findsOneWidget);
+      expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
 
       // Type "French" into the search field
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'French');
       await tester.pumpAndSettle();
 
-      // "French Defense Repertoire" is visible, "Sicilian" and the All repertoires row are hidden
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
-      expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
-      expect(inDrawer('All repertoires'), findsNothing);
 
       // Type a query that matches nothing
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'Nonexistent');
@@ -1203,16 +1341,208 @@ void main() {
 
       expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
-      expect(find.text('Sicilian Dragon Repertoire'), findsNothing);
 
       // Tap clear search button
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
 
-      // Both studies and the All repertoires row reappear
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
+
+      // Close drawer and open Black drawer
+      Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
+      await pumpAsync(tester, 250);
+
+      await tester.tap(find.byTooltip('Black repertoire'));
+      await pumpAsync(tester);
+
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('All repertoires'), findsOneWidget);
+      expect(inDrawer('French Defense Repertoire'), findsNothing);
+    });
+
+    testWidgets('ReviewScopeDrawer groups collapse and expand on header tap', (tester) async {
+      final study = importPgn(
+        '[Opening "Sicilian Defense"]\n1. e4 c5 *',
+        studyTitle: 'Sicilian Lines',
+        repertoireSide: Side.black,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('Black repertoire'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+      expect(inDrawer('Sicilian Lines'), findsOneWidget);
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Lines'), findsNothing);
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+
+      await tester.tap(inDrawer('Openings'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Defense'), findsNothing);
+
+      await tester.tap(inDrawer('Openings'));
+      await pumpAsync(tester);
+
+      expect(inDrawer('Sicilian Defense'), findsOneWidget);
+    });
+
+    testWidgets('ReviewScopeDrawer collapse survives closing and reopening', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+
+      // Dismiss drawer and reopen; reopening must keep the collapse.
+      Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
+      await pumpAsync(tester, 250);
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+
+      expect(find.byType(ReviewScopeDrawer), findsOneWidget);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+    });
+
+    testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Search'), 'King Pawn');
+      await tester.pumpAndSettle();
+
+      expect(inDrawer('King Pawn Lines'), findsOneWidget);
+    });
+
+    testWidgets('collapse toggle off keeps groups expanded and headers plain', (tester) async {
+      final study = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'King Pawn Lines',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(study);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      final element = tester.element(find.byType(ReviewScreen));
+      final container = ProviderScope.containerOf(element);
+      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+
+      // With the master switch off, tapping a header does nothing.
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsOneWidget);
+
+      // Switching it back on restores collapsing without losing the state.
+      await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
+      await pumpAsync(tester);
+      await tester.tap(inDrawer('Studies'));
+      await pumpAsync(tester);
+      expect(inDrawer('King Pawn Lines'), findsNothing);
     });
 
     testWidgets(
@@ -1336,4 +1666,16 @@ void main() {
       },
     );
   });
+}
+
+/// Chapter loads slower than the 180ms sheet-dismiss transition, so any
+/// navigation decision made after the load sees an unmounted drawer.
+class _SlowChaptersRepository extends SqliteStudyRepository {
+  _SlowChaptersRepository(super.db);
+
+  @override
+  Future<List<Chapter>> getChaptersByStudy(String studyId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    return await super.getChaptersByStudy(studyId);
+  }
 }

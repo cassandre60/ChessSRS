@@ -1,0 +1,22 @@
+dartdoc:
+  exclude:
+    - lib/l10n/**
+    - lib/src/generated/**
+    - lib/src/**/*.g.dart
+    - lib/src/**/*.freezed.dart
+    - test/**
+    - lib/src/design/**
+    - lib/src/model/analysis/**
+    - lib/src/model/auth/**
+    - lib/src/model/game/**
+    - lib/src/model/offline_computer/**
+    - lib/src/model/study/**
+    - lib/src/view/**
+    - lib/src/model/engine/**
+    - lib/src/model/offline_computer/**
+    - lib/src/model/common/**
+    - lib/src/network/**
+    - lib/src/widgets/**
+    - lib/src/import/**
+    - lib/src/persistence/**
+    - lib/src/review/review_controller.dart

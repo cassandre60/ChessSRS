@@ -1085,8 +1085,6 @@ void main() {
     test('An engine that never finishes starting is reported as stuck', () async {
       fakeEngine = StuckEngine();
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       fakeAsync((async) {
         final service = readEvaluator(container);
@@ -1096,21 +1094,11 @@ void main() {
 
         // Nothing has failed yet: the engine is simply still loading.
         expect(service.state.lifecycle, EngineLifecycle.loading);
-        expect(crashlytics.recordedErrors, isEmpty);
 
         async.elapse(kEngineCreateTimeout + const Duration(seconds: 1));
         async.flushMicrotasks();
 
         expect(service.state.lifecycle, EngineLifecycle.error);
-        expect(crashlytics.customKeys['engine_failure_kind'], 'stuck');
-        expect(crashlytics.customKeys['engine_unrecoverable'], true);
-        // A create that never returns never hands back an engine to read the native diagnostics
-        // from, so the report says so rather than inventing a phase. In production the plugin
-        // bounds every step it takes and puts its own reading of them in the TimeoutException it
-        // throws, which is what this backstop reports when it does fire.
-        expect(crashlytics.customKeys['engine_phase'], 'unknown');
-        expect(crashlytics.customKeys['engine_phase_step'], 'unknown');
-        expect(crashlytics.recordedErrors, hasLength(1));
       });
     });
 
@@ -1121,8 +1109,6 @@ void main() {
       final stockfish = WedgesOnRestartEngine();
       fakeEngine = stockfish;
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       fakeAsync((async) {
         final service = readEvaluator(container);
@@ -1146,7 +1132,6 @@ void main() {
         async.flushMicrotasks();
 
         expect(nextScreen.state.lifecycle, EngineLifecycle.error);
-        expect(crashlytics.customKeys['engine_failure_kind'], 'stuck');
       });
     });
 
@@ -1185,8 +1170,6 @@ void main() {
       final stockfish = FatalWriteEngine();
       fakeEngine = stockfish;
       final container = await makeContainer();
-      final crashlytics = testBinding.firebaseCrashlytics;
-      crashlytics.recordedErrors.clear();
 
       final service = readEvaluator(container);
 
@@ -1203,8 +1186,6 @@ void main() {
             'killed it',
       );
       expect(service.state.lifecycle, EngineLifecycle.error);
-      expect(crashlytics.customKeys['engine_failure_kind'], 'command');
-      expect(crashlytics.recordedErrors.last.reason, contains(stockfish.failedCommands.single));
     });
 
     test('A write that fails mid-search leaves the engine in the error state', () async {
@@ -1394,6 +1375,54 @@ void main() {
         async.elapse(kEngineEvalEmissionThrottleDelay);
         expect(results.length, 4);
         expect(results.last.$2.depth, 14);
+      });
+    });
+
+    test('info lines without a principal variation are ignored', () async {
+      // An info line carrying a score but no PV would otherwise publish an
+      // eval with an empty move list. Engines emit PV-less infos (upper/lower
+      // bounds, currmove notices); none of them is displayable or storable.
+      // ThrottleTestEngine leaves the search open (no auto bestmove), so
+      // emitted lines actually reach the accumulator.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork());
+
+        // Let engine initialize
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 12 seldepth 8 multipv 1 score cp 20 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100',
+        );
+        async.flushMicrotasks();
+
+        // A subsequent line with a PV emits normally.
+        stockfish.emit(
+          'info depth 12 seldepth 8 multipv 1 score cp 20 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+
+        // Release the throttle window so trailing evals are delivered too.
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+        async.flushMicrotasks();
+
+        // No emitted eval may carry an empty move list, whether or not the
+        // engine also produced its own canned evals.
+        expect(results, isNotEmpty);
+        for (final result in results) {
+          expect(result.$2.pvs.expand((pv) => pv.moves), isNotEmpty);
+        }
       });
     });
 

@@ -60,7 +60,9 @@ Every engineering task must follow:
 4. WRITE TESTS with the contract (dart test, widget test, or integration
    test as appropriate).
 5. IMPLEMENT minimally, following Lichess Mobile conventions (CLAUDE.md).
-6. TARGETED VERIFICATION: run the specific test file.
+6. TARGETED VERIFICATION: run the specific test file — once, and on a budget
+   (see §3.1). The owner's machine heats up under repeated local runs; every
+   local run you skip is a run CI does for you on merge.
 7. STATIC CHECK: `flutter analyze` on the files you touched.
    The full suite is CI's job — see the note on ./verify below. Do not run
    `./verify` as part of the inner loop.
@@ -69,6 +71,29 @@ Every engineering task must follow:
 10. UPDATE IMPLEMENTATION_PLAN.md / spec docs if boundaries changed.
 11. ATOMIC COMMIT matching repository conventions.
 ```
+
+### 3.1 Local test budget (the machine is not a build server)
+
+CI runs the full suite on every push. Local runs exist only to answer "does
+my change do what I claim" — one answer, minimum heat:
+
+- Iterate with `fvm flutter test <file> --plain-name '<test name>'`: one test,
+  not the file. The full file runs exactly once, at the end.
+- Never run neighbouring files, whole directories, or `./verify` locally to
+  "be safe" — that safety is what the PR's CI run is for. If you have a
+  concrete reason to suspect cross-file breakage, state it in the PR instead
+  of running it.
+- The fail-on-old-code check (stash + rerun) counts as the second run of the
+  file: pass run + fail run, then stop. No third run.
+- One `flutter analyze` per task, on the files touched, after the last edit —
+  not after every edit.
+- Never run two heavy commands at once (no test run beside build_runner, no
+  parallel worktrees verifying simultaneously). The per-worktree
+  `build_runner build` (~85s) is the one unavoidable cost; everything else is
+  negotiable.
+- `fvm flutter run -d linux` for runtime validation is exempt from the
+  budget but stays bounded: launch, exercise, quit. No release builds, ever
+  (§4).
 
 ### Isolation: one worktree per task, `main` only by merged PR
 
@@ -89,7 +114,7 @@ fvm dart run build_runner build --delete-conflicting-outputs
 
 # ... work, stage BY NAME, commit, push
 git push -u origin <branch>
-gh pr create -R mansourvery-hub/chess-repertoire-srs
+gh pr create -R cassandre60/chess-repertoire-srs
 
 # after the PR is green and merged
 git worktree remove ../chesssrs-<slug> && git worktree prune
@@ -252,7 +277,74 @@ foundation already contains study-tree and game-tree prior art.
   primitive (filter widget, avatar, sheet) that other survivors need.
 - Keep GPL notices of any removed-origin code that still shares files.
 
+## 10. Quality gates: rules for any agent or contributor working here
+
+This repository is gated. Your job is to get a change accepted by the gates
+honestly, not to make the gates go green. Before editing, read `SPEC.md`
+(invariants with stable IDs), `GATES.md` (everything that can reject you),
+`GATES_PLAN.md` (what is deliberately not gated), and `.gates/`.
+
+1. Classify your change (bugfix, perf, refactor, feature, test-only,
+   dependency, docs, gate-change, spec-change) and gather the evidence that
+   class requires — see `.github/PULL_REQUEST_TEMPLATE.md` and `GATES.md`.
+   A bugfix starts with a test that fails on the current code.
+2. Never edit the referee to get a pass: `SPEC.md`, `GATES.md`,
+   `GATES_PLAN.md`, `QUALITY.md`, `TEST_STRATEGY.md`, `CODEOWNERS`, `.gates/`,
+   `redteam/`, `scripts/gates*`, CI config, `analysis_options.yaml`,
+   `pubspec.yaml`, ratchet baselines, `AGENTS.md`/`CLAUDE.md`, the PR
+   template. If you think a gate is wrong, stop and propose a separate
+   gate-change PR with evidence — never bundle it with product code.
+3. Never weaken a check: no deleted or loosened assertions, no
+   skip/ignore/xfail, no new suppressions, no widened tolerances, no mocking
+   the subject under test, no hardcoded expected values, no catch-all error
+   handling. The tripwire (G08) diffs for exactly this.
+4. When a gate fails, fix the code. Reproduce with the printed command, and
+   address the root cause. After 3 failed attempts on the same gate, stop and
+   report what you learned instead of iterating blindly.
+5. Run `./scripts/gates.sh t1` (needs `BASE_REF`, defaults to `origin/main`)
+   before pushing — **after committing**, because the diff-based gates read
+   `origin/main...HEAD` and see nothing at all while your work is still in the
+   working tree. A pre-commit run that reports G08 "clean" is not evidence; run
+   the same command again on the committed branch. The full suite stays CI's job
+   per §3.1.
+6. New tests cite their invariant (`// SPEC INV-xxx.`); G05 rejects
+   orphaned invariants and unknown IDs.
+7. Fixing a bug the gates missed? Follow `docs/ESCAPE_TO_GATE.md` —
+   regression test, SPEC invariant, red-team case, escapes-log row, in
+   that order. The flywheel only turns if you turn it.
+8. Report honestly: what you ran, what passed, what you could not run, and
+   what remains unverified.
+
+## 11. Releases: when to cut one (agent decides, owner doesn't)
+
+The release workflow (`.github/workflows/release.yml`) is the executable
+truth. Tags (`git tag vX.Y.Z && git push origin vX.Y.Z`) trigger automatic
+build + publish (see `docs/releases.md` for full policy). The agent
+evaluates after every merged green batch and cuts a release when ALL hold:
+
+- Something the owner can feel changed (feature, fix, copy). Gate/CI/
+  refactor/test-only/docs-only deltas ride silently.
+- The work's PR went in green (T1 + Unit tests) with evidence intact.
+- Nothing known-broken is pending; no unverified claims in release notes.
+
+Not worth releasing: invisible delta, same batch already tagged, or red tree.
+
+Versioning: patch (`x.y.Z`) fixes/copy, minor (`x.Y.0`) features/settings.
+Major stays `0` until owner declares otherwise. Watch Release workflow
+to green; report download link. Tags publish — never push casually,
+never move/delete a published tag.
+
 ## Lessons Learned
+
+- [2026-10-07, Space Bunny Free] `./scripts/gates.sh t1` run *before* committing is a
+  green light that means nothing: the diff-based gates read `origin/main...HEAD`, so
+  while the work is uncommitted HEAD is still the base and the diff is empty. Two
+  reskin PRs (#186, #187) both reported `no test-weakening patterns found` locally and
+  both failed CI's G08 with 8 and 13 findings respectively. Run the gate after the
+  commit, or run `python3 scripts/gates/test_weakening_check.py --base origin/main`
+  directly, which reads the same committed range and cannot be fooled by a dirty tree.
+  Verified by: `gates.sh t1` printing "clean" with six modified files unstaged, then
+  the same script run directly on the identical tree printing the findings CI did.
 
 - [2026-09-25, Space Bunny Free] The full suite is a pre-push gate, not a
   per-commit one; this file used to mandate the opposite, and an agent following
@@ -317,6 +409,15 @@ foundation already contains study-tree and game-tree prior art.
   Verified by: `review_controller_test.dart` failing inside a 128-test run and
   passing 30/30 in isolation, with `pumpAsync`'s `Future.delayed` as the only
   wall-clock wait in the path.
+- [2026-09-29, Muse Spark] "Run the specific test file" is not a budget: across
+  eight phone-feedback PRs the agent ran each file 3-5 times (new-test-only,
+  full file, stash fail-check, neighbouring files, repeat analyzes), plus a
+  62-test engine file and a 15-test account batch locally — all work CI repeats
+  on every push anyway. The owner's PC heated up for zero extra safety. Hence
+  §3.1: iterate with --plain-name, one full-file run at the end, fail-check
+  counts as run two, neighbours and ./verify are CI's job. Verified by: the
+  owner reporting the heat and asking for the rule, against a history of green
+  CI runs that had already covered every locally re-run file.
 - [2026-09-28, Space Bunny Free] `build_runner` writes `lib/l10n/*.dart` with
   different line wrapping than what is committed, so a fresh worktree shows 52
   files and ~38,000 changed lines that are pure formatting. Run
@@ -326,3 +427,65 @@ foundation already contains study-tree and game-tree prior art.
   concluding anything about what a worktree has changed. Verified by: 52 files
   / 13,844 insertions / 24,106 deletions before the format, empty after, with
   the test suite green either way.
+- [2026-09-29, Space Bunny Free] Merging a batch of PRs is not delivering it: the
+  owner's own `fvm flutter run` in the primary checkout is the acceptance gate for
+  user-visible work, and that checkout stayed at `ea1d09678` while seven PRs merged
+  to `388b38f3e`. A whole session was spent on "the Account section is missing from
+  Settings" — a feature that arrived in PR #84, *after* the frozen commit — plus a
+  second app window from a worktree, so two windows with different features produced
+  contradictory observations that were chased in the wrong direction each time. After
+  merging, pull `main` in the primary checkout and tell the owner it is current;
+  verify with `git log --oneline -1` there against `origin/main`. Verified by: the
+  Account section being unconditional in `SrsSettingsScreen` and present in
+  `388b38f3e` but absent from `ea1d09678`, and the checkout log showing the stale
+  commit throughout.
+- [2026-09-29, Space Bunny Free] *"We couldn't find any user by this name"* blames
+  the user's typing and sends you auditing a regex and a repository that are
+  byte-identical to upstream. **Superseded 2026-10-02:** the host default is now
+  `lichess.org` (#124), so `--dart-define=LICHESS_HOST=lichess.org` is a no-op,
+  and sign-in is verified working — that symptom had five separate causes, not
+  one. Two parts of the original note still hold: no Lichess client accepts a
+  password, so a "user + password" request is not implementable; and the
+  ruled-out suspects (`_emailRegExp`, `AuthRepository`, `AuthController`,
+  `UserRepository.usernameExists` are byte-identical to upstream) stay ruled out.
+  Current state, the five-defect chain, and what is still unverified:
+  `docs/open-email-login-handoff.md`. Verified by: the owner signing in through
+  the browser on Linux desktop, and `GET /api/study/Gg4E2sIS.pgn → 200` in the
+  app's `http_log`.
+- [2026-09-29, Space Bunny Free] A worktree is not a working directory, it is
+  the *only* place you may write, and the isolation rule is easy to break by
+  inattention rather than by a `git reset`. Editing two docs in the shared main
+  tree while a worktree sat idle put the edits among another agent's in-flight
+  l10n churn, where they would have been committed as part of unrelated work or
+  reverted with it. Nothing was lost because the diff was saved first, but it
+  had to be extracted, checked line by line to confirm it contained only those
+  two files' changes, reverted, and redone in a worktree. Do all editing inside
+  the worktree and branch from `origin/main`, not local `main`: local main was
+  1 commit ahead of origin with another agent's unpushed work, so a branch cut
+  from it would have carried their commit into the PR. Verified by: diffing the
+  two files to confirm 29 added lines and 0 deletions before reverting, then
+  re-applying the same patch on a fresh branch off `ea1d09678`.
+- [2026-09-30, Space Bunny Free] `e57fcb411` is NOT an ancestor of `HEAD`, so
+  `git log HEAD..upstream/main` overstates the upstream gap: fixes reach this fork
+  only as hand-squashed cherry-picks, and at least five are already applied under
+  different hashes (`a99dad8a1`→`bcb66ad5b`, `25cf0fae5`→`a0d9ed580`,
+  `60309eb8d`→`0fad2d1e3`, `c60a0edd8`→`7f2a0c4e7`, `498ce10a7`→`02d91a23f`).
+  Never attempt `git merge upstream/main` — it conflicts on files that are already
+  correct. Realign subsystem-by-subsystem per `docs/upstream-realign.md`; current
+  state and Take ranking in `docs/upstream-audit-2026-09-30.md`. Verified by:
+  `git merge-base --is-ancestor e57fcb411 HEAD` returning non-zero with 167
+  upstream-only commits, and each pair confirmed against both diffs.
+- [2026-09-30, Space Bunny Free] "387 surviving upstream files have no per-file
+  GPL header" is a false positive: upstream puts no per-file headers in those same
+  files either, and licensing here is file-level `LICENSE` + `COPYING.md` exactly
+  as upstream does it. Do not re-raise it in a future audit without first
+  checking the same files at `upstream/main`. Verified by: header grep scoring 0
+  for both fork and upstream on `study_controller.dart`, `network/http.dart`,
+  `analysis_screen.dart`, `board.dart`, `game.dart`, with `LICENSE` and
+  `COPYING.md` present in both trees.
+- [2026-10-01, antigravity/gemini-3.8-flash-tiered] GitHub branch protection
+  requires both 'T1 fast gates' and 'Unit tests on ubuntu-latest'. When a PR touches
+  only files in docs/**, gates.yml does not trigger, leaving 'T1 fast gates'
+  unreported and blocking merge even with --admin. Verified by: PR #119 failing
+  merge with 'GraphQL: Required status check \"T1 fast gates\" is expected', while
+  PR #112 merged cleanly because touching AGENTS.md triggered gates.yml.

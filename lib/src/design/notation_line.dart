@@ -188,12 +188,13 @@ class SrsNotationLine extends StatelessWidget {
     final gapEm = fontSize * 0.42;
     final numGap = fontSize * 0.22;
 
-    // Truncate long lines to at most the last 6 plies before current decision
+    // Truncate long lines to at most the last 8 plies before current decision
+    // (03-components.md:116). Starting on an even ply keeps the line on a move number rather
+    // than mid-pair, which is what the leading ellipsis is there to explain.
     final int startPly;
     final List<String> visibleMoves;
-    if (moves.length > 6) {
-      // Keep even start ply so we don't split half a move without ellipsis indicator
-      final excess = moves.length - 6;
+    if (moves.length > 8) {
+      final excess = moves.length - 8;
       startPly = excess.isEven ? excess : excess - 1;
       visibleMoves = moves.sublist(startPly);
     } else {

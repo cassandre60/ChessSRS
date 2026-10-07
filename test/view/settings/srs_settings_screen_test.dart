@@ -59,6 +59,17 @@ void main() {
     await tester.tap(find.text('Show notes after a move'));
     await tester.pumpAndSettle();
 
+    // Collapsible list groups: same row-tap pattern, gates the drawer collapse switch.
+    await tester.scrollUntilVisible(find.text('Collapsible list groups'), 200);
+    await tester.tap(find.text('Collapsible list groups'));
+    await tester.pumpAndSettle();
+
+    // Transposed moves: the P-TRANSPOSE three-way scope (default In scope).
+    await tester.scrollUntilVisible(find.text('Transposed moves'), 200);
+    expect(find.text('Transposed moves'), findsOneWidget);
+    await tester.tap(find.text('Within study'));
+    await tester.pumpAndSettle();
+
     // Toggle arrows -- the design's label for the row that gates showAnnotations.
     await tester.scrollUntilVisible(find.text('Show arrows and circles'), 200);
     await tester.tap(find.text('Show arrows and circles'));
@@ -74,10 +85,18 @@ void main() {
     await tester.tap(find.bySemanticsLabel('violet'));
     await tester.pumpAndSettle();
 
-    // Verify navigation links to legacy settings
-    expect(find.text('Board & pieces'), findsOneWidget);
-    expect(find.text('Sound & audio details'), findsOneWidget);
+    // Verify navigation links to legacy settings — Board & pieces and Sound sub-screens
+    // are now inlined; only Chess engine remains a nav row.
     expect(find.text('Chess engine'), findsOneWidget);
+
+    // Board/appearance settings are now inline
+    expect(find.text('Board theme'), findsOneWidget);
+    expect(find.text('Piece set'), findsOneWidget);
+    expect(find.text('Board coordinates'), findsOneWidget);
+    expect(find.text('Piece animation'), findsOneWidget);
+
+    // Sound is now inline with a volume slider
+    expect(find.text('Volume'), findsOneWidget);
 
     // Verify algorithm controls are visible
     expect(find.text('Scheduling algorithm'), findsOneWidget);

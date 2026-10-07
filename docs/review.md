@@ -28,7 +28,9 @@ select scope
 
 ## Correctness
 
-A move is correct when it matches an accepted repertoire continuation for the active Review scope.
+A move is correct when it matches an accepted repertoire continuation for the active Review scope,
+or when it reaches a position that exists elsewhere in the active scope's tree (transposed
+acceptance — see Transpositions below).
 
 Do not use engine evaluation to decide Review correctness in MVP.
 
@@ -74,20 +76,49 @@ When the opponent must choose an auto-reply among multiple child nodes:
 3. **Practice / Cram Fallback**:
    - In `ReviewMode.practice` (where all cards are drillable regardless of due date) or if no branch has due material, the engine selects among all candidate branches with anti-repetition so all variations get practiced evenly.
 
-## Due selection
+## Due selection and presentation order
 
 Default scope: all studies.
 
-Selection should favour due items. The exact ordering can evolve, but it must be deterministic enough to test.
+The due *set* never depends on presentation order: urgency filtering and the
+daily quota cut (most overdue first) always apply first. Only consecutive
+presentation order is switchable (`Review order` setting, default By line):
 
-Potential ordering dimensions:
+- **Due date**: most overdue first, wherever the positions fall. Same cards,
+  scattershot order across unrelated lines.
+- **By line**: the same urgency-selected set presented walking study, then
+  chapter source order, then tree order. Ties keep due-date order, so equally
+  placed cards stay most-overdue-first. Practice mode is unaffected (it already
+  walks tree order with no due filtering).
 
-- due time
-- overdue amount
-- study/chapter order
-- randomization
+Scheduling math never sees presentation order.
 
-Do not add complex prioritization until user value is demonstrated.
+## Transpositions: shared positions across lines
+
+One position reached by two move orders (two chapters, or two branches) is
+the same drill, and the app treats it as one in three places:
+
+1. **Shared memory.** The same position-plus-move shares a single scheduling
+   memory across every line that contains it. Learn it once and all lines
+   know it; it is never drilled twice, and multi-study queues deduplicate it.
+2. **Tolerant grading (INV-065).** A legal move that matches no expected
+   continuation here is still graded correct when the position it reaches
+   exists in the active scope's tree; review jumps to the transposed line and
+   continues. Targets outside the scope, and illegal moves, stay incorrect
+   exactly as before. The drilled decision is graded; only the continuation
+   moves. The `Accept transposed moves` setting (Review & SRS, default on)
+   turns this off, restoring strict expected-line grading.
+3. **Presentation order.** By-line order walks each line in tree order, so a
+   transposed position's lines surface near each other instead of scattered
+   by due date.
+
+Deliberately not built: end-of-line continuation. When a short line ends at
+a position where a longer in-scope line passes through and continues, the
+session does NOT flow into the continuation today — it advances to the next
+due decision per the presentation order above. Flowing through shared
+positions at line ends (only into due continuations, never adding cards) is
+a coherent future option, currently on hold pending owner conviction that it
+is a good idea.
 
 ## Multiple repertoire answers
 

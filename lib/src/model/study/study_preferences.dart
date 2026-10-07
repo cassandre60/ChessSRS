@@ -1,3 +1,5 @@
+import 'package:chess_srs/src/domain/review/review_order.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/model/analysis/common_analysis_prefs.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
@@ -127,6 +129,26 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
   Future<void> toggleSrsDiagnostics() {
     return save(state.copyWith(srsDiagnostics: !state.srsDiagnostics));
   }
+
+  Future<void> toggleScopeGroupCollapsed(String group) {
+    final collapsed = Set<String>.of(state.collapsedScopeGroups);
+    if (!collapsed.add(group)) {
+      collapsed.remove(group);
+    }
+    return save(state.copyWith(collapsedScopeGroups: collapsed));
+  }
+
+  Future<void> toggleCollapsibleScopeGroups() {
+    return save(state.copyWith(collapsibleScopeGroups: !state.collapsibleScopeGroups));
+  }
+
+  Future<void> setReviewOrder(ReviewOrder order) {
+    return save(state.copyWith(reviewOrder: order));
+  }
+
+  Future<void> setTransposeScope(TransposeScope scope) {
+    return save(state.copyWith(transposeScope: scope));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -157,6 +179,19 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: 2.5) required double schedulerEase,
     @JsonKey(defaultValue: 1.5) required double schedulerScaling,
     @JsonKey(defaultValue: 100) required int maxDailyReviews,
+    // Scope-drawer group ids ('everywhere', 'openings', 'studies') the user
+    // collapsed. Empty (default) means every group is expanded.
+    @JsonKey(defaultValue: <String>{}) required Set<String> collapsedScopeGroups,
+    // Master switch for collapsible scope-drawer groups. On (default) the
+    // Everywhere/Openings/Studies headers fold; off renders plain headers
+    // and every group always expanded.
+    @JsonKey(defaultValue: true) required bool collapsibleScopeGroups,
+    // Presentation order of the due queue (P-ORDER). The due set never
+    // depends on this: urgency filtering and the quota cut apply first.
+    @JsonKey(defaultValue: ReviewOrder.byLine) required ReviewOrder reviewOrder,
+    // Transposed-move acceptance scope (INV-065): off, within the same
+    // study, or anywhere in scope. Stored on/off installs migrate.
+    @JsonKey(defaultValue: TransposeScope.inScope) required TransposeScope transposeScope,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -177,9 +212,20 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     schedulerEase: 2.5,
     schedulerScaling: 1.5,
     maxDailyReviews: 100,
+    collapsedScopeGroups: {},
+    collapsibleScopeGroups: true,
+    reviewOrder: ReviewOrder.byLine,
+    transposeScope: TransposeScope.inScope,
   );
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {
-    return _$StudyPrefsFromJson(json);
+    // The on/off transpose switch became a three-way scope: carry the old
+    // choice across instead of silently resetting it.
+    final fixed = Map<String, dynamic>.of(json);
+    final legacy = fixed.remove('transposeAccept');
+    if (legacy is bool && !fixed.containsKey('transposeScope')) {
+      fixed['transposeScope'] = legacy ? 'inScope' : 'off';
+    }
+    return _$StudyPrefsFromJson(fixed);
   }
 }

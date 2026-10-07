@@ -1,13 +1,12 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
-import 'package:chess_srs/src/widgets/adaptive_bottom_sheet.dart';
 import 'package:chess_srs/src/widgets/adaptive_choice_picker.dart';
 import 'package:chess_srs/src/widgets/board_preview.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
@@ -125,176 +124,139 @@ class _CreateStudyChapterBottomSheetState extends ConsumerState<CreateStudyChapt
 
   @override
   Widget build(BuildContext context) {
-    return BottomSheetScrollableContainer(
-      // The sheet grows upwards from the bottom of the screen and does no keyboard avoidance of
-      // its own, so without this the on-screen keyboard covers the orientation row and the submit
-      // button while the chapter name is being edited.
-      padding: Styles.verticalBodyPadding.add(
-        EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      ),
-      children: [
-        Card.filled(
-          margin: Styles.bodySectionPadding,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 8.0,
-              children: [
-                ListTile(
-                  title: Text(context.l10n.name),
-                  subtitle: TextField(
-                    controller: _nameController,
-                    onChanged: (value) => setState(() => chapterName = value),
-                  ),
-                ),
-                // [expandedInsets] makes the button fill the available width, so its size does not
-                // depend on which segment is selected
-                SegmentedButton<_ChapterSource>(
-                  expandedInsets: const EdgeInsets.symmetric(horizontal: 20.0),
-                  segments: [
-                    ButtonSegment(
-                      value: _ChapterSource.empty,
-                      label: Text(context.l10n.studyEmpty),
-                    ),
-                    const ButtonSegment(value: _ChapterSource.fen, label: Text('FEN')),
-                    const ButtonSegment(value: _ChapterSource.pgn, label: Text('PGN')),
-                  ],
-                  selected: {_source},
-                  onSelectionChanged: (selection) {
-                    setState(() {
-                      _source = selection.first;
-                      errorText = null;
-                      switch (_source) {
-                        case _ChapterSource.empty:
-                          break;
-                        case _ChapterSource.fen || _ChapterSource.pgn:
-                          _onTextChanged('');
-                      }
-                    });
-                  },
-                ),
-                if (_source == _ChapterSource.fen)
-                  SmallBoardPreview(
-                    orientation: orientation,
-                    fen: errorText == null ? _textController.text : kEmptyFEN,
-                    description: TextField(
-                      maxLines: 5,
-                      decoration: InputDecoration(
-                        errorText: errorText,
-                        labelText: context.l10n.pasteTheFenStringHere,
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.paste),
-                          onPressed: _getClipboardData,
-                          tooltip: 'Paste from clipboard', // TODO l10n
-                        ),
-                      ),
-                      controller: _textController,
-                      readOnly: true,
-                      onTap: () => _getClipboardData(),
-                    ),
-                  ),
-                if (_source == _ChapterSource.pgn)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: 8.0,
-                      children: [
-                        SizedBox(
-                          height: 150,
-                          child: TextField(
-                            expands: true,
-                            maxLines: null,
-                            decoration: InputDecoration(
-                              hintText: context.l10n.pasteThePgnStringHere,
-                              errorText: errorText,
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.paste),
-                                onPressed: _getClipboardData,
-                                tooltip: 'Paste from clipboard', // TODO l10n
-                              ),
-                            ),
-                            readOnly: true,
-                            onTap: _getClipboardData,
-                            controller: _textController,
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _pickPgnFile,
-                          icon: const Icon(Icons.upload_file),
-                          label: Text(context.l10n.mobileOrImportPgnFile),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (_source != _ChapterSource.pgn)
-                  ListTile(
-                    title: Text(context.l10n.variant),
-                    trailing: TextButton(
-                      onPressed: () {
-                        showChoicePicker(
-                          context,
-                          choices: Variant.values,
-                          selectedItem: variant,
-                          labelBuilder: (Variant variant) => Text(variant.label(context.l10n)),
-                          onSelectedItemChanged: (Variant variant) => setState(() {
-                            this.variant = variant;
-                            _validateInput();
-                          }),
-                        );
-                      },
-                      child: Text(variant.label(context.l10n)),
-                    ),
-                  ),
-                ListTile(
-                  title: Text(context.l10n.studyOrientation),
-                  trailing: TextButton(
-                    onPressed: () {
-                      showChoicePicker(
-                        context,
-                        choices: Side.values,
-                        selectedItem: orientation,
-                        labelBuilder: (Side side) => Text(_sideL10n(context, side)),
-                        onSelectedItemChanged: (Side side) => setState(() => orientation = side),
-                      );
-                    },
-                    child: Text(_sideL10n(context, orientation)),
-                  ),
-                ),
-              ],
+    final c = context.srs;
+    return SingleChildScrollView(
+      // The sheet grows upwards and does no keyboard avoidance of its own, so without this
+      // the on-screen keyboard covers the orientation row and the submit button while the
+      // chapter name is being edited.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SrsSheetGrabber(),
+            Text(context.l10n.name, style: SrsText.settingLabel(c.ink)),
+            const SizedBox(height: 4),
+            SrsTextInput(
+              controller: _nameController,
+              semanticLabel: context.l10n.name,
+              onChanged: (value) => setState(() => chapterName = value),
             ),
-          ),
+            const SizedBox(height: 16),
+            SrsSegmented<_ChapterSource>(
+              options: {
+                _ChapterSource.empty: context.l10n.studyEmpty,
+                _ChapterSource.fen: 'FEN',
+                _ChapterSource.pgn: 'PGN',
+              },
+              value: _source,
+              onChanged: (source) {
+                setState(() {
+                  _source = source;
+                  errorText = null;
+                  if (_source != _ChapterSource.empty) _onTextChanged('');
+                });
+              },
+            ),
+            if (_source == _ChapterSource.fen) ...[
+              const SizedBox(height: 16),
+              SmallBoardPreview(
+                orientation: orientation,
+                fen: errorText == null ? _textController.text : kEmptyFEN,
+                description: SrsTextInput(
+                  controller: _textController,
+                  hintText: context.l10n.pasteTheFenStringHere,
+                  semanticLabel: context.l10n.pasteTheFenStringHere,
+                  readOnly: true,
+                  onTap: () => _getClipboardData(),
+                ),
+              ),
+              SrsTextButton(label: 'Paste from clipboard', onPressed: _getClipboardData),
+              if (errorText != null) ...[
+                const SizedBox(height: 4),
+                Text(errorText!, style: SrsText.settingHelp(c.ink2)),
+              ],
+            ],
+            if (_source == _ChapterSource.pgn) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 150,
+                child: SrsTextInput(
+                  controller: _textController,
+                  hintText: context.l10n.pasteThePgnStringHere,
+                  semanticLabel: context.l10n.pasteThePgnStringHere,
+                  readOnly: true,
+                  maxLines: 6,
+                  onTap: () => _getClipboardData(),
+                ),
+              ),
+              SrsTextButton(label: 'Paste from clipboard', onPressed: _getClipboardData),
+              SrsTextButton(label: context.l10n.mobileOrImportPgnFile, onPressed: _pickPgnFile),
+              if (errorText != null) ...[
+                const SizedBox(height: 4),
+                Text(errorText!, style: SrsText.settingHelp(c.ink2)),
+              ],
+            ],
+            if (_source != _ChapterSource.pgn) ...[
+              const SizedBox(height: 8),
+              SrsSettingsRow(
+                label: context.l10n.variant,
+                value: variant.label(context.l10n),
+                onTap: () {
+                  showChoicePicker(
+                    context,
+                    choices: Variant.values,
+                    selectedItem: variant,
+                    labelBuilder: (Variant variant) => Text(variant.label(context.l10n)),
+                    onSelectedItemChanged: (Variant variant) => setState(() {
+                      this.variant = variant;
+                      _validateInput();
+                    }),
+                  );
+                },
+              ),
+            ],
+            SrsSettingsRow(
+              label: context.l10n.studyOrientation,
+              value: _sideL10n(context, orientation),
+              onTap: () {
+                showChoicePicker(
+                  context,
+                  choices: Side.values,
+                  selectedItem: orientation,
+                  labelBuilder: (Side side) => Text(_sideL10n(context, side)),
+                  onSelectedItemChanged: (Side side) => setState(() => orientation = side),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            SrsPillButton(
+              expand: true,
+              label: context.l10n.studyCreateChapter,
+              onPressed: _canSubmit() ? () => _createChapter(_submitPgn()) : null,
+            ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: FilledButton(
-            onPressed: _canSubmit()
-                ? () async {
-                    final pgn = switch (_source) {
-                      _ChapterSource.empty => PgnGame.parsePgn(
-                        '',
-                        initHeaders: () => {'Variant': variant.pgnName},
-                      ).makePgn(),
-                      _ChapterSource.fen => PgnGame.parsePgn(
-                        '',
-                        initHeaders: () => {
-                          'FEN': _textController.text.trim(),
-                          'Variant': variant.pgnName,
-                        },
-                      ).makePgn(),
-                      _ChapterSource.pgn => _textController.text.trim(),
-                    };
-                    await _createChapter(pgn);
-                  }
-                : null,
-            child: _isSubmitting
-                ? const ButtonLoadingIndicator()
-                : Text(context.l10n.studyCreateChapter, style: Styles.bold),
-          ),
-        ),
-      ],
+      ),
     );
+  }
+
+  /// The PGN payload for the submit button. Pulled out of the build so the button reads
+  /// as a button rather than a match statement.
+  String _submitPgn() {
+    return switch (_source) {
+      _ChapterSource.empty => PgnGame.parsePgn(
+        '',
+        initHeaders: () => {'Variant': variant.pgnName},
+      ).makePgn(),
+      _ChapterSource.fen => PgnGame.parsePgn(
+        '',
+        initHeaders: () => {'FEN': _textController.text.trim(), 'Variant': variant.pgnName},
+      ).makePgn(),
+      _ChapterSource.pgn => _textController.text.trim(),
+    };
   }
 
   Future<void> _createChapter(String pgn) async {

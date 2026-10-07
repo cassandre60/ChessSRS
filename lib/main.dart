@@ -20,10 +20,7 @@ Future<void> main() async {
   // See src/app.dart for splash screen removal
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  await Future.wait([
-    lichessBinding.preloadSharedPreferences(),
-    if (defaultTargetPlatform != TargetPlatform.linux) lichessBinding.initializeFirebase(),
-  ]);
+  await lichessBinding.preloadSharedPreferences();
 
   // Must run before [initializeApp], which uses the system colors to pick the default board theme
   // on first run.
@@ -31,13 +28,12 @@ Future<void> main() async {
     await androidDisplayInitialization(widgetsBinding);
   }
 
-  final locale = setupIntl(widgetsBinding);
+  setupIntl(widgetsBinding);
 
   // Background initialization tasks (non-blocking for first frame)
   unawaited(preloadPieceImages());
   unawaited(initializeApp());
   unawaited(SoundService.initialize());
-  unawaited(initializeLocalNotifications(locale));
 
   runApp(
     ProviderScope(

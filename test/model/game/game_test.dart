@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
@@ -25,7 +26,7 @@ void main() {
       );
       expect(game.makePgn(), '''
 [Event "Rated Bullet game"]
-[Site "https://lichess.dev/CCW6EEru"]
+[Site "https://$kLichessHost/CCW6EEru"]
 [Date "${formatDate(1706185945680)}"]
 [White "veloce"]
 [Black "chabrot"]
@@ -49,7 +50,7 @@ void main() {
       );
       expect(game.makePgn(), '''
 [Event "Rated Bullet game"]
-[Site "https://lichess.dev/CCW6EEru"]
+[Site "https://$kLichessHost/CCW6EEru"]
 [Date "${formatDate(1706185945680)}"]
 [White "veloce"]
 [Black "chabrot"]

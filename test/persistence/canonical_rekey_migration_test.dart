@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-005.
 
 import 'dart:convert';
 import 'dart:io';
@@ -297,6 +298,46 @@ void main() {
       expect(moved, hasLength(1));
       expect(moved.single['repetitionCount'], 7);
       expect(moved.single['stability'], 12.5);
+    });
+
+    test('merging onto one key skips a decision that was never reviewed', () async {
+      const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      final oldIdA = canonicalKey(fenKey, 'e2e4');
+      const oldIdB = 'legacy-never-reviewed';
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4']);
+
+      await seed(
+        studyId: 'study-0',
+        chapterId: 'chapter-0',
+        nodeId: 'node-0',
+        fenKey: fenKey,
+        expectedMoves: encodeExpectedMoves([
+          const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          const RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ]),
+        canonicalStateId: oldIdA,
+      );
+      await seed(
+        studyId: 'study-1',
+        chapterId: 'chapter-1',
+        nodeId: 'node-1',
+        fenKey: fenKey,
+        expectedMoves: encodeExpectedMoves([
+          const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          const RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ]),
+        canonicalStateId: oldIdB,
+      );
+      // Only the first decision was ever reviewed; the second has no row.
+      await seedState(oldIdA, repetitions: 3, stability: 4.0);
+
+      // Must not throw on the missing row.
+      final result = await rekeyCanonicalReviewState(db);
+
+      expect(result.decisionsRemapped, 2);
+      final merged = await stateFor(newId);
+      expect(merged, isNotEmpty);
+      expect(merged['repetitionCount'], 3);
     });
   });
   group('backfillCanonicalStatesFromLegacy', () {

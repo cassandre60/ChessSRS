@@ -1,9 +1,4 @@
-import 'package:chess_srs/firebase_options.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A singleton class that provides access to plugins and external APIs.
@@ -61,34 +56,6 @@ abstract class LichessBinding {
   /// This is a synchronous getter that throws an error if shared preferences
   /// have not yet been initialized.
   SharedPreferencesWithCache get sharedPreferences;
-
-  /// Initialize Firebase.
-  ///
-  /// This wraps [Firebase.initializeApp].
-  ///
-  /// This should be called only once before the app starts.
-  Future<void> initializeFirebase();
-
-  /// Whether Firebase is available and initialized on this platform.
-  ///
-  /// Firebase is only initialized on Android and iOS; other targets (e.g.
-  /// Linux desktop) must not use the Firebase getters.
-  bool get isFirebaseSupported;
-
-  /// Wraps [FirebaseMessaging.instance].
-  FirebaseMessaging get firebaseMessaging;
-
-  /// Wraps [FirebaseCrashlytics.instance].
-  FirebaseCrashlytics get firebaseCrashlytics;
-
-  /// Wraps [FirebaseMessaging.onMessage].
-  Stream<RemoteMessage> get firebaseMessagingOnMessage;
-
-  /// Wraps [FirebaseMessaging.onMessageOpenedApp].
-  Stream<RemoteMessage> get firebaseMessagingOnMessageOpenedApp;
-
-  /// Wraps [FirebaseMessaging.onBackgroundMessage].
-  void firebaseMessagingOnBackgroundMessage(BackgroundMessageHandler handler);
 }
 
 /// A concrete implementation of [LichessBinding] for the app.
@@ -145,46 +112,4 @@ class AppLichessBinding extends LichessBinding {
     final appStarts = sharedPreferences.getInt(_kNumAppStartsKey) ?? 0;
     sharedPreferences.setInt(_kNumAppStartsKey, appStarts + 1);
   }
-
-  @override
-  Future<void> initializeFirebase() async {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-    _firebaseInitialized = true;
-
-    if (kReleaseMode) {
-      FlutterError.onError = firebaseCrashlytics.recordFlutterFatalError;
-      PlatformDispatcher.instance.onError = (error, stack) {
-        if (kDebugMode) {
-          return false;
-        } else {
-          firebaseCrashlytics.recordError(error, stack);
-          return true;
-        }
-      };
-    }
-  }
-
-  bool _firebaseInitialized = false;
-
-  @override
-  bool get isFirebaseSupported => _firebaseInitialized;
-
-  @override
-  FirebaseMessaging get firebaseMessaging => FirebaseMessaging.instance;
-
-  @override
-  FirebaseCrashlytics get firebaseCrashlytics => FirebaseCrashlytics.instance;
-
-  @override
-  void firebaseMessagingOnBackgroundMessage(BackgroundMessageHandler handler) {
-    FirebaseMessaging.onBackgroundMessage(handler);
-  }
-
-  @override
-  Stream<RemoteMessage> get firebaseMessagingOnMessage => FirebaseMessaging.onMessage;
-
-  @override
-  Stream<RemoteMessage> get firebaseMessagingOnMessageOpenedApp =>
-      FirebaseMessaging.onMessageOpenedApp;
 }

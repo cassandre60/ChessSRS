@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-013.
 
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';
@@ -20,6 +21,14 @@ void main() {
       expect(resolveChapterOrientation({'Event': 'French Defense (Black)'}), Side.black);
       expect(resolveChapterOrientation({'Event': 'Caro-Kann as Black'}), Side.black);
       expect(resolveChapterOrientation({'Event': 'Nimzo-Indian vs White'}), Side.black);
+    });
+
+    test('reads the plain Study/Chapter tags our exporter writes', () {
+      // Lichess writes StudyName/ChapterName; our exporter writes Study/Chapter.
+      // Both spellings must feed the heuristic or self round-trips lose it.
+      expect(resolveChapterOrientation({'Study': 'My Rep for Black'}), Side.black);
+      expect(resolveChapterOrientation({'Chapter': 'French for Black'}), Side.black);
+      expect(resolveChapterOrientation({'Study': 'My Rep for White'}), Side.white);
     });
 
     test('detects White from Event or ChapterName keywords', () {

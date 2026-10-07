@@ -20,6 +20,10 @@ void main() {
     // (`view/study/`, `view/game/`, `view/chat/`, `view/user/`) are deliberately absent: they are
     // reachable only from a deep link at best, and the right answer for them is a cut, not a
     // reskin. `view/retro` is Lichess's game-review screen and goes with them.
+    // `view/offline_computer/` is one of the two ways into a game, so it is here: the bar, both
+    // sheets and the result dialog were all converted off the inherited look in 2026-10.
+    // Sign-in and PGN import are on the list because they carry a real flow -- importing a private
+    // study is how the app is fed -- so a second design language on either is a visible defect.
     const reachable = <String>[
       'lib/src/app.dart',
       'lib/src/design/',
@@ -33,10 +37,16 @@ void main() {
       'lib/src/view/board_editor/',
       'lib/src/view/explorer/opening_explorer_screen.dart',
       'lib/src/view/explorer/opening_explorer_settings.dart',
+      'lib/src/view/offline_computer/',
       'lib/src/view/review/',
       'lib/src/view/settings/',
       'lib/src/view/auth/sign_in_options.dart',
+      'lib/src/view/auth/email_login_screen.dart',
+      'lib/src/view/more/import_pgn_screen.dart',
       'lib/src/view/account/account_menu.dart',
+      // The study bottom bar is the exception to the study-is-a-cut-candidate rule above:
+      // it renders on the reachable StudyScreen and was converted off CupertinoIcons.
+      'lib/src/view/study/study_bottom_bar.dart',
     ];
 
     /// Widgets that are a *look*, as opposed to `cupertino_ui` the package.

@@ -108,10 +108,14 @@ class SrsColors {
       hairline: const Color.fromRGBO(236, 238, 241, 0.14),
       hairlineSoft: const Color.fromRGBO(236, 238, 241, 0.06),
       scrim: const Color.fromRGBO(0, 0, 0, 0.5),
-      squareLight: const Color(0xFF11141A),
-      squareDark: const Color(0xFF161A22),
+      // Board order is a chess fundamental, pinned in CI: the light squares
+      // must read lighter than the dark ones (h1 light, a1 dark). The previous
+      // values were inverted in luminance (#11141A over #161A22), so on a phone
+      // in dark mode h1 rendered darker than its neighbours.
+      squareLight: const Color(0xFF232A36),
+      squareDark: const Color(0xFF10141B),
       hatch: const Color.fromRGBO(236, 238, 241, 0.22),
-      halo: const Color(0xFF11141A),
+      halo: const Color(0xFF232A36),
       accent: accent,
       accentSoft: accent.withValues(alpha: 0.15),
       accentMid: accent.withValues(alpha: 0.30),
@@ -126,6 +130,135 @@ class SrsColors {
   @override
   bool operator ==(Object other) =>
       other is SrsColors && other.brightness == brightness && other.accentId == accentId;
+
+  @override
+  int get hashCode => Object.hash(brightness, accentId);
+}
+
+// ---------------------------------------------------------------------------
+// Folio colours (warm direction)
+// ---------------------------------------------------------------------------
+
+/// The warm Folio palette, alongside [SrsColors] (Diagram) during the migration.
+///
+/// Values are a verbatim copy of the look-judge demo's `:root` block
+/// (`.opencode/plan/visual-demo.html`): warm paper grounds, blue-black ink, paper/stone
+/// board squares with a grain veil instead of the full-hatch wall. Accents are shared
+/// with Diagram ([kSrsAccents]) with the same soft/mid derivations. Nothing reads this
+/// yet — surfaces switch over one PR at a time, and the two collapse in the final
+/// cutover (plan T14).
+@immutable
+class SrsFolioColors {
+  const SrsFolioColors._({
+    required this.brightness,
+    required this.accentId,
+    required this.page,
+    required this.ground,
+    required this.surface,
+    required this.surface2,
+    required this.ink,
+    required this.ink2,
+    required this.ink3,
+    required this.hairline,
+    required this.hairlineSoft,
+    required this.scrim,
+    required this.squareLight,
+    required this.squareDark,
+    required this.hatch,
+    required this.halo,
+    required this.grain,
+    required this.accent,
+    required this.accentSoft,
+    required this.accentMid,
+  });
+
+  final Brightness brightness;
+  final SrsAccent accentId;
+  final Color page;
+  final Color ground;
+
+  /// Top of the stack: sheets, cards, switch knobs.
+  final Color surface;
+
+  /// Board paper: the well behind the squares.
+  final Color surface2;
+  final Color ink;
+  final Color ink2;
+  final Color ink3;
+  final Color hairline;
+  final Color hairlineSoft;
+  final Color scrim;
+  final Color squareLight;
+  final Color squareDark;
+  final Color hatch;
+  final Color halo;
+
+  /// Linen veil over dark squares, replacing the all-over hatch.
+  final Color grain;
+  final Color accent;
+  final Color accentSoft;
+  final Color accentMid;
+
+  factory SrsFolioColors.light(SrsAccent a) {
+    final accent = kSrsAccents[a]!.light;
+    return SrsFolioColors._(
+      brightness: Brightness.light,
+      accentId: a,
+      page: const Color(0xFFF7F3EC),
+      ground: const Color(0xFFF7F3EC),
+      surface: const Color(0xFFFFFDF8),
+      surface2: const Color(0xFFFFF7EB),
+      ink: const Color(0xFF151A22),
+      ink2: const Color(0xFF545B6A),
+      ink3: const Color(0xFF9398A3),
+      hairline: const Color.fromRGBO(21, 26, 34, 0.12),
+      hairlineSoft: const Color.fromRGBO(21, 26, 34, 0.05),
+      scrim: const Color.fromRGBO(21, 26, 34, 0.26),
+      squareLight: const Color(0xFFFFF9F1),
+      squareDark: const Color(0xFFEEE6D3),
+      hatch: const Color.fromRGBO(21, 26, 34, 0.22),
+      halo: const Color(0xFFFFF9F1),
+      grain: const Color.fromRGBO(21, 26, 34, 0.055),
+      accent: accent,
+      accentSoft: accent.withValues(alpha: 0.11),
+      accentMid: accent.withValues(alpha: 0.24),
+    );
+  }
+
+  factory SrsFolioColors.dark(SrsAccent a) {
+    final accent = kSrsAccents[a]!.dark;
+    return SrsFolioColors._(
+      brightness: Brightness.dark,
+      accentId: a,
+      page: const Color(0xFF0E131B),
+      ground: const Color(0xFF0E131B),
+      surface: const Color(0xFF131A26),
+      surface2: const Color(0xFF192130),
+      ink: const Color(0xFFECEEF1),
+      ink2: const Color(0xFF9BA2AE),
+      ink3: const Color(0xFF6F7785),
+      hairline: const Color.fromRGBO(236, 238, 241, 0.12),
+      hairlineSoft: const Color.fromRGBO(236, 238, 241, 0.05),
+      scrim: const Color.fromRGBO(0, 0, 0, 0.56),
+      squareLight: const Color(0xFF232A36),
+      squareDark: const Color(0xFF10141B),
+      hatch: const Color.fromRGBO(236, 238, 241, 0.18),
+      halo: const Color(0xFF232A36),
+      grain: const Color.fromRGBO(236, 238, 241, 0.045),
+      accent: accent,
+      accentSoft: accent.withValues(alpha: 0.15),
+      accentMid: accent.withValues(alpha: 0.30),
+    );
+  }
+
+  factory SrsFolioColors.forBrightness(Brightness b, SrsAccent a) =>
+      b == Brightness.dark ? SrsFolioColors.dark(a) : SrsFolioColors.light(a);
+
+  bool get isDark => brightness == Brightness.dark;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SrsFolioColors && other.brightness == brightness && other.accentId == accentId;
 
   @override
   int get hashCode => Object.hash(brightness, accentId);
@@ -250,7 +383,7 @@ abstract final class SrsText {
 
   /// Notation line size.
   static double lineSize({required bool wide, double wideWidth = 0}) =>
-      wide ? (wideWidth * 0.024).clamp(23.0, 31.0) : 21;
+      wide ? (wideWidth * 0.024).clamp(23.0, 31.0) : 24;
   static TextStyle lineMove(double size, Color c) =>
       _ui(size, FontWeight.w600, c, em: -0.012, height: _wideLineHeight(size), tab: true);
   static TextStyle lineNumber(double size, Color c) =>

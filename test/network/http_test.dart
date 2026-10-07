@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/model/common/id.dart';
@@ -78,7 +79,7 @@ void main() {
         requests.first,
         isA<http.BaseRequest>()
             .having((r) => r.url.path, 'path', '/test')
-            .having((r) => r.url.host, 'host', 'lichess.dev')
+            .having((r) => r.url.host, 'host', kLichessHost)
             .having((r) => r.url.scheme, 'scheme', 'https'),
       );
     });

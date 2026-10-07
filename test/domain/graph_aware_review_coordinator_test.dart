@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-017, INV-027, INV-028, INV-029.
 
 import 'dart:math' as math;
 import 'package:chess_srs/src/domain/chess_fsrs_scheduler.dart';
@@ -388,22 +389,85 @@ void main() {
         reason: 'one instant in two zones is still one calendar day',
       );
     });
-    test('canonical lookup stays ambiguous-safe across divergent questions', () {
+    test('modern canonical identity ignores a colliding single-move map entry', () {
+      // Two different questions share a position and one accepted move but have
+      // different complete-set identities. The single-move adjacency map can
+      // only hold one of them (last writer wins); a modern node must resolve
+      // to its own state rather than adopt the stranger's.
       const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
-      // Same (position, move) claimed by two different canonical questions.
-      repo.setCanonicalId(fen, 'e2e4', 'canon-two-move');
-      repo.setCanonicalId(fen, 'e2e4', 'canon-one-move');
+      repo.setCanonicalId(fen, 'e2e4', 'question_b');
+      repo.put(
+        'question_a',
+        ReviewState(
+          decisionId: 'question_a',
+          stability: 2.0 * 86400000,
+          difficulty: 5.0,
+          repetitionCount: 1,
+          lastReviewedAt: now.subtract(const Duration(days: 2)),
+          nextDueAt: now,
+        ),
+      );
+      final untouchedB = ReviewState(
+        decisionId: 'question_b',
+        stability: 30.0 * 86400000,
+        difficulty: 4.0,
+        repetitionCount: 5,
+        lastReviewedAt: now.subtract(const Duration(days: 5)),
+        nextDueAt: now.add(const Duration(days: 30)),
+      );
+      repo.put('question_b', untouchedB);
 
-      // Ambiguous: callers must fall back to their own decision id.
-      expect(repo.canonicalIdFor(fen, 'e2e4'), isNull);
+      const nodeA = GraphNode(
+        decisionId: 'question_a',
+        parentId: null,
+        fen4: fen,
+        expectedMoveUci: 'e2e4',
+        hasCanonicalIdentity: true,
+      );
+      final result = coordinator.recordActiveReview(
+        node: nodeA,
+        result: ReviewResult.correct,
+        now: now,
+      );
 
-      // Uncontested keys still resolve.
-      repo.setCanonicalId(fen, 'd2d4', 'canon-two-move');
-      expect(repo.canonicalIdFor(fen, 'd2d4'), 'canon-two-move');
+      expect(result.primaryState.decisionId, 'question_a');
+      expect(result.primaryState.repetitionCount, 2);
+      expect(repo.get('question_a'), equals(result.primaryState));
+      // The colliding question is untouched.
+      expect(repo.get('question_b'), equals(untouchedB));
+    });
 
-      // Re-setting the same id is idempotent, not a conflict.
-      repo.setCanonicalId(fen, 'd2d4', 'canon-two-move');
-      expect(repo.canonicalIdFor(fen, 'd2d4'), 'canon-two-move');
+    test('legacy occurrence identity still follows the single-move map', () {
+      // Pre-v10 decisions carry occurrence ids and share memory through the
+      // map. That path must keep working after the modern-identity fix.
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      repo.setCanonicalId(fen, 'e2e4', 'occurrence_2');
+      repo.put(
+        'occurrence_2',
+        ReviewState(
+          decisionId: 'occurrence_2',
+          stability: 2.0 * 86400000,
+          difficulty: 5.0,
+          repetitionCount: 3,
+          lastReviewedAt: now.subtract(const Duration(days: 2)),
+          nextDueAt: now,
+        ),
+      );
+
+      const nodeLegacy = GraphNode(
+        decisionId: 'occurrence_1',
+        parentId: null,
+        fen4: fen,
+        expectedMoveUci: 'e2e4',
+      );
+      final result = coordinator.recordActiveReview(
+        node: nodeLegacy,
+        result: ReviewResult.correct,
+        now: now,
+      );
+
+      expect(result.primaryState.decisionId, 'occurrence_2');
+      expect(result.primaryState.repetitionCount, 4);
     });
   });
 }
