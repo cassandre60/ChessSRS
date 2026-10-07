@@ -20,7 +20,6 @@ import 'package:chess_srs/src/view/analysis/analysis_player_widget.dart';
 import 'package:chess_srs/src/view/analysis/analysis_settings_screen.dart';
 import 'package:chess_srs/src/view/analysis/analysis_share_screen.dart';
 import 'package:chess_srs/src/view/analysis/game_analysis_board.dart';
-import 'package:chess_srs/src/view/analysis/retro_screen.dart';
 import 'package:chess_srs/src/view/analysis/server_analysis.dart';
 import 'package:chess_srs/src/view/analysis/tree_view.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
@@ -563,9 +562,6 @@ class _BottomBar extends ConsumerWidget {
     final analysisState = ref.read(analysisControllerProvider(options)).requireValue;
     final evalPrefs = ref.watch(engineEvaluationPreferencesProvider);
     final authUser = ref.read(authControllerProvider);
-    final mySide = authUser != null
-        ? analysisState.archivedGame?.playerSideOf(authUser.user.id)
-        : null;
 
     return showAdaptiveActionSheet(
       context: context,
@@ -642,29 +638,6 @@ class _BottomBar extends ConsumerWidget {
                 tabController.animateTo(2);
               },
             ),
-        if (options case ArchivedGame())
-          if (analysisState.isComputerAnalysisAllowed)
-            if (mySide != null)
-              BottomSheetAction(
-                makeLabel: (context) => Text(context.l10n.learnFromYourMistakes),
-                onPressed: () => Navigator.of(context).push(
-                  RetroScreen.buildRoute((id: options.gameId!, initialSide: analysisState.pov)),
-                ),
-              )
-            else ...[
-              BottomSheetAction(
-                makeLabel: (context) => Text(context.l10n.reviewWhiteMistakes),
-                onPressed: () => Navigator.of(
-                  context,
-                ).push(RetroScreen.buildRoute((id: options.gameId!, initialSide: Side.white))),
-              ),
-              BottomSheetAction(
-                makeLabel: (context) => Text(context.l10n.reviewBlackMistakes),
-                onPressed: () => Navigator.of(
-                  context,
-                ).push(RetroScreen.buildRoute((id: options.gameId!, initialSide: Side.black))),
-              ),
-            ],
         // board editor can be used to quickly analyze a position, so engine must be allowed to access
         if (analysisState.isComputerAnalysisAllowed)
           BottomSheetAction(
