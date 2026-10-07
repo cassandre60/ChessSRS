@@ -302,6 +302,54 @@ void main() {
       },
     );
 
+    test(
+      'ReviewScope.opening matches chapters despite surrounding whitespace in stored names',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const study = Study(id: 's_ws', title: 'Whitespace');
+          await repo.saveStudy(study);
+
+          final ch = Chapter.create(
+            studyId: 's_ws',
+            sourceOrder: 0,
+            // Trailing space as stored by an older import/classifier.
+            opening: 'Sicilian Defense ',
+          );
+          await repo.saveChapter(ch);
+
+          final d = RepertoireDecision.create(
+            studyId: 's_ws',
+            chapterId: ch.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'c7', to: 'c5', san: 'c5')],
+          );
+          await repo.saveDecision(d);
+
+          // Due counting already trims; session loading must agree.
+          final due = await service.getDueCount(
+            scope: const ReviewScope.opening('Sicilian Defense'),
+          );
+          expect(due, 1);
+
+          final session = await service.startSession(
+            scope: const ReviewScope.opening('Sicilian Defense'),
+          );
+          expect(
+            session.currentPrompt,
+            isNotNull,
+            reason: 'session loading must trim like due counting does',
+          );
+          expect(session.remainingDueCount, 1);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     test('getDueSummary computes accurate study and chapter progress metrics', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);

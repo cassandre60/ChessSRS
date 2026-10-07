@@ -10,7 +10,7 @@ Baseline: `flutter test test/review/review_engine_test.dart test/persistence/can
 - [x] 5. `_canonicalByFenMove` (session) and `InMemoryReviewStateRepository` collide when two different questions share one FEN + one move but have different accepted sets; lookup prefers the map over the passed `decisionId` and can return the wrong canonical
 - [x] 6. `computePgnHash` / `computeRepertoireTreeHash` write `san` directly; a null SAN hashes as the literal string "null" and collides across unrelated trees (should fall back to UCI)
 - [x] 7. `chapterToPgn` trusts stored `move.san` (writes literal "null" when missing) and crashes on corrupt `startingFen` via unguarded `Setup.parseFen` (should recompute SAN from position + handle bad FEN)
-- [ ] 8. Opening scope matching is inconsistent: `startSession` uses exact `c.opening == openingFamily` while `getDueSummary` trims both sides (whitespace-only difference hides a scope)
+- [x] 8. Opening scope matching is inconsistent: `startSession` uses exact `c.opening == openingFamily` while `getDueSummary` trims both sides (whitespace-only difference hides a scope)
 - [ ] 9. `getDueReviewStates` queries only legacy `srs_review_state` and ignores `position_knowledge_state`, so it under-reports due items (currently unused, but part of the repository contract)
 - [ ] 10. `rekeyCanonicalReviewState` rewrites `position_knowledge_state` + `srs_decision` but leaves orphaned canonical rows in `srs_review_state` under old keys (dead weight; `getDueReviewStates` would surface them as due)
 - [ ] 11. Graph exposure throttle `_isSameCalendarDay` compares calendar fields without normalizing `isUtc`, so the same instant in UTC vs local counts as different days (inconsistent with local-midnight daily quota)
