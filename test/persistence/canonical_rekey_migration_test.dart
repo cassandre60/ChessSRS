@@ -250,6 +250,54 @@ void main() {
         reason: 'an unreadable tree must not cost the user their state',
       );
     });
+
+    test('moves legacy mirrors in srs_review_state to the new key', () async {
+      const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      final oldId = canonicalKey(fenKey, 'e2e4');
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4']);
+
+      await seed(
+        studyId: 'study-1',
+        chapterId: 'chapter-1',
+        nodeId: 'node-1',
+        fenKey: fenKey,
+        expectedMoves: encodeExpectedMoves([
+          const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          const RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ]),
+        canonicalStateId: oldId,
+      );
+      await seedState(oldId, repetitions: 7, stability: 12.5);
+      // saveAnswerBatch mirrors every canonical state into srs_review_state.
+      await db.insert(kTableSrsReviewState, {
+        'decisionId': oldId,
+        'firstReviewedAt': '2026-09-01T10:00:00.000Z',
+        'lastReviewedAt': '2026-09-15T10:00:00.000Z',
+        'nextDueAt': '2026-09-20T10:00:00.000Z',
+        'repetitionCount': 7,
+        'lapseCount': 0,
+        'stability': 12.5,
+        'difficulty': 5.0,
+      });
+
+      await rekeyCanonicalReviewState(db);
+
+      Future<List<Map<String, Object?>>> legacyMirrors(String id) => db.query(
+        kTableSrsReviewState,
+        where: 'decisionId = ?',
+        whereArgs: [id],
+      );
+
+      expect(
+        await legacyMirrors(oldId),
+        isEmpty,
+        reason: 'no mirror may be left behind under the retired key',
+      );
+      final moved = await legacyMirrors(newId);
+      expect(moved, hasLength(1));
+      expect(moved.single['repetitionCount'], 7);
+      expect(moved.single['stability'], 12.5);
+    });
   });
   group('backfillCanonicalStatesFromLegacy', () {
     late Directory tempDir;

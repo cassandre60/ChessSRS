@@ -110,11 +110,29 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
   // two old ids can land on the same new one, which an in-place UPDATE could not express.
   for (final oldId in renames.keys) {
     await db.delete(kTablePositionKnowledgeState, where: 'canonicalId = ?', whereArgs: [oldId]);
+    // saveAnswerBatch mirrors every canonical state into srs_review_state under the same key.
+    // Without this the retired keys linger there as dead rows that due queries would surface.
+    await db.delete(kTableSrsReviewState, where: 'decisionId = ?', whereArgs: [oldId]);
   }
   for (final entry in merged.entries) {
     await db.insert(
       kTablePositionKnowledgeState,
       entry.value..['canonicalId'] = entry.key,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    final row = entry.value;
+    await db.insert(
+      kTableSrsReviewState,
+      {
+        'decisionId': entry.key,
+        'firstReviewedAt': row['firstReviewedAt'],
+        'lastReviewedAt': row['lastReviewedAt'],
+        'nextDueAt': row['nextDueAt'],
+        'repetitionCount': row['repetitionCount'] ?? 0,
+        'lapseCount': row['lapseCount'] ?? 0,
+        'stability': row['stability'] ?? 0.0,
+        'difficulty': row['difficulty'] ?? 5.0,
+      },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
