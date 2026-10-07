@@ -20,7 +20,7 @@ void main() {
     // (`view/study/`, `view/game/`, `view/chat/`, `view/user/`) are deliberately absent: they are
     // reachable only from a deep link at best, and the right answer for them is a cut, not a
     // reskin. `view/retro` is Lichess's game-review screen and goes with them.
-// `view/offline_computer/` is one of the two ways into a game, so it is here: the bar, both
+    // `view/offline_computer/` is one of the two ways into a game, so it is here: the bar, both
     // sheets and the result dialog were all converted off the inherited look in 2026-10.
     // Sign-in and PGN import are on the list because they carry a real flow -- importing a private
     // study is how the app is fed -- so a second design language on either is a visible defect.
