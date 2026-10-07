@@ -795,13 +795,31 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<List<ReviewState>> getDueReviewStates(DateTime now) async {
+    final isoNow = now.toIso8601String();
     final rows = await _db.query(
       kTableSrsReviewState,
       where: 'nextDueAt IS NULL OR nextDueAt <= ?',
-      whereArgs: [now.toIso8601String()],
+      whereArgs: [isoNow],
       orderBy: 'nextDueAt ASC',
     );
-    return rows.map(_reviewStateFromRow).toList(growable: false);
+    // Canonical knowledge states live in their own table; without them this
+    // under-reports due items for every transposed or migrated position.
+    final kRows = await _db.query(
+      kTablePositionKnowledgeState,
+      where: 'nextDueAt IS NULL OR nextDueAt <= ?',
+      whereArgs: [isoNow],
+      orderBy: 'nextDueAt ASC',
+    );
+    final map = <String, ReviewState>{};
+    for (final row in rows) {
+      final s = _reviewStateFromRow(row);
+      map[s.decisionId] = s;
+    }
+    for (final row in kRows) {
+      final k = _knowledgeStateFromRow(row);
+      map[k.canonicalId] = k.toReviewState();
+    }
+    return map.values.toList(growable: false);
   }
 
   @override

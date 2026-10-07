@@ -931,6 +931,54 @@ void main() {
       }
     });
 
+    test('getDueReviewStates includes due canonical knowledge states', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final now = DateTime.utc(2026, 9, 18, 12, 0, 0);
+        final overdue = now.subtract(const Duration(days: 2));
+        final future = now.add(const Duration(days: 2));
+
+        // Canonical-only rows: no legacy srs_review_state mirrors exist for these.
+        await db.insert(kTablePositionKnowledgeState, {
+          'canonicalId': 'canon-due',
+          'firstReviewedAt': null,
+          'lastReviewedAt': null,
+          'nextDueAt': overdue.toIso8601String(),
+          'repetitionCount': 2,
+          'lapseCount': 0,
+          'stability': 5.0,
+          'difficulty': 5.0,
+          'latencyEmaMs': null,
+          'latencySampleCount': 0,
+        });
+        await db.insert(kTablePositionKnowledgeState, {
+          'canonicalId': 'canon-future',
+          'firstReviewedAt': null,
+          'lastReviewedAt': null,
+          'nextDueAt': future.toIso8601String(),
+          'repetitionCount': 2,
+          'lapseCount': 0,
+          'stability': 5.0,
+          'difficulty': 5.0,
+          'latencyEmaMs': null,
+          'latencySampleCount': 0,
+        });
+
+        final due = await repo.getDueReviewStates(now);
+        final ids = due.map((s) => s.decisionId).toSet();
+        expect(
+          ids,
+          contains('canon-due'),
+          reason: 'an overdue canonical state is due even with no legacy row',
+        );
+        expect(ids, isNot(contains('canon-future')));
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'saveAnswerBatch atomically commits knowledge states, legacy mirrors, and events',
       () async {
