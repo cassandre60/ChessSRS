@@ -163,10 +163,17 @@ class ReviewScreenState {
   }
 
   /// The earliest upcoming review timestamp scheduled in the future for this session's scope.
+  ///
+  /// "Now" comes from the session's own clock — the injected one the SRS schedule was computed
+  /// against — never from the wall clock (QUALITY.md §3.2). The previous `?? DateTime.now()`
+  /// fallback was unreachable: the guard below returns unless the session exists, so the
+  /// fallback could only ever have been a second, untestable source of time.
   DateTime? get nextReviewDueAt {
-    final sessionStates = session?.reviewStates.values;
-    if (sessionStates == null || sessionStates.isEmpty) return null;
-    final now = session?.clock.now() ?? DateTime.now();
+    final currentSession = session;
+    if (currentSession == null) return null;
+    final sessionStates = currentSession.reviewStates.values;
+    if (sessionStates.isEmpty) return null;
+    final now = currentSession.clock.now();
     DateTime? earliest;
     for (final s in sessionStates) {
       if (s.nextDueAt != null && s.nextDueAt!.isAfter(now)) {
@@ -182,7 +189,10 @@ class ReviewScreenState {
   String? get timeUntilNextReview {
     final due = nextReviewDueAt;
     if (due == null) return null;
-    final now = session?.clock.now() ?? DateTime.now();
+    // A due date only exists for a loaded session, so the clock is the session's.
+    final currentSession = session;
+    if (currentSession == null) return null;
+    final now = currentSession.clock.now();
     final diff = due.difference(now);
     if (diff.isNegative) return 'due now';
 
