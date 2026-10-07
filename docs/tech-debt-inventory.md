@@ -56,7 +56,7 @@ High-risk items are flagged ⚠️ regardless of score; "defer" means "do not at
 | 8 | Test-environment sniffing + two conflicting isolate thresholds | `import/pgn_importer.dart:70`, `:364`; `review/review_controller.dart:1391`; `dart:io` imported in the application layer | Missing abstraction | 3 | 2 | M-L | 1.5 | `kIsWeb \|\| Platform.environment.containsKey('FLUTTER_TEST') \|\| text.length < 8192` is duplicated; the controller then re-tests the same thing at `>= 65536`, so the policy "when to offload PGN work" exists at two sizes and three sites. Fix: one helper (e.g. `shouldOffloadPgnWork(String)`) with one documented threshold; keeps `dart:io` in one place. |
 | 9 | Triplicated scope-branch setup in `startSession` | `review/review_service.dart:186-204`, `:205-220`, `:221-232` | Duplication | 2 | 2 | M-L | 1.0 | Three of the five scope branches repeat "getAllStudies → filter isActive → loop getChaptersByStudy → collect". Fix: `_loadActiveStudiesAndChapters({bool Function(Chapter)? where})`. Covered by `test/review/review_service_test.dart` (950 lines). |
 | 10 | `getDueSummary` — one 255-line method computing 12 aggregates | `review/review_service.dart:401-655` | Complexity | 3 | 3 | M | 1.0 | Single pass over all decisions that fills per-study, per-chapter, per-opening, per-side and per-scope counters, then builds six progress maps. Correct and well-commented, but every new metric must be threaded through the same loop by hand. Fix: extract the per-decision tally into a small value type (`_DueTally`) + a projection function. |
-| 11 | Raw exception text in user-facing snackbars | `view/review/review_scope_drawer.dart:501`, `view/review/repertoire_import_dialog.dart:191`, `:243`, `view/review/export_pgn_dialog.dart:60`, `:81`, `view/more/import_pgn_screen.dart:145`, `view/study/create_study_chapter_bottom_sheet.dart:288`, `:333`, `view/game/gif_export_dialog.dart:81` | Error handling | 2 | 1 | L | 2.0 | `showSnackBar(context, 'Import failed: $e')` interpolates the raw exception into a user-visible string — nine sites across six files (the first draft of this table listed four; a wider sweep found the rest, including four on the live import/export flow, which is where a user meets them). **Deferred:** what the message should say instead is a content and l10n decision (the repo has `context.l10n` and an "no hardcoded English" direction), not a mechanical edit — do not change user-visible copy as a drive-by refactor. |
+| 11 | Raw exception text in user-facing snackbars | `view/review/review_scope_drawer.dart:501`, `view/review/repertoire_import_dialog.dart:191`, `:243`, `view/review/export_pgn_dialog.dart:60`, `:81`, `view/more/import_pgn_screen.dart:145`, `view/study/create_study_chapter_bottom_sheet.dart:288`, `:333`, `view/game/gif_export_dialog.dart:81` | Error handling | 2 | 1 | L | 2.0 | `showSnackBar(context, 'Import failed: $e')` interpolated the raw exception into a user-visible string — nine sites across six files. **Fixed**: the toasts now state what failed and the exception goes to a `debugPrint` one line above, using the `SEVERE: [Screen] …` form this layer already uses. All nine prefixes are unchanged, so the single test that asserts on this text (`test/view/study/create_study_chapter_bottom_sheet_test.dart:459`, `textContaining`) still holds. Not touched: `view/settings/app_log_settings_screen.dart:206` (`Text('Failed to load logs: $error')`), where showing the error *is* the screen's job. Follow-up left open: these messages are still hardcoded English; they should become `context.l10n` strings, which needs `build_runner` (see §5's caveat). |
 | 12 | Prediction/analysis controllers are near-duplicates | `model/analysis/analysis_controller.dart` vs `model/study/study_controller.dart` | Duplication | 2 | 4 | H ⚠️ | 0.5 | 1,199 diff lines; identical bodies for `jumpToNthNodeOnMainline` (a416 / s512), `onCurrentPathEvalChanged` (a371 / s116), plus both mix in the same three mixins. This is inherited Lichess structure; de-duplicating is a real project, not a session. **Defer.** |
 | 13 | Analysis vs Study preferences duplicate the same eight toggles | `model/analysis/analysis_preferences.dart` (93 LOC) vs `model/study/study_preferences.dart` (231 LOC) | Duplication | 3 | 3 | H ⚠️ | 1.0 | `toggleShowEvaluationGauge`, `toggleShowEngineLines`, `toggleAnnotations`, `togglePgnComments`, `toggleShowBestMoveArrow`, `toggleInlineNotation`, `toggleSmallBoard` (+ `enableServerAnalysis`) are duplicated method-for-method, as are the corresponding freezed fields. `CommonAnalysisPrefs` exists but only declares two getters. Fix needs freezed codegen and touches persisted JSON. **Defer.** |
 | 14 | Presentation imports the database/persistence layer | `view/settings/srs_settings_screen.dart:7` (`db/database.dart`), `view/review/study_chapters_screen.dart:9` (`persistence/study_repository.dart`) | Tight coupling | 3 | 2 | M | 1.5 | QUALITY.md §1.1 says the presentation layer must never interact with database tables; these read `srsStudyRepositoryProvider` / `databaseProvider` directly. Fix: an application-level provider (e.g. `databaseSizeProvider`, `chaptersExportProvider`) that the screen watches. |
@@ -185,6 +185,11 @@ Six commits, one concern each, each verified as far as this environment allows (
 | 5 | `chore(theme): delete the unreferenced kSliderTheme constant` | dead constant deleted | zero references tree-wide; analyzer-suppression ratchet drops 18 → 17 |
 | 6 | `refactor(domain): one source for the prefetch defaults` | `kDefaultPrefetchBatchSize` / `kDefaultPrefetchRefillThreshold` replace three independent `25`/`3` defaults | the literals are gone from all three sites; no other `25`/`3` prefetch default exists |
 
+**Item 11** followed as a seventh commit on the same branch (`fix(view): keep raw exception text out of error
+toasts`) once the copy decision was made: keep every message prefix, drop the `": $e"` suffix, log the exception
+with the layer's existing `SEVERE:` convention. It is a deliberate user-visible copy change and is called out as
+such in the commit and in the PR body.
+
 Gate status for the branch: `./scripts/gates.sh t1` passes (G03 banned APIs, G07 protected paths — nothing
 protected touched, G08 test-weakening — no test file modified, G05 spec traceability, G10 ratchets —
 `analyzer_suppressions` improved 18 → 17, `domain_loc` 3052 → 3076 within the ±150 tolerance).
@@ -196,15 +201,19 @@ is not the same as "CI ran it". Treat `test.yml` as the authority.
 
 ## 6. What remains, in priority order
 
-1. **Item 11** — raw exception text in nine user-facing snackbars (§1). Needs a copy/l10n decision first.
+1. **Item 11** — *done* (§5). Its l10n follow-up (the messages are still English literals) remains, and needs
+   `build_runner`.
 2. **Item 8** — one "when to offload PGN work" helper; the 8 KB and 64 KB thresholds must be reconciled
    deliberately, which is a behaviour decision, not a refactor.
-3. **Item 14** — presentation importing `db/` and `persistence/` (two files, QUALITY.md §1.1).
+3. **Item 14** — presentation importing `db/` and `persistence/` (QUALITY.md §1.1). A wider sweep than the
+   first pass found a **third** file: `view/analysis/analysis_hub_screen.dart:9` (`persistence/persistence.dart`,
+   read at `:175`, watched at `:190`) alongside `view/settings/srs_settings_screen.dart:7` and
+   `view/review/study_chapters_screen.dart:9` (`:46`, `:93`).
 4. **Item 9** — the triplicated scope setup in `startSession`; worth doing with the test file runnable
    (`test/review/review_service_test.dart`, `review_side_scope_test.dart`, `review_order_test.dart` cover it).
    Note it would introduce a record return type, which nothing in `lib/` uses today — decide that first.
 5. **Items 10, 15, 19** — each deserves its own PR with `flutter analyze` + the focused test file available.
 6. **Items 12, 13, 17, 18, 20** — deferred as before: codegen, wide renames, or product decisions.
 
-A follow-up session with the toolchain available can take items 11 → 14 → 9 in that order; the first two are
-small enough to land in one sitting each.
+A follow-up session with the toolchain available can take items 14 → 9 in that order, then the l10n pass over
+the strings item 11 left as English literals.
