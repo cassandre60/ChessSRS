@@ -365,9 +365,16 @@ class ReviewSession {
       }
 
       // Re-queue the failed decision at the end of the session queue
-      // so the user can re-test it before completing the session
-      _dueQueue.removeWhere((d) => d.id == decision.id);
-      _unbufferedQueue.removeWhere((d) => d.id == decision.id);
+      // so the user can re-test it before completing the session.
+      // Transposed twins (same canonicalId, different occurrence id) are dropped
+      // as well, mirroring the correct-answer path: without this the same
+      // position is asked twice before the retry.
+      _dueQueue.removeWhere(
+        (d) => d.id == decision.id || d.canonicalId == decision.canonicalId,
+      );
+      _unbufferedQueue.removeWhere(
+        (d) => d.id == decision.id || d.canonicalId == decision.canonicalId,
+      );
       if (_unbufferedQueue.isNotEmpty) {
         _unbufferedQueue.add(decision);
       } else {
