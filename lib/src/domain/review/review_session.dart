@@ -24,6 +24,20 @@ import 'package:logging/logging.dart';
 
 final Logger _logger = Logger('ReviewEngine');
 
+/// Default number of due decisions buffered in the active queue at once.
+///
+/// Declared here, next to the [ReviewSession] field it feeds, because the
+/// engine (which forwards it) and the application service (which starts
+/// sessions) both used to carry their own copy of the number: three
+/// independent `25`s that had to be changed together to mean anything.
+const int kDefaultPrefetchBatchSize = 25;
+
+/// Default threshold at which the active prefetch buffer refills.
+///
+/// The companion of [kDefaultPrefetchBatchSize]; see it for why the defaults
+/// live on this side of the boundary.
+const int kDefaultPrefetchRefillThreshold = 3;
+
 /// Active review session state machine.
 ///
 /// Encapsulates queue management, move validation against repertoire (Invariant §2.1),
@@ -42,8 +56,8 @@ class ReviewSession {
     this.transposeScope = TransposeScope.inScope,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
-    this.prefetchBatchSize = 25,
-    this.prefetchRefillThreshold = 3,
+    this.prefetchBatchSize = kDefaultPrefetchBatchSize,
+    this.prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     this.remainingDailyQuota,
     GraphAwareReviewCoordinator? coordinator,
     Random? random,

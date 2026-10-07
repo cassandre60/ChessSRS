@@ -157,8 +157,8 @@ class ReviewService {
   Future<ReviewSession> startSession({
     ReviewScope scope = const ReviewScope.all(),
     ReviewMode mode = ReviewMode.srs,
-    int? prefetchBatchSize = 25,
-    int prefetchRefillThreshold = 3,
+    int? prefetchBatchSize = kDefaultPrefetchBatchSize,
+    int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
     int? generation,
   }) async {
