@@ -122,6 +122,60 @@ void main() {
       return (study, chapter, decisions);
     }
 
+    // Two chapters asking the same question (same FEN, same accepted move)
+    // under one study: a transposition duplicated across occurrences.
+    (Study, List<Chapter>, List<RepertoireDecision>) buildTransposedStudy() {
+      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      final canonId = canonicalKeyForPosition(startKey, ['e2e4']);
+      final study = Study(
+        id: 'study-transpo',
+        title: 'Transpositions',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+
+      final dupDecisions = <RepertoireDecision>[];
+      final chapters = <Chapter>[];
+      for (var i = 0; i < 2; i++) {
+        final root = RepertoireNode(
+          id: 'node-root-$i',
+          fen: startFen,
+          fenKey: startKey,
+          children: [
+            RepertoireNode(
+              id: 'node-e4-$i',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              incomingMove: const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            ),
+          ],
+        );
+        final chapter = Chapter(
+          id: 'chapter-$i',
+          studyId: study.id,
+          sourceOrder: i,
+          title: 'Chapter $i',
+          startingFen: startFen,
+          root: root,
+          createdAt: baseTime,
+        );
+        chapters.add(chapter);
+        dupDecisions.add(
+          RepertoireDecision(
+            id: 'dec-dup-$i',
+            studyId: study.id,
+            chapterId: chapter.id,
+            nodeId: root.id,
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            canonicalStateId: canonId,
+          ),
+        );
+      }
+
+      return (study, chapters, dupDecisions);
+    }
+
     test('initializes empty session when no decisions are due', () {
       final (study, chapter, decisions) = buildTestRepertoire();
       // Schedule all decisions in the future
@@ -1031,57 +1085,7 @@ void main() {
     });
 
     test('incorrect answer drops transposed duplicates sharing its canonicalId', () {
-      // Two chapters ask the same question (same FEN, same accepted move) under
-      // one study, so single-study scope queues both occurrences.
-      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
-      final canonId = canonicalKeyForPosition(startKey, ['e2e4']);
-      final study = Study(
-        id: 'study-transpo',
-        title: 'Transpositions',
-        createdAt: baseTime,
-        updatedAt: baseTime,
-      );
-
-      final dupDecisions = <RepertoireDecision>[];
-      final chapters = <Chapter>[];
-      for (var i = 0; i < 2; i++) {
-        final root = RepertoireNode(
-          id: 'node-root-$i',
-          fen: startFen,
-          fenKey: startKey,
-          children: [
-            RepertoireNode(
-              id: 'node-e4-$i',
-              fen:
-                  'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
-              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
-              incomingMove: const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
-            ),
-          ],
-        );
-        final chapter = Chapter(
-          id: 'chapter-$i',
-          studyId: study.id,
-          sourceOrder: i,
-          title: 'Chapter $i',
-          startingFen: startFen,
-          root: root,
-          createdAt: baseTime,
-        );
-        chapters.add(chapter);
-        dupDecisions.add(
-          RepertoireDecision(
-            id: 'dec-dup-$i',
-            studyId: study.id,
-            chapterId: chapter.id,
-            nodeId: root.id,
-            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
-            canonicalStateId: canonId,
-          ),
-        );
-      }
-
+      final (study, chapters, dupDecisions) = buildTransposedStudy();
       final engine = ReviewEngine(clock: clock);
       final session = engine.createSession(
         studies: [study],
@@ -1107,6 +1111,31 @@ void main() {
         failed.id,
         reason: 'after a lapse the retry must be the failed occurrence, not its twin',
       );
+    });
+
+    test('correct answer skips transposed twin already completed this session', () {
+      final (study, chapters, dupDecisions) = buildTransposedStudy();
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: chapters,
+        decisions: dupDecisions,
+        reviewStates: const {},
+        scope: ReviewScope.study(study.id),
+        mode: ReviewMode.srs,
+      );
+
+      final answered = session.submitMove(from: 'e2', to: 'e4');
+      expect(answered.isCorrect, isTrue);
+
+      // The shared canonical state was already updated by the first answer;
+      // asking the twin would double-count one recall as two repetitions.
+      expect(
+        session.isComplete,
+        isTrue,
+        reason: 'the transposed twin must not be asked after its position was answered',
+      );
+      expect(session.remainingDueCount, 0);
     });
 
     test('a position answered correctly only on retry still counts toward the daily quota', () {

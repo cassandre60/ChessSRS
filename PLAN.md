@@ -6,7 +6,7 @@ Baseline: `flutter test test/review/review_engine_test.dart test/persistence/can
 - [x] 1. Daily quota day-boundary mixes UTC and local time (`getTodayReviewedPositionsCount` uses `DateTime.utc(y,m,d)` while events store local `toIso8601String`; exact-midnight local event compares smaller than UTC start and is excluded)
 - [x] 2. `ReviewSession.retryMove` creates fallback `ReviewState.initial(decisionId: decision.id)` instead of canonicalId, diverging from `submitMove` which uses canonicalId
 - [x] 3. Incorrect-answer re-queue removes only by occurrence `id`, leaving a transposed duplicate (same canonicalId, different id) in queue so one position is asked twice
-- [ ] 4. SRS queue dedupes transpositions only for global scope; single-study / chapter / opening scopes queue the same canonical position twice
+- [x] 4. SRS queue dedupes transpositions only for global scope; single-study / chapter / opening scopes queue the same canonical position twice
 - [ ] 5. `_canonicalByFenMove` (session) and `InMemoryReviewStateRepository` collide when two different questions share one FEN + one move but have different accepted sets; lookup prefers the map over the passed `decisionId` and can return the wrong canonical
 - [ ] 6. `computePgnHash` / `computeRepertoireTreeHash` write `san` directly; a null SAN hashes as the literal string "null" and collides across unrelated trees (should fall back to UCI)
 - [ ] 7. `chapterToPgn` trusts stored `move.san` (writes literal "null" when missing) and crashes on corrupt `startingFen` via unguarded `Setup.parseFen` (should recompute SAN from position + handle bad FEN)

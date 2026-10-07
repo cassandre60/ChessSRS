@@ -593,14 +593,35 @@ class ReviewSession {
     if (_dueQueue.length <= prefetchRefillThreshold) {
       _refillPrefetchBuffer();
     }
-    if (_dueQueue.isEmpty) {
-      _currentPrompt = null;
-      _logger.info('ReviewSession queue empty. Completed decisions: $_completedCount');
+    // Dequeue until a promptable decision is found. In SRS mode a queued
+    // occurrence whose canonical position was already answered this session is
+    // a transposed twin: its shared state was just updated, so asking it would
+    // pose the same question twice and count one recall as two repetitions.
+    // (Failed decisions never enter the completed set, so lapse retries still
+    // surface. Practice mode tests every occurrence, so it is exempt.)
+    while (true) {
+      if (_dueQueue.isEmpty) {
+        if (_unbufferedQueue.isEmpty) {
+          _currentPrompt = null;
+          _logger.info('ReviewSession queue empty. Completed decisions: $_completedCount');
+          return;
+        }
+        _refillPrefetchBuffer();
+        if (_dueQueue.isEmpty) {
+          // Batching yields nothing (e.g. batch size 0): stop rather than spin.
+          _currentPrompt = null;
+          return;
+        }
+        continue;
+      }
+      final nextDecision = _dueQueue.removeAt(0);
+      if (mode == ReviewMode.srs && _completedDecisionIds.contains(nextDecision.canonicalId)) {
+        continue;
+      }
+      final node = _nodesById[nextDecision.nodeId];
+      _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
       return;
     }
-    final nextDecision = _dueQueue.removeAt(0);
-    final node = _nodesById[nextDecision.nodeId];
-    _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
   ReviewPrompt _buildPrompt({required RepertoireDecision decision, RepertoireNode? node}) {
