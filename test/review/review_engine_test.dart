@@ -1138,6 +1138,123 @@ void main() {
       expect(session.remainingDueCount, 0);
     });
 
+    test('divergent questions sharing a move keep their own canonical states', () {
+      // Same position, different questions: chapter A accepts {e4, d4} while
+      // chapter B accepts only {e4}. They share the (FEN, e2e4) lookup key but
+      // must not share SRS memory.
+      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      const e4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+      const e4Key = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -';
+      const d4Fen =
+          'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1';
+      const d4Key = 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -';
+      final canonA = canonicalKeyForPosition(startKey, ['e2e4', 'd2d4']);
+      final canonB = canonicalKeyForPosition(startKey, ['e2e4']);
+      expect(canonA, isNot(equals(canonB)));
+
+      final study = Study(
+        id: 'study-divergent',
+        title: 'Divergent',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      const rootA = RepertoireNode(
+        id: 'node-root-a',
+        fen: startFen,
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'node-a-e4',
+            fen: e4Fen,
+            fenKey: e4Key,
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ),
+          RepertoireNode(
+            id: 'node-a-d4',
+            fen: d4Fen,
+            fenKey: d4Key,
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+          ),
+        ],
+      );
+      const rootB = RepertoireNode(
+        id: 'node-root-b',
+        fen: startFen,
+        fenKey: startKey,
+        children: [
+          RepertoireNode(
+            id: 'node-b-e4',
+            fen: e4Fen,
+            fenKey: e4Key,
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ),
+        ],
+      );
+      final chapterA = Chapter(
+        id: 'chapter-a',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Chapter A',
+        startingFen: startFen,
+        root: rootA,
+        createdAt: baseTime,
+      );
+      final chapterB = Chapter(
+        id: 'chapter-b',
+        studyId: study.id,
+        sourceOrder: 1,
+        title: 'Chapter B',
+        startingFen: startFen,
+        root: rootB,
+        createdAt: baseTime,
+      );
+      final decisions = [
+        RepertoireDecision(
+          id: 'dec-a',
+          studyId: study.id,
+          chapterId: chapterA.id,
+          nodeId: rootA.id,
+          expectedMoves: const [
+            RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+          ],
+          canonicalStateId: canonA,
+        ),
+        RepertoireDecision(
+          id: 'dec-b',
+          studyId: study.id,
+          chapterId: chapterB.id,
+          nodeId: rootB.id,
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          canonicalStateId: canonB,
+        ),
+      ];
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapterA, chapterB],
+        decisions: decisions,
+        reviewStates: const {},
+        scope: ReviewScope.study(study.id),
+        mode: ReviewMode.srs,
+      );
+      expect(session.currentPrompt!.decision.id, 'dec-a');
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      expect(
+        result.updatedState.decisionId,
+        canonA,
+        reason: 'the shared (FEN, e2e4) key must not reroute A’s answer into B’s memory',
+      );
+      expect(
+        session.reviewStates[canonB],
+        isNull,
+        reason: 'answering A must not create state under B’s canonical id',
+      );
+    });
+
     test('a position answered correctly only on retry still counts toward the daily quota', () {
       final (study, chapter, decisions) = buildTestRepertoire();
       final engine = ReviewEngine(clock: clock);

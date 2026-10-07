@@ -79,7 +79,16 @@ class InMemoryReviewStateRepository implements ReviewStateRepository {
       _canonicalKeys['$fen4|$expectedMoveUci'];
 
   void setCanonicalId(String fen4, String expectedMoveUci, String canonicalId) {
-    _canonicalKeys['$fen4|$expectedMoveUci'] = canonicalId;
+    // A key claimed by two different canonical ids is ambiguous (same position
+    // and move, different accepted sets): unmap it so lookups fall back to the
+    // caller's own decision id instead of rerouting into another question.
+    final key = '$fen4|$expectedMoveUci';
+    final existing = _canonicalKeys[key];
+    if (existing == null) {
+      _canonicalKeys[key] = canonicalId;
+    } else if (existing != canonicalId) {
+      _canonicalKeys.remove(key);
+    }
   }
 }
 

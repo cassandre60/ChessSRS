@@ -349,5 +349,22 @@ void main() {
       expect(result.stability, 0.0);
       expect(result.nextDueAt, isNull);
     });
+    test('canonical lookup stays ambiguous-safe across divergent questions', () {
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      // Same (position, move) claimed by two different canonical questions.
+      repo.setCanonicalId(fen, 'e2e4', 'canon-two-move');
+      repo.setCanonicalId(fen, 'e2e4', 'canon-one-move');
+
+      // Ambiguous: callers must fall back to their own decision id.
+      expect(repo.canonicalIdFor(fen, 'e2e4'), isNull);
+
+      // Uncontested keys still resolve.
+      repo.setCanonicalId(fen, 'd2d4', 'canon-two-move');
+      expect(repo.canonicalIdFor(fen, 'd2d4'), 'canon-two-move');
+
+      // Re-setting the same id is idempotent, not a conflict.
+      repo.setCanonicalId(fen, 'd2d4', 'canon-two-move');
+      expect(repo.canonicalIdFor(fen, 'd2d4'), 'canon-two-move');
+    });
   });
 }

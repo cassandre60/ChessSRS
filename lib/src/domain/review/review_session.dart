@@ -65,13 +65,22 @@ class ReviewSession {
     // `_canonicalByFenMove` stays keyed by (FEN, single move) on purpose: the graph layer uses it
     // for position adjacency, where propagating between two questions asked at the same board is
     // the intent. It is not the scheduling identity — that is the canonical ID above.
+    // A key shared by two *different* questions (same FEN and move, different accepted sets)
+    // is ambiguous and left unmapped, so lookups fall back to the decision's own canonical ID
+    // instead of rerouting one question's answer into another's memory.
     for (final d in decisions) {
       _decisionsByCanonicalId[d.canonicalId] = d;
       final node = _nodesById[d.nodeId];
       if (node != null) {
         _decisionsByFenKey.putIfAbsent(node.fenKey, () => []).add(d);
         for (final m in d.expectedMoves) {
-          _canonicalByFenMove['${node.fenKey}|${m.uci}'] = d.canonicalId;
+          final key = '${node.fenKey}|${m.uci}';
+          final existing = _canonicalByFenMove[key];
+          if (existing == null) {
+            _canonicalByFenMove[key] = d.canonicalId;
+          } else if (existing != d.canonicalId) {
+            _canonicalByFenMove.remove(key);
+          }
         }
       }
     }
