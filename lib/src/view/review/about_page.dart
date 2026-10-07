@@ -17,7 +17,7 @@ class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
   static const lichessMobileUrl = 'https://github.com/lichess-org/mobile';
-  static const chessSrsUrl = 'https://github.com/mansourvery-hub/chess-repertoire-srs';
+  static const chessSrsUrl = 'https://github.com/cassandre60/chess-repertoire-srs';
 
   static const _attributions = [
     ('Lichess Mobile', 'GPL-3.0'),

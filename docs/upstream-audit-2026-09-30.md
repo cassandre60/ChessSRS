@@ -1,6 +1,6 @@
 # Upstream Diff Audit — 2026-09-30
 
-Fork: `mansourvery-hub/chess-repertoire-srs` (ChessSRS) · Upstream: `lichess-org/mobile`
+Fork: `cassandre60/chess-repertoire-srs` (ChessSRS) · Upstream: `lichess-org/mobile`
 Supersedes nothing: `docs/upstream-audit-2026-09-29.md` remains the earlier snapshot.
 
 **Read-only audit. Nothing was merged, rebased, pushed, or modified.** The only
