@@ -142,7 +142,8 @@ class _BodyState extends ConsumerState<_Body> {
       }
     } catch (e) {
       if (mounted) {
-        showSnackBar(context, 'Error loading file: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [ImportPgnScreen] error loading file: $e');
+        showSnackBar(context, 'Error loading file', type: SnackBarType.error);
       }
     }
   }

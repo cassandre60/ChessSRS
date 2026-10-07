@@ -76,9 +76,10 @@ class _GifExportState extends ConsumerState<GifExport> {
       );
     } catch (e) {
       if (mounted) {
+        debugPrint('SEVERE: [GifExport] failed to export GIF: $e');
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to export GIF: $e')));
+        ).showSnackBar(const SnackBar(content: Text('Failed to export GIF')));
       }
     } finally {
       _clearTimers();
