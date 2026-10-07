@@ -1156,8 +1156,14 @@ void main() {
 
       // Canonical ids computed the way the importer computes them, from the complete accepted
       // set — so they are genuinely different memory items.
-      final canonA = canonicalKeyForPosition(startKey, ['e2e4', 'd2d4']);
-      final canonB = canonicalKeyForPosition(startKey, ['e2e4', 'c2c4']);
+      final canonA = canonicalKeyForPosition(startKey, [
+        'e2e4',
+        'd2d4',
+      ], repertoireSide: Side.white);
+      final canonB = canonicalKeyForPosition(startKey, [
+        'e2e4',
+        'c2c4',
+      ], repertoireSide: Side.white);
       expect(
         canonA,
         isNot(canonB),
