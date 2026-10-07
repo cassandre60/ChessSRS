@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
@@ -72,7 +73,7 @@ void main() {
       final app = await _makeApp(tester);
       await tester.pumpWidget(app);
 
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Paste from clipboard'));
       await tester.pumpAndSettle();
 
       // Text field is not populated — we navigated away
@@ -80,17 +81,19 @@ void main() {
       expect(find.byType(ImportPgnScreen), findsNothing);
     });
 
-    testWidgets('Tapping the text field also pastes and navigates for valid PGN', (tester) async {
-      const pgn = '1. e4 e5 *';
-      mockClipboard(pgn);
+    testWidgets('An empty clipboard says so instead of doing nothing', (tester) async {
+      // The paste button is the only way in now, and a tap that changes nothing on screen reads
+      // as a broken control. Whitespace-only counts as empty: it is not a PGN either.
+      mockClipboard('   \n  ');
 
       final app = await _makeApp(tester);
       await tester.pumpWidget(app);
 
-      await tester.tap(find.byType(TextField));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Paste from clipboard'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(ImportPgnScreen), findsNothing);
+      expect(find.text('The clipboard is empty.'), findsOneWidget);
+      expect(find.byType(ImportPgnScreen), findsOneWidget);
     });
 
     testWidgets('Multi-game PGN from clipboard navigates to the game list screen', (tester) async {
@@ -114,7 +117,7 @@ void main() {
       final app = await _makeApp(tester);
       await tester.pumpWidget(app);
 
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Paste from clipboard'));
       await tester.pumpAndSettle();
 
       // Navigates to game list — text field is not populated
@@ -145,7 +148,7 @@ void main() {
       final app = await _makeApp(tester);
       await tester.pumpWidget(app);
 
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Paste from clipboard'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.textContaining('Player A'));
@@ -175,7 +178,7 @@ void main() {
       final app = await _makeApp(tester);
       await tester.pumpWidget(app);
 
-      await tester.tap(find.byIcon(Icons.paste));
+      await tester.tap(find.widgetWithText(SrsPillButton, 'Paste from clipboard'));
       await tester.pumpAndSettle();
 
       expect(find.text('Magnus Carlsen'), findsOneWidget);
@@ -204,7 +207,7 @@ void main() {
       );
       await tester.pumpWidget(app);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Or import a PGN file'));
+      await tester.tap(find.widgetWithText(SrsTextButton, 'Or import a PGN file'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('e5'), findsOneWidget);
@@ -239,7 +242,7 @@ void main() {
       );
       await tester.pumpWidget(app);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Or import a PGN file'));
+      await tester.tap(find.widgetWithText(SrsTextButton, 'Or import a PGN file'));
       await tester.pumpAndSettle();
 
       expect(find.text('2 games'), findsOneWidget);
@@ -317,7 +320,7 @@ void main() {
       );
       await tester.pumpWidget(app);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Or import a PGN file'));
+      await tester.tap(find.widgetWithText(SrsTextButton, 'Or import a PGN file'));
       await tester.pumpAndSettle();
 
       // 6 games, search bar is visible

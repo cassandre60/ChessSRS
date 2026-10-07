@@ -1,9 +1,9 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
-import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
@@ -64,8 +64,18 @@ class ImportPgnScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.importPgn)),
-      body: const _Body(),
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.importPgn,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            const Expanded(child: _Body()),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -80,36 +90,23 @@ class _Body extends ConsumerStatefulWidget {
 class _BodyState extends ConsumerState<_Body> {
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.max,
         children: [
-          Expanded(
-            child: Padding(
-              padding: Styles.bodySectionPadding,
-              child: TextField(
-                maxLines: 500,
-                decoration: InputDecoration(
-                  hintText: context.l10n.pasteThePgnStringHere,
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.paste),
-                    onPressed: _getClipboardData,
-                    tooltip: 'Paste from clipboard',
-                  ),
-                ),
-                readOnly: true,
-                onTap: _getClipboardData,
-              ),
-            ),
+          // What used to be a 500-line read-only field: an empty box with a paste icon in its
+          // corner and no way to type into it. Tapping it pasted the clipboard, which is what
+          // the button below does too -- only now it says so.
+          Text(
+            'Paste a PGN from the clipboard, or pick a file.',
+            style: SrsText.body(false, context.srs.ink2),
           ),
-          Padding(
-            padding: Styles.bodySectionBottomPadding,
-            child: FilledButton(
-              onPressed: _pickPgnFile,
-              child: Text(context.l10n.mobileOrImportPgnFile),
-            ),
-          ),
+          const Spacer(),
+          SrsPillButton(expand: true, label: 'Paste from clipboard', onPressed: _getClipboardData),
+          const SizedBox(height: 4),
+          SrsTextButton(label: context.l10n.mobileOrImportPgnFile, onPressed: _pickPgnFile),
         ],
       ),
     );
@@ -121,7 +118,12 @@ class _BodyState extends ConsumerState<_Body> {
     if (!mounted) return;
 
     final text = data!.text!.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty) {
+      // The old field silently did nothing here, and with no field on screen a tap that
+      // produces no visible change reads as a broken button.
+      showSnackBar(context, 'The clipboard is empty.');
+      return;
+    }
 
     ImportPgnScreen.handlePgnText(context, text);
   }
