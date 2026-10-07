@@ -284,15 +284,9 @@ class ReviewService {
     // Incremental persistence to canonical knowledge state and review event (SRS mode only)
     if (session.mode != ReviewMode.practice) {
       final canonicalId = currentDecision?.canonicalId ?? result.updatedState.decisionId;
-      final kState = PositionKnowledgeState(
+      final kState = PositionKnowledgeState.fromReviewState(
+        result.updatedState,
         canonicalId: canonicalId,
-        firstReviewedAt: result.updatedState.firstReviewedAt,
-        lastReviewedAt: result.updatedState.lastReviewedAt,
-        nextDueAt: result.updatedState.nextDueAt,
-        repetitionCount: result.updatedState.repetitionCount,
-        lapseCount: result.updatedState.lapseCount,
-        stability: result.updatedState.stability,
-        difficulty: result.updatedState.difficulty,
       );
 
       final allKStates = <PositionKnowledgeState>[kState];
@@ -300,16 +294,7 @@ class ReviewService {
       // Persist any secondary states updated via graph effects (contagion, siblings, auto-traversal)
       for (final sideState in result.sideEffectStates) {
         allKStates.add(
-          PositionKnowledgeState(
-            canonicalId: sideState.decisionId,
-            firstReviewedAt: sideState.firstReviewedAt,
-            lastReviewedAt: sideState.lastReviewedAt,
-            nextDueAt: sideState.nextDueAt,
-            repetitionCount: sideState.repetitionCount,
-            lapseCount: sideState.lapseCount,
-            stability: sideState.stability,
-            difficulty: sideState.difficulty,
-          ),
+          PositionKnowledgeState.fromReviewState(sideState, canonicalId: sideState.decisionId),
         );
       }
 
@@ -355,16 +340,7 @@ class ReviewService {
         await repository.saveAnswerBatch(
           knowledgeStates: [
             for (final sideState in result.sideEffectStates)
-              PositionKnowledgeState(
-                canonicalId: sideState.decisionId,
-                firstReviewedAt: sideState.firstReviewedAt,
-                lastReviewedAt: sideState.lastReviewedAt,
-                nextDueAt: sideState.nextDueAt,
-                repetitionCount: sideState.repetitionCount,
-                lapseCount: sideState.lapseCount,
-                stability: sideState.stability,
-                difficulty: sideState.difficulty,
-              ),
+              PositionKnowledgeState.fromReviewState(sideState, canonicalId: sideState.decisionId),
           ],
         );
       } catch (e, st) {
