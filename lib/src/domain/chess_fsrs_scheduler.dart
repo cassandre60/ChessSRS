@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// FSRS scheduling algorithm implementation for chess repertoire items.
+library;
+
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/domain/review_result.dart';
