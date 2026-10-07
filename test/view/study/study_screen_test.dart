@@ -60,7 +60,7 @@ Study makeStudy({
     liked: false,
     likes: 0,
     ownerId: null,
-    features: (cloneable: false, chat: false, sticky: false),
+    features: (cloneable: false, sticky: false),
     topics: const IList.empty(),
     chapters: chapters ?? IList([StudyChapterMeta(id: effectiveChapter.id, name: '', fen: null)]),
     chapter: effectiveChapter,

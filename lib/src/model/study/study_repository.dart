@@ -118,7 +118,7 @@ class StudyRepository {
               liked: false,
               likes: 0,
               ownerId: null,
-              features: (cloneable: false, chat: false, sticky: false),
+              features: (cloneable: false, sticky: false),
               topics: const IListConst([]),
               chapters: chapterMetas,
               chapter: studyChapter,

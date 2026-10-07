@@ -424,7 +424,7 @@ void main() {
           liked: false,
           likes: 29,
           ownerId: const UserId('kyle-and-jess'),
-          features: (cloneable: false, chat: true, sticky: false),
+          features: (cloneable: false, sticky: false),
           topics: const IList.empty(),
           chapters: IList(const [
             StudyChapterMeta(id: StudyChapterId('EgqyeQIp'), name: 'Introduction', fen: null),

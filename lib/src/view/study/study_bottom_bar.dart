@@ -2,16 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
-import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
-import 'package:chess_srs/src/model/chat/chat.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/study/study_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/analysis/analysis_actions.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
-import 'package:chess_srs/src/view/chat/chat_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/study/create_study_chapter_bottom_sheet.dart';
 import 'package:chess_srs/src/view/study/study_settings.dart';
@@ -262,11 +259,6 @@ class _StudyMenuButton extends ConsumerWidget {
   Future<void> _showStudyMenu(BuildContext context, WidgetRef ref) {
     final state = ref.read(studyControllerProvider(options)).requireValue;
     final evalPrefs = ref.read(engineEvaluationPreferencesProvider);
-    final isKidMode = ref.read(kidModeProvider).value == true;
-
-    final chatOptions = state.study.chat != null
-        ? StudyChatOptions(options: options, writeable: state.study.chat!.writeable)
-        : null;
 
     // showAdaptiveActionSheet is the Srs sheet on every platform (no Cupertino fork).
     return showAdaptiveActionSheet(
@@ -280,12 +272,6 @@ class _StudyMenuButton extends ConsumerWidget {
           makeLabel: (context) => Text(context.l10n.flipBoard),
           onPressed: () => ref.read(studyControllerProvider(options).notifier).toggleBoard(),
         ),
-        if (chatOptions != null && !isKidMode)
-          BottomSheetAction(
-            makeLabel: (context) => Text(context.l10n.chatRoom),
-            onPressed: () =>
-                Navigator.of(context).push(ChatScreen.buildRoute(options: chatOptions)),
-          ),
         if (state.isEngineAvailable(evalPrefs) && state.canShowThreat)
           BottomSheetAction(
             makeLabel: (context) => Text(
