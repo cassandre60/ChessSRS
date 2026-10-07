@@ -1,21 +1,21 @@
 # The referee: changes here need the human owner's approval, no exceptions.
 # Gate-change/spec-change PRs additionally need the `gate-approved` label
 # (see .github/workflows/gates.yml) before the protected-paths check passes.
-/CODEOWNERS                  @mansourvery-hub
-/SPEC.md                     @mansourvery-hub
-/GATES.md                    @mansourvery-hub
-/GATES_PLAN.md               @mansourvery-hub
-/QUALITY.md                  @mansourvery-hub
-/TEST_STRATEGY.md            @mansourvery-hub
-/docs/ESCAPE_TO_GATE.md      @mansourvery-hub
-/.gates/                     @mansourvery-hub
-/redteam/                    @mansourvery-hub
-/scripts/gates/              @mansourvery-hub
-/scripts/gates.sh            @mansourvery-hub
-/.github/                    @mansourvery-hub
-/AGENTS.md                   @mansourvery-hub
-/CLAUDE.md                   @mansourvery-hub
-/verify                      @mansourvery-hub
-/analysis_options.yaml       @mansourvery-hub
-/pubspec.yaml                @mansourvery-hub
-/test_fixtures/              @mansourvery-hub
+/CODEOWNERS                  @cassandre60
+/SPEC.md                     @cassandre60
+/GATES.md                    @cassandre60
+/GATES_PLAN.md               @cassandre60
+/QUALITY.md                  @cassandre60
+/TEST_STRATEGY.md            @cassandre60
+/docs/ESCAPE_TO_GATE.md      @cassandre60
+/.gates/                     @cassandre60
+/redteam/                    @cassandre60
+/scripts/gates/              @cassandre60
+/scripts/gates.sh            @cassandre60
+/.github/                    @cassandre60
+/AGENTS.md                   @cassandre60
+/CLAUDE.md                   @cassandre60
+/verify                      @cassandre60
+/analysis_options.yaml       @cassandre60
+/pubspec.yaml                @cassandre60
+/test_fixtures/              @cassandre60

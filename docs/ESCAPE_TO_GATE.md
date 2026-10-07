@@ -137,7 +137,7 @@ invariant + red-team case IDs. An escape with no row will happen again.
 ```bash
 ./scripts/gates.sh t1   # BASE_REF defaults to origin/main
 git push -u origin <branch>
-gh pr create -R mansourvery-hub/chess-repertoire-srs
+gh pr create -R cassandre60/chess-repertoire-srs
 ```
 
 PR body: `Class: bugfix`, the fail-to-pass output pasted, the new INV ID,

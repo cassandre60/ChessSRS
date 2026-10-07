@@ -114,7 +114,7 @@ fvm dart run build_runner build --delete-conflicting-outputs
 
 # ... work, stage BY NAME, commit, push
 git push -u origin <branch>
-gh pr create -R mansourvery-hub/chess-repertoire-srs
+gh pr create -R cassandre60/chess-repertoire-srs
 
 # after the PR is green and merged
 git worktree remove ../chesssrs-<slug> && git worktree prune
