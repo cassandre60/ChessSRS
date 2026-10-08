@@ -69,7 +69,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 15,
+      version: 16,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -180,6 +180,27 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
         // The data migrations read and write the open database, and a batch is only applied on
         // commit — so the schema has to land before they run, or they read the pre-upgrade tables.
         await batch.commit();
+
+        // v16 scopes the canonical key by repertoire side. This recomputes the v15
+        // canonical IDs in place, so a same position in White and Black gets separate
+        // canonical states instead of sharing one. It is a no-op once every row is
+        // side-scoped, so it runs unconditionally once the legacy migrations settle the
+        // pre-v14 IDs they depend on.
+        if (oldVersion < 16) {
+          final sideScoped = await rekeyCanonicalReviewState(db);
+          _logger.info(
+            'Side-scoped canonical rekey: ${sideScoped.decisionsRemapped} decisions, '
+            '${sideScoped.statesRemapped} states (${sideScoped.statesMerged} merged), '
+            '${sideScoped.skipped} skipped',
+          );
+
+          // Keep any per-occurrence review history reachable under the new canonical rows.
+          final backfill = await backfillCanonicalStatesFromLegacy(db);
+          _logger.info(
+            'Canonical backfill: ${backfill.statesCreated} states created '
+            '(${backfill.collisionsMerged} from collisions)',
+          );
+        }
 
         if (oldVersion < 14) {
           final rekey = await rekeyCanonicalReviewState(db);
