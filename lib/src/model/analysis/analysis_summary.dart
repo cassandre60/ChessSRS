@@ -20,7 +20,7 @@ AnalysisSummary? readAnalysisSummaryFromHeader(Response response) {
 AnalysisSummary _analysisSummaryFromPick(Map<String, dynamic> json) {
   final summary = pick(json, 'summary').required();
   return (
-    division: pick(json, 'division').letOrNull(_divisionFromPick),
+    division: pick(json, 'division').letOrNull(divisionFromPick),
     white: _playerAnalysisSummaryFromPick(summary('white').required()),
     black: _playerAnalysisSummaryFromPick(summary('black').required()),
   );
@@ -34,8 +34,4 @@ PlayerAnalysis _playerAnalysisSummaryFromPick(RequiredPick pick) {
     acpl: pick('acpl').asIntOrNull(),
     accuracy: pick('accuracy').asIntOrNull(),
   );
-}
-
-Division _divisionFromPick(RequiredPick pick) {
-  return Division(middlegame: pick('middle').asIntOrNull(), endgame: pick('end').asIntOrNull());
 }

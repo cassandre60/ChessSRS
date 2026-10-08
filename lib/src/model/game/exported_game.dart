@@ -179,7 +179,7 @@ ExportedGame _archivedGameFromPick(RequiredPick pick, {bool withBookmarked = fal
   final clocks = pick(
     'clocks',
   ).asListOrNull<Duration>((p0) => Duration(milliseconds: p0.asIntOrThrow() * 10));
-  final division = pick('division').letOrNull(_divisionFromPick);
+  final division = pick('division').letOrNull(divisionFromPick);
 
   final initialFen = pick('initialFen').asStringOrNull();
 
@@ -339,8 +339,4 @@ PlayerAnalysis _playerAnalysisFromPick(RequiredPick pick) {
       ),
     ),
   );
-}
-
-Division _divisionFromPick(RequiredPick pick) {
-  return Division(middlegame: pick('middle').asIntOrNull(), endgame: pick('end').asIntOrNull());
 }
