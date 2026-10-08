@@ -155,6 +155,14 @@ Four rules, each of which exists because breaking it has cost real work:
 - **Never delete a worktree you did not create.** `git worktree list` first.
 - **Check `git status` before and after anything that touches the tree**, so you
   can tell what you changed from what someone else changed.
+- **Never push to, merge, or close a branch or PR you did not create without
+  re-reading its live state first.** More than one agent pushes here: `git
+  fetch origin <branch>` and compare tips before pushing (a rejected push means
+  someone else moved it — integrate, don't force), and re-read the PR's state
+  and head-sha immediately before merging or closing it. A reading minutes old
+  has closed, merged, or moved under you before. Verified 2026-10-08: one
+  rejected push, one close overridden by reopen, one merge raced, all on
+  shared branches.
 
 Isolation makes conflicts *visible* — two agents editing one file become a merge
 conflict instead of a silent overwrite. It does not make them *agree*. When two
@@ -174,7 +182,9 @@ you have one.
 - Freezed + fast_immutable_collections for data classes; generated files are
   never committed; run `dart run build_runner build` after model changes.
 - `flutter analyze` on every edited file (including tests) — zero warnings.
-- `dart format` every edited file (page width 100).
+- `dart format` every edited file (page width 100, from `analysis_options.yaml` —
+  so run `fvm flutter pub get` first: with unresolved includes the formatter
+  silently falls back to width 80 and rewrites hundreds of lines).
 - Package imports, single quotes, strict-casts/inference/raw-types.
 - Translations: hardcoded English first; l10n pipeline only after stability.
 
@@ -226,7 +236,8 @@ inner-loop step.**
   runs `flutter test` on every push and is the authority on whether the suite
   is green, so a local full-suite run before that push is duplicate work, not
   extra safety. Run `./verify` locally only when CI is unavailable or you
-  specifically need the answer before pushing.
+  specifically need the answer before pushing. Wait on a run with
+  `gh run watch <id> --exit-status`, not sleep-and-poll loops.
 
 Say plainly in the commit message when a change was verified only by
 targeted tests, so nobody mistakes it for a full-suite result.
