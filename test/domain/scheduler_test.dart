@@ -276,7 +276,7 @@ void main() {
     });
 
     test('falls back to baseMs when stability is zero for repetitionCount >= 2', () {
-      final state = const ReviewState(decisionId: 'd1', repetitionCount: 2, stability: 0);
+      const state = ReviewState(decisionId: 'd1', repetitionCount: 2, stability: 0);
       final sNext = scheduler.schedule(previous: state, result: ReviewResult.correct, now: t0);
       expect(sNext.repetitionCount, 3);
       // baseMs = (1 day * 2.5) = 2.5 days. scaled by 1.5 = 3.75 days (90 hours)
