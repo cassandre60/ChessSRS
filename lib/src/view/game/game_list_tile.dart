@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
@@ -75,8 +76,7 @@ class GameListTile extends ConsumerWidget {
           );
 
     final trailing = <Widget>[
-      if (me.analysis != null)
-        Icon(CupertinoIcons.chart_bar_alt_fill, color: textShade(context, 0.5)),
+      if (me.analysis != null) Icon(Icons.bar_chart, color: textShade(context, 0.5)),
       if (!game.isImported) getResultIcon(game, youAre),
     ];
 
@@ -89,16 +89,14 @@ class GameListTile extends ConsumerWidget {
         loadingLastMove: game.lastMove,
         lastMoveAt: game.lastMoveAt,
       ),
-      onLongPress: () {
-        showModalBottomSheet<void>(
-          context: context,
-          useRootNavigator: true,
-          isDismissible: true,
-          isScrollControlled: true,
-          builder: (context) =>
-              GameContextMenu(game: game, mySide: youAre, onPressedBookmark: onPressedBookmark),
-        );
-      },
+      // A long press opened a raw Material sheet; every other sheet in the app is the Srs
+      // surface, so this one was the odd surface out rather than a deliberate platform choice.
+      onLongPress: () => showSrsSheet<void>(
+        context,
+        SrsSheetSurface(
+          child: GameContextMenu(game: game, mySide: youAre, onPressedBookmark: onPressedBookmark),
+        ),
+      ),
       leading: Icon(game.isImported ? Icons.cloud_upload_outlined : game.perf.icon),
       title: title,
       // For an imported game, `lastMoveAt` is the import date, so prefer the PGN date if we have it.
