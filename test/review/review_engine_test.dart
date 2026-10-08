@@ -757,6 +757,85 @@ void main() {
       },
     );
 
+    // SPEC INV-025. Decision D015 grades a corrected false-start once, as the lapse
+    // it already was. Regression: the re-queued re-test used to be graded a second
+    // time as a success, ticking repetitionCount up on a decision the user had just
+    // failed and pushing its due date out on a recall made seconds later.
+    test('a successful re-test after a lapse is not graded a second time', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final dec1 = decisions[0];
+      final dec2 = decisions[1];
+      final dec3 = decisions[2];
+
+      // Only dec-1 is due, so the re-queue brings it straight back round.
+      final later = baseTime.add(const Duration(days: 5));
+      final reviewStates = {
+        dec1.id: ReviewState.initial(decisionId: dec1.id),
+        dec2.id: ReviewState(decisionId: dec2.id, nextDueAt: later),
+        dec3.id: ReviewState(decisionId: dec3.id, nextDueAt: later),
+      };
+
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+      );
+
+      expect(session.currentPrompt?.decision.id, dec1.id);
+
+      // Wrong move: graded as a lapse, and the decision is re-queued for a re-test.
+      final lapse = session.submitMove(from: 'd2', to: 'd4');
+      expect(lapse.isCorrect, isFalse);
+      expect(lapse.updatedState.lapseCount, 1);
+      expect(lapse.updatedState.repetitionCount, 0);
+
+      session.continueAfterIncorrect();
+      expect(session.currentPrompt?.decision.id, dec1.id);
+
+      // The re-test succeeds seconds later. The lapse already stands as the grade.
+      final retest = session.submitMove(from: 'e2', to: 'e4');
+      expect(retest.isCorrect, isTrue);
+      expect(retest.event, isNull, reason: 'a corrected false-start emits no new review event');
+
+      final afterRetest = session.reviewStates[dec1.id]!;
+      expect(afterRetest.lapseCount, 1);
+      expect(afterRetest.repetitionCount, 0);
+      expect(afterRetest.stability, lapse.updatedState.stability);
+    });
+
+    // SPEC INV-025. The single grading is per-session and per-decision: a decision
+    // that lapses and is then answered correctly on a *fresh* prompt with no prior
+    // lapse this session is still graded as a normal success.
+    test('a first-try success is still graded normally', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final dec1 = decisions[0];
+      final dec2 = decisions[1];
+      final dec3 = decisions[2];
+      final later = baseTime.add(const Duration(days: 5));
+
+      final reviewStates = {
+        dec1.id: ReviewState.initial(decisionId: dec1.id),
+        dec2.id: ReviewState(decisionId: dec2.id, nextDueAt: later),
+        dec3.id: ReviewState(decisionId: dec3.id, nextDueAt: later),
+      };
+
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+      );
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      expect(result.event, isNotNull);
+      expect(result.updatedState.repetitionCount, 1);
+      expect(result.updatedState.lapseCount, 0);
+    });
+
     test(
       'auto-traversal through non-due decisions grants auto-traversal credit and includes updated states in sideEffectStates',
       () {

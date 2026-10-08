@@ -61,6 +61,7 @@ class ReviewSession {
     this.prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     this.remainingDailyQuota,
     GraphAwareReviewCoordinator? coordinator,
+    Map<String, DateTime>? initialExposureThrottle,
     Random? random,
   }) : _random = random ?? Random(),
        _studies = {for (final s in studies) s.id: s},
@@ -100,6 +101,7 @@ class ReviewSession {
         GraphAwareReviewCoordinator(
           scheduler: scheduler,
           repo: _SessionReviewStateRepository(this),
+          initialExposureThrottle: initialExposureThrottle,
         );
 
     // Build initial due queue
@@ -218,6 +220,11 @@ class ReviewSession {
   final List<RepertoireDecision> _dueQueue = [];
   final List<RepertoireDecision> _unbufferedQueue = [];
   final Set<String> _completedDecisionIds = {};
+
+  /// Decisions already graded as a lapse this session. A failed decision is re-queued for a
+  /// re-test; when that re-test succeeds it is a *corrected false-start*, which Decision D015
+  /// grades as a single Again rather than a lapse plus an independent success seconds later.
+  final Set<String> _lapsedThisSession = {};
   ReviewPrompt? _currentPrompt;
   int _completedCount = 0;
   late final int _initialDueCount;
@@ -245,6 +252,10 @@ class ReviewSession {
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
 
+  /// Last auto-traversal exposure grant per canonical id (Architecture §B.2), exposed so the caller
+  /// can persist the daily cap and reseed the next session. See review-2 C1.
+  Map<String, DateTime> get exposureThrottle => _coordinator.snapshotExposureThrottle();
+
   /// Returns the chapter with [chapterId] if present in this session.
   Chapter? getChapter(String chapterId) => _chapters[chapterId];
 
@@ -263,6 +274,7 @@ class ReviewSession {
       dueQueue: List<RepertoireDecision>.of(_dueQueue),
       unbufferedQueue: List<RepertoireDecision>.of(_unbufferedQueue),
       completedDecisionIds: Set<String>.of(_completedDecisionIds),
+      lapsedDecisionIds: Set<String>.of(_lapsedThisSession),
       currentPrompt: _currentPrompt,
       completedCount: _completedCount,
       exposureThrottle: _coordinator.snapshotExposureThrottle(),
@@ -287,6 +299,9 @@ class ReviewSession {
     _completedDecisionIds
       ..clear()
       ..addAll(checkpoint.completedDecisionIds);
+    _lapsedThisSession
+      ..clear()
+      ..addAll(checkpoint.lapsedDecisionIds);
     _currentPrompt = checkpoint.currentPrompt;
     _completedCount = checkpoint.completedCount;
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
@@ -323,10 +338,14 @@ class ReviewSession {
       // -----------------------------------------------------------------------
       // CORRECT MOVE
       // -----------------------------------------------------------------------
+      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
+      // the re-test as a success too would tick repetitionCount up and push the due date out.
+      final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
+
       ReviewState nextState;
       ReviewEvent? event;
 
-      if (mode == ReviewMode.practice) {
+      if (mode == ReviewMode.practice || isCorrectedFalseStart) {
         nextState = prevState;
         event = null;
       } else {
@@ -420,6 +439,9 @@ class ReviewSession {
       if (sideEffects.isNotEmpty) {
         _logger.fine('Lapse contagion/coupling updated ${sideEffects.length} associated states');
       }
+
+      // Decision D015: remember this was graded, so a later re-test is not graded twice.
+      _lapsedThisSession.add(decision.canonicalId);
 
       // Re-queue the failed decision at the end of the session queue
       // so the user can re-test it before completing the session
@@ -970,6 +992,7 @@ class ReviewSessionCheckpoint {
     required this.dueQueue,
     required this.unbufferedQueue,
     required this.completedDecisionIds,
+    required this.lapsedDecisionIds,
     required this.currentPrompt,
     required this.completedCount,
     required this.exposureThrottle,
@@ -979,6 +1002,7 @@ class ReviewSessionCheckpoint {
   final List<RepertoireDecision> dueQueue;
   final List<RepertoireDecision> unbufferedQueue;
   final Set<String> completedDecisionIds;
+  final Set<String> lapsedDecisionIds;
   final ReviewPrompt? currentPrompt;
   final int completedCount;
   final Map<String, DateTime> exposureThrottle;

@@ -143,13 +143,16 @@ class GraphAwareReviewCoordinator {
     required this.scheduler,
     required this.repo,
     this.params = const GraphAwareParams(),
-  });
+    Map<String, DateTime>? initialExposureThrottle,
+  }) : _lastExposedAt = {...?initialExposureThrottle};
 
   final Scheduler scheduler;
   final ReviewStateRepository repo;
   final GraphAwareParams params;
 
-  final Map<String, DateTime> _lastExposedAt = {};
+  /// Last auto-traversal exposure grant per canonical id (§B.2's once-per-calendar-day cap). Seeded
+  /// from the store and re-persisted by the caller, so the cap survives a restart — review-2 C1.
+  final Map<String, DateTime> _lastExposedAt;
 
   /// Resolves the scheduling identity for [node].
   ///

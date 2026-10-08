@@ -19,6 +19,9 @@ final Logger _logger = Logger('FsrsScheduler');
 /// not weak memory. Therefore, ratings collapse strictly to binary Pass/Fail:
 /// - [again]: incorrect move, hint used, or corrected false-start attempt.
 /// - [good]: first committed move was correct (regardless of calculation time).
+///
+/// All three [again] cases arrive folded into a single [ReviewResult.incorrect]; this class never
+/// sees a hint or a corrected false-start separately.
 enum FsrsRating { again, good }
 
 int _g(FsrsRating r) => r == FsrsRating.again ? 1 : 3;
@@ -166,7 +169,14 @@ double fsrsNextStabilitySuccess(double d, double s, double r, ChessFsrsParams p)
   return safeS * (1 + factor);
 }
 
-/// Calculates regressed stability after a lapse (Rating.again).
+/// Calculates stability after a lapse (Rating.again).
+///
+/// **Not monotone in [s]**: for a low-stability item reviewed long past due it can return *more*
+/// than [s]. With the shipped weights a cold-start Again (`S = w0 = 0.35 d`, `D = 6.81`) regresses
+/// only until ~3.9 days overdue, then climbs — 0.371 d at 5 days overdue (+5.9%), 0.516 d at 30
+/// (+47.3%). `(S+1)^w13` outgrows `e^((1-R)w14)` and nothing clamps back to [s]. FSRS has the same
+/// shape and §C.6 specifies it, so it is documented rather than "fixed": `min(result, s)` would be
+/// a spec change. `INV-025` pins the numbers so a retune cannot silently widen the window.
 double fsrsNextStabilityLapse(double d, double s, double r, ChessFsrsParams p) {
   final safeS = s <= 0 ? p.minStabilityDays : s;
   return p.w11 * math.pow(d, -p.w12) * (math.pow(safeS + 1, p.w13) - 1) * math.exp((1 - r) * p.w14);
@@ -202,13 +212,10 @@ class ChessFsrsScheduler implements Scheduler {
     required ReviewState previous,
     required ReviewResult result,
     required DateTime now,
-    bool hintUsed = false,
-    bool multipleAttempts = false,
   }) {
-    // Binary rating inference (Decision D015)
-    final rating = (result == ReviewResult.incorrect || hintUsed || multipleAttempts)
-        ? FsrsRating.again
-        : FsrsRating.good;
+    // Binary rating (Decision D015). "Was this recall independent?" is settled upstream by the
+    // review session and arrives folded into [result], exactly once.
+    final rating = result == ReviewResult.incorrect ? FsrsRating.again : FsrsRating.good;
 
     final anchor = previous.lastReviewedAt ?? previous.firstReviewedAt;
     double elapsedDays = 0.0;
@@ -233,17 +240,23 @@ class ChessFsrsScheduler implements Scheduler {
           ? fsrsInitialDifficulty(FsrsRating.good, params)
           : previous.difficulty;
 
-      final r = fsrsRetrievability(elapsedDays, prevStabilityDays);
-      newDifficulty = fsrsNextDifficulty(prevDifficulty, rating, params);
+      final bool isRapidReReview = elapsedDays < params.sameDayThresholdDays;
 
-      if (elapsedDays < params.sameDayThresholdDays) {
+      if (isRapidReReview) {
+        // Architecture §C.7: a rapid re-review skips the full DSR update and applies only a small
+        // linear stability nudge. Difficulty is part of that update, so it freezes too — updating D
+        // here let three intra-session misses ratchet it to the 10.0 clamp, shrinking the (11 - D)
+        // growth term from 6.07 to 1.00 and taking ~390 successful reviews to unwind.
+        newDifficulty = prevDifficulty;
         newStabilityDays = rating == FsrsRating.again
             ? prevStabilityDays * params.sameDayLapseFactor
             : prevStabilityDays * params.sameDayGainFactor;
-      } else if (rating == FsrsRating.again) {
-        newStabilityDays = fsrsNextStabilityLapse(newDifficulty, prevStabilityDays, r, params);
       } else {
-        newStabilityDays = fsrsNextStabilitySuccess(newDifficulty, prevStabilityDays, r, params);
+        final r = fsrsRetrievability(elapsedDays, prevStabilityDays);
+        newDifficulty = fsrsNextDifficulty(prevDifficulty, rating, params);
+        newStabilityDays = rating == FsrsRating.again
+            ? fsrsNextStabilityLapse(newDifficulty, prevStabilityDays, r, params)
+            : fsrsNextStabilitySuccess(newDifficulty, prevStabilityDays, r, params);
       }
     }
 
@@ -291,21 +304,28 @@ class ChessFsrsScheduler implements Scheduler {
 
 /// Generates a preview of the interval ladder (in days) for consecutive successful recalls
 /// under [targetRetention].
+///
+/// Mirrors what [ChessFsrsScheduler.schedule] emits for a run of clean successes: the same clamps,
+/// in the same order, with clamped stability fed forward. Without them the ladder advertised 1697
+/// days at step 6 where the scheduler emits the 1095-day cap.
 List<double> fsrsIntervalProgressionPreview({
   required double targetRetention,
   int steps = 5,
   ChessFsrsParams params = const ChessFsrsParams.chessDefaults(),
+  double maxIntervalDays = 365 * 3,
+  double minIntervalDays = 1 / 1440,
 }) {
+  if (steps <= 0) return const [];
   final intervals = <double>[];
   var d = fsrsInitialDifficulty(FsrsRating.good, params);
   var s = params.w2; // Initial stability for Rating.good in days
   final effectiveR = targetRetention.clamp(0.70, 0.99);
 
   for (var i = 0; i < steps; i++) {
-    final intervalDays = fsrsIntervalForTarget(s, effectiveR);
-    intervals.add(intervalDays);
+    intervals.add(fsrsIntervalForTarget(s, effectiveR).clamp(minIntervalDays, maxIntervalDays));
     d = fsrsNextDifficulty(d, FsrsRating.good, params);
-    s = fsrsNextStabilitySuccess(d, s, effectiveR, params);
+    final nextStability = fsrsNextStabilitySuccess(d, s, effectiveR, params);
+    s = nextStability.clamp(params.minStabilityDays, params.maxStabilityDays);
   }
   return List.unmodifiable(intervals);
 }

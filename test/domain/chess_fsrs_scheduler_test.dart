@@ -95,17 +95,39 @@ void main() {
       expect(s2.stability, lessThan(s1.stability));
     });
 
-    test('hintUsed or multipleAttempts forces Rating.again even when move was correct', () {
-      final s0 = ReviewState.initial(decisionId: 'd1');
-      final s1 = scheduler.schedule(
-        previous: s0,
-        result: ReviewResult.correct,
+    // SPEC INV-025. Pins a property that is surprising rather than desired: the lapse
+    // formula is not monotone in S, so a low-stability item reviewed long past due ends
+    // up *more* stable after failing. Inherited from FSRS and specified in §C.6, so it is
+    // pinned, not fixed — but a weight retune must not be able to widen the window
+    // silently.
+    test('INV-025 lapse may exceed prior stability for long-overdue items', () {
+      final coldFail = scheduler.schedule(
+        previous: ReviewState.initial(decisionId: 'd1'),
+        result: ReviewResult.incorrect,
         now: t0,
-        hintUsed: true,
       );
+      // S0(Again) = w0 = 0.35 d; D0(Again) = w4 + 2*w5 = 6.81.
+      expect(coldFail.stability, closeTo(0.35 * 86400000, 1000));
+      expect(coldFail.difficulty, closeTo(6.81, 0.001));
 
-      expect(s1.lapseCount, 1); // treated as lapse because recall was not independent
-      expect(s1.repetitionCount, 0);
+      // Still regressing while the item is only a little overdue.
+      final at3 = scheduler.schedule(
+        previous: coldFail,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 3)),
+      );
+      expect(at3.stability, lessThan(coldFail.stability));
+
+      // Past the ~3.9 day crossover the formula inverts.
+      final at5 = scheduler.schedule(
+        previous: coldFail,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 5)),
+      );
+      // Second lapse overall: the cold-start Again above was the first.
+      expect(at5.lapseCount, 2);
+      expect(at5.stability, greaterThan(coldFail.stability));
+      expect(at5.stability / coldFail.stability, closeTo(1.059, 0.002));
     });
 
     test('same-day re-review applies damped factor avoiding division blowup', () {
@@ -117,6 +139,76 @@ void main() {
       final s2 = scheduler.schedule(previous: s1, result: ReviewResult.correct, now: t1);
 
       expect(s2.stability, closeTo(s1.stability * 1.02, 100));
+    });
+
+    // SPEC INV-025. Architecture §C.7: a rapid re-review skips the full DSR update, and
+    // difficulty is part of that update.
+    test('INV-025 rapid re-review freezes difficulty instead of ratcheting it', () {
+      final mature = ReviewState(
+        decisionId: 'd1',
+        stability: 10.0 * 86400000,
+        difficulty: 4.93,
+        repetitionCount: 3,
+        firstReviewedAt: t0.subtract(const Duration(days: 30)),
+        lastReviewedAt: t0,
+        nextDueAt: t0.add(const Duration(days: 10)),
+      );
+
+      // One lapse 5 minutes later: stability still shrinks, but D must not move.
+      final afterLapse = scheduler.schedule(
+        previous: mature,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(minutes: 5)),
+      );
+      expect(afterLapse.lapseCount, 1);
+      expect(afterLapse.stability, closeTo(mature.stability * 0.85, 1000));
+      expect(afterLapse.difficulty, closeTo(mature.difficulty, 1e-9));
+
+      // A failed decision is re-queued and re-tested in the same session, so three
+      // misses inside one session are reachable. They must not push D to the ceiling.
+      var state = mature;
+      var now = t0;
+      for (var i = 0; i < 3; i++) {
+        now = now.add(const Duration(minutes: 5));
+        state = scheduler.schedule(previous: state, result: ReviewResult.incorrect, now: now);
+      }
+      expect(state.lapseCount, 3);
+      expect(state.difficulty, closeTo(mature.difficulty, 1e-9));
+      expect(state.difficulty, lessThan(10.0));
+
+      // A rapid re-review that succeeds must not mean-revert D either — §C.7 skips the
+      // whole update, in both directions. Use a D that is not the fixed point of the
+      // success update (w7*w4/(1-(1-w7)) == D0(good) == 4.93), or the assertion is vacuous.
+      final strained = mature.copyWith(difficulty: 7.0);
+      final afterSuccess = scheduler.schedule(
+        previous: strained,
+        result: ReviewResult.correct,
+        now: t0.add(const Duration(minutes: 5)),
+      );
+      expect(afterSuccess.difficulty, closeTo(7.0, 1e-9));
+      expect(afterSuccess.stability, closeTo(mature.stability * 1.02, 1000));
+    });
+
+    // SPEC INV-025. The freeze is bounded by sameDayThresholdDays: once the item is
+    // genuinely overdue, the full DSR update resumes and D responds to the rating again.
+    test('INV-025 difficulty updates resume past the same-day threshold', () {
+      final mature = ReviewState(
+        decisionId: 'd1',
+        stability: 10.0 * 86400000,
+        difficulty: 4.93,
+        repetitionCount: 3,
+        firstReviewedAt: t0.subtract(const Duration(days: 30)),
+        lastReviewedAt: t0,
+        nextDueAt: t0.add(const Duration(days: 10)),
+      );
+
+      final afterLapse = scheduler.schedule(
+        previous: mature,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 10)),
+      );
+      expect(afterLapse.difficulty, greaterThan(mature.difficulty));
+      expect(afterLapse.difficulty, closeTo(7.009, 0.001));
     });
 
     test('tournament mode target retention produces tighter review intervals', () {
@@ -149,6 +241,33 @@ void main() {
       expect(intervals95.length, 5);
       // Higher target retention produces shorter intervals for equal stability
       expect(intervals95[0], lessThan(intervals90[0]));
+    });
+
+    // SPEC INV-026. The preview must not advertise intervals the scheduler would
+    // never emit. It used to skip maxIntervalDays, so a 10-step ladder ran away to
+    // 1697 days at step 6 and past 14000 by step 9 while the scheduler capped at 1095.
+    test('INV-026 interval preview respects the cap and tracks the scheduler', () {
+      const capped = ChessFsrsScheduler(targetRetention: 0.88);
+      final preview = fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: 10);
+
+      expect(preview.length, 10);
+      for (final interval in preview) {
+        expect(interval, lessThanOrEqualTo(365 * 3.0));
+      }
+
+      // Replay the real scheduler over the same run of clean successes. Tolerance is
+      // the accumulated millisecond rounding of nextDueAt across the replay.
+      var state = ReviewState.initial(decisionId: 'd1');
+      var now = t0;
+      for (var i = 0; i < preview.length; i++) {
+        state = capped.schedule(previous: state, result: ReviewResult.correct, now: now);
+        final scheduledDays = state.nextDueAt!.difference(now).inMilliseconds / 86400000;
+        expect(scheduledDays, closeTo(preview[i], 1e-5));
+        now = state.nextDueAt!;
+      }
+
+      expect(fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: 0), isEmpty);
+      expect(fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: -3), isEmpty);
     });
 
     test('schedulers differing only in params compare unequal', () {
