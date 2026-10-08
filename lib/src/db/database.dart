@@ -69,7 +69,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 15,
+      version: 16,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -170,6 +170,17 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           if (oldVersion < 13) {
             batch.execute(
               'ALTER TABLE $kTableSrsReviewState ADD COLUMN difficulty REAL NOT NULL DEFAULT 5.0',
+            );
+          }
+          if (oldVersion < 16) {
+            // Auto-traversal exposure credit (Architecture §B.2) is capped to once per calendar
+            // day per decision. Until now the only record of the last grant lived in memory, so
+            // the cap reset on every app restart and passive stability compounded once per
+            // session rather than once per day. Nullable: rows written before v16 have no
+            // recorded grant, which the coordinator reads as "never exposed" — the correct,
+            // permissive interpretation.
+            batch.execute(
+              'ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT',
             );
           }
         }
