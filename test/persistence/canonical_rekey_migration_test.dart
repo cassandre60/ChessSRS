@@ -12,6 +12,7 @@ import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -101,7 +102,7 @@ void main() {
     test('moves knowledge state from the old key to the new one', () async {
       const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
       final oldId = canonicalKey(fenKey, 'e2e4');
-      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4']);
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4'], repertoireSide: Side.white);
 
       await seed(
         studyId: 'study-1',
@@ -142,7 +143,7 @@ void main() {
       // they are one item. Both old ids differ from the new one, so both genuinely move.
       final oldIdA = canonicalKey(fenKey, 'e2e4');
       const oldIdB = 'legacy-per-decision-state';
-      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4']);
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4'], repertoireSide: Side.white);
       expect(oldIdA, isNot(equals(newId)));
 
       for (final (index, oldId) in [oldIdA, oldIdB].indexed) {
@@ -176,12 +177,13 @@ void main() {
       );
     });
 
-    test('a single-move position keeps its existing key, so its state is never touched', () async {
+    test('a single-move old key is upgraded to the side-scoped contract', () async {
       const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
-      // With one accepted move the old and new formulations produce the same string, so positions
-      // that only ever had one accepted move need no rewrite at all.
+      // The side-scoped contract always adds the chapter's colour, even with one accepted move,
+      // so the legacy key must be rewritten rather than mistaken for the new one.
       final id = canonicalKey(fenKey, 'e2e4');
-      expect(id, canonicalKeyForPosition(fenKey, ['e2e4']));
+      final sideScopedId = canonicalKeyForPosition(fenKey, ['e2e4'], repertoireSide: Side.white);
+      expect(id, isNot(sideScopedId));
 
       await seed(
         studyId: 'study-1',
@@ -195,14 +197,14 @@ void main() {
 
       final result = await rekeyCanonicalReviewState(db);
 
-      expect(result.decisionsRemapped, 0);
-      expect((await stateFor(id))['repetitionCount'], 9);
-      expect((await stateFor(id))['stability'], 20.0);
+      expect(result.decisionsRemapped, 1);
+      expect((await stateFor(sideScopedId))['repetitionCount'], 9);
+      expect((await stateFor(sideScopedId))['stability'], 20.0);
     });
 
     test('is a no-op when every id is already on the new format', () async {
       const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
-      final newId = canonicalKeyForPosition(fenKey, ['e2e4']);
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4'], repertoireSide: Side.white);
 
       await seed(
         studyId: 'study-1',
@@ -256,7 +258,7 @@ void main() {
       const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
       final oldIdA = canonicalKey(fenKey, 'e2e4');
       const oldIdB = 'legacy-never-reviewed';
-      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4']);
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4'], repertoireSide: Side.white);
 
       await seed(
         studyId: 'study-0',
