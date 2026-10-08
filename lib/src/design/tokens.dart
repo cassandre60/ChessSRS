@@ -327,7 +327,15 @@ abstract final class SrsLayout {
   static const EdgeInsets reviewPaddingNarrow = EdgeInsets.fromLTRB(12, 0, 12, 6);
   static const EdgeInsets reviewPaddingWide = EdgeInsets.fromLTRB(28, 0, 34, 28);
   static const double topbarPadLeftWide = 50;
-  static const double minTouchTarget = 44;
+
+  /// The smallest a control may be, in logical pixels.
+  ///
+  /// **48, not 44.** 44 was taken from the design docs' compact spacing, and it is below the
+  /// minimum both Android and iOS ask for; `perf_stats_screen_test.dart`'s
+  /// `meetsAccessibleGuideline` check caught the page head's back control and its icon buttons
+  /// measuring 44 after they were adopted across the app. A design token that violates the
+  /// platform's own guidance is not a design decision.
+  static const double minTouchTarget = 48;
 
   /// [content] = area below the top bar and inside safe areas.
   static double boardSize(Size content) {
