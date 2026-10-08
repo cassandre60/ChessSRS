@@ -2,7 +2,7 @@ name: chess_srs
 description: ChessSRS - local-first chess repertoire trainer (Lichess Mobile fork)
 publish_to: "none"
 
-version: 1.0.0+3 # Keep in step with the release tag; the About screen reads this.
+version: 1.1.0+4 # Keep in step with the release tag; the About screen reads this.
 
 environment:
   sdk: ^3.12.2
