@@ -63,6 +63,7 @@ class BoardEditorScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final boardEditorState = ref.watch(boardEditorControllerProvider(params));
     final c = context.srs;
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
 
     // Quiet scene-title line under the header (demo meta treatment).
     // Carries the variant name the old app bar title showed as an icon.
@@ -104,7 +105,13 @@ class BoardEditorScreen extends ConsumerWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
+                // No gap under the scene title in landscape, for the same reason the status panel
+                // drops its own leading gap there (`_EditorStatusPanel`): the panel is already
+                // beside the board, so the strip above is the only thing between the head and the
+                // board, and on a 390px-tall phone 8px of empty padding under a one-line label is
+                // 8px of board. The board's own test asserts a width it can only reach by spending
+                // the padding somewhere that holds nothing.
+                padding: EdgeInsets.fromLTRB(24, 2, 24, landscape ? 0 : 8),
                 child: Text(
                   sceneTitle,
                   maxLines: 1,
