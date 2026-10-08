@@ -498,7 +498,8 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
               })
               .catchError((Object e) {
                 if (!context.mounted) return null;
-                showSnackBar(context, 'Could not create it: $e', type: SnackBarType.error);
+                debugPrint('SEVERE: [ReviewScopeDrawer] could not create it: $e');
+                showSnackBar(context, 'Could not create it', type: SnackBarType.error);
                 return null;
               });
         },

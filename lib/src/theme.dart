@@ -7,13 +7,9 @@
 // theme that existed so a user-chosen background image could show through. The background
 // setting that fed it was cut with them: the Diagram palette specifies a fixed `ground`, and the
 // accent table in `design/docs/02-tokens.md` is chosen against that `ground` for 4.5:1
-// contrast.
+// contrast. `kSliderTheme` went the same way: nothing referenced it, and it only carried a
+// deprecated `SliderThemeData.year2023` flag.
 import 'package:material_ui/material_ui.dart';
-
-const kSliderTheme = SliderThemeData(
-  // ignore: deprecated_member_use
-  year2023: false,
-);
 
 /// A custom theme extension that adds lichess custom properties to the theme.
 @immutable

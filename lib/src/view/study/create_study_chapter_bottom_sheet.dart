@@ -285,7 +285,8 @@ class _CreateStudyChapterBottomSheetState extends ConsumerState<CreateStudyChapt
       if (!mounted) return;
       // Keep the sheet open so the user can amend the input and retry.
       setState(() => _isSubmitting = false);
-      showSnackBar(context, 'Could not create chapter: $e', type: SnackBarType.error);
+      debugPrint('SEVERE: [CreateStudyChapterBottomSheet] could not create chapter: $e');
+      showSnackBar(context, 'Could not create chapter', type: SnackBarType.error);
     }
   }
 
@@ -330,7 +331,8 @@ class _CreateStudyChapterBottomSheetState extends ConsumerState<CreateStudyChapt
       }
     } catch (e) {
       if (mounted) {
-        showSnackBar(context, 'Error loading file: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [CreateStudyChapterBottomSheet] error loading file: $e');
+        showSnackBar(context, 'Error loading file', type: SnackBarType.error);
       }
     }
   }
