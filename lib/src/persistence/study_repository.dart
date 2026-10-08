@@ -51,6 +51,7 @@ abstract class StudyRepository {
   /// defaults to White when the column is absent or unreadable, matching the
   /// column's own default.
   Future<Map<String, Side>> getChapterOrientations();
+  Future<Map<String, String>> getChapterStudyIds();
   Future<void> deleteChapter(String id);
 
   // Position Trees

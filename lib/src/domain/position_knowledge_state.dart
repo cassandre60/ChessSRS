@@ -1,13 +1,11 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-/// Knowledge state and memory retention models for board positions.
-library;
-
 import 'dart:convert';
 
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:crypto/crypto.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:meta/meta.dart';
 
 /// Computes the canonical identity key for a position + expected move memory item.
@@ -23,7 +21,7 @@ String canonicalKey(String fenKey, String expectedMoveUci) {
 /// Computes the canonical identity key for a position and its *complete* set of accepted
 /// continuations.
 ///
-/// Formatted as: `sha1("<fenKey>|<sorted uci>|<sorted uci>|...")`.
+/// Formatted as: `sha1("<repertoireSide>|<fenKey>|<sorted uci>|<sorted uci>|...")`.
 ///
 /// A repertoire position is not identified by one representative move: it is identified by the
 /// whole question it asks the player ("from here, any of these is correct"). Two positions that
@@ -35,16 +33,22 @@ String canonicalKey(String fenKey, String expectedMoveUci) {
 ///
 /// Occurrence identity is deliberately *not* part of this key. [RepertoireDecision.id] is the
 /// per-occurrence identity; this is the shared position knowledge that transpositions converge on.
-String canonicalKeyForPosition(String fenKey, Iterable<String> acceptedMoveUcis) {
+String canonicalKeyForPosition(
+  String fenKey,
+  Iterable<String> acceptedMoveUcis, {
+  required Side repertoireSide,
+}) {
   final sortedMoves = acceptedMoveUcis.toList()..sort();
-  return sha1.convert(utf8.encode([fenKey, ...sortedMoves].join('|'))).toString();
+  return sha1
+      .convert(utf8.encode([repertoireSide.name, fenKey, ...sortedMoves].join('|')))
+      .toString();
 }
 
 /// The single source of truth for long-term memory of a specific chess position and move.
 ///
-/// Keyed by [canonicalId] = `sha1(fenKey + expectedMoveUci)`. Multiple [RepertoireDecision]s
-/// across different chapters and studies pointing to the same position and continuation
-/// share this single state.
+/// Keyed by [canonicalId] = `sha1(<repertoireSide>|<fenKey>|<accepted moves>)`. Multiple
+/// [RepertoireDecision]s across different chapters and studies pointing to the same position,
+/// continuation, and trained side share this single state.
 @immutable
 class PositionKnowledgeState {
   const PositionKnowledgeState({

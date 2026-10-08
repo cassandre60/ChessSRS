@@ -348,6 +348,12 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<Map<String, String>> getChapterStudyIds() async {
+    final rows = await _db.query(kTableSrsChapter, columns: ['id', 'studyId']);
+    return {for (final r in rows) r['id']! as String: r['studyId']! as String};
+  }
+
+  @override
   Future<void> deleteChapter(String id) async {
     await _db.transaction((txn) async {
       final decisions = await txn.query(

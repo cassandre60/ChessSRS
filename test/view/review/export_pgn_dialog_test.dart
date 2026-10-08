@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/db/database.dart';
-import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
@@ -148,7 +147,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byTooltip('Black repertoire'));
       await tester.pumpAndSettle();
 
       expect(
@@ -157,15 +156,18 @@ void main() {
       );
 
       // Two rows are called `French Defense` — the opening hub and the study. Only the study
-      // carries actions, so its row is the one with a `…` on it.
+      // carries actions, so its row is the one with a `…` on it. The scope rows' chevrons are
+      // SrsIconButtons too now, so pick the button labelled for study options.
       final frenchRows = find.descendant(
         of: find.byType(ReviewScopeDrawer),
         matching: find.text('French Defense'),
       );
       expect(frenchRows, findsNWidgets(2));
-      final studyRow = find
-          .descendant(of: find.byType(ReviewScopeDrawer), matching: find.byType(SrsIconButton))
-          .first;
+      final studyRow = find.descendant(
+        of: find.byType(ReviewScopeDrawer),
+        matching: find.bySemanticsLabel('Study options'),
+      );
+      expect(studyRow, findsOneWidget);
 
       // design/docs/03-components.md §6.4 offers three routes to the actions sheet. This one is
       // the `…`; the long-press route is covered in review_screen_test.dart.

@@ -9,6 +9,7 @@ import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
@@ -125,10 +126,10 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Board is rendered with Chessboard. The default scope is still the everywhere scope, so
-      // the top bar keeps naming it `All studies`; the side buttons only exist in the drawer.
+      // Board is rendered with Chessboard and top bar shows colour squares
       expect(find.byType(Chessboard), findsOneWidget);
-      expect(find.text('All studies'), findsOneWidget);
+      expect(find.byType(ColourSquare).first, findsOneWidget);
+      expect(find.byType(ColourSquare).last, findsOneWidget);
 
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
@@ -390,7 +391,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
@@ -440,7 +446,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
@@ -627,7 +638,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       // Suspending is a row action, so it lives in the actions sheet (design/docs/03-components.md
@@ -734,12 +750,11 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      // Open Black drawer
+      await tester.tap(find.byType(ColourSquare).last);
       await pumpAsync(tester);
 
-      // Verify the Openings section exists (design/docs/01-identity.md: scope groups are
-      // `Repertoires`, `Openings`, `Studies`)
+      // Verify the Openings section exists
       expect(find.text('Openings'), findsOneWidget);
       expect(find.text('Sicilian Defense'), findsOneWidget);
       expect(find.text('French Defense'), findsOneWidget);
@@ -748,8 +763,13 @@ void main() {
       await tester.tap(find.text('Sicilian Defense'));
       await pumpAsync(tester);
 
-      // Verify AppBar now shows 'Sicilian Defense' as the active scope
-      expect(find.text('Sicilian Defense'), findsOneWidget);
+      // Verify scope changed to 'Sicilian Defense'
+      final element = tester.element(find.byType(ReviewScreen));
+      final container = ProviderScope.containerOf(element);
+      expect(
+        container.read(reviewControllerProvider).value?.scope.openingFamily,
+        'Sicilian Defense',
+      );
     });
 
     testWidgets('study options sheet renames and deletes study from drawer', (tester) async {
@@ -778,7 +798,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       // Open study options sheet (long-press: see the note at the first occurrence above)
@@ -859,7 +884,12 @@ void main() {
         await pumpAsync(tester, 600);
 
         // Open drawer and study options sheet
-        await tester.tap(find.byTooltip('Studies & Scope'));
+        await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
         await pumpAsync(tester, 600);
         await tester.longPress(find.text('King Pawn'));
         await pumpAsync(tester, 600);
@@ -1061,12 +1091,16 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer: before any reviews, both positions are still in the learning bucket.
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
-      // the memory mini-bar beside it, not in the text. The study row shows "2 positions";
-      // the repertoire buttons show just the numeral due count.
+      // the memory mini-bar beside it, not in the text.
       expect(find.text('2 positions'), findsOneWidget);
       List<SrsMemoryBar> drawerBars() => tester
           .widgetList<SrsMemoryBar>(
@@ -1076,28 +1110,17 @@ void main() {
             ),
           )
           .toList();
-      // Two repertoire buttons + one study row. White repertoire & study row have learning=2;
-      // Black repertoire has learning=0. All have retained=0.
-      expect(drawerBars().map((b) => b.retained), everyElement(0));
-      expect(drawerBars().map((b) => b.learning).where((v) => v == 2).length, 2);
-      expect(drawerBars().map((b) => b.learning).where((v) => v == 0).length, 1);
+      expect(drawerBars().first.retained, 0);
+      expect(drawerBars().first.learning, 2);
 
-      // Close drawer by tapping the White repertoire button (the study is White)
+      // Close drawer by tapping the study row
       await tester.tap(
         find.descendant(
           of: find.byType(ReviewScopeDrawer),
-          matching: find.text('White repertoire'),
+          matching: find.text('Progress Test Study'),
         ),
       );
       await pumpAsync(tester);
-
-      // The top bar names the scope the user picked. A side scope names no study
-      // and no opening, so it falls through to the everywhere title unless it is
-      // handled: the bar would claim `All studies` while the queue holds White
-      // positions only, which is precisely what the button was tapped to avoid
-      // (INV-030).
-      expect(find.text('All studies'), findsNothing);
-      expect(find.text('White repertoire'), findsOneWidget);
 
       // Play 1. e4 (first move)
       await playMove(tester, 'e2', 'e4');
@@ -1113,15 +1136,17 @@ void main() {
       expect(find.byType(SrsMemoryBar), findsOneWidget);
 
       // Open drawer again: both positions have moved to retained
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       expect(find.text('2 positions'), findsOneWidget);
-      expect(drawerBars().map((b) => b.learning), everyElement(0));
-      // White repertoire and the study row hold both positions as retained; the Black
-      // repertoire is empty, so its bar has no segments at all.
-      expect(drawerBars().where((b) => b.retained == 2).length, 2);
-      expect(drawerBars().where((b) => b.retained == 0).length, 1);
+      expect(drawerBars().first.learning, 0);
+      expect(drawerBars().first.retained, 2);
     });
 
     testWidgets('RepertoireImportDialog indicates when imported PGN is already up to date', (
@@ -1153,7 +1178,12 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer and click Import PGN
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       await tester.tap(find.text('Import PGN'));
@@ -1194,6 +1224,16 @@ void main() {
         return http.Response('Not Found', 404);
       });
 
+      // First, create a study so the main review view is shown with the top bar
+      final whiteStudy = importPgn(
+        '1. e4 e5 *',
+        studyTitle: 'White study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(whiteStudy);
+      });
+
       final app = await makeTestProviderScopeApp(
         tester,
         home: const ReviewScreen(),
@@ -1213,13 +1253,19 @@ void main() {
       await pumpAsync(tester);
 
       // Open drawer and click Import PGN
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) => widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       await tester.tap(find.text('Import PGN'));
       await pumpAsync(tester);
 
-      expect(find.byType(RepertoireImportDialog), findsOneWidget);
+      // Switch to Lichess tab
+      await tester.tap(find.text('Lichess Study'));
+      await pumpAsync(tester);
 
       // Enter Lichess study URL
       await tester.enterText(
@@ -1301,7 +1347,7 @@ void main() {
       final study1 = importPgn(
         '1. e4 e6 *',
         studyTitle: 'French Defense Repertoire',
-        repertoireSide: Side.black,
+        repertoireSide: Side.white,
       );
       final study2 = importPgn(
         '1. e4 c5 *',
@@ -1328,39 +1374,27 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Open drawer
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      // Open White drawer
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
-      // Verify drawer is open by the group header.
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
-      // Both studies and both repertoire buttons are visible initially.
-      expect(inDrawer('Repertoires'), findsOneWidget);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
+      // White drawer only shows the White study:
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
-      expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-
-      // A query naming one side keeps that button and hides the other: the label is
-      // what the search matches on, exactly as for a study title.
-      await tester.enterText(find.widgetWithText(TextField, 'Search'), 'black');
-      await tester.pumpAndSettle();
-
-      expect(inDrawer('Black repertoire'), findsOneWidget);
-      expect(inDrawer('White repertoire'), findsNothing);
+      expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
 
       // Type "French" into the search field
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'French');
       await tester.pumpAndSettle();
 
-      // "French Defense Repertoire" is visible; the Sicilian study and both repertoire
-      // buttons are hidden — neither label matches "French".
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
-      expect(inDrawer('Sicilian Dragon Repertoire'), findsNothing);
-      expect(inDrawer('White repertoire'), findsNothing);
-      expect(inDrawer('Black repertoire'), findsNothing);
 
       // Type a query that matches nothing
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'Nonexistent');
@@ -1368,19 +1402,22 @@ void main() {
 
       expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
-      expect(find.text('Sicilian Dragon Repertoire'), findsNothing);
-      expect(inDrawer('White repertoire'), findsNothing);
-      expect(inDrawer('Black repertoire'), findsNothing);
 
       // Tap clear search button
       await tester.tap(find.byTooltip('Clear search'));
       await tester.pumpAndSettle();
 
-      // Both studies and both repertoire buttons reappear
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
+
+      // Close drawer and open Black drawer
+      Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
+      await pumpAsync(tester, 250);
+
+      await tester.tap(find.byType(ColourSquare).last);
+      await pumpAsync(tester);
+
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
+      expect(inDrawer('French Defense Repertoire'), findsNothing);
     });
 
     testWidgets('ReviewScopeDrawer groups collapse and expand on header tap', (tester) async {
@@ -1408,14 +1445,12 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(find.byType(ColourSquare).last);
       await pumpAsync(tester);
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
       expect(inDrawer('Sicilian Lines'), findsOneWidget);
 
@@ -1423,33 +1458,17 @@ void main() {
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Lines'), findsNothing);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Defense'), findsNothing);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
       await pumpAsync(tester);
 
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
-
-      await tester.tap(inDrawer('Repertoires'));
-      await pumpAsync(tester);
-
-      expect(inDrawer('White repertoire'), findsNothing);
-      expect(inDrawer('Black repertoire'), findsNothing);
-
-      await tester.tap(inDrawer('Repertoires'));
-      await pumpAsync(tester);
-
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
     });
 
     testWidgets('ReviewScopeDrawer collapse survives closing and reopening', (tester) async {
@@ -1477,7 +1496,12 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       final drawer = find.byType(ReviewScopeDrawer);
@@ -1487,15 +1511,19 @@ void main() {
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
-      // Choosing a scope closes the drawer; reopening must keep the collapse.
-      await tester.tap(inDrawer('White repertoire'));
-      await pumpAsync(tester);
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      // Dismiss drawer and reopen; reopening must keep the collapse.
+      Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
+      await pumpAsync(tester, 250);
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       expect(inDrawer('King Pawn Lines'), findsNothing);
-      expect(inDrawer('White repertoire'), findsOneWidget);
     });
 
     testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {
@@ -1523,7 +1551,12 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       final drawer = find.byType(ReviewScopeDrawer);
@@ -1569,7 +1602,12 @@ void main() {
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
       await pumpAsync(tester);
 
-      await tester.tap(find.byTooltip('Studies & Scope'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColourSquare && widget.side == Side.white,
+        ),
+      );
       await pumpAsync(tester);
 
       final drawer = find.byType(ReviewScopeDrawer);
@@ -1579,8 +1617,6 @@ void main() {
       await tester.tap(inDrawer('Studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
 
       // Switching it back on restores collapsing without losing the state.
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
@@ -1588,8 +1624,6 @@ void main() {
       await tester.tap(inDrawer('Studies'));
       await pumpAsync(tester);
       expect(inDrawer('King Pawn Lines'), findsNothing);
-      expect(inDrawer('White repertoire'), findsOneWidget);
-      expect(inDrawer('Black repertoire'), findsOneWidget);
     });
 
     testWidgets(

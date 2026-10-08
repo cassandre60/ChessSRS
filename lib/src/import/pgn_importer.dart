@@ -189,8 +189,6 @@ RepertoireMove normalmoveToRepertoireMove(NormalMove move, Position position) {
 ///
 /// The [repertoireSide] is the [Side] whose moves become [RepertoireDecision]s.
 /// Opponent moves are recorded in the tree but not scheduled.
-/// When [repertoireSide] is null, every node with at least one continuation
-/// becomes a decision (useful for training both sides).
 ///
 /// Errors are collected rather than thrown. A chapter with a fatal error
 /// (e.g. bad starting FEN) is omitted from [ImportResult.chapters]; a
@@ -628,24 +626,29 @@ RepertoireNode _buildChildren(
 /// Derives [RepertoireDecision]s from a position tree.
 ///
 /// A decision is created at any node where:
-/// - The side to move matches [repertoireSide] (or [repertoireSide] is null), AND
+/// - The side to move matches [repertoireSide], AND
 /// - The node has at least one child (there is a move to recall).
 void _deriveDecisions(
   RepertoireNode node,
   String studyId,
   String chapterId,
   Side nodeSideToMove,
-  Side? repertoireSide,
+  Side repertoireSide,
   List<RepertoireDecision> out,
 ) {
   if (node.children.isNotEmpty) {
-    final isRepertoireSide = repertoireSide == null || nodeSideToMove == repertoireSide;
+    final isRepertoireSide = nodeSideToMove == repertoireSide;
 
     if (isRepertoireSide) {
       // A decision is identified by the position *and* every move it accepts, not by one
       // representative child: two positions sharing a FEN and a first move but offering
-      // different continuations are different questions and must not share SRS memory.
-      final cKey = canonicalKeyForPosition(node.fenKey, node.childMoves.map((move) => move.uci));
+      // different continuations are different questions and must not share SRS memory. The trained
+      // side participates too, so copied colours of the same lines keep separate SRS memory.
+      final cKey = canonicalKeyForPosition(
+        node.fenKey,
+        node.childMoves.map((move) => move.uci),
+        repertoireSide: repertoireSide,
+      );
       out.add(
         RepertoireDecision.create(
           studyId: studyId,

@@ -224,9 +224,9 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
     return Column(
       children: [
         SrsTopBar(
-          scopeTitle: 'ChessSRS',
+          wordmark: 'ChessSRS',
           dueCount: 0,
-          onScopePressed: () => ReviewScopeDrawer.show(context),
+          onSidePressed: (side) => ReviewScopeDrawer.show(context, side),
           onOverflowPressed: () => _showOverflowSheet(context),
         ),
         Expanded(
@@ -367,10 +367,10 @@ class _NothingDueView extends ConsumerWidget {
         child: Column(
           children: [
             SrsTopBar(
-              scopeTitle: _computeScopeTitle(state),
+              activeSide: state.activeSide,
               dueCount: 0,
               isPracticeMode: state.isPracticeMode,
-              onScopePressed: () => ReviewScopeDrawer.show(context),
+              onSidePressed: (side) => ReviewScopeDrawer.show(context, side),
               onOverflowPressed: () => _showOverflowSheet(context),
               onExitPractice: state.isPracticeMode
                   ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -522,7 +522,7 @@ class _NothingDueView extends ConsumerWidget {
                             ),
                             SrsTextButton(
                               label: context.l10n.reviewNothingDueChooseRepertoire,
-                              onPressed: () => ReviewScopeDrawer.show(context),
+                              onPressed: () => ReviewScopeDrawer.show(context, state.activeSide),
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
@@ -746,10 +746,10 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
         child: SrsReviewLayout(
           whiteAtBottom: state.boardOrientation == Side.white,
           topBar: SrsTopBar(
-            scopeTitle: _computeScopeTitle(state),
+            activeSide: state.activeSide,
             dueCount: state.totalDueCount,
             isPracticeMode: state.isPracticeMode,
-            onScopePressed: () => ReviewScopeDrawer.show(context),
+            onSidePressed: (side) => ReviewScopeDrawer.show(context, side),
             onOverflowPressed: () => _showOverflowSheet(context),
             onExitPractice: state.isPracticeMode
                 ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
@@ -1111,32 +1111,6 @@ class _OpenInAnalysisButton extends StatelessWidget {
   }
 }
 
-String _computeScopeTitle(ReviewScreenState state) {
-  if (state.scope.openingFamily != null) {
-    return state.scope.openingFamily!;
-  }
-  // A side scope names no study and no opening, so it would otherwise fall
-  // through to `All studies` below — claiming a narrowed queue is the
-  // everywhere scope, which is the one thing the two repertoire buttons
-  // (INV-030) exist to let the user leave.
-  final side = state.scope.side;
-  if (side != null) {
-    return ReviewScopeDrawer.sideLabel(side);
-  }
-  if (state.scope.studyId != null) {
-    final study = state.studies.firstWhere(
-      (s) => s.id == state.scope.studyId,
-      orElse: () => const Study(id: '', title: 'Study'),
-    );
-    if (state.scope.chapterId != null && state.currentPrompt?.chapterTitle != null) {
-      return '${study.title} • ${state.currentPrompt!.chapterTitle}';
-    }
-    return study.title;
-  }
-  // design/docs/01-identity.md names the everywhere scope `All studies`, and the demo's top bar
-  // shows the same string the scope list row uses.
-  return 'All studies';
-}
 
 class _SrsDiagnosticsOverlay extends StatelessWidget {
   const _SrsDiagnosticsOverlay({required this.state});
