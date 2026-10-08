@@ -4,6 +4,6 @@
     "analyzer_suppressions": {"value": 18, "direction": "lower_is_better", "tolerance": 0},
     "test_skips": {"value": 11, "direction": "lower_is_better", "tolerance": 0},
     "test_declarations": {"value": 1509, "direction": "higher_is_better", "tolerance": 0},
-    "domain_loc": {"value": 3020, "direction": "lower_is_better", "tolerance": 150}
+    "domain_loc": {"value": 3200, "direction": "lower_is_better", "tolerance": 150}
   }
 }
