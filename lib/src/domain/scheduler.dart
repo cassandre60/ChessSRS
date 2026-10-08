@@ -108,6 +108,18 @@ class SimpleScheduler implements Scheduler {
         );
     }
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SimpleScheduler &&
+          firstInterval == other.firstInterval &&
+          baseInterval == other.baseInterval &&
+          intervalMultiplier == other.intervalMultiplier &&
+          maximumInterval == other.maximumInterval;
+
+  @override
+  int get hashCode => Object.hash(firstInterval, baseInterval, intervalMultiplier, maximumInterval);
 }
 
 /// Parametric spaced repetition scheduler adapted from chessrs SpacedRepetitionService.
