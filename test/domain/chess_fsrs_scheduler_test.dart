@@ -95,19 +95,6 @@ void main() {
       expect(s2.stability, lessThan(s1.stability));
     });
 
-    test('hintUsed or multipleAttempts forces Rating.again even when move was correct', () {
-      final s0 = ReviewState.initial(decisionId: 'd1');
-      final s1 = scheduler.schedule(
-        previous: s0,
-        result: ReviewResult.correct,
-        now: t0,
-        hintUsed: true,
-      );
-
-      expect(s1.lapseCount, 1); // treated as lapse because recall was not independent
-      expect(s1.repetitionCount, 0);
-    });
-
     test('same-day re-review applies damped factor avoiding division blowup', () {
       final s0 = ReviewState.initial(decisionId: 'd1');
       final s1 = scheduler.schedule(previous: s0, result: ReviewResult.correct, now: t0);

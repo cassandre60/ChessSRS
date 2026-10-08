@@ -16,6 +16,10 @@ final Logger _logger = Logger('FsrsScheduler');
 /// not weak memory. Therefore, ratings collapse strictly to binary Pass/Fail:
 /// - [again]: incorrect move, hint used, or corrected false-start attempt.
 /// - [good]: first committed move was correct (regardless of calculation time).
+///
+/// All three [again] cases arrive as a single [ReviewResult.incorrect]. The
+/// review session is what recognises a hint or a corrected false-start and grades
+/// it once; this class never sees them separately.
 enum FsrsRating { again, good }
 
 int _g(FsrsRating r) => r == FsrsRating.again ? 1 : 3;
@@ -199,13 +203,12 @@ class ChessFsrsScheduler implements Scheduler {
     required ReviewState previous,
     required ReviewResult result,
     required DateTime now,
-    bool hintUsed = false,
-    bool multipleAttempts = false,
   }) {
-    // Binary rating inference (Decision D015)
-    final rating = (result == ReviewResult.incorrect || hintUsed || multipleAttempts)
-        ? FsrsRating.again
-        : FsrsRating.good;
+    // Binary rating (Decision D015). "Was this recall independent?" — hint used,
+    // or a corrected false-start — is settled upstream by the review session and
+    // arrives folded into [result]: a fumbled answer reaches the scheduler as
+    // [ReviewResult.incorrect] exactly once, not as a lapse plus a later pass.
+    final rating = result == ReviewResult.incorrect ? FsrsRating.again : FsrsRating.good;
 
     final anchor = previous.lastReviewedAt ?? previous.firstReviewedAt;
     double elapsedDays = 0.0;

@@ -203,6 +203,15 @@ class ReviewSession {
   final List<RepertoireDecision> _dueQueue = [];
   final List<RepertoireDecision> _unbufferedQueue = [];
   final Set<String> _completedDecisionIds = {};
+
+  /// Decisions that have already been graded as a lapse during this session.
+  ///
+  /// A failed decision is re-queued for a re-test ([submitMove]'s incorrect
+  /// branch). When the re-test succeeds it is a *corrected false-start*, which
+  /// Decision D015 grades as a single Again — not as a lapse followed by an
+  /// independent successful recall seconds later. This set is what lets the
+  /// correct branch tell the two apart.
+  final Set<String> _lapsedThisSession = {};
   ReviewPrompt? _currentPrompt;
   int _completedCount = 0;
   late final int _initialDueCount;
@@ -248,6 +257,7 @@ class ReviewSession {
       dueQueue: List<RepertoireDecision>.of(_dueQueue),
       unbufferedQueue: List<RepertoireDecision>.of(_unbufferedQueue),
       completedDecisionIds: Set<String>.of(_completedDecisionIds),
+      lapsedDecisionIds: Set<String>.of(_lapsedThisSession),
       currentPrompt: _currentPrompt,
       completedCount: _completedCount,
       exposureThrottle: _coordinator.snapshotExposureThrottle(),
@@ -272,6 +282,9 @@ class ReviewSession {
     _completedDecisionIds
       ..clear()
       ..addAll(checkpoint.completedDecisionIds);
+    _lapsedThisSession
+      ..clear()
+      ..addAll(checkpoint.lapsedDecisionIds);
     _currentPrompt = checkpoint.currentPrompt;
     _completedCount = checkpoint.completedCount;
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
@@ -308,10 +321,17 @@ class ReviewSession {
       // -----------------------------------------------------------------------
       // CORRECT MOVE
       // -----------------------------------------------------------------------
+      // Decision D015: a corrected false-start is graded once, as the lapse it
+      // already was. Grading the re-test as a success too would tick
+      // repetitionCount up on a decision the user just failed, and push its due
+      // date out on the strength of a recall made seconds later in the same
+      // context — which is not a spaced recall at all.
+      final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
+
       ReviewState nextState;
       ReviewEvent? event;
 
-      if (mode == ReviewMode.practice) {
+      if (mode == ReviewMode.practice || isCorrectedFalseStart) {
         nextState = prevState;
         event = null;
       } else {
@@ -405,6 +425,10 @@ class ReviewSession {
       if (sideEffects.isNotEmpty) {
         _logger.fine('Lapse contagion/coupling updated ${sideEffects.length} associated states');
       }
+
+      // Decision D015: remember that this decision was already graded, so a
+      // successful re-test later in the session is not graded a second time.
+      _lapsedThisSession.add(decision.canonicalId);
 
       // Re-queue the failed decision at the end of the session queue
       // so the user can re-test it before completing the session
@@ -955,6 +979,7 @@ class ReviewSessionCheckpoint {
     required this.dueQueue,
     required this.unbufferedQueue,
     required this.completedDecisionIds,
+    required this.lapsedDecisionIds,
     required this.currentPrompt,
     required this.completedCount,
     required this.exposureThrottle,
@@ -964,6 +989,7 @@ class ReviewSessionCheckpoint {
   final List<RepertoireDecision> dueQueue;
   final List<RepertoireDecision> unbufferedQueue;
   final Set<String> completedDecisionIds;
+  final Set<String> lapsedDecisionIds;
   final ReviewPrompt? currentPrompt;
   final int completedCount;
   final Map<String, DateTime> exposureThrottle;
