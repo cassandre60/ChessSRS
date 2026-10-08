@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_service.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
@@ -10,7 +11,6 @@ import 'package:chess_srs/src/model/user/user_repository_providers.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
-import 'package:chess_srs/src/utils/string.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/game/game_list_detail_tile.dart';
 import 'package:chess_srs/src/view/game/game_list_tile.dart';
@@ -19,9 +19,6 @@ import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/filter.dart';
 import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/misc.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
-import 'package:chess_srs/src/widgets/platform_context_menu_button.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
@@ -51,16 +48,6 @@ class GameHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filtersInUse = ref.watch(gameFilterProvider(gameFilter));
-    final nbGamesAsync = ref.watch(userNumberOfGamesProvider(user));
-    final title = user != null && gameFilter.opponent != null
-        ? AppBarTitleText(context.l10n.resVsX(user!.name, gameFilter.opponent!.username))
-        : filtersInUse.count == 0
-        ? nbGamesAsync.when(
-            data: (nbGames) => AppBarTitleText(context.l10n.nbGames(nbGames).localizeNumbers()),
-            loading: () => const ButtonLoadingIndicator(),
-            error: (e, s) => AppBarTitleText(context.l10n.mobileAllGames),
-          )
-        : Text(filtersInUse.selectionLabel(context.l10n));
     final filterBtn = SemanticIconButton(
       icon: Badge.count(
         backgroundColor: ColorScheme.of(context).secondary,
@@ -87,35 +74,75 @@ class GameHistoryScreen extends ConsumerWidget {
           }),
     );
 
-    final displayModeButton = ContextMenuIconButton(
-      consumeOutsideTap: true,
-      icon: const Icon(Icons.more_horiz),
-      semanticsLabel: context.l10n.menu,
-      actions: [
-        ContextMenuAction(
-          icon: Icons.ballot_outlined,
-          label: context.l10n.mobileDisplayModeDetailed,
-          onPressed: () {
-            ref
-                .read(gameHistoryPreferencesProvider.notifier)
-                .setDisplayMode(GameHistoryDisplayMode.detail);
-          },
-        ),
-        ContextMenuAction(
-          icon: Icons.list_outlined,
-          label: context.l10n.mobileDisplayModeCompact,
-          onPressed: () {
-            ref
-                .read(gameHistoryPreferencesProvider.notifier)
-                .setDisplayMode(GameHistoryDisplayMode.compact);
-          },
-        ),
-      ],
+    // A display mode is a two-way setting, so it is a choice rather than a menu entry: the sheet
+    // states both options and marks the current one. The old `ContextMenuIconButton` put them
+    // behind an ellipsis and showed nothing about which was on.
+    final displayModeButton = SrsIconButton(
+      icon: Icons.more_horiz,
+      tooltip: context.l10n.menu,
+      onPressed: () =>
+          showSrsSheet<void>(context, const SrsSheetSurface(child: _DisplayModeSheet())),
     );
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(title: title, actions: [filterBtn, displayModeButton]),
-      body: _Body(user: user, isOnline: isOnline, gameFilter: gameFilter),
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              // The head names the destination. The old title was a widget carrying the game
+              // count, which is a fact about the list below it, not about where you are.
+              label: user?.name ?? context.l10n.mobileAllGames,
+              onBack: () => Navigator.of(context).maybePop(),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [filterBtn, const SizedBox(width: 4), displayModeButton],
+              ),
+            ),
+            Expanded(
+              child: _Body(user: user, isOnline: isOnline, gameFilter: gameFilter),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The display-mode choice: a segmented control naming both options and the current one.
+class _DisplayModeSheet extends ConsumerWidget {
+  const _DisplayModeSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(gameHistoryPreferencesProvider).displayMode;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SrsSheetGrabber(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SrsGroupHeader('Display mode'),
+              SrsSegmented<GameHistoryDisplayMode>(
+                value: mode,
+                options: {
+                  GameHistoryDisplayMode.detail: context.l10n.mobileDisplayModeDetailed,
+                  GameHistoryDisplayMode.compact: context.l10n.mobileDisplayModeCompact,
+                },
+                onChanged: (value) {
+                  ref.read(gameHistoryPreferencesProvider.notifier).setDisplayMode(value);
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
