@@ -40,9 +40,7 @@ Future<void> _ensureLateSrsColumns(Database db) async {
   if (columns.isEmpty) return; // table not created yet; onCreate will include the column
   final hasLastExposedAt = columns.any((row) => row['name'] == 'lastExposedAt');
   if (!hasLastExposedAt) {
-    await db.execute(
-      'ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT',
-    );
+    await db.execute('ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT');
   }
 }
 
