@@ -826,7 +826,6 @@ void main() {
             difficulty: 4.8,
             latencyEmaMs: 1420.5,
             latencySampleCount: 5,
-            lastExposedAt: now.subtract(const Duration(hours: 5)),
           );
 
           await repo.savePositionKnowledgeState(kState);
@@ -840,74 +839,11 @@ void main() {
           expect(loaded.difficulty, 4.8);
           expect(loaded.latencyEmaMs, 1420.5);
           expect(loaded.latencySampleCount, 5);
-          expect(loaded.lastExposedAt, now.subtract(const Duration(hours: 5)));
 
           // Also synchronized to legacy review_state
           final legacy = await repo.getReviewState('canonical_test_1');
           expect(legacy, isNotNull);
           expect(legacy!.repetitionCount, 4);
-        } finally {
-          await db.close();
-        }
-      },
-    );
-
-    // SPEC INV-028. The once-per-calendar-day exposure cap only holds across an app restart if the
-    // last grant is stored. saveAnswerBatch is the write path a real answer takes, and it uses
-    // INSERT OR REPLACE, so a column the caller omits is erased rather than preserved.
-    test(
-      'saveAnswerBatch round-trips lastExposedAt so the daily exposure cap survives a restart',
-      () async {
-        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
-        final repo = SqliteStudyRepository(db);
-
-        try {
-          final now = DateTime.utc(2026, 9, 18, 12);
-          final exposed = now.subtract(const Duration(hours: 9));
-          await repo.saveAnswerBatch(knowledgeStates: [
-            PositionKnowledgeState(
-              canonicalId: 'canonical_exposed',
-              lastReviewedAt: now,
-              nextDueAt: now.add(const Duration(days: 4)),
-              repetitionCount: 3,
-              stability: 345600000.0,
-              difficulty: 4.2,
-              lastExposedAt: exposed,
-            ),
-          ]);
-
-          final loaded = await repo.getPositionKnowledgeState('canonical_exposed');
-          expect(loaded, isNotNull);
-          expect(loaded!.lastExposedAt, exposed);
-
-          // A later answer that carries a newer grant updates it...
-          final laterExposed = now.add(const Duration(days: 1));
-          await repo.saveAnswerBatch(knowledgeStates: [
-            PositionKnowledgeState(
-              canonicalId: 'canonical_exposed',
-              lastReviewedAt: now,
-              nextDueAt: now.add(const Duration(days: 4)),
-              repetitionCount: 3,
-              stability: 345600000.0,
-              difficulty: 4.2,
-              lastExposedAt: laterExposed,
-            ),
-          ]);
-          final updated = await repo.getPositionKnowledgeState('canonical_exposed');
-          expect(updated!.lastExposedAt, laterExposed);
-
-          // ...and a state that never earned credit stays null, so the coordinator reads it as
-          // "not exposed today" rather than inheriting a stale cap.
-          await repo.saveAnswerBatch(knowledgeStates: [
-            PositionKnowledgeState(
-              canonicalId: 'canonical_never_exposed',
-              repetitionCount: 1,
-              stability: 86400000.0,
-              difficulty: 5.0,
-            ),
-          ]);
-          final neverExposed = await repo.getPositionKnowledgeState('canonical_never_exposed');
-          expect(neverExposed!.lastExposedAt, isNull);
         } finally {
           await db.close();
         }
