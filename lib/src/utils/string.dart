@@ -6,7 +6,9 @@ final _random = Random.secure();
 
 String genRandomString(int len) {
   final values = List<int>.generate(len, (i) => _random.nextInt(256));
-  return base64UrlEncode(values);
+  // base64url without padding: '=' is legal in URLs but not in the alphabet,
+  // and these strings travel in SRI-style tokens where padding carries nothing.
+  return base64UrlEncode(values).replaceAll('=', '');
 }
 
 extension StringExtension on String {
