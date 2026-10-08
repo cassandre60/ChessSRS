@@ -16,14 +16,20 @@ int? _intField(Map<String, dynamic> m) => m['n'] as int;
 void main() {
   group('decodeObjectList', () {
     test('maps every element of a JSON list', () {
-      final json = <Object?>[<String, dynamic>{'n': 1}, <String, dynamic>{'n': 2}];
+      final json = <Object?>[
+        <String, dynamic>{'n': 1},
+        <String, dynamic>{'n': 2},
+      ];
       final out = decodeObjectList<int>(json, mapper: (m) => m['n'] as int);
 
       expect(out.toList(), [1, 2]);
     });
 
     test('drops the elements a mapper returns null for', () {
-      final json = <Object?>[<String, dynamic>{'n': 1}, <String, dynamic>{'n': null}];
+      final json = <Object?>[
+        <String, dynamic>{'n': 1},
+        <String, dynamic>{'n': null},
+      ];
       final out = decodeObjectList<int?>(json, mapper: (m) => m['n'] as int?);
 
       expect(out.toList(), [1]);
@@ -36,7 +42,9 @@ void main() {
     });
 
     test('a single element is handled the same as many', () {
-      final json = <Object?>[<String, dynamic>{'n': 7}];
+      final json = <Object?>[
+        <String, dynamic>{'n': 7},
+      ];
       final out = decodeObjectList<int>(json, mapper: (m) => m['n'] as int);
 
       expect(out.toList(), [7]);
@@ -59,7 +67,9 @@ void main() {
     });
 
     test('a mapper that throws is rethrown wrapped as an Exception', () {
-      final json = <Object?>[<String, dynamic>{'n': 'not an int'}];
+      final json = <Object?>[
+        <String, dynamic>{'n': 'not an int'},
+      ];
 
       expect(() => decodeObjectList<int>(json, mapper: _intField), throwsA(isA<Exception>()));
     });

@@ -29,44 +29,29 @@ class SqliteStudyRepository implements StudyRepository {
     final sw = Stopwatch()..start();
     await _db.transaction((txn) async {
       final now = DateTime.now().toIso8601String();
-      await txn.insert(kTableSrsStudy, {
-        'id': result.study.id,
-        'title': result.study.title,
-        'createdAt': result.study.createdAt?.toIso8601String() ?? now,
-        'updatedAt': result.study.updatedAt?.toIso8601String() ?? now,
-        'isActive': result.study.isActive ? 1 : 0,
-        'pgnHash': result.study.pgnHash,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(
+        kTableSrsStudy,
+        _studyRow(result.study, nowIso: now),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
       final chapterBatch = txn.batch();
       for (final chapter in result.chapters) {
-        final treeJson = chapter.root != null
-            ? jsonEncode(repertoireNodeToJson(chapter.root!))
-            : null;
-        chapterBatch.insert(kTableSrsChapter, {
-          'id': chapter.id,
-          'studyId': chapter.studyId,
-          'sourceOrder': chapter.sourceOrder,
-          'title': chapter.title,
-          'startingFen': chapter.startingFen,
-          'createdAt': (chapter.createdAt ?? DateTime.now()).toIso8601String(),
-          'treeJson': treeJson,
-          'opening': chapter.opening,
-          'orientation': chapter.orientation.name,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        chapterBatch.insert(
+          kTableSrsChapter,
+          _chapterRow(chapter),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
       await chapterBatch.commit(noResult: true);
 
       final decisionBatch = txn.batch();
       for (final d in result.decisions) {
-        decisionBatch.insert(kTableSrsDecision, {
-          'id': d.id,
-          'studyId': d.studyId,
-          'chapterId': d.chapterId,
-          'nodeId': d.nodeId,
-          'expectedMoves': encodeExpectedMoves(d.expectedMoves),
-          'canonicalStateId': d.canonicalStateId ?? d.canonicalId,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        decisionBatch.insert(
+          kTableSrsDecision,
+          _decisionRow(d),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
       await decisionBatch.commit(noResult: true);
     });
@@ -84,14 +69,11 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<void> saveStudy(Study study) async {
     final now = DateTime.now().toIso8601String();
-    await _db.insert(kTableSrsStudy, {
-      'id': study.id,
-      'title': study.title,
-      'createdAt': study.createdAt?.toIso8601String() ?? now,
-      'updatedAt': study.updatedAt?.toIso8601String() ?? now,
-      'isActive': study.isActive ? 1 : 0,
-      'pgnHash': study.pgnHash,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert(
+      kTableSrsStudy,
+      _studyRow(study, nowIso: now),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
@@ -276,40 +258,22 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> saveChapter(Chapter chapter) async {
-    final treeJson = chapter.root != null ? jsonEncode(repertoireNodeToJson(chapter.root!)) : null;
-
-    await _db.insert(kTableSrsChapter, {
-      'id': chapter.id,
-      'studyId': chapter.studyId,
-      'sourceOrder': chapter.sourceOrder,
-      'title': chapter.title,
-      'startingFen': chapter.startingFen,
-      'createdAt': (chapter.createdAt ?? DateTime.now()).toIso8601String(),
-      'treeJson': treeJson,
-      'opening': chapter.opening,
-      'orientation': chapter.orientation.name,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert(
+      kTableSrsChapter,
+      _chapterRow(chapter),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
   Future<void> saveChapters(List<Chapter> chapters) async {
     final batch = _db.batch();
     for (final chapter in chapters) {
-      final treeJson = chapter.root != null
-          ? jsonEncode(repertoireNodeToJson(chapter.root!))
-          : null;
-
-      batch.insert(kTableSrsChapter, {
-        'id': chapter.id,
-        'studyId': chapter.studyId,
-        'sourceOrder': chapter.sourceOrder,
-        'title': chapter.title,
-        'startingFen': chapter.startingFen,
-        'createdAt': (chapter.createdAt ?? DateTime.now()).toIso8601String(),
-        'treeJson': treeJson,
-        'opening': chapter.opening,
-        'orientation': chapter.orientation.name,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+        kTableSrsChapter,
+        _chapterRow(chapter),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -450,28 +414,22 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> saveDecision(RepertoireDecision decision) async {
-    await _db.insert(kTableSrsDecision, {
-      'id': decision.id,
-      'studyId': decision.studyId,
-      'chapterId': decision.chapterId,
-      'nodeId': decision.nodeId,
-      'expectedMoves': encodeExpectedMoves(decision.expectedMoves),
-      'canonicalStateId': decision.canonicalStateId ?? decision.canonicalId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert(
+      kTableSrsDecision,
+      _decisionRow(decision),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
   Future<void> saveDecisions(List<RepertoireDecision> decisions) async {
     final batch = _db.batch();
     for (final d in decisions) {
-      batch.insert(kTableSrsDecision, {
-        'id': d.id,
-        'studyId': d.studyId,
-        'chapterId': d.chapterId,
-        'nodeId': d.nodeId,
-        'expectedMoves': encodeExpectedMoves(d.expectedMoves),
-        'canonicalStateId': d.canonicalStateId ?? d.canonicalId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+        kTableSrsDecision,
+        _decisionRow(d),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -512,19 +470,11 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state) async {
-    await _db.insert(kTablePositionKnowledgeState, {
-      'canonicalId': state.canonicalId,
-      'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-      'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-      'nextDueAt': state.nextDueAt?.toIso8601String(),
-      'repetitionCount': state.repetitionCount,
-      'lapseCount': state.lapseCount,
-      'stability': state.stability,
-      'difficulty': state.difficulty,
-      'latencyEmaMs': state.latencyEmaMs,
-      'latencySampleCount': state.latencySampleCount,
-      'lastExposedAt': state.lastExposedAt?.toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert(
+      kTablePositionKnowledgeState,
+      _knowledgeStateRow(state),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
 
     await saveReviewState(state.toReviewState(state.canonicalId));
 
@@ -544,19 +494,11 @@ class SqliteStudyRepository implements StudyRepository {
   Future<void> savePositionKnowledgeStates(List<PositionKnowledgeState> states) async {
     final batch = _db.batch();
     for (final s in states) {
-      batch.insert(kTablePositionKnowledgeState, {
-        'canonicalId': s.canonicalId,
-        'firstReviewedAt': s.firstReviewedAt?.toIso8601String(),
-        'lastReviewedAt': s.lastReviewedAt?.toIso8601String(),
-        'nextDueAt': s.nextDueAt?.toIso8601String(),
-        'repetitionCount': s.repetitionCount,
-        'lapseCount': s.lapseCount,
-        'stability': s.stability,
-        'difficulty': s.difficulty,
-        'latencyEmaMs': s.latencyEmaMs,
-        'latencySampleCount': s.latencySampleCount,
-        'lastExposedAt': s.lastExposedAt?.toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+        kTablePositionKnowledgeState,
+        _knowledgeStateRow(s),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
     await batch.commit(noResult: true);
     await saveReviewStates(states.map((s) => s.toReviewState()).toList());
@@ -572,30 +514,17 @@ class SqliteStudyRepository implements StudyRepository {
       final batch = txn.batch();
 
       for (final s in knowledgeStates) {
-        batch.insert(kTablePositionKnowledgeState, {
-          'canonicalId': s.canonicalId,
-          'firstReviewedAt': s.firstReviewedAt?.toIso8601String(),
-          'lastReviewedAt': s.lastReviewedAt?.toIso8601String(),
-          'nextDueAt': s.nextDueAt?.toIso8601String(),
-          'repetitionCount': s.repetitionCount,
-          'lapseCount': s.lapseCount,
-          'stability': s.stability,
-          'difficulty': s.difficulty,
-          'latencyEmaMs': s.latencyEmaMs,
-          'latencySampleCount': s.latencySampleCount,
-          'lastExposedAt': s.lastExposedAt?.toIso8601String(),
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        batch.insert(
+          kTablePositionKnowledgeState,
+          _knowledgeStateRow(s),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
 
-        batch.insert(kTableSrsReviewState, {
-          'decisionId': s.canonicalId,
-          'firstReviewedAt': s.firstReviewedAt?.toIso8601String(),
-          'lastReviewedAt': s.lastReviewedAt?.toIso8601String(),
-          'nextDueAt': s.nextDueAt?.toIso8601String(),
-          'repetitionCount': s.repetitionCount,
-          'lapseCount': s.lapseCount,
-          'stability': s.stability,
-          'difficulty': s.difficulty,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        batch.insert(
+          kTableSrsReviewState,
+          _reviewStateRow(s.toReviewState(s.canonicalId)),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
 
         batch.rawInsert(
           '''
@@ -621,13 +550,7 @@ class SqliteStudyRepository implements StudyRepository {
       }
 
       if (event != null) {
-        batch.insert(kTableSrsReviewEvent, {
-          'decisionId': event.decisionId,
-          'whenTimestamp': event.when.toIso8601String(),
-          'result': event.result.name,
-          'oldStateJson': jsonEncode(reviewStateToJson(event.oldState)),
-          'newStateJson': jsonEncode(reviewStateToJson(event.newState)),
-        });
+        batch.insert(kTableSrsReviewEvent, _reviewEventRow(event));
       }
 
       await batch.commit(noResult: true);
@@ -718,38 +641,47 @@ class SqliteStudyRepository implements StudyRepository {
     );
   }
 
+  /// The `position_knowledge_state` row for [state].
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _knowledgeStateRow(PositionKnowledgeState state) => {
+    'canonicalId': state.canonicalId,
+    'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
+    'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
+    'nextDueAt': state.nextDueAt?.toIso8601String(),
+    'repetitionCount': state.repetitionCount,
+    'lapseCount': state.lapseCount,
+    'stability': state.stability,
+    'difficulty': state.difficulty,
+    'latencyEmaMs': state.latencyEmaMs,
+    'latencySampleCount': state.latencySampleCount,
+    'lastExposedAt': state.lastExposedAt?.toIso8601String(),
+  };
+
   // ---------------------------------------------------------------------------
   // Review States (SRS)
   // ---------------------------------------------------------------------------
 
   @override
   Future<void> saveReviewState(ReviewState state) async {
-    await _db.insert(kTableSrsReviewState, {
-      'decisionId': state.decisionId,
-      'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-      'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-      'nextDueAt': state.nextDueAt?.toIso8601String(),
-      'repetitionCount': state.repetitionCount,
-      'lapseCount': state.lapseCount,
-      'stability': state.stability,
-      'difficulty': state.difficulty,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert(
+      kTableSrsReviewState,
+      _reviewStateRow(state),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
   Future<void> saveReviewStates(List<ReviewState> states) async {
     final batch = _db.batch();
     for (final s in states) {
-      batch.insert(kTableSrsReviewState, {
-        'decisionId': s.decisionId,
-        'firstReviewedAt': s.firstReviewedAt?.toIso8601String(),
-        'lastReviewedAt': s.lastReviewedAt?.toIso8601String(),
-        'nextDueAt': s.nextDueAt?.toIso8601String(),
-        'repetitionCount': s.repetitionCount,
-        'lapseCount': s.lapseCount,
-        'stability': s.stability,
-        'difficulty': s.difficulty,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+        kTableSrsReviewState,
+        _reviewStateRow(s),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -859,13 +791,7 @@ class SqliteStudyRepository implements StudyRepository {
     _logger.fine(
       'Saving review event: decisionId=${event.decisionId}, result=${event.result.name}, at=${event.when}',
     );
-    await _db.insert(kTableSrsReviewEvent, {
-      'decisionId': event.decisionId,
-      'whenTimestamp': event.when.toIso8601String(),
-      'result': event.result.name,
-      'oldStateJson': jsonEncode(reviewStateToJson(event.oldState)),
-      'newStateJson': jsonEncode(reviewStateToJson(event.newState)),
-    });
+    await _db.insert(kTableSrsReviewEvent, _reviewEventRow(event));
   }
 
   @override
@@ -930,6 +856,21 @@ class SqliteStudyRepository implements StudyRepository {
     );
   }
 
+  /// The `srs_study` row for [study], stamped with [nowIso] when the study
+  /// carries no timestamp of its own.
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _studyRow(Study study, {required String nowIso}) => {
+    'id': study.id,
+    'title': study.title,
+    'createdAt': study.createdAt?.toIso8601String() ?? nowIso,
+    'updatedAt': study.updatedAt?.toIso8601String() ?? nowIso,
+    'isActive': study.isActive ? 1 : 0,
+    'pgnHash': study.pgnHash,
+  };
+
   static Chapter _chapterFromRow(Map<String, Object?> row) {
     final treeJson = row['treeJson'] as String?;
     final root = treeJson != null && treeJson.isNotEmpty
@@ -952,6 +893,23 @@ class SqliteStudyRepository implements StudyRepository {
     );
   }
 
+  /// The `srs_chapter` row for [chapter], tree included.
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _chapterRow(Chapter chapter) => {
+    'id': chapter.id,
+    'studyId': chapter.studyId,
+    'sourceOrder': chapter.sourceOrder,
+    'title': chapter.title,
+    'startingFen': chapter.startingFen,
+    'createdAt': (chapter.createdAt ?? DateTime.now()).toIso8601String(),
+    'treeJson': chapter.root != null ? jsonEncode(repertoireNodeToJson(chapter.root!)) : null,
+    'opening': chapter.opening,
+    'orientation': chapter.orientation.name,
+  };
+
   static RepertoireDecision _decisionFromRow(Map<String, Object?> row) {
     final rawMoves = row['expectedMoves']! as String;
     return RepertoireDecision(
@@ -963,6 +921,20 @@ class SqliteStudyRepository implements StudyRepository {
       canonicalStateId: row['canonicalStateId'] as String?,
     );
   }
+
+  /// The `srs_decision` row for [decision].
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _decisionRow(RepertoireDecision decision) => {
+    'id': decision.id,
+    'studyId': decision.studyId,
+    'chapterId': decision.chapterId,
+    'nodeId': decision.nodeId,
+    'expectedMoves': encodeExpectedMoves(decision.expectedMoves),
+    'canonicalStateId': decision.canonicalStateId ?? decision.canonicalId,
+  };
 
   static ReviewState _reviewStateFromRow(Map<String, Object?> row) {
     final first = row['firstReviewedAt'] as String?;
@@ -981,6 +953,22 @@ class SqliteStudyRepository implements StudyRepository {
     );
   }
 
+  /// The `srs_review_state` row for [state].
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _reviewStateRow(ReviewState state) => {
+    'decisionId': state.decisionId,
+    'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
+    'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
+    'nextDueAt': state.nextDueAt?.toIso8601String(),
+    'repetitionCount': state.repetitionCount,
+    'lapseCount': state.lapseCount,
+    'stability': state.stability,
+    'difficulty': state.difficulty,
+  };
+
   static ReviewEvent _reviewEventFromRow(Map<String, Object?> row) {
     return ReviewEvent(
       decisionId: row['decisionId']! as String,
@@ -994,4 +982,17 @@ class SqliteStudyRepository implements StudyRepository {
       ),
     );
   }
+
+  /// The `srs_review_event` row for [event].
+  ///
+  /// One builder per table: each of these tables is written from the import
+  /// transaction, the single save and the batch save, and a column added to one
+  /// copy and missed in another loses a field silently.
+  static Map<String, Object?> _reviewEventRow(ReviewEvent event) => {
+    'decisionId': event.decisionId,
+    'whenTimestamp': event.when.toIso8601String(),
+    'result': event.result.name,
+    'oldStateJson': jsonEncode(reviewStateToJson(event.oldState)),
+    'newStateJson': jsonEncode(reviewStateToJson(event.newState)),
+  };
 }

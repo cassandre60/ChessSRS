@@ -83,9 +83,9 @@ class SrsTopBar extends StatelessWidget {
           if (isPracticeMode) ...[
             // The `Practice` label is itself the way out. It used to be inert text with a separate
             // 12px `Exit Practice` button beside it -- a 168x16px target for the only exit from a
-            // mode the user opted into, against the 44x44 minimum in 03-components.md §6, and two
-            // controls where one says the same thing. `SrsPressable` enforces no minimum of its
-            // own, so the 44px is asked for here.
+            // mode the user opted into, against the minimum target in 03-components.md §6 (now
+            // `SrsLayout.minTouchTarget`, 48), and two controls where one says the same thing.
+            // `SrsPressable` enforces no minimum of its own, so the size is asked for here.
             SrsPressable(
               onPressed: onExitPractice,
               semanticLabel: 'Exit practice',
@@ -129,8 +129,11 @@ class SrsTopBar extends StatelessWidget {
             semanticLabel: 'Library and settings',
             radius: 999,
             builder: (context, hovered, pressed) => Container(
-              width: 44,
-              height: 44,
+              // Was a hardcoded 44. The token it should have read went to 48, and this is the one
+              // control the change walked straight past: a literal, in a file the token also lives
+              // in. It now reads the token like its neighbours, so the two cannot drift again.
+              width: SrsLayout.minTouchTarget,
+              height: SrsLayout.minTouchTarget,
               decoration: BoxDecoration(
                 color: hovered ? c.hairlineSoft : const Color(0x00000000),
                 shape: BoxShape.circle,
@@ -182,7 +185,7 @@ class _ColourSquare extends StatelessWidget {
         semanticsToggled: isActive,
         radius: 8,
         builder: (context, hovered, pressed) => Container(
-          // The padding is what carries the square to the 44px minimum target
+          // The padding is what carries the square up to the minimum target
           // (`03-components.md` §6); the square itself stays small so the two
           // read as a pair rather than as two buttons.
           padding: const EdgeInsets.all((SrsLayout.minTouchTarget - _edge) / 2),

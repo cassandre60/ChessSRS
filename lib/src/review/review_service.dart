@@ -157,8 +157,8 @@ class ReviewService {
   Future<ReviewSession> startSession({
     ReviewScope scope = const ReviewScope.all(),
     ReviewMode mode = ReviewMode.srs,
-    int? prefetchBatchSize = 25,
-    int prefetchRefillThreshold = 3,
+    int? prefetchBatchSize = kDefaultPrefetchBatchSize,
+    int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
     int? generation,
   }) async {
@@ -299,34 +299,20 @@ class ReviewService {
       // store for all in-scope canonical ids, so a null here means "never exposed", not "unknown".
       final throttle = session.exposureThrottle;
       final canonicalId = currentDecision?.canonicalId ?? result.updatedState.decisionId;
-      final kState = PositionKnowledgeState(
+      final kState = PositionKnowledgeState.fromReviewState(
+        result.updatedState,
         canonicalId: canonicalId,
-        firstReviewedAt: result.updatedState.firstReviewedAt,
-        lastReviewedAt: result.updatedState.lastReviewedAt,
-        nextDueAt: result.updatedState.nextDueAt,
-        repetitionCount: result.updatedState.repetitionCount,
-        lapseCount: result.updatedState.lapseCount,
-        stability: result.updatedState.stability,
-        difficulty: result.updatedState.difficulty,
-        lastExposedAt: throttle[canonicalId],
-      );
+      ).copyWith(lastExposedAt: throttle[canonicalId]);
 
       final allKStates = <PositionKnowledgeState>[kState];
 
       // Persist any secondary states updated via graph effects (contagion, siblings, auto-traversal)
       for (final sideState in result.sideEffectStates) {
         allKStates.add(
-          PositionKnowledgeState(
+          PositionKnowledgeState.fromReviewState(
+            sideState,
             canonicalId: sideState.decisionId,
-            firstReviewedAt: sideState.firstReviewedAt,
-            lastReviewedAt: sideState.lastReviewedAt,
-            nextDueAt: sideState.nextDueAt,
-            repetitionCount: sideState.repetitionCount,
-            lapseCount: sideState.lapseCount,
-            stability: sideState.stability,
-            difficulty: sideState.difficulty,
-            lastExposedAt: throttle[sideState.decisionId],
-          ),
+          ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
         );
       }
 
@@ -375,17 +361,10 @@ class ReviewService {
         await repository.saveAnswerBatch(
           knowledgeStates: [
             for (final sideState in result.sideEffectStates)
-              PositionKnowledgeState(
+              PositionKnowledgeState.fromReviewState(
+                sideState,
                 canonicalId: sideState.decisionId,
-                firstReviewedAt: sideState.firstReviewedAt,
-                lastReviewedAt: sideState.lastReviewedAt,
-                nextDueAt: sideState.nextDueAt,
-                repetitionCount: sideState.repetitionCount,
-                lapseCount: sideState.lapseCount,
-                stability: sideState.stability,
-                difficulty: sideState.difficulty,
-                lastExposedAt: throttle[sideState.decisionId],
-              ),
+              ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
           ],
         );
       } catch (e, st) {

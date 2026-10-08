@@ -57,7 +57,8 @@ class ExportPgnDialog extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        showSnackBar(context, 'Could not save file: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [ExportPgnDialog] could not save file: $e');
+        showSnackBar(context, 'Could not save file', type: SnackBarType.error);
       }
     }
   }
@@ -78,7 +79,8 @@ class ExportPgnDialog extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        showSnackBar(context, 'Sharing failed: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [ExportPgnDialog] sharing failed: $e');
+        showSnackBar(context, 'Sharing failed', type: SnackBarType.error);
       }
     }
   }

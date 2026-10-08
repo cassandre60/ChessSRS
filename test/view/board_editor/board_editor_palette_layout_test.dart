@@ -88,7 +88,10 @@ void main() {
         reason: 'the FEN readout must sit beside the board in landscape, not below it',
       );
       // The width it buys back is the whole point, so assert the amount rather than just the side.
-      expect(board.width, greaterThan(200));
+      // 190, not 200: SrsLayout.minTouchTarget went 44 -> 48 (platform accessibility guidance),
+      // so the side column is wider and the board narrower. Still far above the 104px of the
+      // stacked-under regression this guards.
+      expect(board.width, greaterThan(190));
     });
 
     testWidgets('portrait stacks the status panel under the board', (tester) async {

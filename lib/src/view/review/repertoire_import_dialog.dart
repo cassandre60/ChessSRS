@@ -188,7 +188,8 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        showSnackBar(context, 'Lichess import failed: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [RepertoireImportDialog] Lichess import failed: $e');
+        showSnackBar(context, 'Lichess import failed', type: SnackBarType.error);
       }
     } finally {
       if (mounted) {
@@ -240,7 +241,8 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        showSnackBar(context, 'Import failed: $e', type: SnackBarType.error);
+        debugPrint('SEVERE: [RepertoireImportDialog] import failed: $e');
+        showSnackBar(context, 'Import failed', type: SnackBarType.error);
       }
     } finally {
       if (mounted) {

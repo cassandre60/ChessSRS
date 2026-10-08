@@ -420,6 +420,8 @@ class SrsSettingsRow extends StatelessWidget {
     this.preview,
     this.selected,
     this.onTap,
+    this.onLongPress,
+    this.inlineControl = false,
     this.enabled = true,
     this.destructive = false,
   });
@@ -443,6 +445,12 @@ class SrsSettingsRow extends StatelessWidget {
   /// Right-hand control for a setting row: a switch, a segmented control, a picker.
   final Widget? control;
 
+  /// Keeps [control] on the same line as the label instead of dropping it below when the row is
+  /// narrow. Off by default, because a switch under its own label reads as broken -- but a
+  /// two-glyph trailing mark belongs beside the row it annotates, and under the label it stops
+  /// being a trailing mark at all. Set it for rows whose control is a mark, not a control.
+  final bool inlineControl;
+
   /// Rendered under the label, full width. For the choice rows that show what an option looks
   /// like -- a board thumbnail, a piece set.
   final Widget? preview;
@@ -451,6 +459,11 @@ class SrsSettingsRow extends StatelessWidget {
   final bool? selected;
 
   final VoidCallback? onTap;
+
+  /// Opens a row's secondary actions. Distinct from a long press on [SrsPressable], which this
+  /// delegates to: the design's row actions are "reveal them via long-press / secondary click",
+  /// and a row that only answers to a tap has nowhere to put them.
+  final VoidCallback? onLongPress;
 
   final bool enabled;
 
@@ -501,7 +514,7 @@ class SrsSettingsRow extends StatelessWidget {
 
     final row = LayoutBuilder(
       builder: (context, constraints) {
-        final stacked = trailing != null && constraints.maxWidth < 520;
+        final stacked = trailing != null && !inlineControl && constraints.maxWidth < 520;
         if (trailing == null) return text;
         if (stacked) {
           return Column(
@@ -538,10 +551,11 @@ class SrsSettingsRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.hairlineSoft)),
       ),
-      child: onTap == null
+      child: onTap == null && onLongPress == null
           ? body
           : SrsPressable(
               onPressed: enabled ? onTap : null,
+              onLongPress: enabled ? onLongPress : null,
               semanticLabel: label,
               radius: 0,
               builder: (context, hovered, _) => ColoredBox(
