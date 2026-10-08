@@ -167,7 +167,22 @@ double fsrsNextStabilitySuccess(double d, double s, double r, ChessFsrsParams p)
   return safeS * (1 + factor);
 }
 
-/// Calculates regressed stability after a lapse (Rating.again).
+/// Calculates stability after a lapse (Rating.again).
+///
+/// Named for the usual case, but it is **not monotone in [s]**: for a
+/// low-stability item reviewed long past due it can return *more* than [s]. With
+/// the shipped weights, a cold-start Again (`S = w0 = 0.35 d`, `D = 6.81`)
+/// regresses only until about 3.9 days overdue, and then climbs — 0.350 d becomes
+/// 0.371 d at 5 days overdue (+5.9%) and 0.516 d at 30 days (+47.3%). The
+/// `(S+1)^w13` term grows faster than the `e^((1-R)w14)` term shrinks, and nothing
+/// clamps the result back to [s].
+///
+/// This is inherited rather than introduced: FSRS's lapse formula has the same
+/// shape and no monotonic clamp, and §C.6 specifies it that way. It is therefore
+/// documented rather than "fixed" — adding `min(result, s)` here would be a
+/// spec change, not a bug fix. The test `INV-025 lapse may exceed prior stability
+/// for long-overdue items` pins the numbers so a weight retune cannot silently
+/// widen the window in which failing an item pushes it further out.
 double fsrsNextStabilityLapse(double d, double s, double r, ChessFsrsParams p) {
   final safeS = s <= 0 ? p.minStabilityDays : s;
   return p.w11 * math.pow(d, -p.w12) * (math.pow(safeS + 1, p.w13) - 1) * math.exp((1 - r) * p.w14);

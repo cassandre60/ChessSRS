@@ -95,6 +95,41 @@ void main() {
       expect(s2.stability, lessThan(s1.stability));
     });
 
+    // SPEC INV-025. Pins a property that is surprising rather than desired: the lapse
+    // formula is not monotone in S, so a low-stability item reviewed long past due ends
+    // up *more* stable after failing. Inherited from FSRS and specified in §C.6, so it is
+    // pinned, not fixed — but a weight retune must not be able to widen the window
+    // silently.
+    test('INV-025 lapse may exceed prior stability for long-overdue items', () {
+      final coldFail = scheduler.schedule(
+        previous: ReviewState.initial(decisionId: 'd1'),
+        result: ReviewResult.incorrect,
+        now: t0,
+      );
+      // S0(Again) = w0 = 0.35 d; D0(Again) = w4 + 2*w5 = 6.81.
+      expect(coldFail.stability, closeTo(0.35 * 86400000, 1000));
+      expect(coldFail.difficulty, closeTo(6.81, 0.001));
+
+      // Still regressing while the item is only a little overdue.
+      final at3 = scheduler.schedule(
+        previous: coldFail,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 3)),
+      );
+      expect(at3.stability, lessThan(coldFail.stability));
+
+      // Past the ~3.9 day crossover the formula inverts.
+      final at5 = scheduler.schedule(
+        previous: coldFail,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 5)),
+      );
+      // Second lapse overall: the cold-start Again above was the first.
+      expect(at5.lapseCount, 2);
+      expect(at5.stability, greaterThan(coldFail.stability));
+      expect(at5.stability / coldFail.stability, closeTo(1.059, 0.002));
+    });
+
     test('same-day re-review applies damped factor avoiding division blowup', () {
       final s0 = ReviewState.initial(decisionId: 'd1');
       final s1 = scheduler.schedule(previous: s0, result: ReviewResult.correct, now: t0);
