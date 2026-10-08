@@ -1,7 +1,7 @@
 import 'dart:math';
-
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
@@ -18,7 +18,6 @@ import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/user/game_history_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
-import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/progression_widget.dart';
 import 'package:chess_srs/src/widgets/rating.dart';
 import 'package:chess_srs/src/widgets/stat_card.dart';
@@ -53,76 +52,68 @@ class PerfStatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: _Title(user: user, perf: perf),
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.perfStatPerfStats(perf.label(context.l10n)),
+              onBack: () => Navigator.of(context).maybePop(),
+              // The perf picker, still in the head: it is the one control on this screen
+              // that navigates, so it belongs beside the name of where you are.
+              trailing: _PerfSwitcher(user: user, perf: perf),
+            ),
+            Expanded(
+              child: _Body(user: user, perf: perf),
+            ),
+          ],
+        ),
       ),
-      body: _Body(user: user, perf: perf),
     );
   }
 }
 
-class _Title extends StatelessWidget {
-  const _Title({required this.user, required this.perf});
+/// The perf picker: an icon button that opens a sheet listing the perfs with games behind
+/// them, which is what the old tappable AppBar title did.
+class _PerfSwitcher extends StatelessWidget {
+  const _PerfSwitcher({required this.user, required this.perf});
 
-  final Perf perf;
   final User user;
+  final Perf perf;
 
   @override
   Widget build(BuildContext context) {
     final allPerfs = Perf.values
-        .where((element) {
-          if ([perf, Perf.storm, Perf.streak, Perf.fromPosition].contains(element)) {
-            return false;
-          }
-          final p = user.perfs[element];
-          return p != null &&
-              p.games != null &&
-              p.games! > 0 &&
-              p.ratingDeviation < kClueLessDeviation;
+        .where((p) {
+          if ([perf, Perf.storm, Perf.streak, Perf.fromPosition].contains(p)) return false;
+          final stat = user.perfs[p];
+          return stat != null &&
+              stat.games != null &&
+              stat.games! > 0 &&
+              stat.ratingDeviation < kClueLessDeviation;
         })
         .toList(growable: false);
-    return InkWell(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(perf.icon),
-            Text(
-              ' ${context.l10n.perfStatPerfStats(perf.label(context.l10n))}',
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Icon(Icons.arrow_drop_down),
-          ],
-        ),
-      ),
-      onTap: () {
-        showAdaptiveActionSheet<void>(
-          context: context,
-          actions: allPerfs
-              .map((p) {
-                return BottomSheetAction(
-                  makeLabel: (context) => Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(p.icon),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.l10n.perfStatPerfStats(p.label(context.l10n)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                  onPressed: () {
-                    Navigator.of(
+
+    return SrsIconButton(
+      icon: perf.icon,
+      tooltip: context.l10n.perfStatPerfStats(perf.label(context.l10n)),
+      onPressed: allPerfs.isEmpty
+          ? null
+          : () => showAdaptiveActionSheet<void>(
+              context: context,
+              actions: [
+                for (final p in allPerfs)
+                  BottomSheetAction(
+                    makeLabel: (context) => Text(
+                      context.l10n.perfStatPerfStats(p.label(context.l10n)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () => Navigator.of(
                       context,
-                    ).pushReplacement(PerfStatsScreen.buildRoute(user: user, perf: p));
-                  },
-                );
-              })
-              .toList(growable: false),
-        );
-      },
+                    ).pushReplacement(PerfStatsScreen.buildRoute(user: user, perf: p)),
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -619,11 +610,12 @@ class _GameListWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListSection(
-      header: header,
-      margin: const EdgeInsets.only(top: 10.0),
-      hasLeading: false,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        header,
+        const SizedBox(height: 6),
+
         for (final game in games)
           _GameListTile(
             onTap: () async {
