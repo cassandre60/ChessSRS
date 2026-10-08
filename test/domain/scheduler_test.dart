@@ -274,5 +274,34 @@ void main() {
       expect(scheduler.isDue(sDue, t0), isTrue);
       expect(scheduler.isDue(sFuture, t0), isFalse);
     });
+
+    test('falls back to baseMs when stability is zero for repetitionCount >= 2', () {
+      const state = ReviewState(decisionId: 'd1', repetitionCount: 2, stability: 0);
+      final sNext = scheduler.schedule(previous: state, result: ReviewResult.correct, now: t0);
+      expect(sNext.repetitionCount, 3);
+      // baseMs = (1 day * 2.5) = 2.5 days. scaled by 1.5 = 3.75 days (90 hours)
+      final expectedMs = (const Duration(days: 1).inMilliseconds * 2.5 * 1.5).round();
+      expect(sNext.stability, expectedMs.toDouble());
+    });
+
+    test('equality and hashCode work correctly', () {
+      const s1 = EaseScalingScheduler(ease: 2.5, scaling: 1.5);
+      const s2 = EaseScalingScheduler(ease: 2.5, scaling: 1.5);
+      const s3 = EaseScalingScheduler(ease: 3.0, scaling: 1.5);
+      expect(s1, equals(s2));
+      expect(s1.hashCode, equals(s2.hashCode));
+      expect(s1, isNot(equals(s3)));
+    });
+  });
+
+  group('SimpleScheduler equality', () {
+    test('equality and hashCode work correctly', () {
+      const s1 = SimpleScheduler();
+      const s2 = SimpleScheduler();
+      const s3 = SimpleScheduler(intervalMultiplier: 3.0);
+      expect(s1, equals(s2));
+      expect(s1.hashCode, equals(s2.hashCode));
+      expect(s1, isNot(equals(s3)));
+    });
   });
 }
