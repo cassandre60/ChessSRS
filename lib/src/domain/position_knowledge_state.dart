@@ -71,6 +71,26 @@ class PositionKnowledgeState {
   factory PositionKnowledgeState.cold(String canonicalId) =>
       PositionKnowledgeState(canonicalId: canonicalId);
 
+  /// Builds the canonical knowledge state for [canonicalId] from an equivalent
+  /// [ReviewState]: the single mapping from decision-keyed review memory to
+  /// canonical-position knowledge, and the inverse of [toReviewState].
+  ///
+  /// Latency fields have no counterpart on [ReviewState]; a caller holding only
+  /// a review outcome passes no samples ("never measured" by default).
+  factory PositionKnowledgeState.fromReviewState(
+    ReviewState state, {
+    required String canonicalId,
+  }) => PositionKnowledgeState(
+    canonicalId: canonicalId,
+    firstReviewedAt: state.firstReviewedAt,
+    lastReviewedAt: state.lastReviewedAt,
+    nextDueAt: state.nextDueAt,
+    repetitionCount: state.repetitionCount,
+    lapseCount: state.lapseCount,
+    stability: state.stability,
+    difficulty: state.difficulty,
+  );
+
   /// Canonical SHA-1 fingerprint of `<fenKey>|<expectedMoveUci>`.
   final String canonicalId;
 
