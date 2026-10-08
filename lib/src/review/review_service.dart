@@ -233,17 +233,6 @@ class ReviewService {
       reviewStates[k.canonicalId] = k.toReviewState();
     }
 
-    // Seed the B.2 exposure cap from the store. Without this the once-per-calendar-day throttle
-    // lives only in the coordinator's memory, so it resets with every session and passive stability
-    // compounds once per session rather than once per day (review-2 C1).
-    final exposureThrottle = <String, DateTime>{};
-    for (final k in kStates) {
-      final exposedAt = k.lastExposedAt;
-      if (exposedAt != null) {
-        exposureThrottle[k.canonicalId] = exposedAt;
-      }
-    }
-
     final engine = ReviewEngine(scheduler: scheduler, clock: clock);
 
     final session = engine.createSession(
@@ -255,7 +244,6 @@ class ReviewService {
       mode: mode,
       order: reviewOrder,
       transposeScope: transposeScope,
-      initialExposureThrottle: exposureThrottle,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,
@@ -295,9 +283,6 @@ class ReviewService {
 
     // Incremental persistence to canonical knowledge state and review event (SRS mode only)
     if (session.mode != ReviewMode.practice) {
-      // The throttle is authoritative for every id we are about to write: it was seeded from the
-      // store for all in-scope canonical ids, so a null here means "never exposed", not "unknown".
-      final throttle = session.exposureThrottle;
       final canonicalId = currentDecision?.canonicalId ?? result.updatedState.decisionId;
       final kState = PositionKnowledgeState(
         canonicalId: canonicalId,
@@ -308,7 +293,6 @@ class ReviewService {
         lapseCount: result.updatedState.lapseCount,
         stability: result.updatedState.stability,
         difficulty: result.updatedState.difficulty,
-        lastExposedAt: throttle[canonicalId],
       );
 
       final allKStates = <PositionKnowledgeState>[kState];
@@ -325,7 +309,6 @@ class ReviewService {
             lapseCount: sideState.lapseCount,
             stability: sideState.stability,
             difficulty: sideState.difficulty,
-            lastExposedAt: throttle[sideState.decisionId],
           ),
         );
       }
@@ -368,9 +351,6 @@ class ReviewService {
     final result = session.retryMove(from: from, to: to, promotion: promotion);
 
     if (session.mode != ReviewMode.practice && result.sideEffectStates.isNotEmpty) {
-      // Hoisted: the getter copies the throttle map, so calling it inside the element loop would
-      // copy it once per side effect.
-      final throttle = session.exposureThrottle;
       try {
         await repository.saveAnswerBatch(
           knowledgeStates: [
@@ -384,7 +364,6 @@ class ReviewService {
                 lapseCount: sideState.lapseCount,
                 stability: sideState.stability,
                 difficulty: sideState.difficulty,
-                lastExposedAt: throttle[sideState.decisionId],
               ),
           ],
         );

@@ -55,7 +55,6 @@ class PositionKnowledgeState {
     this.difficulty = 0.0,
     this.latencyEmaMs,
     this.latencySampleCount = 0,
-    this.lastExposedAt,
   });
 
   /// Creates a cold (unreviewed) knowledge state.
@@ -84,14 +83,6 @@ class PositionKnowledgeState {
   /// Number of active recall latency samples recorded.
   final int latencySampleCount;
 
-  /// When this position last received auto-traversal exposure credit (§B.2).
-  ///
-  /// Persisted so the "once per calendar day" cap survives an app restart. Without it the cap is
-  /// per-session, and passive stability compounds once per session instead of once per day — see
-  /// review-2 C1. Null means never exposed, which is the permissive reading and is correct for
-  /// every row written before the column existed.
-  final DateTime? lastExposedAt;
-
   bool get isNew => repetitionCount == 0 && nextDueAt == null;
   bool get isLearned => repetitionCount > 0;
   bool isDueAt(DateTime now) => nextDueAt == null || !nextDueAt!.isAfter(now);
@@ -118,7 +109,6 @@ class PositionKnowledgeState {
     double? difficulty,
     double? latencyEmaMs,
     int? latencySampleCount,
-    DateTime? lastExposedAt,
   }) {
     return PositionKnowledgeState(
       canonicalId: canonicalId,
@@ -131,7 +121,6 @@ class PositionKnowledgeState {
       difficulty: difficulty ?? this.difficulty,
       latencyEmaMs: latencyEmaMs ?? this.latencyEmaMs,
       latencySampleCount: latencySampleCount ?? this.latencySampleCount,
-      lastExposedAt: lastExposedAt ?? this.lastExposedAt,
     );
   }
 
@@ -148,8 +137,7 @@ class PositionKnowledgeState {
           other.stability == stability &&
           other.difficulty == difficulty &&
           other.latencyEmaMs == latencyEmaMs &&
-          other.latencySampleCount == latencySampleCount &&
-          other.lastExposedAt == lastExposedAt;
+          other.latencySampleCount == latencySampleCount;
 
   @override
   int get hashCode => Object.hash(
@@ -163,7 +151,6 @@ class PositionKnowledgeState {
     difficulty,
     latencyEmaMs,
     latencySampleCount,
-    lastExposedAt,
   );
 
   @override

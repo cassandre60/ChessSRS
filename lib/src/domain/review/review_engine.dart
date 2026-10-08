@@ -41,7 +41,6 @@ class ReviewEngine {
     int prefetchRefillThreshold = 3,
     int? remainingDailyQuota,
     GraphAwareReviewCoordinator? coordinator,
-    Map<String, DateTime>? initialExposureThrottle,
     Random? random,
   }) {
     return ReviewSession(
@@ -59,7 +58,6 @@ class ReviewEngine {
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,
       coordinator: coordinator,
-      initialExposureThrottle: initialExposureThrottle,
       random: random ?? this.random,
     );
   }

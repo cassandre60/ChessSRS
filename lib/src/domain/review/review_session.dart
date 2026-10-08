@@ -46,7 +46,6 @@ class ReviewSession {
     this.prefetchRefillThreshold = 3,
     this.remainingDailyQuota,
     GraphAwareReviewCoordinator? coordinator,
-    Map<String, DateTime>? initialExposureThrottle,
     Random? random,
   }) : _random = random ?? Random(),
        _studies = {for (final s in studies) s.id: s},
@@ -86,7 +85,6 @@ class ReviewSession {
         GraphAwareReviewCoordinator(
           scheduler: scheduler,
           repo: _SessionReviewStateRepository(this),
-          initialExposureThrottle: initialExposureThrottle,
         );
 
     // Build initial due queue
@@ -240,13 +238,6 @@ class ReviewSession {
   int get initialDueCount => _initialDueCount;
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
-
-  /// Last auto-traversal exposure grant per canonical id (Architecture §B.2).
-  ///
-  /// Exposed so the caller can persist the once-per-calendar-day cap alongside the answer that
-  /// updated it, and reseed the next session from the store. Keeping it only here made the cap
-  /// per-session rather than per-day; see review-2 C1.
-  Map<String, DateTime> get exposureThrottle => _coordinator.snapshotExposureThrottle();
 
   /// Returns the chapter with [chapterId] if present in this session.
   Chapter? getChapter(String chapterId) => _chapters[chapterId];
