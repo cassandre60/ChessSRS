@@ -29,9 +29,7 @@ final _logger = Logger('CanonicalRekeyMigration');
 ///
 /// Safe to run more than once: a decision already on the new format recomputes to itself and is
 /// left alone.
-Future<CanonicalRekeyResult> rekeyCanonicalReviewState(
-  DatabaseExecutor db,
-) async {
+Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) async {
   final fenKeysByChapter = await _loadFenKeysByChapter(db);
 
   final decisions = await db.query(
@@ -69,10 +67,7 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(
     }
 
     final moves = decodeExpectedMoves(rawMoves);
-    final newId = canonicalKeyForPosition(
-      fenKey,
-      moves.map((move) => move.uci),
-    );
+    final newId = canonicalKeyForPosition(fenKey, moves.map((move) => move.uci));
     if (newId == oldId) continue;
 
     renames[oldId] = newId;
@@ -118,18 +113,10 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(
   // The primary key changes, so the moved rows are removed and rewritten rather than updated:
   // two old ids can land on the same new one, which an in-place UPDATE could not express.
   for (final oldId in renames.keys) {
-    await db.delete(
-      kTablePositionKnowledgeState,
-      where: 'canonicalId = ?',
-      whereArgs: [oldId],
-    );
+    await db.delete(kTablePositionKnowledgeState, where: 'canonicalId = ?', whereArgs: [oldId]);
     // saveAnswerBatch mirrors every canonical state into srs_review_state under the same key.
     // Without this the retired keys linger there as dead rows that due queries would surface.
-    await db.delete(
-      kTableSrsReviewState,
-      where: 'decisionId = ?',
-      whereArgs: [oldId],
-    );
+    await db.delete(kTableSrsReviewState, where: 'decisionId = ?', whereArgs: [oldId]);
   }
   for (final entry in merged.entries) {
     await db.insert(
@@ -191,13 +178,8 @@ class CanonicalRekeyResult {
 }
 
 /// chapterId -> nodeId -> position identity.
-Future<Map<String, Map<String, String>>> _loadFenKeysByChapter(
-  DatabaseExecutor db,
-) async {
-  final chapters = await db.query(
-    kTableSrsChapter,
-    columns: ['id', 'treeJson'],
-  );
+Future<Map<String, Map<String, String>>> _loadFenKeysByChapter(DatabaseExecutor db) async {
+  final chapters = await db.query(kTableSrsChapter, columns: ['id', 'treeJson']);
   final result = <String, Map<String, String>>{};
 
   for (final row in chapters) {
@@ -205,18 +187,12 @@ Future<Map<String, Map<String, String>>> _loadFenKeysByChapter(
     if (treeJson == null || treeJson.isEmpty) continue;
     try {
       final chapterId = row['id']! as String;
-      final root = repertoireNodeFromJson(
-        jsonDecode(treeJson) as Map<String, dynamic>,
-      );
+      final root = repertoireNodeFromJson(jsonDecode(treeJson) as Map<String, dynamic>);
       result[chapterId] = _collectFenKeys(root);
     } catch (e, st) {
       // A chapter whose tree cannot be read is skipped whole. Its decisions keep their current
       // ids, so nothing is lost — the states simply stay under the key they already use.
-      _logger.warning(
-        'Skipping chapter ${row['id']} during canonical rekey',
-        e,
-        st,
-      );
+      _logger.warning('Skipping chapter ${row['id']} during canonical rekey', e, st);
     }
   }
   return result;
@@ -244,10 +220,8 @@ bool _knowledgeProgress({
   required Map<String, Object?> row,
   required Map<String, Object?> incumbent,
 }) {
-  int intOf(Map<String, Object?> row, String key) =>
-      (row[key] as num?)?.toInt() ?? 0;
-  double doubleOf(Map<String, Object?> row, String key) =>
-      (row[key] as num?)?.toDouble() ?? 0.0;
+  int intOf(Map<String, Object?> row, String key) => (row[key] as num?)?.toInt() ?? 0;
+  double doubleOf(Map<String, Object?> row, String key) => (row[key] as num?)?.toDouble() ?? 0.0;
   String? timeOf(Map<String, Object?> row, String key) => row[key] as String?;
 
   final byRepetitions = intOf(
@@ -261,30 +235,18 @@ bool _knowledgeProgress({
   final byLastReviewed = (lastA ?? '').compareTo(lastB ?? '');
   if (byLastReviewed != 0) return byLastReviewed > 0;
 
-  final byStability = doubleOf(
-    row,
-    'stability',
-  ).compareTo(doubleOf(incumbent, 'stability'));
+  final byStability = doubleOf(row, 'stability').compareTo(doubleOf(incumbent, 'stability'));
   if (byStability != 0) return byStability > 0;
 
-  final byLapses = intOf(
-    row,
-    'lapseCount',
-  ).compareTo(intOf(incumbent, 'lapseCount'));
+  final byLapses = intOf(row, 'lapseCount').compareTo(intOf(incumbent, 'lapseCount'));
   if (byLapses != 0) return byLapses < 0;
 
-  return (row['canonicalId']! as String).compareTo(
-        incumbent['canonicalId']! as String,
-      ) <
-      0;
+  return (row['canonicalId']! as String).compareTo(incumbent['canonicalId']! as String) < 0;
 }
 
 /// The result of a backfill pass, for logging and tests.
 class LegacyBackfillResult {
-  const LegacyBackfillResult({
-    required this.statesCreated,
-    required this.collisionsMerged,
-  });
+  const LegacyBackfillResult({required this.statesCreated, required this.collisionsMerged});
 
   /// Canonical positions that gained a knowledge state they had no row for.
   final int statesCreated;
@@ -309,9 +271,7 @@ class LegacyBackfillResult {
 /// Runs after [rekeyCanonicalReviewState] so it matches legacy rows against the keys the importer
 /// now generates. Safe to run more than once: a canonical position that already has a row is left
 /// alone.
-Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(
-  DatabaseExecutor db,
-) async {
+Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(DatabaseExecutor db) async {
   final decisions = await db.query(
     kTableSrsDecision,
     columns: ['id', 'canonicalStateId'],
@@ -335,10 +295,7 @@ Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(
 
   // Canonical positions that already have a row win: the canonical table is the newer record.
   final existing = <String>{};
-  for (final row in await db.query(
-    kTablePositionKnowledgeState,
-    columns: ['canonicalId'],
-  )) {
+  for (final row in await db.query(kTablePositionKnowledgeState, columns: ['canonicalId'])) {
     final id = row['canonicalId'];
     if (id is String) existing.add(id);
   }
@@ -355,11 +312,9 @@ Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(
     seenPerCanonical[canonical] = (seenPerCanonical[canonical] ?? 0) + 1;
     final current = candidates[canonical];
     if (current == null) {
-      candidates[canonical] = Map<String, Object?>.of(row)
-        ..['canonicalId'] = canonical;
+      candidates[canonical] = Map<String, Object?>.of(row)..['canonicalId'] = canonical;
     } else if (_knowledgeProgress(row: row, incumbent: current)) {
-      candidates[canonical] = Map<String, Object?>.of(row)
-        ..['canonicalId'] = canonical;
+      candidates[canonical] = Map<String, Object?>.of(row)..['canonicalId'] = canonical;
     }
   }
 
@@ -386,8 +341,5 @@ Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(
     );
   }
 
-  return LegacyBackfillResult(
-    statesCreated: candidates.length,
-    collisionsMerged: collisions,
-  );
+  return LegacyBackfillResult(statesCreated: candidates.length, collisionsMerged: collisions);
 }
