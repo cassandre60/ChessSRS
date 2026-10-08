@@ -283,11 +283,8 @@ void main() {
 
       await rekeyCanonicalReviewState(db);
 
-      Future<List<Map<String, Object?>>> legacyMirrors(String id) => db.query(
-        kTableSrsReviewState,
-        where: 'decisionId = ?',
-        whereArgs: [id],
-      );
+      Future<List<Map<String, Object?>>> legacyMirrors(String id) =>
+          db.query(kTableSrsReviewState, where: 'decisionId = ?', whereArgs: [id]);
 
       expect(
         await legacyMirrors(oldId),
