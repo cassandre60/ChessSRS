@@ -84,12 +84,9 @@ class PositionKnowledgeState {
   /// Number of active recall latency samples recorded.
   final int latencySampleCount;
 
-  /// When this position last received auto-traversal exposure credit (§B.2).
-  ///
-  /// Persisted so the "once per calendar day" cap survives an app restart. Without it the cap is
-  /// per-session, and passive stability compounds once per session instead of once per day — see
-  /// review-2 C1. Null means never exposed, which is the permissive reading and is correct for
-  /// every row written before the column existed.
+  /// When this position last received auto-traversal exposure credit (§B.2). Persisted so the
+  /// "once per calendar day" cap survives a restart; null means never exposed, which is correct for
+  /// rows written before the column existed. See review-2 C1.
   final DateTime? lastExposedAt;
 
   bool get isNew => repetitionCount == 0 && nextDueAt == null;

@@ -150,11 +150,8 @@ class GraphAwareReviewCoordinator {
   final ReviewStateRepository repo;
   final GraphAwareParams params;
 
-  /// Last auto-traversal exposure grant per canonical id (§B.2's once-per-calendar-day cap).
-  ///
-  /// Seeded from the store at construction and re-persisted by the caller after each answer, so
-  /// the cap survives an app restart. Left purely in memory it resets per session, and passive
-  /// stability compounds once per session instead of once per day — see review-2 C1.
+  /// Last auto-traversal exposure grant per canonical id (§B.2's once-per-calendar-day cap). Seeded
+  /// from the store and re-persisted by the caller, so the cap survives a restart — review-2 C1.
   final Map<String, DateTime> _lastExposedAt;
 
   /// Resolves the scheduling identity for [node].

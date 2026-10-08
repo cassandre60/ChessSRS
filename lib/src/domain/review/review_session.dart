@@ -206,13 +206,9 @@ class ReviewSession {
   final List<RepertoireDecision> _unbufferedQueue = [];
   final Set<String> _completedDecisionIds = {};
 
-  /// Decisions that have already been graded as a lapse during this session.
-  ///
-  /// A failed decision is re-queued for a re-test ([submitMove]'s incorrect
-  /// branch). When the re-test succeeds it is a *corrected false-start*, which
-  /// Decision D015 grades as a single Again — not as a lapse followed by an
-  /// independent successful recall seconds later. This set is what lets the
-  /// correct branch tell the two apart.
+  /// Decisions already graded as a lapse this session. A failed decision is re-queued for a
+  /// re-test; when that re-test succeeds it is a *corrected false-start*, which Decision D015
+  /// grades as a single Again rather than a lapse plus an independent success seconds later.
   final Set<String> _lapsedThisSession = {};
   ReviewPrompt? _currentPrompt;
   int _completedCount = 0;
@@ -241,11 +237,8 @@ class ReviewSession {
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
 
-  /// Last auto-traversal exposure grant per canonical id (Architecture §B.2).
-  ///
-  /// Exposed so the caller can persist the once-per-calendar-day cap alongside the answer that
-  /// updated it, and reseed the next session from the store. Keeping it only here made the cap
-  /// per-session rather than per-day; see review-2 C1.
+  /// Last auto-traversal exposure grant per canonical id (Architecture §B.2), exposed so the caller
+  /// can persist the daily cap and reseed the next session. See review-2 C1.
   Map<String, DateTime> get exposureThrottle => _coordinator.snapshotExposureThrottle();
 
   /// Returns the chapter with [chapterId] if present in this session.
@@ -330,11 +323,8 @@ class ReviewSession {
       // -----------------------------------------------------------------------
       // CORRECT MOVE
       // -----------------------------------------------------------------------
-      // Decision D015: a corrected false-start is graded once, as the lapse it
-      // already was. Grading the re-test as a success too would tick
-      // repetitionCount up on a decision the user just failed, and push its due
-      // date out on the strength of a recall made seconds later in the same
-      // context — which is not a spaced recall at all.
+      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
+      // the re-test as a success too would tick repetitionCount up and push the due date out.
       final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
 
       ReviewState nextState;
@@ -435,8 +425,7 @@ class ReviewSession {
         _logger.fine('Lapse contagion/coupling updated ${sideEffects.length} associated states');
       }
 
-      // Decision D015: remember that this decision was already graded, so a
-      // successful re-test later in the session is not graded a second time.
+      // Decision D015: remember this was graded, so a later re-test is not graded twice.
       _lapsedThisSession.add(decision.canonicalId);
 
       // Re-queue the failed decision at the end of the session queue

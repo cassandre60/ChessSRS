@@ -8,14 +8,10 @@ import 'package:chess_srs/src/domain/review_result.dart';
 /// Tracks recall history so the [Scheduler] can compute the next due date.
 /// All fields are immutable; state transitions produce new instances.
 ///
-/// The [stability] field is scheduler-owned and carries a different meaning per
-/// scheduler, though always in **milliseconds**:
-/// - [SimpleScheduler] / `EaseScalingScheduler`: the current interval.
-/// - `ChessFsrsScheduler`: memory stability — days until 90% retention.
-///
-/// It is opaque to the Review UI. Because the meanings differ, a state written by
-/// one scheduler is misread by another: switching `schedulerType` in preferences
-/// reinterprets the value rather than converting it, which is a known gap.
+/// The [stability] field is scheduler-owned, always in **milliseconds**, and opaque to the Review
+/// UI: the current interval for [SimpleScheduler] / `EaseScalingScheduler`, memory stability (days
+/// to 90% retention) for `ChessFsrsScheduler`. Because the meanings differ, switching
+/// `schedulerType` reinterprets the value rather than converting it — a known gap.
 ///
 /// Invariant: [isDueAt] must be deterministic given an injected [Clock]
 /// (QUALITY.md §3.2).

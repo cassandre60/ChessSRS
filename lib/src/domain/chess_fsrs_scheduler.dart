@@ -17,9 +17,8 @@ final Logger _logger = Logger('FsrsScheduler');
 /// - [again]: incorrect move, hint used, or corrected false-start attempt.
 /// - [good]: first committed move was correct (regardless of calculation time).
 ///
-/// All three [again] cases arrive as a single [ReviewResult.incorrect]. The
-/// review session is what recognises a hint or a corrected false-start and grades
-/// it once; this class never sees them separately.
+/// All three [again] cases arrive folded into a single [ReviewResult.incorrect]; this class never
+/// sees a hint or a corrected false-start separately.
 enum FsrsRating { again, good }
 
 int _g(FsrsRating r) => r == FsrsRating.again ? 1 : 3;
@@ -169,20 +168,12 @@ double fsrsNextStabilitySuccess(double d, double s, double r, ChessFsrsParams p)
 
 /// Calculates stability after a lapse (Rating.again).
 ///
-/// Named for the usual case, but it is **not monotone in [s]**: for a
-/// low-stability item reviewed long past due it can return *more* than [s]. With
-/// the shipped weights, a cold-start Again (`S = w0 = 0.35 d`, `D = 6.81`)
-/// regresses only until about 3.9 days overdue, and then climbs — 0.350 d becomes
-/// 0.371 d at 5 days overdue (+5.9%) and 0.516 d at 30 days (+47.3%). The
-/// `(S+1)^w13` term grows faster than the `e^((1-R)w14)` term shrinks, and nothing
-/// clamps the result back to [s].
-///
-/// This is inherited rather than introduced: FSRS's lapse formula has the same
-/// shape and no monotonic clamp, and §C.6 specifies it that way. It is therefore
-/// documented rather than "fixed" — adding `min(result, s)` here would be a
-/// spec change, not a bug fix. The test `INV-025 lapse may exceed prior stability
-/// for long-overdue items` pins the numbers so a weight retune cannot silently
-/// widen the window in which failing an item pushes it further out.
+/// **Not monotone in [s]**: for a low-stability item reviewed long past due it can return *more*
+/// than [s]. With the shipped weights a cold-start Again (`S = w0 = 0.35 d`, `D = 6.81`) regresses
+/// only until ~3.9 days overdue, then climbs — 0.371 d at 5 days overdue (+5.9%), 0.516 d at 30
+/// (+47.3%). `(S+1)^w13` outgrows `e^((1-R)w14)` and nothing clamps back to [s]. FSRS has the same
+/// shape and §C.6 specifies it, so it is documented rather than "fixed": `min(result, s)` would be
+/// a spec change. `INV-025` pins the numbers so a retune cannot silently widen the window.
 double fsrsNextStabilityLapse(double d, double s, double r, ChessFsrsParams p) {
   final safeS = s <= 0 ? p.minStabilityDays : s;
   return p.w11 * math.pow(d, -p.w12) * (math.pow(safeS + 1, p.w13) - 1) * math.exp((1 - r) * p.w14);
@@ -219,10 +210,8 @@ class ChessFsrsScheduler implements Scheduler {
     required ReviewResult result,
     required DateTime now,
   }) {
-    // Binary rating (Decision D015). "Was this recall independent?" — hint used,
-    // or a corrected false-start — is settled upstream by the review session and
-    // arrives folded into [result]: a fumbled answer reaches the scheduler as
-    // [ReviewResult.incorrect] exactly once, not as a lapse plus a later pass.
+    // Binary rating (Decision D015). "Was this recall independent?" is settled upstream by the
+    // review session and arrives folded into [result], exactly once.
     final rating = result == ReviewResult.incorrect ? FsrsRating.again : FsrsRating.good;
 
     final anchor = previous.lastReviewedAt ?? previous.firstReviewedAt;
@@ -251,12 +240,10 @@ class ChessFsrsScheduler implements Scheduler {
       final bool isRapidReReview = elapsedDays < params.sameDayThresholdDays;
 
       if (isRapidReReview) {
-        // Architecture §C.7: a rapid re-review (elapsed < sameDayThresholdDays) skips the
-        // full DSR update and applies only a small linear stability nudge. Difficulty is
-        // part of that update, so it freezes too. Updating D here let a burst of
-        // intra-session failures ratchet it to the 10.0 clamp — three misses in one session
-        // were enough — which then shrank the (11 - D) growth term from 6.07 to 1.00 and
-        // took ~390 successful reviews of mean reversion at w7 to unwind.
+        // Architecture §C.7: a rapid re-review skips the full DSR update and applies only a small
+        // linear stability nudge. Difficulty is part of that update, so it freezes too — updating D
+        // here let three intra-session misses ratchet it to the 10.0 clamp, shrinking the (11 - D)
+        // growth term from 6.07 to 1.00 and taking ~390 successful reviews to unwind.
         newDifficulty = prevDifficulty;
         newStabilityDays = rating == FsrsRating.again
             ? prevStabilityDays * params.sameDayLapseFactor
@@ -315,11 +302,9 @@ class ChessFsrsScheduler implements Scheduler {
 /// Generates a preview of the interval ladder (in days) for consecutive successful recalls
 /// under [targetRetention].
 ///
-/// Mirrors what [ChessFsrsScheduler.schedule] actually emits for a run of clean successes:
-/// the same stability and interval clamps, applied in the same order, with the clamped
-/// stability fed forward. Skipping them made the ladder drift away from reality — it
-/// advertised 1697 days at step 6 and 14725 at step 9, where the scheduler emits the
-/// 1095-day cap for both.
+/// Mirrors what [ChessFsrsScheduler.schedule] emits for a run of clean successes: the same clamps,
+/// in the same order, with clamped stability fed forward. Without them the ladder advertised 1697
+/// days at step 6 where the scheduler emits the 1095-day cap.
 List<double> fsrsIntervalProgressionPreview({
   required double targetRetention,
   int steps = 5,
