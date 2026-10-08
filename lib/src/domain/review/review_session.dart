@@ -135,16 +135,25 @@ class ReviewSession {
         _logger.info(
           'Daily review quota ($remainingDailyQuota) reached, truncating queue to most urgent due items',
         );
-        _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
+        _unbufferedQueue.removeRange(
+          remainingDailyQuota!,
+          _unbufferedQueue.length,
+        );
       }
 
       // By-line order (INV-066): same set, walking study, chapter, tree order.
       if (order == ReviewOrder.byLine) {
-        final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
+        final studyIndex = <String, int>{
+          for (var i = 0; i < studies.length; i++) studies[i].id: i,
+        };
         var n = 0;
-        final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
+        final nodeOrder = <String, int>{
+          for (final id in _nodesById.keys) id: n++,
+        };
         _unbufferedQueue.sort((a, b) {
-          var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
+          var c = (studyIndex[a.studyId] ?? 0).compareTo(
+            studyIndex[b.studyId] ?? 0,
+          );
           if (c != 0) return c;
           c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
             _chapters[b.chapterId]?.sourceOrder ?? 0,
@@ -218,7 +227,8 @@ class ReviewSession {
       _unbufferedQueue.clear();
       return;
     }
-    while (_dueQueue.length < prefetchBatchSize! && _unbufferedQueue.isNotEmpty) {
+    while (_dueQueue.length < prefetchBatchSize! &&
+        _unbufferedQueue.isNotEmpty) {
       _dueQueue.add(_unbufferedQueue.removeAt(0));
     }
   }
@@ -229,10 +239,13 @@ class ReviewSession {
 
   ReviewPrompt? get currentPrompt => _currentPrompt;
   int get remainingDueCount =>
-      _dueQueue.length + _unbufferedQueue.length + (_currentPrompt != null ? 1 : 0);
+      _dueQueue.length +
+      _unbufferedQueue.length +
+      (_currentPrompt != null ? 1 : 0);
   int get completedCount => _completedCount;
   int get initialDueCount => _initialDueCount;
-  bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
+  bool get isComplete =>
+      _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
 
   /// Returns the chapter with [chapterId] if present in this session.
@@ -287,10 +300,16 @@ class ReviewSession {
   // ---------------------------------------------------------------------------
 
   /// Submit a user move to validate against the expected repertoire continuation.
-  ReviewStepResult submitMove({required String from, required String to, String? promotion}) {
+  ReviewStepResult submitMove({
+    required String from,
+    required String to,
+    String? promotion,
+  }) {
     final prompt = _currentPrompt;
     if (prompt == null) {
-      throw StateError('Cannot submit move: review session has no active prompt');
+      throw StateError(
+        'Cannot submit move: review session has no active prompt',
+      );
     }
 
     final decision = prompt.decision;
@@ -363,7 +382,11 @@ class ReviewSession {
       // -----------------------------------------------------------------------
       // INCORRECT MOVE
       // -----------------------------------------------------------------------
-      final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
+      final movePlayed = RepertoireMove(
+        from: from,
+        to: to,
+        promotion: promotion,
+      );
 
       ReviewState nextState;
       ReviewEvent? event;
@@ -408,7 +431,9 @@ class ReviewSession {
         '(lapses: ${nextState.lapseCount}, stability: ${nextState.stability.toStringAsFixed(2)})',
       );
       if (sideEffects.isNotEmpty) {
-        _logger.fine('Lapse contagion/coupling updated ${sideEffects.length} associated states');
+        _logger.fine(
+          'Lapse contagion/coupling updated ${sideEffects.length} associated states',
+        );
       }
 
       // Re-queue the failed decision at the end of the session queue
@@ -435,7 +460,8 @@ class ReviewSession {
         updatedState: nextState,
         event: event,
         autoPlayedMoves: const [],
-        nextPrompt: _currentPrompt, // keeps prompt until user continues or retries
+        nextPrompt:
+            _currentPrompt, // keeps prompt until user continues or retries
         sessionComplete: false,
         sideEffectStates: sideEffects,
       );
@@ -446,10 +472,16 @@ class ReviewSession {
   ///
   /// If the retry is correct, advances along the repertoire line without
   /// overwriting the initial lapse recorded in SRS.
-  ReviewStepResult retryMove({required String from, required String to, String? promotion}) {
+  ReviewStepResult retryMove({
+    required String from,
+    required String to,
+    String? promotion,
+  }) {
     final prompt = _currentPrompt;
     if (prompt == null) {
-      throw StateError('Cannot retry move: review session has no active prompt');
+      throw StateError(
+        'Cannot retry move: review session has no active prompt',
+      );
     }
 
     final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
@@ -475,7 +507,11 @@ class ReviewSession {
         startNode: transposedStart,
       );
     } else {
-      final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
+      final movePlayed = RepertoireMove(
+        from: from,
+        to: to,
+        promotion: promotion,
+      );
       return ReviewStepResult(
         isCorrect: false,
         movePlayed: movePlayed,
@@ -500,7 +536,8 @@ class ReviewSession {
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
     // A transposed acceptance traverses from the reached line instead.
-    var activeNode = startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
+    var activeNode =
+        startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
 
     while (activeNode != null) {
       if (activeNode.children.isEmpty) {
@@ -524,8 +561,13 @@ class ReviewSession {
       // Now at opponentChild, which is user's turn
       final nextDecision = _decisionForNode[opponentChild.id];
       if (nextDecision != null) {
-        final decState = _reviewStates[nextDecision.canonicalId] ?? _reviewStates[nextDecision.id];
-        final isDue = mode == ReviewMode.practice || decState == null || decState.isDueAt(now);
+        final decState =
+            _reviewStates[nextDecision.canonicalId] ??
+            _reviewStates[nextDecision.id];
+        final isDue =
+            mode == ReviewMode.practice ||
+            decState == null ||
+            decState.isDueAt(now);
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
@@ -533,12 +575,19 @@ class ReviewSession {
         if (isDue && !isQuotaExhausted) {
           // Found next due decision along this branch!
           _dueQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
+            (d) =>
+                d.id == nextDecision.id ||
+                d.canonicalId == nextDecision.canonicalId,
           );
           _unbufferedQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
+            (d) =>
+                d.id == nextDecision.id ||
+                d.canonicalId == nextDecision.canonicalId,
           );
-          _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
+          _currentPrompt = _buildPrompt(
+            decision: nextDecision,
+            node: opponentChild,
+          );
           return ReviewStepResult(
             isCorrect: true,
             movePlayed: expectedMatch,
@@ -576,7 +625,10 @@ class ReviewSession {
             expectedMoveUci: userMove.uci,
             hasCanonicalIdentity: nextDecision.canonicalStateId != null,
           );
-          final exposedState = _coordinator.recordAutoTraversalExposure(node: expNode, now: now);
+          final exposedState = _coordinator.recordAutoTraversalExposure(
+            node: expNode,
+            now: now,
+          );
           if (exposedState != null) {
             _reviewStates[nextDecision.canonicalId] = exposedState;
             _reviewStates[nextDecision.id] = exposedState;
@@ -656,7 +708,9 @@ class ReviewSession {
       if (_dueQueue.isEmpty) {
         if (_unbufferedQueue.isEmpty) {
           _currentPrompt = null;
-          _logger.info('ReviewSession queue empty. Completed decisions: $_completedCount');
+          _logger.info(
+            'ReviewSession queue empty. Completed decisions: $_completedCount',
+          );
           return;
         }
         _refillPrefetchBuffer();
@@ -668,7 +722,8 @@ class ReviewSession {
         continue;
       }
       final nextDecision = _dueQueue.removeAt(0);
-      if (mode == ReviewMode.srs && _completedDecisionIds.contains(nextDecision.canonicalId)) {
+      if (mode == ReviewMode.srs &&
+          _completedDecisionIds.contains(nextDecision.canonicalId)) {
         continue;
       }
       final node = _nodesById[nextDecision.nodeId];
@@ -677,7 +732,10 @@ class ReviewSession {
     }
   }
 
-  ReviewPrompt _buildPrompt({required RepertoireDecision decision, RepertoireNode? node}) {
+  ReviewPrompt _buildPrompt({
+    required RepertoireDecision decision,
+    RepertoireNode? node,
+  }) {
     final chapter = _chapters[decision.chapterId];
     final study = _studies[decision.studyId];
 
@@ -728,7 +786,11 @@ class ReviewSession {
     return node.childForMove(move);
   }
 
-  void _indexNodes(RepertoireNode node, String chapterId, [RepertoireNode? parent]) {
+  void _indexNodes(
+    RepertoireNode node,
+    String chapterId, [
+    RepertoireNode? parent,
+  ]) {
     _nodesById[node.id] = node;
     _chapterOfNode[node.id] = chapterId;
     _nodesByFenKey.putIfAbsent(node.fenKey, () => []).add(node);
@@ -746,7 +808,9 @@ class ReviewSession {
     ReviewPrompt prompt,
     RepertoireMove movePlayed,
   ) {
-    final direct = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+    final direct = prompt.expectedMoves
+        .where((exp) => exp.matches(movePlayed))
+        .firstOrNull;
     if (direct != null) return (expected: direct, start: null);
     if (transposeScope == TransposeScope.off) return null;
     final target = _findTransposedNode(prompt, movePlayed);
@@ -760,7 +824,10 @@ class ReviewSession {
   /// out-of-scope targets, and targets without their own repertoire move
   /// fail closed, preserving ordinary incorrect handling exactly.
   /// Within-study scope additionally requires the target's study.
-  RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
+  RepertoireNode? _findTransposedNode(
+    ReviewPrompt prompt,
+    RepertoireMove movePlayed,
+  ) {
     if (transposeScope == TransposeScope.off) return null;
     // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
     Position position;
@@ -769,7 +836,12 @@ class ReviewSession {
     } catch (_) {
       return null;
     }
-    const promotions = {'q': Role.queen, 'r': Role.rook, 'b': Role.bishop, 'n': Role.knight};
+    const promotions = {
+      'q': Role.queen,
+      'r': Role.rook,
+      'b': Role.bishop,
+      'n': Role.knight,
+    };
     final promotion = promotions[movePlayed.promotion ?? ''];
     if (movePlayed.promotion != null && promotion == null) return null;
     late final Position next;
@@ -798,7 +870,8 @@ class ReviewSession {
             openingFamily: chapter.opening,
             side: chapter.orientation,
           ) ||
-          (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
+          (transposeScope == TransposeScope.withinStudy &&
+              chapter.studyId != prompt.studyId)) {
         continue;
       }
       return node;
@@ -836,7 +909,9 @@ class ReviewSession {
       dueCounts[child] = _countDueDecisionsInSubtree(child, now);
     }
 
-    final dueChildren = node.children.where((c) => (dueCounts[c] ?? 0) > 0).toList();
+    final dueChildren = node.children
+        .where((c) => (dueCounts[c] ?? 0) > 0)
+        .toList();
     if (dueChildren.isNotEmpty) {
       return _selectWeighted(dueChildren, dueCounts);
     }
@@ -856,8 +931,10 @@ class ReviewSession {
     var count = 0;
     final decision = _decisionForNode[node.id];
     if (decision != null) {
-      final state = _reviewStates[decision.canonicalId] ?? _reviewStates[decision.id];
-      final isDue = mode == ReviewMode.practice || state == null || state.isDueAt(now);
+      final state =
+          _reviewStates[decision.canonicalId] ?? _reviewStates[decision.id];
+      final isDue =
+          mode == ReviewMode.practice || state == null || state.isDueAt(now);
       if (isDue) {
         count++;
       }
@@ -882,7 +959,10 @@ class ReviewSession {
   ) {
     if (candidates.length == 1) return candidates.first;
 
-    final totalWeight = candidates.fold<int>(0, (sum, c) => sum + (weights[c] ?? 1));
+    final totalWeight = candidates.fold<int>(
+      0,
+      (sum, c) => sum + (weights[c] ?? 1),
+    );
     if (totalWeight <= 0) {
       return candidates[_random.nextInt(candidates.length)];
     }
@@ -899,7 +979,8 @@ class ReviewSession {
   }
 
   List<String> _childDecisionIdsOf(String decisionId) {
-    final decision = _decisionsByCanonicalId[decisionId] ?? _decisionsById[decisionId];
+    final decision =
+        _decisionsByCanonicalId[decisionId] ?? _decisionsById[decisionId];
     if (decision == null) return const [];
     final node = _nodesById[decision.nodeId];
     if (node == null) return const [];
@@ -927,7 +1008,8 @@ class ReviewSession {
 
     final siblings = <GraphNode>[];
     for (final other in candidates) {
-      if (other.id == decision.id || other.canonicalId == decision.canonicalId) continue;
+      if (other.id == decision.id || other.canonicalId == decision.canonicalId)
+        continue;
       for (final m in other.expectedMoves) {
         siblings.add(
           GraphNode(
@@ -951,9 +1033,11 @@ class _SessionReviewStateRepository implements ReviewStateRepository {
   @override
   ReviewState? get(String decisionId) {
     final decision =
-        _session._decisionsById[decisionId] ?? _session._decisionsByCanonicalId[decisionId];
+        _session._decisionsById[decisionId] ??
+        _session._decisionsByCanonicalId[decisionId];
     if (decision != null) {
-      return _session._reviewStates[decision.canonicalId] ?? _session._reviewStates[decision.id];
+      return _session._reviewStates[decision.canonicalId] ??
+          _session._reviewStates[decision.id];
     }
     return _session._reviewStates[decisionId];
   }
@@ -962,7 +1046,8 @@ class _SessionReviewStateRepository implements ReviewStateRepository {
   void put(String decisionId, ReviewState state) {
     _session._reviewStates[decisionId] = state;
     final decision =
-        _session._decisionsById[decisionId] ?? _session._decisionsByCanonicalId[decisionId];
+        _session._decisionsById[decisionId] ??
+        _session._decisionsByCanonicalId[decisionId];
     if (decision != null) {
       _session._reviewStates[decision.canonicalId] = state;
       _session._reviewStates[decision.id] = state;
@@ -970,7 +1055,8 @@ class _SessionReviewStateRepository implements ReviewStateRepository {
   }
 
   @override
-  List<String> childrenOf(String decisionId) => _session._childDecisionIdsOf(decisionId);
+  List<String> childrenOf(String decisionId) =>
+      _session._childDecisionIdsOf(decisionId);
 
   @override
   String? canonicalIdFor(String fen4, String expectedMoveUci) =>
