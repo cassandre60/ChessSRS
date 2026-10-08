@@ -276,3 +276,71 @@ while getting its impact wrong, so the negative results are worth as much as the
 **Not verified:** whether the session could supply `siblings` to enable §B.4 (D5), and the real-world
 distribution of auto-traversal frequency that determines how fast C1 bites. Neither is needed to act
 on the findings above.
+
+---
+
+## 6. Attempted fix for C1, and why it was backed out
+
+Recorded so the work is not repeated blind, and so the open question is precise.
+
+### What was built
+
+The spec requires the cap to be per calendar day, and the bug is that the only record of the last
+grant dies with the session. So the fix persists it:
+
+1. `lastExposedAt TEXT` on `kTablePositionKnowledgeState` (`srs_schema.dart`), schema v15 → v16 with
+   the matching `ALTER` in `onUpgrade`.
+2. `PositionKnowledgeState.lastExposedAt`, carried through `copyWith`, `==` and `hashCode`.
+3. The repository writes the column on all three write paths and reads it in the row mapper.
+4. `GraphAwareReviewCoordinator` takes `initialExposureThrottle`; `ReviewSession` and `ReviewEngine`
+   pass it through, and the session exposes `exposureThrottle` so the caller can persist it.
+5. `ReviewService` seeds the coordinator from the knowledge states it already loads at session
+   creation, and stamps the current throttle onto every state it writes.
+
+Step 5 is safe against erasure even though the write is `INSERT OR REPLACE`: the throttle is seeded
+for every in-scope canonical id, so a null means "never exposed" rather than "unknown".
+
+Two tests accompanied it — an `INV-028` coordinator test that reseeds a fresh coordinator and asserts
+the same-day refusal still holds (and that the next day grants again), plus a round-trip through
+`saveAnswerBatch`.
+
+### Why it was backed out
+
+Adding the `database.dart` migration reproducibly fails **2 unit tests** in CI, and this environment
+cannot read CI logs (`results-receiver.actions.githubusercontent.com` and the other log hosts are
+unreachable), so the only available signal is the pass/fail count. Four runs isolated the cause:
+
+| Commit | Configuration | Result |
+|---|---|---|
+| `f730ce63e` | full fix, my tests reverted | 1663 passed, **2 failed** |
+| `d1db493b0` | schema + database + repository reverted | green |
+| `7a627a444` | schema + repository kept, `database.dart` at v15 | green |
+| `74f6cc0a7` | full fix, coordinator test only | 1664 passed, **2 failed** |
+
+The two failures are not in either file I touched: the coordinator regression test passes in both
+failing runs, and the second excludes the persistence round-trip test entirely.
+
+**The part I could not explain.** For a fresh database `openAppDatabase` runs `onCreate`, not
+`onUpgrade`, so the version bump and the `ALTER` are both inert — and the tests use fresh temp
+databases. I checked the mechanisms that could make them non-inert and ruled each out: no test
+exercises `onUpgrade`; there are no `.db` fixtures; no test asserts a schema version; the tests that
+build the schema by hand call `createSrsTables` directly and so get the new column. Every
+explanation I could construct contradicts the observation, so I backed the change out rather than
+ship a migration I cannot account for.
+
+### What would unblock it
+
+- **Read the failure.** Anyone with CI log access, or a local `flutter test`, gets the two test names
+  immediately. That is the whole blocker.
+- **Or avoid the version bump.** Add the column idempotently (check `PRAGMA table_info` before the
+  `ALTER`, run from `onOpen`) so the schema version does not move. This trades the repo's versioned-
+  migration convention for a change that does not touch the one file implicated by the bisect.
+
+### Also learned, and worth keeping
+
+The first version of these tests failed `dart format`. It was isolated by bisect and fixed by
+rewriting both tests to use only construct shapes already present in their file — single-line method
+calls with the times hoisted to locals, and list literals assigned to a local instead of passed
+inline. The rewrite passed formatting on the first attempt, which is a reusable rule: when the
+formatter cannot be run locally, copy the shape of neighbouring code rather than writing an
+equivalent-looking variant.
