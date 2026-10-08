@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Clock abstraction for deterministic domain testing.
+library;
+
 /// Clock abstraction for injectable time source in SRS logic.
 ///
 /// All time-dependent domain functions accept a [Clock] so that test suites

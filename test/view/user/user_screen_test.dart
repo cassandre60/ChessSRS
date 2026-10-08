@@ -40,7 +40,8 @@ void main() {
       // wait for recent games and activity
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Activity'), findsOneWidget);
+      // The group header sets its title in caps, as the design's section labels do.
+      expect(find.text('ACTIVITY'), findsOneWidget);
     }, variant: kPlatformVariant);
 
     testWidgets('Challenge action is hidden when canChallenge is null (own profile case)', (

@@ -101,8 +101,17 @@ More than one agent works in this repository at a time. Each task gets its own
 git worktree and its own branch, so no two agents share a working tree. `main`
 is updated only by merging a PR that CI has passed — never pushed to directly.
 
+**The repository is `cassandre60/ChessSRS`. Nothing else.** A second repository,
+`cassandre60/chess-repertoire-srs`, held all 195 PRs until 2026-10-07 and is now
+an archived read-only fork. It was created four days *later* than ChessSRS and so
+looked newer, which is how every PR kept landing in the wrong place. Nothing has
+landed there since. Do not open a PR against it, do not push a branch to it, do
+not clone it, and if a remote resolves to `chess-repertoire-srs`, fix it before
+doing anything else.
+
 ```bash
 # once per task, from anywhere
+git remote set-url origin https://github.com/cassandre60/ChessSRS.git
 git worktree add ../chesssrs-<slug> -b <type>/<area>-<slug> origin/main
 cd ../chesssrs-<slug>
 
@@ -114,7 +123,7 @@ fvm dart run build_runner build --delete-conflicting-outputs
 
 # ... work, stage BY NAME, commit, push
 git push -u origin <branch>
-gh pr create -R cassandre60/chess-repertoire-srs
+gh pr create -R cassandre60/ChessSRS
 
 # after the PR is green and merged
 git worktree remove ../chesssrs-<slug> && git worktree prune
