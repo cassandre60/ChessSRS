@@ -23,6 +23,29 @@ const kStorageAnonId = '**anonymous**';
 
 final _logger = Logger('Database');
 
+/// Adds SRS columns introduced after a database was first created, if they are missing.
+///
+/// Architecture §B.2 caps auto-traversal exposure credit to once per calendar day per decision.
+/// Until `lastExposedAt` was stored, the only record of the last grant lived in the coordinator's
+/// memory, so the cap reset on every app restart and passive stability compounded once per session
+/// rather than once per day.
+///
+/// This is a top-up rather than a versioned migration, on purpose: it reads the table first, so it
+/// is idempotent, it leaves `version` and `onUpgrade` untouched, and it converges for any database
+/// whether or not it was created before the column existed. The column is nullable TEXT, so it
+/// reads back as null, which the coordinator treats as "never exposed" — the permissive reading,
+/// and the correct one for a row written before the column existed.
+Future<void> _ensureLateSrsColumns(Database db) async {
+  final columns = await db.rawQuery('PRAGMA table_info($kTablePositionKnowledgeState)');
+  if (columns.isEmpty) return; // table not created yet; onCreate will include the column
+  final hasLastExposedAt = columns.any((row) => row['name'] == 'lastExposedAt');
+  if (!hasLastExposedAt) {
+    await db.execute(
+      'ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT',
+    );
+  }
+}
+
 /// A provider for the app [Database].
 final databaseProvider = FutureProvider<Database>((Ref ref) async {
   if (Platform.isLinux) {
@@ -79,6 +102,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
         }
       },
       onOpen: (db) async {
+        await _ensureLateSrsColumns(db);
         await db.transaction((txn) async {
           await Future.wait([
             _deleteOldEntries(txn, 'puzzle', puzzleTTL),
