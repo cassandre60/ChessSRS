@@ -1,4 +1,4 @@
-import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/user/search_history.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/model/user/user_repository_providers.dart';
@@ -8,7 +8,6 @@ import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/utils/rate_limit.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform_search_bar.dart';
 import 'package:chess_srs/src/widgets/user_list_tile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -81,31 +80,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final searchBar = PlatformSearchBar(
-      hintText: context.l10n.searchSearch,
+    final searchBar = SrsSearchField(
+      placeholder: context.l10n.searchSearch,
       controller: _searchController,
-      autoFocus: widget.autoFocus,
+      autofocus: widget.autoFocus,
+      onChanged: (_) => _onSearchChanged(),
     );
 
     final body = _Body(_term, setSearchText, widget.onUserTap);
 
+    // The search field was an AppBar title on one path and an AppBar `bottom` on the other,
+    // chosen by whether the caller passed a title -- so the same screen put the field in a
+    // different place depending on who opened it. It is a row under the head on both now.
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: widget.title == null
-            ? kToolbarHeight
-            : null, // Custom height to fit the search bar
-        title: widget.title ?? searchBar,
-        bottom: widget.title != null
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(kToolbarHeight),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: searchBar,
-                ),
-              )
-            : null,
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: widget.title?.toString() ?? context.l10n.searchSearch,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            Padding(padding: const EdgeInsets.fromLTRB(24, 4, 24, 12), child: searchBar),
+            Expanded(child: body),
+          ],
+        ),
       ),
-      body: body,
     );
   }
 }
@@ -122,27 +122,24 @@ class _Body extends ConsumerWidget {
       return SafeArea(child: _UserList(term!, onUserTap));
     } else {
       final searchHistory = ref.watch(searchHistoryProvider).history;
-      return SafeArea(
-        child: SingleChildScrollView(
-          child: searchHistory.isEmpty
-              ? kEmptyWidget
-              : ListSection(
-                  header: Text(context.l10n.mobileRecentSearches),
-                  headerTrailing: TextButton(
-                    child: Text(context.l10n.mobileClearButton),
-                    onPressed: () => ref.read(searchHistoryProvider.notifier).clear(),
-                  ),
-                  hasLeading: true,
-                  children: searchHistory
-                      .map(
-                        (term) => ListTile(
-                          leading: const Icon(Icons.history),
-                          title: Text(term),
-                          onTap: () => onRecentSearchTap(term),
-                        ),
-                      )
-                      .toList(),
+      if (searchHistory.isEmpty) return const SizedBox.shrink();
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(child: SrsGroupHeader('Recent searches')),
+                SrsTextButton(
+                  label: context.l10n.mobileClearButton,
+                  onPressed: () => ref.read(searchHistoryProvider.notifier).clear(),
                 ),
+              ],
+            ),
+            for (final term in searchHistory)
+              SrsSettingsRow(label: term, onTap: () => onRecentSearchTap(term)),
+          ],
         ),
       );
     }

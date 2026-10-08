@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/user/search_screen.dart';
 import 'package:chess_srs/src/widgets/user_list_tile.dart';
@@ -33,7 +34,7 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      await tester.enterText(find.byType(SearchBar), 'joh');
+      await tester.enterText(find.byType(SrsSearchField), 'joh');
 
       // await debouce call
       await tester.pump(const Duration(milliseconds: 300));
@@ -68,7 +69,7 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      await tester.enterText(find.byType(SearchBar), 'johnny');
+      await tester.enterText(find.byType(SrsSearchField), 'johnny');
       // await debouce call
       await tester.pump(const Duration(milliseconds: 300));
 
