@@ -81,8 +81,7 @@ void createSrsTables(Batch batch) {
       stability REAL NOT NULL DEFAULT 0.0,
       difficulty REAL NOT NULL DEFAULT 0.0,
       latencyEmaMs REAL,
-      latencySampleCount INTEGER NOT NULL DEFAULT 0,
-      lastExposedAt TEXT
+      latencySampleCount INTEGER NOT NULL DEFAULT 0
     );
   ''');
   batch.execute('''
