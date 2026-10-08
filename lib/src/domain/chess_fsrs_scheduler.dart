@@ -299,21 +299,30 @@ class ChessFsrsScheduler implements Scheduler {
 
 /// Generates a preview of the interval ladder (in days) for consecutive successful recalls
 /// under [targetRetention].
+///
+/// Mirrors what [ChessFsrsScheduler.schedule] actually emits for a run of clean successes:
+/// the same stability and interval clamps, applied in the same order, with the clamped
+/// stability fed forward. Skipping them made the ladder drift away from reality — it
+/// advertised 1697 days at step 6 and 14725 at step 9, where the scheduler emits the
+/// 1095-day cap for both.
 List<double> fsrsIntervalProgressionPreview({
   required double targetRetention,
   int steps = 5,
   ChessFsrsParams params = const ChessFsrsParams.chessDefaults(),
+  double maxIntervalDays = 365 * 3,
+  double minIntervalDays = 1 / 1440,
 }) {
+  if (steps <= 0) return const [];
   final intervals = <double>[];
   var d = fsrsInitialDifficulty(FsrsRating.good, params);
   var s = params.w2; // Initial stability for Rating.good in days
   final effectiveR = targetRetention.clamp(0.70, 0.99);
 
   for (var i = 0; i < steps; i++) {
-    final intervalDays = fsrsIntervalForTarget(s, effectiveR);
-    intervals.add(intervalDays);
+    intervals.add(fsrsIntervalForTarget(s, effectiveR).clamp(minIntervalDays, maxIntervalDays));
     d = fsrsNextDifficulty(d, FsrsRating.good, params);
-    s = fsrsNextStabilitySuccess(d, s, effectiveR, params);
+    final nextStability = fsrsNextStabilitySuccess(d, s, effectiveR, params);
+    s = nextStability.clamp(params.minStabilityDays, params.maxStabilityDays);
   }
   return List.unmodifiable(intervals);
 }

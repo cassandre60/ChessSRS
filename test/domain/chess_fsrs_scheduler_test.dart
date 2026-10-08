@@ -208,6 +208,33 @@ void main() {
       expect(intervals95[0], lessThan(intervals90[0]));
     });
 
+    // SPEC INV-026. The preview must not advertise intervals the scheduler would
+    // never emit. It used to skip maxIntervalDays, so a 10-step ladder ran away to
+    // 1697 days at step 6 and past 14000 by step 9 while the scheduler capped at 1095.
+    test('INV-026 interval preview respects the cap and tracks the scheduler', () {
+      const capped = ChessFsrsScheduler(targetRetention: 0.88);
+      final preview = fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: 10);
+
+      expect(preview.length, 10);
+      for (final interval in preview) {
+        expect(interval, lessThanOrEqualTo(365 * 3.0));
+      }
+
+      // Replay the real scheduler over the same run of clean successes. Tolerance is
+      // the accumulated millisecond rounding of nextDueAt across the replay.
+      var state = ReviewState.initial(decisionId: 'd1');
+      var now = t0;
+      for (var i = 0; i < preview.length; i++) {
+        state = capped.schedule(previous: state, result: ReviewResult.correct, now: now);
+        final scheduledDays = state.nextDueAt!.difference(now).inMilliseconds / 86400000;
+        expect(scheduledDays, closeTo(preview[i], 1e-5));
+        now = state.nextDueAt!;
+      }
+
+      expect(fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: 0), isEmpty);
+      expect(fsrsIntervalProgressionPreview(targetRetention: 0.88, steps: -3), isEmpty);
+    });
+
     test('schedulers differing only in params compare unequal', () {
       const base = ChessFsrsScheduler(targetRetention: 0.88);
       const tuned = ChessFsrsScheduler(targetRetention: 0.88, params: ChessFsrsParams(w2: 3.5));
