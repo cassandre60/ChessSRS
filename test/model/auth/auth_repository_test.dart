@@ -70,6 +70,51 @@ Future<ProviderContainer> appAuthContainer(MockClient mockClient, FlutterAppAuth
 }
 
 void main() {
+  // A real failure, owner-reported 2026-10-08: signing in through the browser on a device that
+  // takes the desktop loopback path returned Lichess's "bad scope". The desktop flow built its
+  // own /oauth URI and asked for `study:read study:write preference:read` as the OAuth scope.
+  // Those are token *capabilities*, not OAuth scopes -- Lichess validates the parameter against
+  // its own scope set and rejects anything else. The mobile path never sent a scope at all,
+  // which is why only the hand-built URL was wrong.
+  //
+  // The regression test is on the URI, not on a network call: launching a real browser is not
+  // something a widget test can do, but the query it builds is exactly what the server reads.
+  test('the desktop OAuth URI asks only for a scope Lichess accepts', () {
+    final uri = buildDesktopOAuthUri(
+      clientId: 'chesssrs.test',
+      redirectUri: 'http://127.0.0.1:1234/callback',
+      codeChallenge: 'challenge',
+    );
+
+    final scope = uri.queryParameters['scope'];
+    if (scope != null) {
+      for (final requested in scope.split(RegExp(r'[\s+]+'))) {
+        expect(
+          oauthScopes,
+          contains(requested),
+          reason:
+              'Lichess answers "bad scope" for anything outside $oauthScopes, and '
+              'study:read / study:write / preference:read are token capabilities, not scopes',
+        );
+      }
+    }
+  });
+
+  test('the desktop OAuth URI carries PKCE and the redirect', () {
+    final uri = buildDesktopOAuthUri(
+      clientId: 'chesssrs.test',
+      redirectUri: 'http://127.0.0.1:1234/callback',
+      codeChallenge: 'challenge',
+    );
+
+    expect(uri.path, '/oauth');
+    expect(uri.queryParameters['response_type'], 'code');
+    expect(uri.queryParameters['client_id'], 'chesssrs.test');
+    expect(uri.queryParameters['redirect_uri'], 'http://127.0.0.1:1234/callback');
+    expect(uri.queryParameters['code_challenge'], 'challenge');
+    expect(uri.queryParameters['code_challenge_method'], 'S256');
+  });
+
   group('AuthRepository.signIn', () {
     test('returns the authenticated user on success', () async {
       final container = await appAuthContainer(

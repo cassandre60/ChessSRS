@@ -1,4 +1,5 @@
 import 'package:async/async.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/account/flair_provider.dart';
 import 'package:chess_srs/src/model/user/user.dart';
@@ -71,56 +72,67 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
+    // One shell for all three account states. It used to be three Scaffolds, each with its own
+    // AppBar, so loading briefly showed one title bar and error showed another.
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.editProfile,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            Expanded(child: _body(account)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body(AsyncValue<User?> account) {
+    final c = context.srs;
     switch (account) {
       case AsyncData(:final value):
-        return Scaffold(
-          appBar: AppBar(title: Text(context.l10n.editProfile)),
-          body: PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (bool didPop, _) async {
-              if (didPop) {
-                return;
-              }
-              final NavigatorState navigator = Navigator.of(context);
-              if (value == null || !_formHasChanges(value)) {
-                return navigator.pop();
-              }
-              final bool? shouldPop = await _showBackDialog(context);
-              if (shouldPop ?? false) {
-                navigator.pop();
-              }
-            },
-            child: value == null
-                ? Center(child: Text(context.l10n.mobileMustBeLoggedIn))
-                : GestureDetector(
-                    onTap: () => FocusScope.of(context).unfocus(),
-                    child: Padding(
-                      padding: Styles.bodyPadding.copyWith(top: 0, bottom: 0),
-                      child: ListView(
-                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                        children: [
-                          SizedBox(height: Styles.bodyPadding.top),
-                          Text(context.l10n.allInformationIsPublicAndOptional),
-                          const SizedBox(height: 16),
-                          _EditProfileForm(value, _formKey, _formData),
-                          SizedBox(height: Styles.bodyPadding.bottom),
-                        ],
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (bool didPop, _) async {
+            if (didPop) {
+              return;
+            }
+            final NavigatorState navigator = Navigator.of(context);
+            if (value == null || !_formHasChanges(value)) {
+              return navigator.pop();
+            }
+            final bool? shouldPop = await _showBackDialog(context);
+            if (shouldPop ?? false) {
+              navigator.pop();
+            }
+          },
+          child: value == null
+              ? Center(child: Text(context.l10n.mobileMustBeLoggedIn))
+              : GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  child: ListView(
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                    children: [
+                      Text(
+                        context.l10n.allInformationIsPublicAndOptional,
+                        style: SrsText.body(false, c.ink2),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      _EditProfileForm(value, _formKey, _formData),
+                    ],
                   ),
-          ),
+                ),
         );
 
       case AsyncError(:final error):
-        return Scaffold(
-          appBar: AppBar(title: Text(context.l10n.editProfile)),
-          body: Center(child: Text(error.toString())),
-        );
+        return Center(child: Text(error.toString()));
+
       case _:
-        return Scaffold(
-          appBar: AppBar(title: Text(context.l10n.editProfile)),
-          body: const Center(child: CircularProgressIndicator.adaptive()),
-        );
+        return const Center(child: CircularProgressIndicator.adaptive());
     }
   }
 
@@ -449,7 +461,9 @@ class _EditProfileFormState extends ConsumerState<_EditProfileForm> {
             child: FutureBuilder(
               future: _pendingSaveProfile,
               builder: (context, snapshot) {
-                return FilledButton(
+                return SrsPillButton(
+                  expand: true,
+                  label: context.l10n.apply,
                   onPressed: snapshot.connectionState == ConnectionState.waiting
                       ? null
                       : () async {
@@ -498,7 +512,6 @@ class _EditProfileFormState extends ConsumerState<_EditProfileForm> {
                             );
                           }
                         },
-                  child: Text(context.l10n.apply),
                 );
               },
             ),

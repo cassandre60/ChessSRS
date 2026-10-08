@@ -27,6 +27,30 @@ const _kOAuthCustomSchemeCallbackHost = 'login-callback';
 const kOAuthRedirectUri = '$kLichessCustomUriSchemeName://$_kOAuthCustomSchemeCallbackHost';
 const oauthScopes = ['web:mobile'];
 
+/// Builds the `/oauth` URI the desktop loopback flow opens in the system browser.
+///
+/// Extracted so it can be asserted on: the URL was previously assembled inline in the middle of
+/// an async method that also binds a socket and exchanges a code, which is why a wrong scope went
+/// unnoticed until the owner signed in on a device and Lichess answered *bad scope*.
+///
+/// **No `scope` parameter is sent, deliberately.** Lichess validates that field against its own
+/// OAuth scope set (`oauthScopes`) and rejects anything else with *bad scope*. The
+/// `study:read` / `study:write` / `preference:read` strings that were being sent here are token
+/// *capabilities*, not scopes; asking for them as scopes is what broke sign-in. The mobile path
+/// has always sent none, and it works -- the resulting token carries the study capabilities
+/// already, which is how a private study import reads.
+Uri buildDesktopOAuthUri({
+  required String clientId,
+  required String redirectUri,
+  required String codeChallenge,
+}) => lichessUri('/oauth', {
+  'response_type': 'code',
+  'client_id': clientId,
+  'redirect_uri': redirectUri,
+  'code_challenge': codeChallenge,
+  'code_challenge_method': 'S256',
+});
+
 /// Thrown when the user dismisses the OAuth session before completing it.
 ///
 /// This is distinct from a genuine sign-in failure: the UI should silently
@@ -124,14 +148,11 @@ class AuthRepository {
       final challengeBytes = sha256.convert(ascii.encode(codeVerifier)).bytes;
       final codeChallenge = base64UrlEncode(challengeBytes).replaceAll('=', '');
 
-      final authUri = lichessUri('/oauth', {
-        'response_type': 'code',
-        'client_id': kLichessClientId,
-        'redirect_uri': redirectUri,
-        'code_challenge': codeChallenge,
-        'code_challenge_method': 'S256',
-        'scope': 'study:read study:write preference:read',
-      });
+      final authUri = buildDesktopOAuthUri(
+        clientId: kLichessClientId,
+        redirectUri: redirectUri,
+        codeChallenge: codeChallenge,
+      );
 
       if (!await launchUrl(authUri, mode: LaunchMode.externalApplication)) {
         throw Exception('Could not launch system browser for authentication.');
