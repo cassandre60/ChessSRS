@@ -250,12 +250,31 @@ top-level function with no clamp on `d`. At `d > 11` the factor goes negative an
 and `-1` both return `[]` silently, and the loop is O(steps) with no upper bound. Fine for a test, a
 hang if it is ever bound to a text field.
 
-**D3 — O(k) sequential awaited inserts per review answer.**
+**D3 — ~~O(k) sequential awaited inserts per review answer.~~ RETRACTED — see correction below.**
 `sqlite_study_repository.dart:513-538`: `savePositionKnowledgeState` issues one **awaited, unbatched**
 `saveReviewState` per decision matching the canonical id, plus one more per row in a loop. For a
 position that transposes across many chapters this is k sequential round-trips on the review hot path.
 A batched variant exists 60 lines below (`:596-618`), so the single-item path is the outlier, not the
 house style.
+
+> **Correction (added 2026-10-08, after grepping for callers).** The premise — "on the review hot
+> path" — is false, and with it the severity. `savePositionKnowledgeState` has **zero production
+> callers**; the only references outside its own definition are the interface declaration at
+> `study_repository.dart:77` and five call sites in tests. `savePositionKnowledgeStates` (the batched
+> variant) has **no callers at all**, production or test.
+>
+> The path that actually runs on a review answer is `saveAnswerBatch`, called from
+> `review_service.dart:317` and `:355`. It already uses `_db.batch()` and mirrors to
+> `kTableSrsReviewState` with a single `INSERT … SELECT … WHERE canonicalStateId = ?` rather than a
+> per-decision loop — i.e. it already does what this entry recommended.
+>
+> What remains is not a performance issue but a **dead-code** one: two public repository methods and
+> their five test call sites exist solely to be tested. The unbatched loop in the singular method is
+> still a latent trap for whoever first wires it up in production, since it would reintroduce the O(k)
+> round-trips on the very path `saveAnswerBatch` was written to avoid. Either wire the singular method
+> through the batch, or delete both and let `saveAnswerBatch` be the only writer. **Improvement 7 below
+> is void as originally written.**
+
 
 **D4 — Timestamps are persisted as offset-less local time.**
 `sqlite_study_repository.dart:517-519` write `toIso8601String()` on local `DateTime`s (no `Z`, no
@@ -313,7 +332,11 @@ Each is scoped to be reviewable on its own.
 6. **Collapse the difficulty defaults to one named constant (C7).** Export
    `kDefaultDifficulty = 4.93` (or `0.0` + universal fallback) and use it in the schema, both row
    mappers, and `:229`.
-7. **Batch the per-decision writes (D3).** Fold `:528-538` into the existing batch at `:596-618`.
+7. ~~**Batch the per-decision writes (D3).**~~ **Void — see the D3 retraction.** The production write
+   path (`saveAnswerBatch`, `review_service.dart:317`/`:355`) is already batched. The real finding is
+   that `savePositionKnowledgeState` / `savePositionKnowledgeStates` are **dead code** reachable only
+   from tests, and the singular one still contains the unbatched loop. Decide between routing it
+   through the batch and deleting both.
 8. **Store timestamps as UTC or epoch-ms (D4).** Mechanical, but it is a schema change, so it wants its
    own migration and should not be bundled with anything above.
 
@@ -339,3 +362,55 @@ they are not lost:
   symptom of something larger there. Pass #3.
 - **`review_service.dart` / `review_controller.dart`** (688 + 1508 LOC) — idempotency, double-scheduling,
   and clock injection under concurrency. Pass #4.
+
+---
+
+## 6. Resolution log
+
+Every item above has now been dispositioned. This is the audit trail for why each one was fixed,
+documented, or dropped, so a later reader does not have to re-derive the reasoning.
+
+| # | Finding | Disposition | Why |
+|---|---|---|---|
+| C1 | Difficulty mutated during rapid re-review | **Fixed** `18dde77` | Contradicted §C.7 and changed scheduling output. Two regression tests, one with fail-to-pass evidence against base. |
+| C2 | Corrected false-start graded twice | **Fixed** `604d5a1` | Same human action had two outcomes depending on which button ended the turn. Fixed at the session layer; one test removed with an `Ack-G08:` trailer. |
+| C3 | Interval preview ignored the scheduler's clamps | **Fixed** `5ccb7ba` | Advertised 1697 d where the scheduler emits 1095 d. Preview now clamps in the same order; tolerance measured, not guessed. |
+| C4 | Cross-scheduler `stability` reinterpretation | **Deferred, documented** | See note below. Every available remedy mutates user memory. |
+| C5 | Lapse formula not monotone in S | **Documented + pinned** `cbf3194` | Matches canonical FSRS and §C.6; adding `min(result, s)` would be a spec change. Numbers pinned so a weight retune cannot silently widen the window. |
+| C6 | `isColdStart` never re-arms | **Open** | Genuine 6.8× gap but needs a product answer on what "forgotten" means. Low blast radius in practice. |
+| C7 | Three disagreeing difficulty defaults | **Dropped** | Both columns are `NOT NULL` and the repository always writes explicitly, so the `?? 5.0` fallbacks are unreachable. Dead magic numbers, not a live bug. |
+| D1 | `steps` unvalidated | **Fixed** `5ccb7ba` | Folded into the C3 fix. |
+| D2 | `stability` doc said "days" | **Fixed** `5ccb7ba` | The comment is what let C4 survive review. Now states milliseconds and names each scheduler's meaning. |
+| D3 | Sequential per-decision writes | **Retracted** | Premise false — no production callers; the real path is already batched. Real finding is dead code. See the D3 correction. |
+| D4 | Offset-less local timestamps | **Open** | Real portability bug, but it is a schema migration with data risk and deserves its own PR. |
+| D5–D7 | Semantics / naming / cap-linking | **Open** | Recorded; none is a live defect today. |
+
+### Why C4 was deferred rather than fixed
+
+The collision is real and demonstrable: a 30-day interval written by `SimpleScheduler` and later read
+by `ChessFsrsScheduler` yields 98.69 d instead of the expected 60 d, because the two schedulers store
+different quantities in the same column. A fix requires a schema migration to record which scheduler
+produced a row — that part is mechanical (`database.dart` is at `version: 15` with an `onUpgrade`
+handler) — and then a policy decision about what happens to memory already on disk when someone
+changes the algorithm setting:
+
+1. **Reset to cold start.** Honest and simple, but destroys every accumulated interval the moment a
+   user taps a different algorithm name.
+2. **Convert.** A principled mapping exists (`I(S, 0.88) = S × 1.242`, so `S = interval / 1.242`), but
+   it is approximate: `SimpleScheduler`'s ladder was not produced by the FSRS curve, so the conversion
+   invents a stability the user never earned.
+3. **Warn and require confirmation.** Least destructive; leaves the data intact but makes the
+   reinterpretation the user's informed choice.
+
+All three mutate or expose user memory differently, and the choice is a product decision rather than
+an engineering one. Option 1 is the only one that can be ruled out on technical grounds, since it
+punishes curiosity with irreversible data loss. **Recommendation: option 3 now, option 2 later if
+switching turns out to be common.** Until then the gap is documented in `review_state.dart` at the
+field that causes it, which is where a future reader will look.
+
+### Note on process
+
+Two of the corrections above (D3 retracted, C7 dropped) were found by checking the *callers* of the
+code the review described, not the code itself. Both original findings read the implementation
+correctly and still reached a wrong conclusion about impact, because neither asked whether the path
+was reachable in production. Passes #2–#4 should check reachability before assigning severity.
