@@ -80,7 +80,29 @@ class GameListTile extends ConsumerWidget {
       if (!game.isImported) getResultIcon(game, youAre),
     ];
 
-    return ListTile(
+    return SrsSettingsRow(
+      // The accessibility label is the opponent's name where there is one, so a screen reader
+      // announces the row by who it is against rather than by the shape of the glyph beside it.
+      label: game.isImported
+          ? context.l10n.resVsX(
+              game.white.fullName(context.l10n),
+              game.black.fullName(context.l10n),
+            )
+          : (opponent.name ?? context.l10n.opponent),
+      labelWidget: title,
+      // The time control, or the import marker for a game not tied to an account. This one
+      // carries data rather than categorising a row, which is what [SrsSettingsRow.leading] is
+      // for: the design's text-led rule is about settings rows, not about a list where the
+      // category *is* the point.
+      leading: Icon(game.isImported ? Icons.cloud_upload_outlined : game.perf.icon),
+      // For an imported game, `lastMoveAt` is the import date, so prefer the PGN date if we have it.
+      help: game.importDate != null
+          ? formatPgnDate(game.importDate!, shortDate: false)
+          : relativeDate(context.l10n, game.lastMoveAt, shortDate: false),
+      inlineControl: true,
+      control: trailing.isEmpty
+          ? null
+          : Row(mainAxisSize: MainAxisSize.min, spacing: 5, children: trailing),
       onTap: () => openGameScreen(
         context,
         game: item.game,
@@ -89,25 +111,15 @@ class GameListTile extends ConsumerWidget {
         loadingLastMove: game.lastMove,
         lastMoveAt: game.lastMoveAt,
       ),
-      // A long press opened a raw Material sheet; every other sheet in the app is the Srs
-      // surface, so this one was the odd surface out rather than a deliberate platform choice.
+      // #20 turned this sheet into an Srs surface; the row conversion kept it that way rather
+      // than reverting it. A long press on the row is how you reach a game's actions, so the two
+      // changes compose.
       onLongPress: () => showSrsSheet<void>(
         context,
         SrsSheetSurface(
           child: GameContextMenu(game: game, mySide: youAre, onPressedBookmark: onPressedBookmark),
         ),
       ),
-      leading: Icon(game.isImported ? Icons.cloud_upload_outlined : game.perf.icon),
-      title: title,
-      // For an imported game, `lastMoveAt` is the import date, so prefer the PGN date if we have it.
-      subtitle: Text(
-        game.importDate != null
-            ? formatPgnDate(game.importDate!, shortDate: false)
-            : relativeDate(context.l10n, game.lastMoveAt, shortDate: false),
-      ),
-      trailing: trailing.isEmpty
-          ? null
-          : Row(mainAxisSize: MainAxisSize.min, spacing: 5, children: trailing),
     );
   }
 }
