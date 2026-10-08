@@ -62,6 +62,12 @@ try:
             'INSERT INTO openings (eco, name, pgn, uci, epd) VALUES (?, ?, ?, ?, ?);', to_db
         )
         tmp.commit()
+        # The app looks up openings by exact epd on every position change
+        # (see OpeningService.fetchFromFen), so keep an index on epd.
+        # Built here (not read from the shipped schema) because the schema row
+        # in sqlite_master holds the table only; indexes are separate rows.
+        tmp.execute('CREATE INDEX IF NOT EXISTS idx_openings_epd ON openings(epd);')
+        tmp.commit()
         written = tmp.execute('SELECT COUNT(*) FROM openings').fetchone()[0]
         new_openings = set(r[0] for r in tmp.execute(openings_sql))
     finally:

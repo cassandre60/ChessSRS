@@ -10,6 +10,15 @@ class SrsBoardBackgroundPainter extends CustomPainter {
   final SrsColors colors;
   final bool frame;
 
+  /// Which physical squares are dark, by file (0 = a) and row from the top.
+  ///
+  /// Chess fundamental, pinned in CI (`test/design/board_squares_test.dart`):
+  /// h1 is light, a1 is dark. The rule is rotation-symmetric on an 8x8 board
+  /// (`(7-f) + (7-r)` has the same parity as `f + r`), so it holds for both
+  /// White and Black orientations with no orientation input: flipping the
+  /// board moves h1 to the top-left, which is light either way.
+  static bool isDarkSquare(int file, int rowFromTop) => (file + rowFromTop).isOdd;
+
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
@@ -21,7 +30,7 @@ class SrsBoardBackgroundPainter extends CustomPainter {
     final dark = Path();
     for (var f = 0; f < 8; f++) {
       for (var r = 0; r < 8; r++) {
-        if ((f + r).isOdd) dark.addRect(Rect.fromLTWH(f * sq, r * sq, sq, sq));
+        if (isDarkSquare(f, r)) dark.addRect(Rect.fromLTWH(f * sq, r * sq, sq, sq));
       }
     }
     canvas.drawPath(dark, Paint()..color = colors.squareDark);

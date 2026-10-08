@@ -64,6 +64,31 @@ void main() {
     });
   });
 
+  group('curated choices', () {
+    // The picker shows only the curated themes (Diagram + Wood + Paper + Slate).
+    // Fails on base, which listed all 28 Lichess themes.
+    testWidgets('board choice shows only the curated themes', (tester) async {
+      await open(tester, const BoardChoiceScreen());
+
+      final rows = tester.widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow)).toList();
+      expect(rows.length, 4);
+
+      final labels = rows.map((r) => r.label).toSet();
+      expect(labels, contains('Diagram'));
+      expect(labels, contains('Wood'));
+      expect(labels, contains('Paper'));
+      expect(labels, contains('Slate'));
+    });
+
+    // Fails on base, which listed all ~40 piece sets.
+    testWidgets('piece set shows only the curated sets', (tester) async {
+      await open(tester, const PieceSetScreen());
+
+      final rows = tester.widgetList<SrsSettingsRow>(find.byType(SrsSettingsRow)).toList();
+      expect(rows.length, 5);
+    });
+  });
+
   group('sound settings', () {
     testWidgets('uses the Diagram head, a volume row and a segmented theme control', (
       tester,

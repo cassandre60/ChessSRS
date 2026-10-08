@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_preferences.dart';
 import 'package:chess_srs/src/model/common/chess.dart' show Variant;
 import 'package:chess_srs/src/model/explorer/tablebase.dart';
@@ -6,7 +7,6 @@ import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/theme.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/explorer/explorer_view.dart';
-import 'package:chess_srs/src/widgets/shimmer.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -154,14 +154,8 @@ class TablebaseView extends ConsumerWidget {
       case _:
         return _TablebaseListView(
           isLoading: true,
-          children: [
-            Shimmer(
-              child: ShimmerLoading(
-                isLoading: true,
-                child: _TablebaseLoadingPlaceholder(position: position),
-              ),
-            ),
-          ],
+          // Static skeleton, never shimmer: the design has no shimmer anywhere.
+          children: [_TablebaseLoadingPlaceholder(position: position)],
         );
     }
   }
@@ -204,9 +198,10 @@ class _TablebaseHeaderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Container(
       width: double.infinity,
-      color: ColorScheme.of(context).surfaceDim,
+      color: c.hairlineSoft,
       padding: kExplorerTableRowPadding,
       child: DefaultTextStyle.merge(
         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -234,6 +229,7 @@ class _TablebaseMoveRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     final metrics = <String>[];
 
     if (move.checkmate) {
@@ -299,10 +295,12 @@ class _TablebaseMoveRow extends StatelessWidget {
       }).toList();
       metricsWidget = Wrap(spacing: 8.0, runSpacing: 4.0, children: metricBoxes);
     }
-    return InkWell(
-      onTap: onMoveSelected != null ? () => onMoveSelected!(Move.parse(move.uci)!) : null,
-      child: Container(
-        color: color,
+    return SrsPressable(
+      onPressed: onMoveSelected != null ? () => onMoveSelected!(Move.parse(move.uci)!) : null,
+      semanticLabel: move.san,
+      radius: 8,
+      builder: (_, hover, _) => Container(
+        color: hover ? c.hairlineSoft : color,
         padding: kExplorerTableRowPadding,
         child: Row(
           children: [
@@ -330,18 +328,19 @@ class _TablebaseLoadingPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     return Column(
       children: [
         Container(
           height: 20 + (kExplorerTableRowVerticalPadding * 2),
-          color: Colors.grey[300],
+          color: c.hairline,
           margin: const EdgeInsets.only(bottom: 8),
         ),
         ...List.generate(
           position.legalMoves.length,
           (index) => Container(
             height: 20 + (kExplorerTableRowVerticalPadding * 2),
-            color: Colors.grey[200],
+            color: c.hairline,
             margin: const EdgeInsets.only(bottom: 1),
           ),
         ),

@@ -1,3 +1,5 @@
+// SPEC coverage: INV-006.
+
 import 'package:chess_srs/src/model/auth/auth_repository.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/network/http.dart';
@@ -68,6 +70,51 @@ Future<ProviderContainer> appAuthContainer(MockClient mockClient, FlutterAppAuth
 }
 
 void main() {
+  // A real failure, owner-reported 2026-10-08: signing in through the browser on a device that
+  // takes the desktop loopback path returned Lichess's "bad scope". The desktop flow built its
+  // own /oauth URI and asked for `study:read study:write preference:read` as the OAuth scope.
+  // Those are token *capabilities*, not OAuth scopes -- Lichess validates the parameter against
+  // its own scope set and rejects anything else. The mobile path never sent a scope at all,
+  // which is why only the hand-built URL was wrong.
+  //
+  // The regression test is on the URI, not on a network call: launching a real browser is not
+  // something a widget test can do, but the query it builds is exactly what the server reads.
+  test('the desktop OAuth URI asks only for a scope Lichess accepts', () {
+    final uri = buildDesktopOAuthUri(
+      clientId: 'chesssrs.test',
+      redirectUri: 'http://127.0.0.1:1234/callback',
+      codeChallenge: 'challenge',
+    );
+
+    final scope = uri.queryParameters['scope'];
+    if (scope != null) {
+      for (final requested in scope.split(RegExp(r'[\s+]+'))) {
+        expect(
+          oauthScopes,
+          contains(requested),
+          reason:
+              'Lichess answers "bad scope" for anything outside $oauthScopes, and '
+              'study:read / study:write / preference:read are token capabilities, not scopes',
+        );
+      }
+    }
+  });
+
+  test('the desktop OAuth URI carries PKCE and the redirect', () {
+    final uri = buildDesktopOAuthUri(
+      clientId: 'chesssrs.test',
+      redirectUri: 'http://127.0.0.1:1234/callback',
+      codeChallenge: 'challenge',
+    );
+
+    expect(uri.path, '/oauth');
+    expect(uri.queryParameters['response_type'], 'code');
+    expect(uri.queryParameters['client_id'], 'chesssrs.test');
+    expect(uri.queryParameters['redirect_uri'], 'http://127.0.0.1:1234/callback');
+    expect(uri.queryParameters['code_challenge'], 'challenge');
+    expect(uri.queryParameters['code_challenge_method'], 'S256');
+  });
+
   group('AuthRepository.signIn', () {
     test('returns the authenticated user on success', () async {
       final container = await appAuthContainer(
@@ -136,10 +183,12 @@ void main() {
   });
 
   group('AuthRepository.requestEmailLoginCode', () {
-    test('posts the email as a query parameter', () async {
+    test('posts the email and username in the body', () async {
       Uri? requestedUrl;
+      Map<String, String>? requestedBody;
       final container = await emailLoginContainer((request) {
         requestedUrl = request.url;
+        requestedBody = request.bodyFields;
         return mockResponse('', 204);
       });
 
@@ -148,10 +197,8 @@ void main() {
           .requestEmailLoginCode(username: 'johndoe', email: 'johndoe@lichess.org');
 
       expect(requestedUrl?.path, '/auth/mobile-code/email');
-      expect(requestedUrl?.queryParameters, {
-        'email': 'johndoe@lichess.org',
-        'username': 'johndoe',
-      });
+      expect(requestedUrl?.hasQuery, isFalse);
+      expect(requestedBody, {'email': 'johndoe@lichess.org', 'username': 'johndoe'});
     });
 
     test('throws EmailLoginRateLimitException on 429', () async {
@@ -175,15 +222,39 @@ void main() {
         throwsA(isA<ServerException>()),
       );
     });
+
+    test('falls back to query parameters if the server returns 404 to body-only request', () async {
+      final requests = <Uri>[];
+      final container = await emailLoginContainer((request) {
+        requests.add(request.url);
+        if (!request.url.hasQuery) {
+          return mockResponse('', 404);
+        }
+        return mockResponse('', 204);
+      });
+
+      await container
+          .read(authRepositoryProvider)
+          .requestEmailLoginCode(username: 'johndoe', email: 'johndoe@lichess.org');
+
+      expect(requests, hasLength(2));
+      expect(requests.first.hasQuery, isFalse);
+      expect(requests.last.queryParameters, {
+        'email': 'johndoe@lichess.org',
+        'username': 'johndoe',
+      });
+    });
   });
 
   group('AuthRepository.signInWithEmailCode', () {
     test('exchanges the code for a token and returns the authenticated user', () async {
       Uri? requestedUrl;
+      Map<String, String>? requestedBody;
       final container = await emailLoginContainer((request) {
         switch (request.url.path) {
           case '/auth/mobile-code/bearer':
             requestedUrl = request.url;
+            requestedBody = request.bodyFields;
             return mockResponse('lio_token', 200);
           case '/api/account':
             return mockResponse(_accountResponse, 200);
@@ -196,7 +267,8 @@ void main() {
           .read(authRepositoryProvider)
           .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx');
 
-      expect(requestedUrl?.queryParameters, {
+      expect(requestedUrl?.hasQuery, isFalse);
+      expect(requestedBody, {
         'email': 'johndoe@lichess.org',
         'username': 'johndoe',
         'code': 'xxxxxx',
@@ -257,6 +329,37 @@ void main() {
             .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx'),
         throwsA(isA<Exception>()),
       );
+    });
+
+    test('falls back to query parameters if the server returns 404 to body-only request', () async {
+      final requests = <Uri>[];
+      final container = await emailLoginContainer((request) {
+        switch (request.url.path) {
+          case '/auth/mobile-code/bearer':
+            requests.add(request.url);
+            if (!request.url.hasQuery) {
+              return mockResponse('', 404);
+            }
+            return mockResponse('lio_token', 200);
+          case '/api/account':
+            return mockResponse(_accountResponse, 200);
+          default:
+            return mockResponse('', 404);
+        }
+      });
+
+      final authUser = await container
+          .read(authRepositoryProvider)
+          .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx');
+
+      expect(requests, hasLength(2));
+      expect(requests.first.hasQuery, isFalse);
+      expect(requests.last.queryParameters, {
+        'email': 'johndoe@lichess.org',
+        'username': 'johndoe',
+        'code': 'xxxxxx',
+      });
+      expect(authUser.token, 'lio_token');
     });
   });
 }

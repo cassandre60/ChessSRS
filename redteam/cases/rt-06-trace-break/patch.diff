@@ -1,0 +1,11 @@
+diff --git a/test/review/move_latency_test.dart b/test/review/move_latency_test.dart
+index 7058c4053..d23f6f078 100644
+--- a/test/review/move_latency_test.dart
++++ b/test/review/move_latency_test.dart
+@@ -1,6 +1,5 @@
+ // Copyright (C) 2024 ChessSRS contributors
+ // SPDX-License-Identifier: GPL-3.0-or-later
+-// SPEC coverage: INV-050.
+ 
+ import 'dart:io';
+ 

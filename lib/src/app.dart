@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/app_links_service.dart';
@@ -12,8 +11,6 @@ import 'package:chess_srs/src/model/analysis/analysis_preferences.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/log/app_log_service.dart';
-import 'package:chess_srs/src/model/notifications/notification_service.dart';
-import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/quick_actions.dart';
@@ -23,11 +20,8 @@ import 'package:chess_srs/src/utils/screen.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:home_widget/home_widget.dart';
 import 'package:l10n_esperanto/l10n_esperanto.dart';
 import 'package:material_ui/material_ui.dart';
-
-const String _kIosAppGroupId = 'group.org.chesssrs.app.LichessWidgets';
 
 /// Application initialization and main entry point.
 class AppInitializationScreen extends ConsumerWidget {
@@ -120,35 +114,10 @@ class _AppState extends ConsumerState<Application> {
 
     // Start services
     ref.read(appLogServiceProvider).start();
-    ref.read(notificationServiceProvider).start();
     ref.read(accountServiceProvider).start();
     ref.read(quickActionServiceProvider).start();
     ref.read(appLinksServiceProvider).start();
     ref.read(sharedPgnServiceProvider).start();
-
-    // Home-screen widgets are only supported on iOS and Android; the plugin
-    // has no implementation on desktop platforms.
-    if (Platform.isIOS || Platform.isAndroid) {
-      if (Platform.isIOS) {
-        HomeWidget.setAppGroupId(_kIosAppGroupId);
-      }
-      HomeWidget.saveWidgetData<String>('lichessHost', kLichessHost);
-    }
-
-    if (Platform.isIOS) {
-      ref.listenManual(boardPreferencesProvider, (prev, state) {
-        if (prev == null ||
-            prev.boardTheme != state.boardTheme ||
-            prev.pieceSet != state.pieceSet) {
-          Future.wait([
-            HomeWidget.saveWidgetData<String>('boardTheme', state.boardTheme.name),
-            HomeWidget.saveWidgetData<String>('pieceSet', state.pieceSet.name),
-          ]).then((_) {
-            HomeWidget.updateWidget(iOSName: 'DailyPuzzleLargeWidget');
-          });
-        }
-      }, fireImmediately: true);
-    }
 
     super.initState();
   }

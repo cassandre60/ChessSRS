@@ -14,7 +14,7 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   // Headers
   final event = (chapter.title != null && !chapter.title!.startsWith('Game '))
       ? chapter.title!
-      : (studyTitle ?? chapter.title ?? 'Repertoire Study');
+      : (studyTitle ?? chapter.title ?? 'Untitled Study');
   buffer.writeln('[Event "$event"]');
   buffer.writeln('[Site "ChessSRS"]');
   buffer.writeln('[Date "${_formatDate(chapter.createdAt ?? DateTime.now())}"]');
@@ -28,6 +28,12 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   }
   if (chapter.title != null && chapter.title!.trim().isNotEmpty) {
     buffer.writeln('[Chapter "${chapter.title!.trim()}"]');
+  }
+  // Preserve opening classification across export → re-import so opening
+  // scopes and breakdowns survive the round-trip (`extractOpeningFamily`
+  // reads `Opening` first, before `Event`/ECO fallbacks).
+  if (chapter.opening != null && chapter.opening!.trim().isNotEmpty) {
+    buffer.writeln('[Opening "${chapter.opening!.trim()}"]');
   }
 
   if (chapter.startingFen != null && chapter.startingFen!.isNotEmpty) {

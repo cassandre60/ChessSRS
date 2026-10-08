@@ -7,6 +7,7 @@ import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
@@ -28,6 +29,41 @@ import 'package:material_ui/material_ui.dart' show Scaffold, showModalBottomShee
 /// home for the study list: the scope drawer still owns choosing what to review, and this screen
 /// only reaches the existing `StudyChaptersScreen`. The two overlap in subject matter and not in
 /// purpose, which is why the entry only appears once a study actually exists.
+///
+/// Tapping a chapter opens it in the analysis board: free browsing of all
+/// moves, variations and notes with no quizzing and no SRS writes — the
+/// answers to review's questions (owner decision 2026-09-29 Q7).
+/// Minimal PGN carrying a single FEN, so the analysis and explorer screens
+/// open on the review board's live position instead of the start position
+/// (owner report 2026-09-29). `PgnGame.parsePgn` honours the FEN header.
+String reviewPositionPgn(String fen) => '[FEN "$fen"]\n\n*';
+
+/// Analysis options for the review board's live position, falling back to a
+/// blank standalone board when no review position exists (e.g. hub opened
+/// with nothing imported yet).
+AnalysisOptions analysisOptionsForReviewPosition({String? fen, required Side orientation}) {
+  if (fen == null) return const AnalysisOptions.standalone(variant: Variant.standard);
+  return AnalysisOptions.pgn(
+    id: const StringId('review_position'),
+    orientation: orientation,
+    pgn: reviewPositionPgn(fen),
+    isComputerAnalysisAllowed: true,
+    variant: Variant.standard,
+  );
+}
+
+/// Explorer options for the review board's live position, falling back to the
+/// start position when there is none.
+AnalysisOptions explorerOptionsForReviewPosition({String? fen, required Side orientation}) {
+  return AnalysisOptions.pgn(
+    id: const StringId('review_position_explorer'),
+    orientation: orientation,
+    pgn: fen == null ? '' : reviewPositionPgn(fen),
+    isComputerAnalysisAllowed: false,
+    variant: Variant.standard,
+  );
+}
+
 class AnalysisHubScreen extends ConsumerWidget {
   const AnalysisHubScreen({super.key});
 
@@ -38,6 +74,11 @@ class AnalysisHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.srs;
+    // The live review position, so the tools open where the user already is
+    // rather than on the start position (owner report 2026-09-29).
+    final reviewState = ref.watch(reviewControllerProvider).value;
+    final reviewFen = reviewState?.boardPosition?.fen;
+    final orientation = reviewState?.boardOrientation ?? Side.white;
 
     return Scaffold(
       backgroundColor: c.ground,
@@ -62,7 +103,10 @@ class AnalysisHubScreen extends ConsumerWidget {
                         help: 'Work through a position with the engine',
                         onTap: () => Navigator.of(context, rootNavigator: true).push(
                           AnalysisScreen.buildRoute(
-                            const AnalysisOptions.standalone(variant: Variant.standard),
+                            analysisOptionsForReviewPosition(
+                              fen: reviewFen,
+                              orientation: orientation,
+                            ),
                           ),
                         ),
                       ),
@@ -71,12 +115,9 @@ class AnalysisHubScreen extends ConsumerWidget {
                         help: 'Browse openings by name and ECO',
                         onTap: () => Navigator.of(context, rootNavigator: true).push(
                           OpeningExplorerScreen.buildRoute(
-                            const AnalysisOptions.pgn(
-                              id: StringId('standalone_opening_explorer'),
-                              orientation: Side.white,
-                              pgn: '',
-                              isComputerAnalysisAllowed: false,
-                              variant: Variant.standard,
+                            explorerOptionsForReviewPosition(
+                              fen: reviewFen,
+                              orientation: orientation,
                             ),
                           ),
                         ),
@@ -87,15 +128,15 @@ class AnalysisHubScreen extends ConsumerWidget {
                         onTap: () => Navigator.of(context, rootNavigator: true).push(
                           BoardEditorScreen.buildRoute((
                             initialVariant: Variant.standard,
-                            initialFen: null,
-                            initialOrientation: Side.white,
+                            initialFen: reviewFen,
+                            initialOrientation: orientation,
                           )),
                         ),
                       ),
-                      const _SectionHeader('Repertoires'),
+                      const _SectionHeader('Studies'),
                       SrsSettingsRow(
-                        label: 'Chapters of a study',
-                        help: 'Browse the chapters of a repertoire you imported',
+                        label: 'Explore study',
+                        help: 'Browse a study\u2019s moves and notes freely, no quizzing',
                         onTap: () => _pickStudyToBrowse(context, ref),
                       ),
                     ],
@@ -112,7 +153,7 @@ class AnalysisHubScreen extends ConsumerWidget {
   /// Opens the study picker, then the chosen study's chapters.
   ///
   /// A sheet rather than a study list inline on this screen. Inlining it was the first attempt and
-  /// it was wrong twice over: it put a *second* list of the user's repertoires next to the scope
+  /// it was wrong twice over: it put a *second* list of the user's studies next to the scope
   /// drawer, which already owns that list, and it meant the hub's one job -- offering tools -- grew
   /// a second purpose. The picker keeps the duplication one level deeper, where it is a choice
   /// rather than a competing home.
@@ -121,7 +162,7 @@ class AnalysisHubScreen extends ConsumerWidget {
     if (!context.mounted) return;
 
     if (studies.isEmpty) {
-      showSnackBar(context, 'Import a repertoire first.');
+      showSnackBar(context, 'Import a study first.');
       return;
     }
 

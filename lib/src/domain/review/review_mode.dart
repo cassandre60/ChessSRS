@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Review mode definitions (SRS recall vs free practice).
+library;
+
 /// The operational mode for a [ReviewSession].
 enum ReviewMode {
   /// Standard spaced-repetition mode: queries due items, updates intervals,

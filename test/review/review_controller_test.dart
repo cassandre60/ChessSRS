@@ -1,5 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-003, INV-011, INV-020, INV-021, INV-023, INV-026, INV-030, INV-031, INV-032,
+//   INV-033.
 
 import 'dart:async';
 
@@ -20,6 +22,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../binding.dart';
 import '../model/common/service/fake_sound_service.dart';
+import '../test_helpers.dart';
 import 'gated_study_repository.dart';
 
 void main() {
@@ -253,7 +256,9 @@ void main() {
       // Pre-move animation: starts at parent position (White's turn before 1. e4),
       // then animates White's 1. e4 onto the board so Black sees opponent's move!
       expect(state.boardPosition!.turn, Side.white);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       final stateAfterPreMove = container.read(reviewControllerProvider).requireValue;
       expect(stateAfterPreMove.boardPosition!.turn, Side.black);
       expect(stateAfterPreMove.lastMove, const NormalMove(from: Square.e2, to: Square.e4));
@@ -288,6 +293,146 @@ void main() {
       expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
     });
 
+    // SPEC INV-030: the two drawers are independent, so a White repertoire has no
+    // Black counterpart until the user makes one. "I imported everything as
+    // White" is the ordinary way a Black library ends up empty.
+    test('a study can be created in the opposite colour', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 Nc6 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+
+      final blackOrNull = await controller.createStudyInSide(white.study.id, Side.black);
+      expect(blackOrNull, isNotNull, reason: 'the Black copy was not created');
+
+      final studies = await repo.getAllStudies();
+      expect(studies.length, 2);
+      final black = studies.where((s) => s.id == blackOrNull!.id).first;
+      final blackChapters = await repo.getChaptersByStudy(black.id);
+      expect(
+        blackChapters.map((c) => c.orientation),
+        everyElement(Side.black),
+        reason: 'the copy must land in the other drawer, not beside the original',
+      );
+
+      // Its positions are its own, not the White one's: the same tree answered in
+      // the other colour is a different question (there is a test for that on
+      // import, and this is the same rule reached through a different door).
+      final blackDecisions = await repo.getDecisionsByStudy(black.id);
+      final whiteDecisions = await repo.getDecisionsByStudy(white.study.id);
+      expect(blackDecisions.length, whiteDecisions.length);
+      final blackIds = blackDecisions.map((d) => d.id).toSet();
+      final whiteIds = whiteDecisions.map((d) => d.id).toSet();
+      expect(blackIds.intersection(whiteIds), isEmpty);
+    });
+
+    test('creating the opposite colour twice does not duplicate it', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+
+      await controller.createStudyInSide(white.study.id, Side.black);
+      // Null rather than a second copy: the import is deduplicated per side, so
+      // the row is a no-op the user can press twice without consequence.
+      final again = await controller.createStudyInSide(white.study.id, Side.black);
+
+      expect(again, isNull);
+      expect((await repo.getAllStudies()).length, 2);
+    });
+
+    test('creating the opposite colour leaves the user on what they were reviewing', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      await controller.createStudyInSide(white.study.id, Side.black);
+
+      // Creating the Black copy while reviewing the White one is a setup action,
+      // not a change of intention: yanking the session across colours would
+      // throw away the White queue the user was part-way through.
+      final state = container.read(reviewControllerProvider).value;
+      expect(state?.scope.studyId, white.study.id);
+      expect(state?.activeSide, Side.white);
+    });
+
+    test('the starting drawer is the colour that has material', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: "Queen's Pawn",
+        repertoireSide: Side.black,
+      );
+
+      // A fresh session on a library of nothing but Black material must open
+      // on Black rather than on an empty White drawer.
+      final container2 = createContainer();
+      await container2.read(reviewControllerProvider.future);
+      expect(container2.read(reviewControllerProvider).value?.scope, const ReviewScope.black());
+      expect(container2.read(reviewControllerProvider).value?.activeSide, Side.black);
+    });
+
+    // SPEC INV-030: the two repertoire buttons count the review queue by side, so a tally has to
+    // move as the session is worked through. The controller patches these optimistically instead of
+    // reloading the whole summary, and the patch is easy to forget when a new per-scope tally is
+    // added: without it the drawer keeps showing the count the session started with until the app
+    // is restarted.
+    test('per-side tallies follow the session as moves are reviewed', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Two Repertoires"]
+1. e4 e5 2. Nf3 Nc6 *
+''';
+
+      // Two repertoires over the same tree, so both buttons start non-zero and answering the White
+      // one must leave the Black one untouched.
+      await controller.importPgnText(pgnText: pgn, title: 'White book', repertoireSide: Side.white);
+      await controller.importPgnText(pgnText: pgn, title: 'Black book', repertoireSide: Side.black);
+
+      // The import scoped to the study it just created; the side totals are all-scope figures, so
+      // switch to a side scope and read them there. Awaited: changeScope reloads the summary, and
+      // an unawaited reload would land after the move and overwrite the patched tally.
+      await controller.changeScope(const ReviewScope.white());
+      var state = container.read(reviewControllerProvider).requireValue;
+
+      expect(state.sideProgress[Side.white]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.white]!.learnedDecisions, 0);
+      expect(state.sideProgress[Side.black]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
+
+      // Play 1. e4 in the White repertoire.
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+
+      state = container.read(reviewControllerProvider).requireValue;
+
+      // White's button has one less due and one more learned.
+      expect(state.sideProgress[Side.white]!.dueDecisions, 1);
+      expect(state.sideProgress[Side.white]!.learnedDecisions, 1);
+      // Black's button is untouched — answering one repertoire must not debit the other.
+      expect(
+        state.sideProgress[Side.black]!.dueDecisions,
+        2,
+        reason: "the other side's button moved when only this repertoire was reviewed",
+      );
+      expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
+    });
+
     test('handles incorrect move (lapse) and allows user to reguess on the board', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);
@@ -319,6 +464,82 @@ void main() {
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.feedback, ReviewFeedback.none);
       expect(state.expectedMove, isNull);
+    });
+
+    test('lapsed item is re-tested: dues drop when the re-test is answered', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Queen Pawn"]
+1. d4 d5 *
+''';
+
+      await controller.importPgnText(pgnText: pgn, title: 'Queen Pawn', repertoireSide: Side.white);
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Lapse: play 1. e4 instead of 1. d4. The item is re-queued, still due.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse, isNotNull);
+      expect(lapse!.isCorrect, isFalse);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Reguess correctly: proves the move was seen, but the re-test is still
+      // pending, so dues must NOT drop yet (the screen still shows a prompt).
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry, isNotNull);
+      expect(retry!.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt, isNotNull);
+      expect(state.totalDueCount, 1);
+
+      // Answer the re-test correctly first-try: now the item resolves.
+      final retest = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retest, isNotNull);
+      expect(retest!.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 0);
+    });
+
+    test('mid-advance scope change discards the stale advancement', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final importA = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      final importB = await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      // Back to study A: one due prompt (1. e4).
+      await controller.changeScope(ReviewScope.study(importA.study.id));
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+
+      // Answer correctly but do not await the advancement: the 300ms+
+      // opponent-reply animation is still in flight below.
+      final advance = controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      // Switch to study B mid-advance and let it fully load.
+      await controller.changeScope(ReviewScope.study(importB.study.id));
+      await advance;
+
+      // The stale advancement for A must not paint over B's fresh load:
+      // scope, prompt and dues all belong to B.
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, ReviewScope.study(importB.study.id));
+      expect(state.totalDueCount, 1);
+      expect(state.currentPrompt, isNotNull);
+      expect(state.currentPrompt!.studyId, importB.study.id);
     });
 
     test(
@@ -503,9 +724,18 @@ void main() {
 
       // Complete all items in normal review so due count is 0
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await waitUntil(() => container.read(reviewControllerProvider).value?.isComplete == true);
 
       var state = container.read(reviewControllerProvider).requireValue;
       expect(state.totalDueCount, 0);
@@ -548,21 +778,35 @@ void main() {
       // User plays 1. e4
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
       // Auto-reply plays 1... e5
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
 
       // User plays 2. Nf3 to complete branch 1
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Transitioning to the other branch: White to play against opponent's response.
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.currentPrompt?.incomingMove != null,
+      );
 
-      // Now transitioning to the other branch: White to play against opponent's response.
-      // Initially, board is at parent position (before opponent's move)
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.currentPrompt, isNotNull);
       final incoming = state.currentPrompt!.incomingMove;
       expect(incoming, isNotNull);
 
       // Wait for pre-move animation of the opponent's incoming branch move
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).value?.lastMove ==
+            NormalMove(from: Square.fromName(incoming!.from), to: Square.fromName(incoming.to)),
+      );
       final stateAfterPreMove = container.read(reviewControllerProvider).requireValue;
       expect(
         stateAfterPreMove.lastMove,
@@ -590,7 +834,9 @@ void main() {
       );
 
       // Wait for pre-move of Prompt 1
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       var state = container.read(reviewControllerProvider).requireValue;
       expect(state.currentPrompt, isNotNull);
 
@@ -610,7 +856,9 @@ void main() {
       expect(nextIncoming, isNotNull);
 
       // Wait for pre-move animation of White's move onto the board
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await waitUntil(
+        () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+      );
       final stateAfter = container.read(reviewControllerProvider).requireValue;
       expect(
         stateAfter.lastMove,
@@ -633,15 +881,42 @@ void main() {
 
       // Move 1: 1. e4
       await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Nf3' || m.uci == 'g1f3') ==
+            true,
+      );
 
       // Move 2: 2. Nf3
       await controller.onUserMove(const NormalMove(from: Square.g1, to: Square.f3));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'Bc4' || m.uci == 'f1c4') ==
+            true,
+      );
 
       // Move 3: 3. Bc4
       await controller.onUserMove(const NormalMove(from: Square.f1, to: Square.c4));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'O-O' || m.uci == 'e1g1') ==
+            true,
+      );
 
       // Move 4: User plays O-O by dragging King from e1 to g1 on board!
       final result = await controller.onUserMove(const NormalMove(from: Square.e1, to: Square.g1));

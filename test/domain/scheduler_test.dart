@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-024, INV-025, INV-026, INV-030, INV-041.
 
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:flutter_test/flutter_test.dart';

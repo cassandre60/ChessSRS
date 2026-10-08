@@ -101,11 +101,6 @@ sealed class GeneralPrefs with _$GeneralPrefs implements Serializable {
     /// user's other settings down with it.
     @JsonKey(unknownEnumValue: kSrsDefaultAccent) @Default(kSrsDefaultAccent) SrsAccent accent,
 
-    /// App theme seed
-    @Deprecated('Use systemColors instead')
-    @JsonKey(unknownEnumValue: AppThemeSeed.board, defaultValue: AppThemeSeed.board)
-    required AppThemeSeed appThemeSeed,
-
     /// Locale to use in the app, use system locale if null
     @LocaleConverter() Locale? locale,
   }) = _GeneralPrefs;
@@ -116,20 +111,11 @@ sealed class GeneralPrefs with _$GeneralPrefs implements Serializable {
     soundTheme: SoundTheme.standard,
     masterVolume: 0.8,
     systemColors: true,
-    appThemeSeed: AppThemeSeed.board,
   );
 
   factory GeneralPrefs.fromJson(Map<String, dynamic> json) {
     return _$GeneralPrefsFromJson(json);
   }
-}
-
-enum AppThemeSeed {
-  /// The app theme is based on the user's system theme (only available on Android 10+).
-  system,
-
-  /// The app theme is based on the chessboard.
-  board,
 }
 
 /// Describes the background theme of the app.

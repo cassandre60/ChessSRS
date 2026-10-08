@@ -1,0 +1,18 @@
+diff --git a/test/network/socket_test.dart b/test/network/socket_test.dart
+index dfde14d9e..639d9a263 100644
+--- a/test/network/socket_test.dart
++++ b/test/network/socket_test.dart
+@@ -1,4 +1,3 @@
+-// SPEC coverage: INV-064.
+ import 'dart:convert';
+ import 'dart:io';
+ 
+@@ -115,7 +114,7 @@ void main() {
+ 
+     test('connects with the sri in the query string on the analysis route', () async {
+       // The F-CLOUDEVAL path: cloud eval goes out over /analysis/socket, and
+-      // INV-064 holds per route, not just for the default one.
++      // the session check holds per route, not just for the default one.
+       final factory = _RecordingUrlChannelFactory();
+ 
+       final socketClient = makeTestSocketClient(

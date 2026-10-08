@@ -140,7 +140,9 @@ ThemeData srsThemeData(SrsColors c) {
         return c.ink3;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return c.accent;
+        // Ink, not the accent: the Folio switch is on-ink/off-hairline (SrsSwitch), and the
+        // bridge exists to make un-migrated screens read as the same system.
+        if (states.contains(WidgetState.selected)) return c.ink;
         return c.surface;
       }),
       trackOutlineColor: WidgetStateProperty.all(c.hairline),
@@ -148,7 +150,9 @@ ThemeData srsThemeData(SrsColors c) {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return c.accent;
+          // Ink, not the accent, for the same reason: SrsSegmented marks the chosen
+          // item ink-on-ground.
+          if (states.contains(WidgetState.selected)) return c.ink;
           return c.surface;
         }),
         foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -163,7 +167,10 @@ ThemeData srsThemeData(SrsColors c) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: c.accent,
+        // Ink, not the accent: the only filled button in the system is the ink pill
+        // (SrsPillButton), and the bridge exists to make un-migrated screens — auth,
+        // import, offline setup — read as the same system instead of Material purple.
+        backgroundColor: c.ink,
         foregroundColor: c.ground,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         textStyle: const TextStyle(

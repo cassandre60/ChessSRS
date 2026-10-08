@@ -1,4 +1,3 @@
-import 'package:auto_size_text/auto_size_text.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
@@ -6,7 +5,6 @@ import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/styles/lichess_icons.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/http_network_image.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -15,11 +13,9 @@ import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/account/profile_screen.dart';
 import 'package:chess_srs/src/view/auth/sign_in_error.dart';
 import 'package:chess_srs/src/view/auth/sign_in_options.dart';
-import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/adaptive_action_sheet.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/platform.dart';
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_riverpod/experimental/mutation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,20 +31,10 @@ class AccountMenuScreen extends ConsumerStatefulWidget {
   const AccountMenuScreen({super.key});
 
   static Route<void> buildRoute(BuildContext context) {
-    if (Theme.of(context).platform == TargetPlatform.iOS) {
-      return buildScreenRoute(screen: const AccountMenuScreen());
-    }
-
-    return PageRouteBuilder<void>(
-      pageBuilder: (_, a, b) => const AccountMenuScreen(),
-      transitionsBuilder: (_, animation, b, child) {
-        final tween = Tween(
-          begin: const Offset(1.0, 0.0),
-          end: Offset.zero,
-        ).chain(CurveTween(curve: Curves.easeInOut));
-        return SlideTransition(position: animation.drive(tween), child: child);
-      },
-    );
+    // One route. This branched on platform to present a Cupertino sheet on iOS and a
+    // slide-in page elsewhere, so the same screen arrived two different ways; the Srs head
+    // closes the same way on both.
+    return buildScreenRoute(screen: const AccountMenuScreen());
   }
 
   @override
@@ -93,145 +79,98 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
     final kidMode = account.value?.kid ?? false;
     final LightUser? user = account.value?.lightUser ?? authUser?.user;
 
-    return PlatformScaffold(
-      appBar: PlatformAppBar(
-        title: Text(context.l10n.mobileAccount),
-        automaticallyImplyLeading: Theme.of(context).platform == TargetPlatform.iOS,
-        actions: [
-          if (Theme.of(context).platform != TargetPlatform.iOS)
-            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
-        ],
-      ),
-      body: ListView(
-        children: [
-          if (user != null)
-            ListSection(
-              children: [
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  leading: switch (account) {
-                    AsyncData(:final value) =>
-                      value == null
-                          ? const Icon(Icons.account_circle_outlined, size: 30)
-                          : CircleAvatar(
-                              radius: 20,
-                              foregroundImage: value.flair != null && !_errorLoadingFlair
-                                  ? HttpNetworkImage(lichessFlairSrc(value.flair!), client)
-                                  : null,
-                              onForegroundImageError: value.flair != null
-                                  ? (error, _) => setState(() => _errorLoadingFlair = true)
-                                  : null,
-                              backgroundColor: value.flair == null || _errorLoadingFlair
-                                  ? null
-                                  : ColorScheme.of(context).surfaceContainer,
-                              child: value.flair == null || _errorLoadingFlair
-                                  ? Text(value.initials)
-                                  : null,
-                            ),
-                    _ => const Icon(Icons.account_circle_outlined, size: 30),
-                  },
-                  // §7: every row ends with the 14px ink3 chevron, on every platform. It was
-                  // a `CupertinoListTileChevron` on iOS and nothing elsewhere, so the same
-                  // settings list pointed one way on a phone and another everywhere else.
-                  // `00-agent-brief.md` open decision 4, resolved 2026-09-28.
-                  trailing: Icon(Symbols.chevron_right_rounded, size: 14, color: c.ink3),
-                  title: AutoSizeText(
-                    user.name,
-                    style: Styles.callout,
-                    maxLines: 1,
-                    minFontSize: 14,
-                    maxFontSize: 18,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  enabled: isOnline,
-                  onTap: () {
-                    ref.invalidate(accountProvider);
-                    _navigate(context, ProfileScreen.buildRoute());
-                  },
-                ),
-                if (kidMode)
-                  ListTile(
-                    textColor: Theme.of(context).colorScheme.primary,
-                    iconColor: Theme.of(context).colorScheme.primary,
-                    leading: const Icon(Symbols.sentiment_satisfied, weight: 600),
-                    title: Text(
-                      context.l10n.kidModeIsEnabled,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+    return Scaffold(
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SrsPageHead(
+              label: context.l10n.mobileAccount,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                children: [
+                  if (user != null) ...[
+                    const SrsGroupHeader('Account'),
+                    SrsSettingsRow(
+                      label: user.name,
+                      labelWidget: Text(user.name, style: SrsText.settingLabel(c.ink)),
+                      leading: switch (account) {
+                        AsyncData(:final value) =>
+                          value == null
+                              ? const Icon(Icons.account_circle_outlined, size: 30)
+                              : CircleAvatar(
+                                  radius: 20,
+                                  foregroundImage: value.flair != null && !_errorLoadingFlair
+                                      ? HttpNetworkImage(lichessFlairSrc(value.flair!), client)
+                                      : null,
+                                  onForegroundImageError: value.flair != null
+                                      ? (error, _) => setState(() => _errorLoadingFlair = true)
+                                      : null,
+                                  backgroundColor: value.flair == null || _errorLoadingFlair
+                                      ? null
+                                      : c.surface,
+                                  child: value.flair == null || _errorLoadingFlair
+                                      ? Text(value.initials)
+                                      : null,
+                                ),
+                        _ => const Icon(Icons.account_circle_outlined, size: 30),
+                      },
+                      enabled: isOnline,
+                      onTap: () {
+                        ref.invalidate(accountProvider);
+                        Navigator.of(context).push(ProfileScreen.buildRoute());
+                      },
                     ),
-                    onTap: () {
-                      _pendingKidModeRefresh = true;
-                      launchUrl(lichessUri('/account/kid'));
-                    },
-                  ),
-              ],
-            )
-          else ...[
-            Center(
-              child: FilledButton(
-                onPressed: isOnline
-                    ? switch (signInState) {
-                        MutationPending() => null,
-                        _ => () => showSignInOptions(context, ref),
-                      }
-                    : null,
-                child: Text(context.l10n.signIn),
+                    if (kidMode)
+                      SrsSettingsRow(
+                        label: context.l10n.kidModeIsEnabled,
+                        selected: true,
+                        onTap: () {
+                          _pendingKidModeRefresh = true;
+                          launchUrl(lichessUri('/account/kid'));
+                        },
+                      ),
+                  ] else ...[
+                    const SizedBox(height: 24),
+                    Center(
+                      child: SrsPillButton(
+                        label: context.l10n.signIn,
+                        onPressed: isOnline
+                            ? switch (signInState) {
+                                MutationPending() => null,
+                                _ => () => showSignInOptions(context, ref),
+                              }
+                            : null,
+                      ),
+                    ),
+                  ],
+                  if (user != null) ...[
+                    const SrsGroupHeader('Session'),
+                    if (signOutState case MutationPending())
+                      const SrsSettingsRow(
+                        label: 'Logging out',
+                        control: ButtonLoadingIndicator(),
+                        enabled: false,
+                      )
+                    else
+                      SrsSettingsRow(
+                        label: context.l10n.logOut,
+                        destructive: true,
+                        enabled: isOnline,
+                        onTap: () => _showSignOutConfirmDialog(context, ref),
+                      ),
+                  ],
+                  const SocketPingRatingListTile(),
+                ],
               ),
             ),
           ],
-          ListSection(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: Text(context.l10n.settingsSettings),
-                onTap: () {
-                  _navigate(context, SrsSettingsScreen.buildRoute());
-                },
-              ),
-              if (user != null)
-                switch (signOutState) {
-                  MutationPending() => const ListTile(
-                    leading: Icon(Icons.logout_outlined),
-                    enabled: false,
-                    title: Center(child: ButtonLoadingIndicator()),
-                  ),
-                  _ => ListTile(
-                    leading: const Icon(Icons.logout_outlined),
-                    title: Text(context.l10n.logOut),
-                    enabled: isOnline,
-                    onTap: () => _showSignOutConfirmDialog(context, ref),
-                  ),
-                },
-            ],
-          ),
-          ListSection(
-            children: [
-              if (Theme.of(context).platform == TargetPlatform.android)
-                ListTile(
-                  leading: Icon(
-                    LichessIcons.patron,
-                    semanticLabel: context.l10n.patronLichessPatron,
-                  ),
-                  title: Text(context.l10n.patronDonate),
-                  enabled: isOnline,
-                  onTap: () => launchUrl(Uri.parse('https://lichess.org/patron')),
-                ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(context.l10n.about),
-                onTap: () {
-                  _navigate(context, AboutScreen.buildRoute());
-                },
-              ),
-            ],
-          ),
-          const SocketPingRatingListTile(),
-        ],
+        ),
       ),
     );
-  }
-
-  void _navigate(BuildContext context, Route<dynamic> route) {
-    Navigator.of(context).push(route);
   }
 
   void _showSignOutConfirmDialog(BuildContext context, WidgetRef ref) {
@@ -414,9 +353,13 @@ class AboutScreen extends ConsumerWidget {
                 onTap: () {
                   showLicensePage(
                     context: context,
-                    applicationName: 'Lichess',
+                    applicationName: 'ChessSRS',
                     applicationVersion: packageInfo.version,
-                    applicationIcon: const Icon(LichessIcons.logo_lichess),
+                    applicationIcon: Image.asset(
+                      'assets/brand/icon-1024.png',
+                      width: 48,
+                      height: 48,
+                    ),
                   );
                 },
               ),

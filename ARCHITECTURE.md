@@ -75,6 +75,12 @@ Lichess Mobile foundation (GPL-3.0 fork)
 5. **Isolated integrations**: Listudy-derived and chessrs-derived behavior
    live in isolated domain modules behind our contracts (see
    `docs/INTEGRATION_MAP.md`). No cross-cutting merges.
+6. **Imported repertoires vs. online studies**: Repertoires imported into
+   ChessSRS (from PGN or Lichess) are pure, local-first snapshots stored in
+   SQLite. They have no live socket connection and never auto-sync with
+   remote changes. Remote Lichess study browsing (`StudyScreen`/`StudyController`)
+   operates strictly in-memory over WebSockets for live viewing; it never
+   writes to the local database.
 
 ## 3. Component responsibilities
 

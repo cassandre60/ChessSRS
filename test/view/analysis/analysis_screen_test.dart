@@ -14,7 +14,6 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
 import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
-import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
@@ -180,8 +179,8 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      expect(find.byIcon(AnalysisTab.moveTimes.icon), findsOneWidget);
-      await tester.tap(find.byIcon(AnalysisTab.moveTimes.icon));
+      expect(find.text('Times'), findsOneWidget);
+      await tester.tap(find.text('Times'));
       await tester.pumpAndSettle();
 
       final chart = tester.widget<MoveTimesChart>(find.byType(MoveTimesChart));
@@ -216,7 +215,7 @@ void main() {
 
       await tester.pumpWidget(app);
 
-      expect(find.byIcon(AnalysisTab.moveTimes.icon), findsNothing);
+      expect(find.text('Times'), findsNothing);
     });
 
     testWidgets('Variations bar displays variations and can be tapped', (tester) async {
@@ -993,6 +992,17 @@ void main() {
           // After e5, position has ply=2, so cp=30 which displays as +0.3
           expect(find.widgetWithText(InlineMove, '+0.2'), findsOne);
           expect(find.widgetWithText(InlineMove, '+0.3'), findsOne);
+        });
+
+        testWidgets('bottom bar has no Engine label or switch', (tester) async {
+          // Owner report 2026-09-29: the 'Engine' label is redundant chrome and
+          // the switch duplicates the button tap, which already toggles the
+          // engine. Both were removed; the button stays as the single control.
+          await makeEngineTestApp(tester, isCloudEvalEnabled: false);
+
+          expect(find.text('Engine'), findsNothing);
+          expect(find.byType(SrsSwitch), findsNothing);
+          expect(find.byType(EngineButton), findsOneWidget);
         });
       });
 

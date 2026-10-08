@@ -171,7 +171,7 @@ class GameLayout extends ConsumerStatefulWidget {
   /// If true, the move list will be hidden
   final bool zenMode;
 
-  /// Optional widget that contains various user actions, usually a `BottomBar`.
+  /// Optional widget that contains various user actions, usually a row of `SrsTextButton`s.
   /// Displayed below the board, or below the move list if landscape mode is used.
   final Widget? userActionsBar;
 

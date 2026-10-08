@@ -1,0 +1,34 @@
+name: Docs Check
+
+# A dedicated check for documentation/markdown-only pull requests, as specified in AGENTS.md:
+# "If a docs change ever does need a check, add a small dedicated workflow triggered on **.md;
+# do not widen the test job's filter just to make a doc edit look verified."
+#
+# Emits the required "Unit tests on ubuntu-latest" status check for docs-only changes that
+# do not touch code or configuration tracked by test.yml.
+
+on:
+  push:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/docs-check.yml'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/docs-check.yml'
+    branches:
+      - main
+
+permissions: read-all
+
+jobs:
+  unit-test:
+    name: Unit tests on ubuntu-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge docs-only change
+        run: echo "Markdown/docs-only change; unit tests not required."

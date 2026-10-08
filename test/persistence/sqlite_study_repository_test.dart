@@ -1,5 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-001, INV-002, INV-004, INV-005, INV-031, INV-051.
 
 import 'dart:convert';
 import 'dart:io';
@@ -596,6 +597,66 @@ void main() {
       },
     );
 
+    test(
+      'deleteStudy preserves shared canonical events and mirrors referenced by another study',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final studyA = Study(id: 'study-a', title: 'Study A', createdAt: now, updatedAt: now);
+          final chapterA = Chapter(id: 'ch-a', studyId: studyA.id, sourceOrder: 0);
+          final studyB = Study(id: 'study-b', title: 'Study B', createdAt: now, updatedAt: now);
+          final chapterB = Chapter(id: 'ch-b', studyId: studyB.id, sourceOrder: 0);
+
+          const sharedCanonicalId = 'shared-pos-canonical';
+          const decA = RepertoireDecision(
+            id: 'dec-a',
+            studyId: 'study-a',
+            chapterId: 'ch-a',
+            nodeId: 'na',
+            expectedMoves: [],
+            canonicalStateId: sharedCanonicalId,
+          );
+          const decB = RepertoireDecision(
+            id: 'dec-b',
+            studyId: 'study-b',
+            chapterId: 'ch-b',
+            nodeId: 'nb',
+            expectedMoves: [],
+            canonicalStateId: sharedCanonicalId,
+          );
+          const sharedState = ReviewState(decisionId: sharedCanonicalId, repetitionCount: 3);
+          final event = ReviewEvent(
+            decisionId: sharedCanonicalId,
+            when: now,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: sharedCanonicalId),
+            newState: sharedState,
+          );
+
+          await repo.saveStudy(studyA);
+          await repo.saveChapter(chapterA);
+          await repo.saveDecision(decA);
+          await repo.saveStudy(studyB);
+          await repo.saveChapter(chapterB);
+          await repo.saveDecision(decB);
+          await repo.saveReviewState(sharedState);
+          await repo.saveReviewEvent(event);
+
+          await repo.deleteStudy(studyA.id);
+
+          // Study B still owns the position: its history and mirror survive.
+          expect(await repo.getDecision(decB.id), isNotNull);
+          expect(await repo.getReviewState(sharedCanonicalId), isNotNull);
+          expect(await repo.getReviewEvents(sharedCanonicalId), hasLength(1));
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     test('savePositionTree updates tree independently of chapter metadata', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);
@@ -900,6 +961,41 @@ void main() {
 
         final count = await repo.getTodayReviewedPositionsCount(now);
         expect(count, 2); // exactly 2 distinct positions reviewed today
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('getTodayReviewedPositionsCount includes a review at local midnight', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        // Local wall time (no UTC suffix): this is what SystemClock produces.
+        final now = DateTime(2026, 9, 18, 14, 30);
+        final atMidnight = DateTime(2026, 9, 18);
+        final beforeMidnight = DateTime(2026, 9, 17, 23, 59, 59);
+
+        Future<void> saveAt(String decisionId, DateTime when) {
+          return repo.saveReviewEvent(
+            ReviewEvent(
+              decisionId: decisionId,
+              when: when,
+              result: ReviewResult.correct,
+              oldState: ReviewState(decisionId: decisionId),
+              newState: ReviewState(decisionId: decisionId, repetitionCount: 1),
+            ),
+          );
+        }
+
+        await saveAt('dec-midnight', atMidnight);
+        await saveAt('dec-before', beforeMidnight);
+
+        final count = await repo.getTodayReviewedPositionsCount(now);
+        // Midnight belongs to today; the minute before does not. The old
+        // UTC-midnight bound (with a 'Z' suffix) excluded the midnight row
+        // via string comparison against offset-less local timestamps.
+        expect(count, 1);
       } finally {
         await db.close();
       }
@@ -1245,7 +1341,7 @@ void main() {
           canonicalKeyForPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -', [
             'e2e4',
             'd2d4',
-          ]),
+          ], repertoireSide: Side.white),
         );
 
         // And the legacy history followed the key across, rather than being stranded.

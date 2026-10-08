@@ -7,8 +7,15 @@ name: Tests
 #   build.yaml             build_runner configuration
 #   assets/**              maia_book_asset_test.dart loads these through rootBundle
 #   scripts/**             update_openings_db_test.dart executes the python script
-# 'docs/**' is deliberately absent: no step below reads Markdown, so triggering a run for a
-# documentation change would spend several minutes to confirm what cannot fail.
+# The referee files below are listed even though no step reads them: branch protection
+# requires the "Unit tests" report on every PR, and a workflow that never triggers leaves
+# that check permanently "expected", which blocks the merge for everyone including admins
+# (G-CIREPORT: this froze PRs #133-#135 despite green gates). A redundant run on these rare
+# PRs is the price of a mergeable repo.
+# 'docs/**' (except the referee docs named explicitly above) stays absent: no step below
+# reads them, so triggering a full run for a pure-docs change would spend several minutes
+# to confirm what cannot fail. Consequence, stated plainly: a docs-only PR still gets no
+# CI and cannot merge on its own; it must ride along with a PR that triggers a lane.
 # Keep the push and pull_request filters identical.
 on:
   push:
@@ -22,7 +29,21 @@ on:
       - 'pubspec.lock'
       - 'analysis_options.yaml'
       - 'build.yaml'
-      - '.github/workflows/test.yml'
+      - '.github/**'
+      - '.gates/**'
+      - 'redteam/**'
+      - 'SPEC.md'
+      - 'GATES.md'
+      - 'GATES_PLAN.md'
+      - 'QUALITY.md'
+      - 'TEST_STRATEGY.md'
+      - 'PRODUCT.md'
+      - 'MVP.md'
+      - 'ARCHITECTURE.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'CODEOWNERS'
+      - 'verify'
     branches:
       - main
   pull_request:
@@ -36,10 +57,30 @@ on:
       - 'pubspec.lock'
       - 'analysis_options.yaml'
       - 'build.yaml'
-      - '.github/workflows/test.yml'
+      - '.github/**'
+      - '.gates/**'
+      - 'redteam/**'
+      - 'SPEC.md'
+      - 'GATES.md'
+      - 'GATES_PLAN.md'
+      - 'QUALITY.md'
+      - 'TEST_STRATEGY.md'
+      - 'PRODUCT.md'
+      - 'MVP.md'
+      - 'ARCHITECTURE.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'CODEOWNERS'
+      - 'verify'
     branches:
       - main
   workflow_dispatch:
+
+# Cancel superseded PR runs so only the latest pushed commit is actually tested.
+# Pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Declare default permissions as read only.
 permissions: read-all

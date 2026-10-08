@@ -1,4 +1,3 @@
-import 'package:chess_srs/src/model/chat/chat_message.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/user/user.dart';
@@ -26,7 +25,6 @@ sealed class Study with _$Study {
     required IList<StudyChapterMeta> chapters,
     required StudyChapter chapter,
     required IMap<UserId, StudyMember> members,
-    ChatData? chat,
     int? socketVersion,
 
     /// Hints to display in "gamebook"/"interactive" mode
@@ -80,11 +78,9 @@ Study _studyFromPick(RequiredPick pick) {
     liked: study('liked').asBoolOrThrow(),
     likes: study('likes').asIntOrThrow(),
     ownerId: study('ownerId').asUserIdOrNull(),
-    chat: study('chat').letOrNull((p) => chatDataFromPick(p)),
     socketVersion: study('socketVersion').asIntOrNull(),
     features: (
       cloneable: study('features', 'cloneable').asBoolOrFalse(),
-      chat: study('features', 'chat').asBoolOrFalse(),
       sticky: study('features', 'sticky').asBoolOrFalse(),
     ),
     topics: study('topics').asListOrThrow((pick) => pick.asStringOrThrow()).lock,
@@ -101,7 +97,7 @@ Study _studyFromPick(RequiredPick pick) {
   );
 }
 
-typedef StudyFeatures = ({bool cloneable, bool chat, bool sticky});
+typedef StudyFeatures = ({bool cloneable, bool sticky});
 
 @Freezed(fromJson: true)
 sealed class StudyChapter with _$StudyChapter {

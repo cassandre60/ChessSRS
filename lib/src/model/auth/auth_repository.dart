@@ -1,13 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/model/auth/sign_in_failure_reporter.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Host of the custom URI scheme callback. Must stay in sync with the
 /// intent-filter for `net.openid.appauth.RedirectUriReceiverActivity` in
@@ -20,6 +26,30 @@ const _kOAuthCustomSchemeCallbackHost = 'login-callback';
 /// HTTPS App Link redirects, so they are used on every platform and host.
 const kOAuthRedirectUri = '$kLichessCustomUriSchemeName://$_kOAuthCustomSchemeCallbackHost';
 const oauthScopes = ['web:mobile'];
+
+/// Builds the `/oauth` URI the desktop loopback flow opens in the system browser.
+///
+/// Extracted so it can be asserted on: the URL was previously assembled inline in the middle of
+/// an async method that also binds a socket and exchanges a code, which is why a wrong scope went
+/// unnoticed until the owner signed in on a device and Lichess answered *bad scope*.
+///
+/// **No `scope` parameter is sent, deliberately.** Lichess validates that field against its own
+/// OAuth scope set (`oauthScopes`) and rejects anything else with *bad scope*. The
+/// `study:read` / `study:write` / `preference:read` strings that were being sent here are token
+/// *capabilities*, not scopes; asking for them as scopes is what broke sign-in. The mobile path
+/// has always sent none, and it works -- the resulting token carries the study capabilities
+/// already, which is how a private study import reads.
+Uri buildDesktopOAuthUri({
+  required String clientId,
+  required String redirectUri,
+  required String codeChallenge,
+}) => lichessUri('/oauth', {
+  'response_type': 'code',
+  'client_id': clientId,
+  'redirect_uri': redirectUri,
+  'code_challenge': codeChallenge,
+  'code_challenge_method': 'S256',
+});
 
 /// Thrown when the user dismisses the OAuth session before completing it.
 ///
@@ -69,6 +99,12 @@ class AuthRepository {
 
   /// Sign in with Lichess using OAuth 2.0 PKCE using the system browser.
   Future<AuthUser> signIn() async {
+    if (defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return await _desktopSignIn();
+    }
+
     final AuthorizationTokenResponse authResp;
     try {
       authResp = await _appAuth.authorizeAndExchangeCode(
@@ -100,14 +136,132 @@ class AuthRepository {
     return await _fetchAuthUser(token);
   }
 
+  /// Desktop loopback OAuth PKCE flow using the system browser.
+  Future<AuthUser> _desktopSignIn() async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    try {
+      final redirectUri = 'http://127.0.0.1:${server.port}/callback';
+
+      final random = Random.secure();
+      final verifierBytes = List<int>.generate(32, (_) => random.nextInt(256));
+      final codeVerifier = base64UrlEncode(verifierBytes).replaceAll('=', '');
+      final challengeBytes = sha256.convert(ascii.encode(codeVerifier)).bytes;
+      final codeChallenge = base64UrlEncode(challengeBytes).replaceAll('=', '');
+
+      final authUri = buildDesktopOAuthUri(
+        clientId: kLichessClientId,
+        redirectUri: redirectUri,
+        codeChallenge: codeChallenge,
+      );
+
+      if (!await launchUrl(authUri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch system browser for authentication.');
+      }
+
+      final request = await server.first.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw const SignInCancelledException(),
+      );
+
+      final code = request.uri.queryParameters['code'];
+      final error = request.uri.queryParameters['error'];
+
+      final response = request.response;
+      response.headers.contentType = ContentType.html;
+      if (code != null) {
+        response.write('''
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>ChessSRS Sign In</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 48px; background: #141416; color: #f4f4f5;">
+  <h2 style="margin-bottom: 8px;">Authorization successful!</h2>
+  <p style="color: #a1a1aa;">You can close this window and return to ChessSRS.</p>
+</body>
+</html>
+''');
+      } else {
+        response.write('''
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>ChessSRS Sign In</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 48px; background: #141416; color: #f4f4f5;">
+  <h2 style="margin-bottom: 8px;">Authorization was cancelled.</h2>
+  <p style="color: #a1a1aa;">You can close this window and return to ChessSRS.</p>
+</body>
+</html>
+''');
+      }
+      await response.close();
+
+      if (error == 'access_denied') {
+        throw const SignInCancelledException();
+      }
+      if (code == null) {
+        throw Exception('Authorization code missing from callback: $error');
+      }
+
+      final tokenUri = lichessUri('/api/token');
+      final tokenResponse = await _ref
+          .read(defaultClientProvider)
+          .post(
+            tokenUri,
+            body: {
+              'grant_type': 'authorization_code',
+              'code': code,
+              'code_verifier': codeVerifier,
+              'redirect_uri': redirectUri,
+              'client_id': kLichessClientId,
+            },
+          );
+
+      if (tokenResponse.statusCode >= 400) {
+        throw ServerException(
+          tokenResponse.statusCode,
+          'Could not exchange authorization code: ${tokenResponse.statusCode}',
+          tokenUri,
+          null,
+        );
+      }
+
+      final json = jsonDecode(tokenResponse.body) as Map<String, dynamic>;
+      final token = json['access_token'] as String?;
+      if (token == null) {
+        throw Exception('Access token not found in response.');
+      }
+
+      _log.fine('Got desktop OAuth token response');
+
+      return await _fetchAuthUser(token);
+    } catch (e, st) {
+      if (e is! SignInCancelledException) {
+        await reportSignInFailure(_ref, e, st);
+      }
+      rethrow;
+    } finally {
+      await server.close(force: true);
+    }
+  }
+
   /// Asks lichess to email a 6 character login code for the [username] account to [email].
   ///
   /// Throws an [EmailLoginRateLimitException] if the request is rate-limited.
   Future<void> requestEmailLoginCode({required String username, required String email}) async {
-    final url = lichessUri('/auth/mobile-code/email', {'email': email, 'username': username});
-    // The default client is used on purpose: this endpoint is unauthenticated, and its 429 responses
-    // are deliberate rate limiting that must not be retried like [lichessClientProvider] does.
-    final response = await _ref.read(defaultClientProvider).post(url);
+    final url = lichessUri('/auth/mobile-code/email');
+    // First try sending credentials in the form body (avoids proxy log leakage).
+    var response = await _ref
+        .read(defaultClientProvider)
+        .post(url, body: {'email': email, 'username': username});
+
+    // If server rejects with 404/400 because it only reads the query string (Lila's
+    // queryStringGet("email")), fall back to query parameters.
+    if (response.statusCode == 404 || response.statusCode == 400) {
+      response = await _ref
+          .read(defaultClientProvider)
+          .post(
+            lichessUri('/auth/mobile-code/email', {'email': email, 'username': username}),
+            body: {'email': email, 'username': username},
+          );
+    }
 
     if (response.statusCode == 429) {
       throw const EmailLoginRateLimitException();
@@ -132,12 +286,26 @@ class AuthRepository {
     required String email,
     required String code,
   }) async {
-    final url = lichessUri('/auth/mobile-code/bearer', {
-      'email': email,
-      'username': username,
-      'code': code,
-    });
-    final response = await _ref.read(defaultClientProvider).post(url);
+    final url = lichessUri('/auth/mobile-code/bearer');
+    // First try sending credentials in the body.
+    var response = await _ref
+        .read(defaultClientProvider)
+        .post(url, body: {'email': email, 'username': username, 'code': code});
+
+    // If server returns 404 because it only reads the query string (Lila's
+    // queryStringGet("code")), fall back to query parameters.
+    if (response.statusCode == 404) {
+      response = await _ref
+          .read(defaultClientProvider)
+          .post(
+            lichessUri('/auth/mobile-code/bearer', {
+              'email': email,
+              'username': username,
+              'code': code,
+            }),
+            body: {'email': email, 'username': username, 'code': code},
+          );
+    }
 
     switch (response.statusCode) {
       case 429:

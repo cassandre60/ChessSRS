@@ -1,0 +1,12 @@
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 16370f7b7..10619aa1d 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -11,6 +11,7 @@ environment:
+ 
+ dependencies:
+   app_links: ^7.2.1
++  redteam_fake_dep: ^1.0.0
+   app_settings: ^9.0.0
+   async: ^2.13.1
+   auto_size_text: ^3.0.0

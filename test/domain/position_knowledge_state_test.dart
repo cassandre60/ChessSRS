@@ -1,7 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+// SPEC coverage: INV-015, INV-016, INV-017.
 
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -29,8 +31,8 @@ void main() {
       const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
 
       test('is deterministic and a SHA-1 hex string', () {
-        final a = canonicalKeyForPosition(start, ['e2e4']);
-        final b = canonicalKeyForPosition(start, ['e2e4']);
+        final a = canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.white);
+        final b = canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.white);
 
         expect(a, equals(b));
         expect(a.length, 40);
@@ -38,8 +40,10 @@ void main() {
 
       test('ignores the order the accepted moves are listed in', () {
         expect(
-          canonicalKeyForPosition(start, ['e2e4', 'd2d4', 'g1f3']),
-          equals(canonicalKeyForPosition(start, ['g1f3', 'd2d4', 'e2e4'])),
+          canonicalKeyForPosition(start, ['e2e4', 'd2d4', 'g1f3'], repertoireSide: Side.white),
+          equals(
+            canonicalKeyForPosition(start, ['g1f3', 'd2d4', 'e2e4'], repertoireSide: Side.white),
+          ),
           reason: 'reordered branches must not fork the same repertoire',
         );
       });
@@ -47,21 +51,34 @@ void main() {
       test('differs when the accepted set differs even if the first move matches', () {
         // This is the collision the first-child key could not see.
         expect(
-          canonicalKeyForPosition(start, ['e2e4']),
-          isNot(equals(canonicalKeyForPosition(start, ['e2e4', 'd2d4']))),
+          canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.white),
+          isNot(
+            equals(canonicalKeyForPosition(start, ['e2e4', 'd2d4'], repertoireSide: Side.white)),
+          ),
         );
         expect(
-          canonicalKeyForPosition(start, ['e2e4', 'd2d4']),
-          isNot(equals(canonicalKeyForPosition(start, ['e2e4', 'c2c4']))),
+          canonicalKeyForPosition(start, ['e2e4', 'd2d4'], repertoireSide: Side.white),
+          isNot(
+            equals(canonicalKeyForPosition(start, ['e2e4', 'c2c4'], repertoireSide: Side.white)),
+          ),
         );
       });
 
       test('differs when the position differs even if the accepted set matches', () {
         const elsewhere = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3';
         expect(
-          canonicalKeyForPosition(start, ['e7e5']),
-          isNot(equals(canonicalKeyForPosition(elsewhere, ['e7e5']))),
+          canonicalKeyForPosition(start, ['e7e5'], repertoireSide: Side.white),
+          isNot(equals(canonicalKeyForPosition(elsewhere, ['e7e5'], repertoireSide: Side.white))),
           reason: 'distinct positions must never share SRS memory',
+        );
+      });
+
+      test('differs when the trained colour differs even if the move matches', () {
+        // White and Black copies of the same lines are separate repertoires: reviewing one
+        // must not mark the position in the other one learned.
+        expect(
+          canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.white),
+          isNot(equals(canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.black))),
         );
       });
 
@@ -70,8 +87,10 @@ void main() {
         // entirely, which merged every position offering the same move.
         const elsewhereFEN = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3';
         expect(
-          canonicalKeyForPosition(start, ['e2e4']),
-          isNot(equals(canonicalKeyForPosition(elsewhereFEN, ['e2e4']))),
+          canonicalKeyForPosition(start, ['e2e4'], repertoireSide: Side.white),
+          isNot(
+            equals(canonicalKeyForPosition(elsewhereFEN, ['e2e4'], repertoireSide: Side.white)),
+          ),
         );
       });
     });

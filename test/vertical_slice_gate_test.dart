@@ -54,15 +54,6 @@ void main() {
       } catch (_) {}
     });
 
-    Future<void> pumpAsync(WidgetTester tester, [int ms = 80]) async {
-      await tester.runAsync(() async {
-        await Future<void>.delayed(Duration(milliseconds: ms));
-      });
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 300));
-    }
-
     testWidgets(
       'Full vertical slice lifecycle: import -> review -> correct -> lapse -> restart persistence',
       (tester) async {
@@ -85,7 +76,7 @@ void main() {
         await tester.pumpWidget(app);
         await pumpAsync(tester, 200);
 
-        expect(find.text('Bring your repertoire.'), findsOneWidget);
+        expect(find.text('Bring your study.'), findsOneWidget);
         expect(find.text('Choose file'), findsWidgets);
 
         // -----------------------------------------------------------------------
@@ -126,10 +117,10 @@ void main() {
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
-        // design/docs/01-identity.md names the everywhere scope `All repertoires`; the top bar
-        // shows it, and the scope list's first row shows the same string when the drawer opens.
-        expect(find.text('All repertoires'), findsOneWidget);
-        expect(find.text('Repertoire vs Opponent'), findsOneWidget);
+        // The top bar shows the current scope name. After importing a White repertoire,
+        // the scope is the newly imported study.
+        expect(find.text('Italian Game Repertoire'), findsOneWidget);
+        expect(find.text('Repertoire vs Opponent'), findsNothing);
         expect(find.text('White to play'), findsOneWidget);
 
         // -----------------------------------------------------------------------

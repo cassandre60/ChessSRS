@@ -4,10 +4,7 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
-import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
-import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
-import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -111,15 +108,7 @@ class SrsLibrarySheet extends ConsumerWidget {
             onTap: () => Navigator.of(context).pop(),
           ),
         ),
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onVerticalDragEnd: (details) {
-            if ((details.primaryVelocity ?? 0) > 150) {
-              Navigator.of(context).pop();
-            }
-          },
-          child: content,
-        ),
+        SrsSheetDismissible(child: content),
       ],
     );
   }
@@ -146,47 +135,7 @@ class SrsLibrarySheet extends ConsumerWidget {
           ] else
             const SizedBox(height: 8),
 
-          // Group 1: Add repertoire
-          _buildRow(
-            c: c,
-            title: 'Import PGN',
-            subtitle: 'From a file, pasted text or a Lichess study',
-            onTap: () {
-              Navigator.pop(context);
-              RepertoireImportDialog.show(context);
-            },
-          ),
-          _buildRow(
-            c: c,
-            title: 'Studies & Repertoires',
-            subtitle: 'Choose active study or opening hub',
-            onTap: () {
-              Navigator.pop(context);
-              ReviewScopeDrawer.show(context);
-            },
-          ),
-
-          _buildDivider(c),
-
-          // Group 2: Explore.
-          //
-          // These were three flat rows here, which left this sheet doing two unrelated jobs:
-          // choosing a repertoire to review, and listing tools. They now live in one screen,
-          // `AnalysisHubScreen` (owner decision 2026-09-28 on `00-agent-brief.md` open decision
-          // 1), which also carries a study's chapters.
-          _buildGroupHeader('Explore', c),
-          _buildRow(
-            c: c,
-            title: 'Analysis',
-            subtitle: 'Analysis board, explorer, editor, chapters',
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context, rootNavigator: true).push(AnalysisHubScreen.buildRoute());
-            },
-          ),
-          _buildDivider(c),
-
-          // Group 3: Preferences & Settings
+          // Preferences & Settings
           _buildGroupHeader('Preferences', c),
           _buildRow(
             c: c,
@@ -229,13 +178,6 @@ class SrsLibrarySheet extends ConsumerWidget {
           color: c.ink3,
         ),
       ),
-    );
-  }
-
-  Widget _buildDivider(SrsColors c) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Container(height: 1, color: c.hairlineSoft),
     );
   }
 

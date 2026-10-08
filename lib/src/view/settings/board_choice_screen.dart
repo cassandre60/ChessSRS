@@ -1,6 +1,5 @@
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
-import 'package:chess_srs/src/utils/color_palette.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,11 +38,17 @@ class _Body extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final boardTheme = ref.watch(boardPreferencesProvider.select((p) => p.boardTheme));
 
-    final hasSystemColors = getSystemCorePalettes() != null;
+    // Only show the curated board themes — the full Lichess set is kept in the
+    // enum for data compatibility but hidden from the picker. To restore a
+    // theme, add it to this list.
+    const allowedBoardThemes = {
+      BoardTheme.diagram,
+      BoardTheme.wood,
+      BoardTheme.paper,
+      BoardTheme.slate,
+    };
 
-    final choices = BoardTheme.values
-        .where((t) => t != BoardTheme.system || hasSystemColors)
-        .toList();
+    final choices = BoardTheme.values.where((t) => allowedBoardThemes.contains(t)).toList();
 
     void onChanged(BoardTheme? value) =>
         ref.read(boardPreferencesProvider.notifier).setBoardTheme(value ?? BoardTheme.brown);

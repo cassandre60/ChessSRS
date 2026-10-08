@@ -133,39 +133,56 @@ class SrsReviewSide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.srs;
     final lineH = lineFontSize * (wide ? 1.3 : 1.36);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(top: wide ? 2 : 0),
-          child: meta,
-        ),
-        if (line != null) ...[
-          SizedBox(height: wide ? 22 : 8),
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: lineH * 2),
-            child: line,
+    // The side column is one surface card: meta + line + slot grouped above a ruled
+    // action footer. In the prompt state the slot is empty and the actions hold a lone
+    // Skip — without the card and the footer rule that reads as a void with a floater.
+    return Container(
+      padding: EdgeInsets.fromLTRB(wide ? 20 : 14, wide ? 14 : 12, wide ? 20 : 14, 0),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border.all(color: c.hairline),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: wide ? 2 : 0),
+            child: meta,
+          ),
+          if (line != null) ...[
+            SizedBox(height: wide ? 22 : 10),
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: lineH * 2),
+              child: line,
+            ),
+          ],
+          Expanded(
+            child: wide
+                ? Padding(
+                    padding: EdgeInsets.only(top: line != null ? 26 : 14),
+                    child: SingleChildScrollView(child: slot),
+                  )
+                : _BottomFade(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: line != null ? 12 : 10, bottom: 22),
+                      child: SingleChildScrollView(child: slot),
+                    ),
+                  ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: c.hairlineSoft)),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(padding: const EdgeInsets.fromLTRB(0, 8, 0, 8), child: actions),
+            ),
           ),
         ],
-        Expanded(
-          child: wide
-              ? Padding(
-                  padding: EdgeInsets.only(top: line != null ? 26 : 14),
-                  child: SingleChildScrollView(child: slot),
-                )
-              : _BottomFade(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: line != null ? 10 : 8, bottom: 22),
-                    child: SingleChildScrollView(child: slot),
-                  ),
-                ),
-        ),
-        ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
-          child: Padding(padding: const EdgeInsets.fromLTRB(0, 6, 0, 4), child: actions),
-        ),
-      ],
+      ),
     );
   }
 }

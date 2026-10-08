@@ -1,0 +1,135 @@
+# Fast gate lane: referee integrity, spec traceability, and drift ratchets.
+# The product suite (format/analyze/flutter test) stays in test.yml, which
+# remains the authority on "the suite is green". This workflow enforces what
+# it cannot: that no PR quietly redefines what "passing" means.
+#
+# Design notes:
+# - Gate scripts run from the TRUSTED base checkout (../trusted), never from
+#   the PR tree, so a PR cannot tamper with its own judges. The one exception
+#   is the bootstrap PR that introduces the gates: the base has no scripts
+#   yet, so the workflow falls back to the PR tree with a visible warning and
+#   judges under owner review (G07 still flags every referee edit there).
+# - `docs/**` (except SPEC/GATES/strategy docs, which are named explicitly) is
+#   deliberately absent from the paths filter: a change touching only prose
+#   docs skips CI, preserving the cheap docs lane documented in AGENTS.md.
+# - G07 approval path: the owner adds the `gate-approved` label to a
+#   gate-change/spec-change PR after review; only then do referee edits pass.
+# - Nightly recall judges each red-team patch delta only
+#   (BASE_REF = the checkout SHA), so the gate commit itself is not re-judged.
+
+name: Gates
+
+on:
+  pull_request:
+    # `labeled` is load-bearing: the G07 approval path depends on the owner
+    # adding the `gate-approved` label re-running these gates (G-LABELEVENT).
+    # Without it the label fires no event and `gh run rerun` replays the
+    # pre-label payload, so approval could only land via close/reopen.
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'scripts/**'
+      - '.gates/**'
+      - 'redteam/**'
+      - 'SPEC.md'
+      - 'GATES.md'
+      - 'GATES_PLAN.md'
+      - 'QUALITY.md'
+      - 'TEST_STRATEGY.md'
+      - 'PRODUCT.md'
+      - 'MVP.md'
+      - 'ARCHITECTURE.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'CODEOWNERS'
+      - 'pubspec.yaml'
+      - 'analysis_options.yaml'
+      - 'build.yaml'
+      - '.github/**'
+      - 'verify'
+    branches:
+      - main
+  schedule:
+    - cron: '0 3 * * *' # nightly red-team recall
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: T1 fast gates
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          path: pr
+          fetch-depth: 0
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          fetch-depth: 0
+
+      - name: Locate gate scripts (trusted base copy; PR tree on bootstrap)
+        working-directory: pr
+        run: |
+          if [ -f ../trusted/scripts/gates/banned_apis_check.py ]; then
+            echo "TRUSTED=../trusted" >> "$GITHUB_ENV"
+            echo "using trusted base copy of the gate scripts"
+          else
+            echo "TRUSTED=." >> "$GITHUB_ENV"
+            echo "::warning::trusted gate scripts absent on base (bootstrap PR); judging with the PR tree under owner review"
+          fi
+
+      - name: G03 banned APIs in core
+        working-directory: pr
+        run: python3 "$TRUSTED/scripts/gates/banned_apis_check.py" --config "$TRUSTED/.gates/banned-apis.json" --root .
+
+      - name: G07 protected paths (referee edits need approval)
+        working-directory: pr
+        run: |
+          APPROVAL=""
+          if [ "${{ contains(github.event.pull_request.labels.*.name, 'gate-approved') }}" = "true" ]; then
+            APPROVAL="--approved"
+          fi
+          python3 "$TRUSTED/scripts/gates/protected_paths_check.py" \
+            --base origin/${{ github.base_ref }} --patterns "$TRUSTED/.gates/protected-paths.txt" $APPROVAL
+
+      - name: G08 test-weakening tripwire
+        working-directory: pr
+        run: python3 "$TRUSTED/scripts/gates/test_weakening_check.py" --base origin/${{ github.base_ref }}
+
+      - name: G05 spec traceability
+        working-directory: pr
+        # Citations are judged against the PR spec (one PR may add an
+        # invariant with its test); coverage is enforced against the union
+        # with the base spec (a PR cannot dodge by deleting; G-BASEINV).
+        run: python3 "$TRUSTED/scripts/gates/spec_trace_check.py" --spec SPEC.md --tests test --base-spec "$TRUSTED/SPEC.md"
+
+      - name: G10 ratchets
+        working-directory: pr
+        run: |
+          python3 "$TRUSTED/scripts/gates/collect_metrics.py" --out metrics.json
+          python3 "$TRUSTED/scripts/gates/ratchet_check.py" \
+            --baseline "$TRUSTED/.gates/ratchet-baseline.json" --current metrics.json
+
+  nightly:
+    name: T3 red-team recall
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Red-team corpus recall (must reject every case)
+        run: BASE_REF="$GITHUB_SHA" python3 scripts/gates/redteam_runner.py --gate-cmd "./scripts/gates.sh t1"

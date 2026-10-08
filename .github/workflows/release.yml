@@ -1,0 +1,179 @@
+name: Release
+
+# Automatic shippable builds. Cutting a release is pushing a tag; everything
+# else is automatic:
+#   git tag v0.1.0 && git push origin v0.1.0
+# Tagging is the deliberate act — every commit does NOT cut a release (version
+# spam, burned CI minutes, meaningless versions). Manual dispatch builds the
+# same artifacts without publishing, for proof.
+#
+# Ships today: Linux tarball (shippable as-is), Android AAB + APK
+# (throwaway-signed, testing only — the permanent upload key lives with the
+# owner and must never enter this repo; see release-proof.yml header).
+# Not shipped: iOS (no signing certs), web (native database/engine have no
+# web builds yet), Windows/macOS (no platform directories exist).
+#
+# Safety: main only merges green PRs (branch protection), so a tag on main
+# is already tested — this workflow does not re-run the suite, it ships.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux release bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          # libsecret-1-dev: flutter_secure_storage_linux links libsecret at
+          # CMake configure time (v0.1.0 failed without it).
+          sudo apt-get install -y clang cmake git ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev
+
+      - name: 🐦 Install flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          cache: true
+          flutter-version-file: pubspec.yaml
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Code generation
+        run: dart run build_runner build
+
+      - name: Build Linux release
+        run: flutter build linux --release
+
+      - name: Package bundle
+        run: |
+          TAG="${GITHUB_REF_NAME:-manual}"
+          tar -czf "chesssrs-${TAG}-linux-x64.tar.gz" -C build/linux/x64/release bundle
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: linux-bundle
+          path: 'chesssrs-*.tar.gz'
+          retention-days: 14
+
+  android:
+    name: Android release artifacts (throwaway-signed, testing only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: ☕ Install Java 17
+        uses: actions/setup-java@v5.0.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 🐦 Install flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          cache: true
+          flutter-version-file: pubspec.yaml
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Code generation
+        run: dart run build_runner build
+
+      - name: Throwaway signing key (NOT the upload key)
+        run: |
+          keytool -genkeypair -keystore /tmp/throwaway.keystore \
+            -alias upload -keyalg RSA -keysize 2048 -validity 30 \
+            -storepass throwaway -keypass throwaway \
+            -dname "CN=Throwaway, OU=CI, O=CI, L=CI, ST=CI, C=DE"
+          printf 'storePassword=throwaway\nkeyPassword=throwaway\nkeyAlias=upload\nstoreFile=/tmp/throwaway.keystore\n' \
+            > android/key.properties
+
+      - name: Build release app bundle
+        run: flutter build appbundle --release
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: android-testing
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # gh release create needs git context (tag resolution, generated notes).
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v6.0.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect and rename artifacts per tag
+        # download-artifact with merge-multiple preserves each upload's
+        # directory layout, so locate by filename instead of assuming dist/.
+        # (v0.1.1 failed here assuming a flat dist/.)
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          AAB=$(find dist -name 'app-release.aab' | head -1)
+          APK=$(find dist -name 'app-release.apk' | head -1)
+          TGZ=$(find dist -name 'chesssrs-*.tar.gz' | head -1)
+          test -n "$AAB" && test -n "$APK" && test -n "$TGZ" || { echo "missing artifacts:"; find dist -type f; exit 1; }
+          mkdir -p release
+          mv "$AAB" "release/chesssrs-${TAG}-android-testing.aab"
+          mv "$APK" "release/chesssrs-${TAG}-android-testing.apk"
+          mv "$TGZ" "release/chesssrs-${TAG}-linux-x64.tar.gz"
+
+      - name: Compose release notes
+        # Generated notes plus the permanent file guide, so every release
+        # explains its own downloads without a manual edit afterwards.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            -f target_commitish="${GITHUB_SHA}" \
+            --jq .body > notes.md
+          cat >> notes.md <<EOF
+
+          ## Which file do I download?
+
+          - **Linux** (\`chesssrs-${GITHUB_REF_NAME}-linux-x64.tar.gz\`) — the desktop app. Unpack and run; needs system GTK/SQLite libraries (standard Flutter Linux prerequisites).
+          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.apk\`) — installs directly on a phone for trying the app. Test-signed: it can never upgrade into a future store version, so expect to uninstall before switching to a store build.
+          - **Android AAB** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.aab\`) — not installable. This is Google's store-upload format, published here only to prove that pipeline works; ignore it unless you publish to Play.
+          EOF
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Beta: marked pre-release until the owner declares stable.
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release/* \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --prerelease

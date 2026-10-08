@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:chess_srs/src/model/auth/auth_controller.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
@@ -60,7 +60,7 @@ Study makeStudy({
     liked: false,
     likes: 0,
     ownerId: null,
-    features: (cloneable: false, chat: false, sticky: false),
+    features: (cloneable: false, sticky: false),
     topics: const IList.empty(),
     chapters: chapters ?? IList([StudyChapterMeta(id: effectiveChapter.id, name: '', fen: null)]),
     chapter: effectiveChapter,
@@ -162,10 +162,10 @@ void main() {
       expect(find.text('pgn 2'), findsNothing);
 
       // First chapter does not allow opening explorer
-      expect(find.bySemanticsLabel(RegExp('Opening explorer & tablebase')), findsNothing);
+      expect(find.text('Explorer'), findsNothing);
 
       // Open chapter selection dialog
-      await tester.tap(findByTooltip('2 Chapters'));
+      await tester.tap(find.text('2 Chapters'));
       // Wait for dialog to open
       await tester.pumpAndSettle();
 
@@ -189,7 +189,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Second chapter allows opening explorer, so tab should be displayed now.
-      expect(find.bySemanticsLabel(RegExp('Opening explorer & tablebase')), findsOneWidget);
+      expect(find.text('Explorer'), findsOneWidget);
 
       expect(find.text('1. Chapter 1'), findsNothing);
       expect(find.text('2. Chapter 2'), findsOneWidget);
@@ -359,7 +359,7 @@ void main() {
 
       expect(tester.widget<Chessboard>(find.byType(Chessboard)).orientation, Side.white);
 
-      await tester.tap(findByTooltip('Menu'));
+      await tester.tap(find.text('Menu'));
       await tester.pumpAndSettle(); // Wait for menu to open
 
       await tester.tap(find.text('Flip board'));
@@ -446,7 +446,7 @@ void main() {
       expect(find.text('Not much to say after ...Qc7.'), findsOneWidget);
       expect(find.text(introText), findsNothing);
 
-      await tester.tap(findByTooltip('Retry'));
+      await tester.tap(find.text('Retry'));
       await tester.pump(); // Wait for move to be taken back
 
       expect(find.text(introText), findsOneWidget);
@@ -467,7 +467,7 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(findByTooltip('Next'));
+      await tester.tap(find.text('Next'));
       await tester.pump(); // Wait for opponent move to be played
 
       expect(find.text('What would you play in this position?'), findsOneWidget);
@@ -483,7 +483,7 @@ void main() {
       await playMove(tester, 'c3', 'g3');
       expect(find.text('A fork, threatening Rg7 & b3.'), findsOneWidget);
 
-      await tester.tap(findByTooltip('Next'));
+      await tester.tap(find.text('Next'));
       await tester.pump(); // Wait for opponent move to be played
 
       expect(find.text('What would you play in this position?'), findsOneWidget);
@@ -497,9 +497,9 @@ void main() {
         findsOneWidget,
       );
 
-      expect(findByTooltip('Play again'), findsOneWidget);
-      expect(findByTooltip('Next chapter'), findsOneWidget);
-      expect(findByTooltip('Analysis board'), findsOneWidget);
+      expect(find.text('Play again'), findsOneWidget);
+      expect(find.text('Next chapter'), findsOneWidget);
+      expect(find.text('Analysis board'), findsOneWidget);
     });
 
     testWidgets('Interactive study hints and deviation comments', (WidgetTester tester) async {
@@ -561,7 +561,7 @@ void main() {
 
       await playMove(tester, 'e2', 'e3');
       expect(find.text('Shown if any move other than d4 is played'), findsOneWidget);
-      await tester.tap(findByTooltip('Retry'));
+      await tester.tap(find.text('Retry'));
       await tester.pump(); // Wait for move to be taken back
 
       // Hint should still be shown after incorrect move
@@ -569,11 +569,11 @@ void main() {
 
       await playMove(tester, 'd2', 'd4');
       expect(find.text('Shown if d4 is played'), findsOneWidget);
-      await tester.tap(findByTooltip('Retry'));
+      await tester.tap(find.text('Retry'));
       await tester.pump(); // Wait for move to be taken back
 
-      expect(findByTooltip('View the solution'), findsOneWidget);
-      await tester.tap(findByTooltip('View the solution'));
+      expect(find.text('View the solution'), findsOneWidget);
+      await tester.tap(find.text('View the solution'));
       // Wait for correct move and opponent's response to be played
       await tester.pump(const Duration(seconds: 1));
 
@@ -599,7 +599,7 @@ void main() {
       expect(find.text('Hint 2'), findsOneWidget);
 
       // Open chapter selection dialog
-      await tester.tap(findByTooltip('2 Chapters'));
+      await tester.tap(find.text('2 Chapters'));
       // Wait for dialog to open
       await tester.pumpAndSettle();
 
@@ -671,7 +671,7 @@ void main() {
       expect(find.text('1. Legal Chapter'), findsOneWidget);
 
       // Navigate to second chapter with illegal position
-      await tester.tap(findByTooltip('2 Chapters'));
+      await tester.tap(find.text('2 Chapters'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('2 Illegal Chapter', findRichText: true));
       await tester.pumpAndSettle();
@@ -685,7 +685,7 @@ void main() {
       expect(staticBoard.fen, '8/8/8/8/8/8/8/8 w - - 0 1');
 
       // Verify we can navigate back to first chapter
-      await tester.tap(findByTooltip('2 Chapters'));
+      await tester.tap(find.text('2 Chapters'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('1 Legal Chapter', findRichText: true));
@@ -693,7 +693,7 @@ void main() {
 
       expect(find.text('1. Legal Chapter'), findsOneWidget);
       // Verify we can navigate back to first chapter
-      await tester.tap(findByTooltip('2 Chapters'));
+      await tester.tap(find.text('2 Chapters'));
       await tester.pumpAndSettle();
 
       //Check that also via the chapter list the illegal chapter can be navigated to
@@ -762,11 +762,11 @@ void main() {
 
     // each pumpAndSettle() call waits for move to be played and potential annotation to appear
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expectAnnotations([]);
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
     // 4. Rg1!!
@@ -774,19 +774,19 @@ void main() {
       containsPair(Square.g1, predicate<Annotation>((annotation) => annotation.symbol == '!!')),
     ]);
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle(); // Wait for move to be played
     expectAnnotations([]);
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle(); // Wait for move to be played
     expectAnnotations([]);
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle(); // Wait for move to be played
     expectAnnotations([]);
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle(); // Wait for move to be played
 
     // Regression test for https://github.com/lichess-org/mobile/issues/2231
@@ -882,7 +882,7 @@ void main() {
     // Wait for study to load
     await tester.pumpAndSettle();
 
-    await tester.tap(findByTooltip('Next'));
+    await tester.tap(find.text('Next'));
     await tester.pumpAndSettle(); // Wait for O-O-O move to be played
 
     final board = tester.widget<Chessboard>(find.byType(Chessboard));
@@ -894,44 +894,7 @@ void main() {
   });
 
   group('Server Analysis', () {
-    testWidgets('Does not display server analysis tab if chapter does not allow it', (
-      WidgetTester tester,
-    ) async {
-      final mockRepository = MockStudyRepository();
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: false, explorer: false),
-            ),
-          ),
-          null,
-          '',
-        ),
-      );
-
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const StudyScreen(options: (id: testId, initialChapter: null)),
-        overrides: {
-          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
-        },
-      );
-      await tester.pumpWidget(app);
-
-      // Wait for study to load
-      await tester.pumpAndSettle();
-
-      // Server analysis tab should not be displayed since chapter does not allow it
-      expect(find.bySemanticsLabel(RegExp('Computer analysis')), findsNothing);
-    });
-
-    testWidgets('Cannot request server analysis if study has less than 4 moves', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('Does not display server analysis tab', (WidgetTester tester) async {
       final mockRepository = MockStudyRepository();
 
       when(() => mockRepository.getStudy(id: testId)).thenAnswer(
@@ -942,51 +905,6 @@ void main() {
               orientation: Side.white,
               features: (computer: true, explorer: false),
             ),
-          ),
-          null,
-          '',
-        ),
-      );
-
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const StudyScreen(options: (id: testId, initialChapter: null)),
-        overrides: {
-          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
-        },
-      );
-      await tester.pumpWidget(app);
-
-      // Wait for study to load
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
-
-      expect(find.textContaining('The chapter is too short'), findsOneWidget);
-    });
-
-    testWidgets('Cannot request server analysis without write permissions', (
-      WidgetTester tester,
-    ) async {
-      final mockRepository = MockStudyRepository();
-
-      final user = AuthUser(
-        user: LightUser(id: UserId.fromUserName('John'), name: 'John'),
-        token: 'test-token',
-      );
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: true, explorer: false),
-            ),
-            members: IMap<UserId, StudyMember>(
-              const {},
-            ).add(user.user.id, StudyMember(user: user.user, role: '')),
           ),
           null,
           'e4 e5 Nf3 Nc6',
@@ -999,45 +917,25 @@ void main() {
         overrides: {
           studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
         },
-        authUser: user,
       );
       await tester.pumpWidget(app);
 
       // Wait for study to load
       await tester.pumpAndSettle();
 
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
-
-      expect(find.textContaining('Only the study contributors'), findsOneWidget);
+      // Server analysis tab should not be displayed
+      expect(find.text('Summary'), findsNothing);
     });
 
-    testWidgets('Can request server analysis if chapter is long enough and has write permissions', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('Study menu opens a sheet of share rows', (tester) async {
+      // The platform context menu is gone: one ⋯ button opens a sheet of text rows
+      // (like toggle for signed-in users, then the share and export rows). Fails on
+      // base, which built a ContextMenuIconButton with a nested adaptive menu.
       final mockRepository = MockStudyRepository();
 
-      final user = AuthUser(
-        user: LightUser(id: UserId.fromUserName('John'), name: 'John'),
-        token: 'test-token',
-      );
-
-      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
-        (_) async => (
-          makeStudy(
-            chapter: makeChapter(
-              id: const StudyChapterId('1'),
-              orientation: Side.white,
-              features: (computer: true, explorer: false),
-            ),
-            members: IMap<UserId, StudyMember>(
-              const {},
-            ).add(user.user.id, StudyMember(user: user.user, role: 'w')),
-          ),
-          null,
-          'e4 e5 Nf3 Nc6',
-        ),
-      );
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, 'e4 e5 Nf3 Nc6'));
 
       final app = await makeTestProviderScopeApp(
         tester,
@@ -1045,17 +943,18 @@ void main() {
         overrides: {
           studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
         },
-        authUser: user,
       );
       await tester.pumpWidget(app);
-
-      // Wait for study to load
       await tester.pumpAndSettle();
 
-      await tester.tap(find.bySemanticsLabel(RegExp('Computer analysis')));
-      await tester.pumpAndSettle(); // wait for switch to server analysis tab
+      await tester.tap(find.bySemanticsLabel('Study menu'));
+      await tester.pumpAndSettle();
 
-      expect(find.textContaining('Request a computer analysis'), findsOneWidget);
+      expect(find.byType(SrsSheetSurface), findsOneWidget);
+      expect(find.text('Study URL'), findsOneWidget);
+      expect(find.text('Current chapter URL'), findsOneWidget);
+      expect(find.text('Study PGN'), findsOneWidget);
+      expect(find.text('Chapter PGN'), findsOneWidget);
     });
   });
 }

@@ -1,8 +1,11 @@
+// SPEC coverage: INV-008.
+
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/app_links_service.dart';
+import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/game/game.dart';
@@ -17,6 +20,7 @@ import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/view/user/user_screen.dart';
+import 'package:chess_srs/src/widgets/rich_link_text.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,6 +91,31 @@ Future<void> triggerAppLink(
   );
   await tester.pumpWidget(app);
   await tester.tap(find.text('test link'));
+}
+
+class _LinkifyTestWidget extends ConsumerWidget {
+  const _LinkifyTestWidget({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ElevatedButton(
+      onPressed: () async {
+        await ref.read(appLinksServiceProvider).onLinkifyOpen(context, UrlElement(url));
+      },
+      child: const Text('test linkify'),
+    );
+  }
+}
+
+Future<void> triggerLinkifyOpen(WidgetTester tester, String url) async {
+  final app = await makeTestProviderScopeApp(
+    tester,
+    home: Scaffold(body: _LinkifyTestWidget(url: url)),
+  );
+  await tester.pumpWidget(app);
+  await tester.tap(find.text('test linkify'));
 }
 
 void main() {
@@ -372,7 +401,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Pressing back must return to the home widget — no extra StudyScreen in the stack.
-      await tester.pageBack();
+      // The head uses a custom chevron rather than a platform back button, so pageBack()
+      // (which looks for BackButton/CupertinoNavigationBarBackButton) cannot see it.
+      await tester.tap(find.bySemanticsLabel('Back to Review'));
       await tester.pumpAndSettle();
 
       expect(find.text('go to study'), findsOneWidget);
@@ -461,6 +492,35 @@ void main() {
       await tester.pump(); // Process socket message
 
       await tester.pumpAndSettle(); // Wait for TV screen to load
+    });
+  });
+
+  group('onLinkifyOpen', () {
+    testWidgets('routes a first-party url to the in-app screen', (WidgetTester tester) async {
+      await triggerLinkifyOpen(tester, 'https://$kLichessHost/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
+    });
+
+    testWidgets('does not treat a host prefixed with the lichess host as first-party', (
+      WidgetTester tester,
+    ) async {
+      await triggerLinkifyOpen(tester, 'https://$kLichessHost.evil.com/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not treat userinfo disguising an attacker host as first-party', (
+      WidgetTester tester,
+    ) async {
+      await triggerLinkifyOpen(tester, 'https://$kLichessHost@evil.com/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 

@@ -1,0 +1,29 @@
+{
+  "rules": [
+    {
+      "paths": ["lib/src/domain/*", "lib/src/domain/**/*"],
+      "forbid": [
+        "import\\s+'package:flutter/",
+        "import\\s+'dart:io'",
+        "import\\s+'dart:html'",
+        "import\\s+'dart:js'",
+        "import\\s+'package:sqflite",
+        "import\\s+'package:chessground",
+        "import\\s+'sqflite"
+      ],
+      "why": "QUALITY.md ARCH-1 / SPEC INV-040+INV-042: the domain layer is pure Dart with zero Flutter, chessground, sqflite, or I/O imports"
+    },
+    {
+      "paths": [
+        "lib/src/domain/scheduler.dart",
+        "lib/src/domain/chess_fsrs_scheduler.dart",
+        "lib/src/domain/graph_aware_review_coordinator.dart",
+        "lib/src/domain/review_state.dart",
+        "lib/src/domain/position_knowledge_state.dart",
+        "lib/src/domain/review/*"
+      ],
+      "forbid": ["(?<!\\[)DateTime\\.now(?!\\])"],
+      "why": "QUALITY.md REL-2 / SPEC INV-024+INV-041: scheduling and review paths take time only through the injected Clock (the bracket lookarounds exempt the doc comment on the Scheduler contract)"
+    }
+  ]
+}

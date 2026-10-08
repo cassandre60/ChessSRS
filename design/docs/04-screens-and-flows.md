@@ -55,8 +55,10 @@ stateDiagram-v2
   the wrong-move path when in prompt). Confirm this matches the product's actual FSRS semantics for a skip
   before wiring it to real scheduling — if the domain layer treats skip as a lapse, lower-confidence rating,
   or a no-op, keep that logic and only change how it looks.
-- In **correction**: Skip plays the correct move on the user's behalf and proceeds as if answered correctly
-  (prototype behaviour). Confirm against the domain layer's real skip/"show answer" semantics before wiring.
+- In **correction**: the action is labelled **Reveal answer** (owner wording decision 2026-10-04: a
+  bare "Skip" mislabels what is left once recall has already failed). It plays the correct move on the
+  user's behalf through the normal retry path — the lapse already stands, so this changes the flow,
+  not the grade — and proceeds as if answered correctly.
 - Skip is hidden during `note` (Continue is the only action) and during `quiet`.
 
 ## 4. Input
@@ -65,7 +67,7 @@ stateDiagram-v2
   threshold, commit on release over a square) both work everywhere, simultaneously.
 - **Keyboard** (desktop/web, and any device with a hardware keyboard attached):
   - `Space` or `Enter`: Continue, when a note is showing.
-  - `S`: Skip, when Skip is visible.
+  - `S`: the visible text action (Skip in prompt, Reveal answer in correction).
   - `P`: Practice, on the Nothing Due screen.
   - `Esc`: close any open sheet.
   - Standard tab order: scope button → due/practice (not focusable, it's not actionable) → overflow button →

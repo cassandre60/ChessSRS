@@ -7,7 +7,6 @@ import 'package:chess_srs/src/model/engine/engine_factory.dart';
 import 'package:chess_srs/src/model/engine/opening_book.dart';
 import 'package:chess_srs/src/model/engine/thinking_time.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
-import 'package:chess_srs/src/model/notifications/notification_service.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
@@ -28,7 +27,6 @@ import 'model/engine/fake_engine.dart';
 import 'model/engine/fake_maia_online_book.dart';
 import 'model/engine/fake_stockfish_nnue_service.dart';
 import 'model/engine/fake_weights_service.dart';
-import 'model/notifications/fake_notification_display.dart';
 import 'network/fake_http_client_factory.dart';
 import 'network/fake_websocket_channel.dart';
 import 'utils/fake_connectivity.dart';
@@ -80,9 +78,6 @@ Future<ProviderContainer> makeContainer({
     ),
     connectivityPluginProvider: connectivityPluginProvider.overrideWith((_) {
       return FakeConnectivity();
-    }),
-    notificationDisplayProvider: notificationDisplayProvider.overrideWith((ref) {
-      return FakeNotificationDisplay();
     }),
     databaseProvider: databaseProvider.overrideWith((ref) async {
       final db = await openAppDatabase(databaseFactoryFfi, inMemoryDatabasePath);

@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Scheduler contract and interface definitions.
+library;
+
 import 'package:chess_srs/src/domain/clock.dart';
 import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';

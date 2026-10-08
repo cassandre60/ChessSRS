@@ -195,3 +195,80 @@ Finder findByTooltip(String message, {bool skipOffstage = true}) => find.byWidge
   description: 'tooltip "$message"',
   skipOffstage: skipOffstage,
 );
+
+/// Pumps the widget tree until [condition] returns true, with a timeout.
+///
+/// This replaces fixed-delay `pumpAsync` helpers that cause flakiness under CPU contention.
+/// Instead of waiting a fixed time, this polls the widget tree for a condition,
+/// which is robust to varying execution speeds.
+///
+/// Usage:
+///   await pumpUntil(tester, () => find.text('Done').evaluate().isNotEmpty);
+///   await pumpUntilFound(tester, find.byType(MyWidget));
+Future<void> pumpUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('pumpUntil timed out after $timeout');
+    }
+    await tester.runAsync(() => Future<void>.delayed(interval));
+    await tester.pump();
+  }
+}
+
+/// Polls until [condition] returns true, checking every [interval] up to [timeout].
+///
+/// Useful for unit tests where background async tasks (such as controller timers or
+/// animations) complete over real wall-clock time without a [WidgetTester].
+Future<void> waitUntil(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw StateError('waitUntil timed out after $timeout');
+    }
+    await Future<void>.delayed(interval);
+  }
+}
+
+/// Pumps the widget tree until [finder] finds at least one widget.
+Future<void> pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 20),
+}) async {
+  await pumpUntil(tester, () => finder.evaluate().isNotEmpty, timeout: timeout, interval: interval);
+}
+
+/// Pumps the widget tree until [finder] finds no widgets.
+Future<void> pumpUntilGone(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 20),
+}) async {
+  await pumpUntil(tester, () => finder.evaluate().isEmpty, timeout: timeout, interval: interval);
+}
+
+/// Legacy pumpAsync for backwards compatibility — prefer pumpUntil/pumpUntilFound.
+///
+/// This uses a fixed delay and is kept for existing tests that haven't migrated yet.
+/// New tests should use pumpUntil/pumpUntilFound instead.
+@Deprecated('Use pumpUntil or pumpUntilFound instead')
+Future<void> pumpAsync(WidgetTester tester, [int ms = 120]) async {
+  await tester.runAsync(() async {
+    await Future<void>.delayed(Duration(milliseconds: ms));
+  });
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump(const Duration(milliseconds: 300));
+}

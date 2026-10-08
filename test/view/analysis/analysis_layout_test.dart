@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:chess_srs/src/constants.dart';
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
@@ -178,4 +179,49 @@ void main() {
       );
     }
   }, variant: kPlatformVariant);
+
+  testWidgets('tab strip is a segmented switch and taps change the page', (
+    WidgetTester tester,
+  ) async {
+    // The Material tab bar (with its icon vocabulary) is gone: one segmented control
+    // over the same swipeable pages. Fails on base, which built a TabBar.
+    //
+    // The App flavour of the harness, not the bare MaterialApp: the strip reads
+    // localized tab labels, and only the App wrapper provides the delegates.
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: DefaultTabController(
+        length: 2,
+        child: AnalysisLayout(
+          pov: Side.white,
+          sideToMove: Side.white,
+          tabs: const [AnalysisTab.moves, AnalysisTab.explorer],
+          boardBuilder: (context, boardSize, boardRadius) {
+            return StaticChessboard(
+              size: boardSize,
+              fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR',
+              orientation: Side.white,
+            );
+          },
+          bottomBar: const SizedBox(height: kBottomBarHeight),
+          children: const [
+            Center(child: Text('Moves page')),
+            Center(child: Text('Explorer page')),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TabBar), findsNothing);
+    expect(find.byType(TabBarView), findsOneWidget);
+    expect(find.text('Explorer'), findsOneWidget);
+    expect(find.byType(SrsSegmented<int>), findsOneWidget);
+    expect(find.text('Moves page'), findsOneWidget);
+
+    await tester.tap(find.text('Explorer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Explorer page'), findsOneWidget);
+  });
 }

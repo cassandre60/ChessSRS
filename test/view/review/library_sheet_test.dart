@@ -32,15 +32,19 @@ void main() {
 
   const destinations = ['Analysis board', 'Opening explorer', 'Board editor'];
 
-  testWidgets('the sheet offers the hub, not the tools it now contains', (tester) async {
+  testWidgets('the sheet does not offer Analysis or the tools it contains', (tester) async {
     final sheet = await rowLabels(tester, const SrsLibrarySheet());
 
-    expect(sheet, contains('Analysis'), reason: 'the sheet must offer the hub');
+    expect(
+      sheet,
+      isNot(contains('Analysis')),
+      reason: 'Analysis is reached directly via repertoires in the scope drawer',
+    );
     for (final destination in destinations) {
       expect(
         sheet,
         isNot(contains(destination)),
-        reason: '"$destination" moved into the hub; leaving it here gives two paths to one screen',
+        reason: '"$destination" is not in the library sheet',
       );
     }
   });
@@ -51,5 +55,24 @@ void main() {
     for (final destination in destinations) {
       expect(hub, contains(destination), reason: 'the hub must reach $destination');
     }
+  });
+
+  testWidgets('study management lives in the scope drawer, not the Library sheet', (tester) async {
+    final sheet = await rowLabels(tester, const SrsLibrarySheet());
+
+    expect(
+      sheet,
+      isNot(contains('Import PGN')),
+      reason: 'Import PGN lives in the scope drawer pill; duplicating it here gives two paths',
+    );
+    expect(
+      sheet,
+      isNot(contains('Studies & Repertoires')),
+      reason: 'scope button already opens the drawer; this row was a redundant hop',
+    );
+    // Guard the survivors so a future edit cannot empty the sheet silently.
+    expect(sheet, isNot(contains('Analysis')));
+    expect(sheet, contains('Settings'));
+    expect(sheet, contains('About and licences'));
   });
 }

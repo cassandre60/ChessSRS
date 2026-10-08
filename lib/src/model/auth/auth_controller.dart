@@ -16,13 +16,13 @@ final _authEventsController = StreamController<AuthEvent>.broadcast();
 Stream<AuthEvent> get authEventsStream => _authEventsController.stream;
 
 /// A provider for [AuthController].
-final authControllerProvider = NotifierProvider.autoDispose<AuthController, AuthUser?>(
+final authControllerProvider = NotifierProvider<AuthController, AuthUser?>(
   AuthController.new,
   name: 'AuthControllerProvider',
 );
 
 /// A provider that indicates whether the user is logged in.
-final isLoggedInProvider = Provider.autoDispose<bool>((Ref ref) {
+final isLoggedInProvider = Provider<bool>((Ref ref) {
   return ref.watch(authControllerProvider.select((authUser) => authUser != null));
 }, name: 'IsLoggedInProvider');
 

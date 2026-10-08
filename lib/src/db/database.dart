@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
+import 'package:chess_srs/src/persistence/opening_name_repair_migration.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
@@ -68,7 +69,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 14,
+      version: 16,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -180,6 +181,27 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
         // commit — so the schema has to land before they run, or they read the pre-upgrade tables.
         await batch.commit();
 
+        // v16 scopes the canonical key by repertoire side. This recomputes the v15
+        // canonical IDs in place, so a same position in White and Black gets separate
+        // canonical states instead of sharing one. It is a no-op once every row is
+        // side-scoped, so it runs unconditionally once the legacy migrations settle the
+        // pre-v14 IDs they depend on.
+        if (oldVersion < 16) {
+          final sideScoped = await rekeyCanonicalReviewState(db);
+          _logger.info(
+            'Side-scoped canonical rekey: ${sideScoped.decisionsRemapped} decisions, '
+            '${sideScoped.statesRemapped} states (${sideScoped.statesMerged} merged), '
+            '${sideScoped.skipped} skipped',
+          );
+
+          // Keep any per-occurrence review history reachable under the new canonical rows.
+          final backfill = await backfillCanonicalStatesFromLegacy(db);
+          _logger.info(
+            'Canonical backfill: ${backfill.statesCreated} states created '
+            '(${backfill.collisionsMerged} from collisions)',
+          );
+        }
+
         if (oldVersion < 14) {
           final rekey = await rekeyCanonicalReviewState(db);
           _logger.info(
@@ -196,6 +218,18 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           _logger.info(
             'Canonical backfill: ${backfill.statesCreated} states created '
             '(${backfill.collisionsMerged} from collisions)',
+          );
+        }
+
+        // Also not a schema change: v15 clears opening names that P-OPENNAME's
+        // classifier now rejects, on chapters imported before that fix. Runs
+        // after the batch commit for the same reason as the v14 block above — it
+        // reads and writes the upgraded table.
+        if (oldVersion < 15) {
+          final repaired = await repairSpuriousOpeningNames(db);
+          _logger.info(
+            'Opening name repair: ${repaired.cleared} spurious names cleared, '
+            '${repaired.kept} kept',
           );
         }
 

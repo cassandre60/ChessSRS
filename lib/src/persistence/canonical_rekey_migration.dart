@@ -7,6 +7,7 @@ import 'package:chess_srs/src/domain/position_knowledge_state.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:logging/logging.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -17,7 +18,7 @@ final _logger = Logger('CanonicalRekeyMigration');
 ///
 /// The canonical ID used to be `sha1("<fenKey>|<first accepted move>")`, which could not tell two
 /// different questions asked at the same position apart. It is now
-/// `sha1("<fenKey>|<every accepted move, sorted>")`. That is a different string for most decisions,
+/// `sha1("<repertoireSide>|<fenKey>|<every accepted move, sorted>")`. That is a different string for most decisions,
 /// so every persisted `canonicalStateId` and every `position_knowledge_state` row keyed by the old
 /// format would be orphaned — the position would look never-reviewed and a user's accumulated
 /// stability, due dates and history would silently reset.
@@ -36,9 +37,15 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
     kTableSrsDecision,
     columns: ['id', 'chapterId', 'nodeId', 'expectedMoves', 'canonicalStateId'],
   );
+  final chapterSides = <String, Side>{};
+  for (final row in await db.query(kTableSrsChapter, columns: ['id', 'orientation'])) {
+    chapterSides[row['id']! as String] = (row['orientation'] as String?) == 'black'
+        ? Side.black
+        : Side.white;
+  }
 
-  // old canonical id -> new canonical id, for the ids that actually move.
-  final renames = <String, String>{};
+  // old canonical id -> every new side-scoped id it maps to, for the ids that actually move.
+  final oldToNew = <String, Set<String>>{};
   // decision row id -> its new canonical id.
   final decisionUpdates = <String, String>{};
   // Decisions whose position could not be recovered, so their ID cannot be recomputed.
@@ -67,11 +74,26 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
     }
 
     final moves = decodeExpectedMoves(rawMoves);
-    final newId = canonicalKeyForPosition(fenKey, moves.map((move) => move.uci));
+    final side = chapterSides[chapterId] ?? Side.white;
+    final newId = canonicalKeyForPosition(
+      fenKey,
+      moves.map((move) => move.uci),
+      repertoireSide: side,
+    );
     if (newId == oldId) continue;
 
-    renames[oldId] = newId;
+    oldToNew.putIfAbsent(oldId, () => <String>{}).add(newId);
     decisionUpdates[decisionId] = newId;
+  }
+
+  final renames = <String, String>{
+    for (final entry in oldToNew.entries)
+      if (entry.value.length == 1) entry.key: entry.value.single,
+  };
+  for (final entry in oldToNew.entries) {
+    if (entry.value.length > 1) {
+      renames[entry.key] = entry.value.first;
+    }
   }
 
   if (renames.isEmpty) {
@@ -92,16 +114,21 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
   // New id -> the row that should survive under it.
   final merged = <String, Map<String, Object?>>{};
   var mergeCount = 0;
-  for (final entry in renames.entries) {
-    final existing = merged[entry.value];
-    if (existing == null) {
-      final row = statesByOldId[entry.key];
-      // Copied, not aliased: the primary key is rewritten below.
-      if (row != null) merged[entry.value] = Map<String, Object?>.of(row);
-    } else {
-      mergeCount++;
-      if (_knowledgeProgress(row: statesByOldId[entry.key]!, incumbent: existing)) {
-        merged[entry.value] = Map<String, Object?>.of(statesByOldId[entry.key]!);
+  for (final entry in oldToNew.entries) {
+    final row = statesByOldId[entry.key];
+    for (final newId in entry.value) {
+      final existing = merged[newId];
+      if (existing == null) {
+        // Copied, not aliased: the primary key is rewritten below.
+        if (row != null) merged[newId] = Map<String, Object?>.of(row);
+      } else {
+        mergeCount++;
+        // A decision that was never reviewed has no knowledge row; there is
+        // nothing to merge, so keep the surviving row instead of crashing.
+        if (row == null) continue;
+        if (_knowledgeProgress(row: row, incumbent: existing)) {
+          merged[newId] = Map<String, Object?>.of(row);
+        }
       }
     }
   }

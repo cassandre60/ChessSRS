@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 
@@ -34,12 +35,20 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final repo = repoAsync.asData?.value;
   final scheduler = ref.watch(schedulerProvider);
   final clock = ref.watch(clockProvider);
+  final reviewOrder = ref.watch(studyPreferencesProvider.select((p) => p.reviewOrder));
+  final transposeScope = ref.watch(studyPreferencesProvider.select((p) => p.transposeScope));
 
   if (repo == null) {
     throw StateError('StudyRepository is not yet initialized');
   }
 
-  return ReviewService(repository: repo, scheduler: scheduler, clock: clock);
+  return ReviewService(
+    repository: repo,
+    scheduler: scheduler,
+    clock: clock,
+    reviewOrder: reviewOrder,
+    transposeScope: transposeScope,
+  );
 });
 
 /// Application service orchestrating review sessions, local persistence,
@@ -52,6 +61,10 @@ class DueCountsSummary {
     this.studyProgress = const {},
     this.chapterProgress = const {},
     this.openingProgress = const {},
+    this.sideProgress = const {},
+    this.studySideProgress = const {},
+    this.studyIdsBySide = const {},
+    this.openingsBySide = const {},
   });
 
   final int totalDueCount;
@@ -60,6 +73,37 @@ class DueCountsSummary {
   final Map<String, RepertoireProgress> studyProgress;
   final Map<String, RepertoireProgress> chapterProgress;
   final Map<String, RepertoireProgress> openingProgress;
+
+  /// Progress over the chapters trained from each side, for the drawer's two
+  /// repertoire buttons. Always carries both sides, so a button can render its
+  /// memory bar at zero instead of guessing whether it has any material.
+  final Map<Side, RepertoireProgress> sideProgress;
+
+  /// Progress per study partitioned by the side its chapters train, so each
+  /// repertoire menu shows only its own side's figures (INV-030). A study
+  /// training both sides appears under both menus; a study with no decisions
+  /// has no entry. The per-side figures sum to the study-wide ones.
+  final Map<String, Map<Side, RepertoireProgress>> studySideProgress;
+
+  /// Sides trained by [studyId]. Empty when the study has no decisions.
+  Set<Side> sidesForStudy(String studyId) => studySideProgress[studyId]?.keys.toSet() ?? const {};
+
+  /// Progress for [studyId] restricted to [side], or zero when the study
+  /// trains nothing from that side.
+  RepertoireProgress studyProgressForSide(String studyId, Side side) =>
+      studySideProgress[studyId]?[side] ?? RepertoireProgress.zero;
+
+  /// Which studies and which opening families belong to each colour, so a drawer
+  /// can list only its own. Grouped by chapter rather than by decision: a study
+  /// with nothing due yet still has to appear in the drawer, and a paused study
+  /// has to stay findable so it can be resumed.
+  final Map<Side, List<String>> studyIdsBySide;
+  final Map<Side, List<String>> openingsBySide;
+
+  /// Due positions for [side], or 0 when the summary predates this field.
+  int dueCountForSide(Side side) => sideProgress[side]?.dueDecisions ?? 0;
+
+  RepertoireProgress progressForSide(Side side) => sideProgress[side] ?? RepertoireProgress.zero;
 }
 
 class ReviewService {
@@ -67,11 +111,20 @@ class ReviewService {
     required this.repository,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
+    this.reviewOrder = ReviewOrder.dueDate,
+    this.transposeScope = TransposeScope.inScope,
   });
 
   final StudyRepository repository;
   final Scheduler scheduler;
   final Clock clock;
+
+  /// Presentation order of the due queue. The domain default stays due-date;
+  /// the product default (StudyPrefs) is by-line.
+  final ReviewOrder reviewOrder;
+
+  /// Whether off-line-but-book moves are accepted (INV-065).
+  final TransposeScope transposeScope;
 
   ReviewSession? _activeSession;
   ReviewSession? get activeSession => _activeSession;
@@ -141,6 +194,22 @@ class ReviewService {
       targetStudies = activeStudies;
       targetChapters = chapters;
       decisions = await _getOpeningDecisions(targetChapters, scope.openingFamily!, activeStudies);
+    } else if (scope.side != null) {
+      // A side scope spans every active study but keeps only the chapters
+      // trained from that side. Resolved here rather than by filtering the
+      // whole decision list so the queue, its trees and its states are all
+      // narrowed together — a decision whose chapter is excluded would
+      // otherwise arrive with no tree to grade against (INV-030).
+      final allStudies = await repository.getAllStudies();
+      final activeStudies = allStudies.where((s) => s.isActive).toList();
+      final chapters = <Chapter>[];
+      for (final s in activeStudies) {
+        final studyChapters = await repository.getChaptersByStudy(s.id);
+        chapters.addAll(studyChapters.where((c) => c.orientation == scope.side));
+      }
+      targetStudies = activeStudies;
+      targetChapters = chapters;
+      decisions = await _getSideDecisions(chapters);
     } else {
       final allStudies = await repository.getAllStudies();
       final activeStudies = allStudies.where((s) => s.isActive).toList();
@@ -173,6 +242,8 @@ class ReviewService {
       reviewStates: reviewStates,
       scope: scope,
       mode: mode,
+      order: reviewOrder,
+      transposeScope: transposeScope,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,
@@ -334,6 +405,8 @@ class ReviewService {
   }) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
+    final chapterSides = await repository.getChapterOrientations();
+    final chapterStudyIds = await repository.getChapterStudyIds();
     final allDecisions = await repository.getAllDecisions();
     final reviewStatesList = await repository.getAllReviewStates();
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
@@ -342,6 +415,14 @@ class ReviewService {
     final studyDueCounts = <String, int>{for (final s in studies) s.id: 0};
     final studyTotals = <String, int>{for (final s in studies) s.id: 0};
     final studyLearned = <String, int>{for (final s in studies) s.id: 0};
+
+    // Per-study figures partitioned by side, so each repertoire menu shows
+    // only its own side's numbers (INV-030). Keyed sparsely: a side with no
+    // decisions in the study has no entry, which is also how the drawer
+    // decides which menu a study belongs to.
+    final studySideTotals = <String, Map<Side, int>>{};
+    final studySideLearned = <String, Map<Side, int>>{};
+    final studySideDue = <String, Map<Side, int>>{};
 
     final chapterTotals = <String, int>{};
     final chapterLearned = <String, int>{};
@@ -356,6 +437,52 @@ class ReviewService {
     final openingDueCounts = <String, int>{for (final op in openingFamilies) op: 0};
     final openingTotals = <String, int>{for (final op in openingFamilies) op: 0};
     final openingLearned = <String, int>{for (final op in openingFamilies) op: 0};
+
+    // Per-side tallies for the drawer's two repertoire buttons. Counted over
+    // active studies only, so a paused study leaves neither button showing work
+    // the review session will not ask for (INV-030).
+    final sideDueCounts = <Side, int>{Side.white: 0, Side.black: 0};
+    final sideTotals = <Side, int>{Side.white: 0, Side.black: 0};
+    final sideLearned = <Side, int>{Side.white: 0, Side.black: 0};
+    // Canonical ids already counted into a side, so a position reached by
+    // transposition through two chapters of the same side is due once there —
+    // the same rule the all-studies scope applies across studies.
+    final sideAccountedCanonicalIds = <Side, Set<String>>{
+      Side.white: <String>{},
+      Side.black: <String>{},
+    };
+
+    // Which colour each drawer lists. Derived from chapters, not from decisions,
+    // and deliberately including paused studies: a drawer that hid a paused study
+    // would be a place the user could not go to resume one. Insertion order
+    // follows the chapter order, which is the order the library already shows.
+    final studyIdsBySide = <Side, List<String>>{Side.white: <String>[], Side.black: <String>[]};
+    final openingsBySide = <Side, List<String>>{Side.white: <String>[], Side.black: <String>[]};
+    final seenStudyPerSide = <Side, Set<String>>{Side.white: {}, Side.black: {}};
+    final seenOpeningPerSide = <Side, Set<String>>{Side.white: {}, Side.black: {}};
+    for (final entry in chapterSides.entries) {
+      final side = entry.value;
+      final studyId = chapterStudyIds[entry.key];
+      if (studyId != null && seenStudyPerSide[side]!.add(studyId)) {
+        studyIdsBySide[side]!.add(studyId);
+      }
+      final opening = chapterOpenings[entry.key]?.trim();
+      if (opening != null && opening.isNotEmpty && seenOpeningPerSide[side]!.add(opening)) {
+        openingsBySide[side]!.add(opening);
+      }
+    }
+    // A study with no chapters is in neither list. It still has to be reachable,
+    // so it goes to both: it trains no colour, and hiding it from both drawers
+    // would strand it.
+    for (final s in studies) {
+      final known =
+          seenStudyPerSide[Side.white]!.contains(s.id) ||
+          seenStudyPerSide[Side.black]!.contains(s.id);
+      if (!known) {
+        studyIdsBySide[Side.white]!.add(s.id);
+        studyIdsBySide[Side.black]!.add(s.id);
+      }
+    }
 
     var totalDueCount = 0;
     final accountedDueCanonicalIds = <String>{};
@@ -382,6 +509,25 @@ class ReviewService {
 
       final opening = chapterOpenings[d.chapterId]?.trim();
       final isActiveStudy = activeStudyIds.contains(d.studyId);
+      final side = chapterSides[d.chapterId] ?? Side.white;
+
+      // Per-study figures partitioned by side (INV-030). Totals and learned
+      // cover every study like the study-wide maps do; due counts below cover
+      // every due decision the same way studyDueCounts does.
+      if (studyTotals.containsKey(d.studyId)) {
+        final totalsForStudy = studySideTotals.putIfAbsent(
+          d.studyId,
+          () => {Side.white: 0, Side.black: 0},
+        );
+        totalsForStudy[side] = totalsForStudy[side]! + 1;
+        if (isLearned) {
+          final learnedForStudy = studySideLearned.putIfAbsent(
+            d.studyId,
+            () => {Side.white: 0, Side.black: 0},
+          );
+          learnedForStudy[side] = learnedForStudy[side]! + 1;
+        }
+      }
 
       if (isActiveStudy && opening != null && opening.isNotEmpty) {
         if (openingTotals.containsKey(opening)) {
@@ -392,10 +538,22 @@ class ReviewService {
         }
       }
 
+      if (isActiveStudy) {
+        sideTotals[side] = sideTotals[side]! + 1;
+        if (isLearned) {
+          sideLearned[side] = sideLearned[side]! + 1;
+        }
+      }
+
       if (!isDue) continue;
 
       if (studyDueCounts.containsKey(d.studyId)) {
         studyDueCounts[d.studyId] = (studyDueCounts[d.studyId] ?? 0) + 1;
+        final dueForStudy = studySideDue.putIfAbsent(
+          d.studyId,
+          () => {Side.white: 0, Side.black: 0},
+        );
+        dueForStudy[side] = dueForStudy[side]! + 1;
       }
 
       if (isActiveStudy && opening != null && opening.isNotEmpty) {
@@ -404,7 +562,16 @@ class ReviewService {
         }
       }
 
-      if (scope.matches(studyId: d.studyId, chapterId: d.chapterId, openingFamily: opening)) {
+      if (isActiveStudy && sideAccountedCanonicalIds[side]!.add(d.canonicalId)) {
+        sideDueCounts[side] = sideDueCounts[side]! + 1;
+      }
+
+      if (scope.matches(
+        studyId: d.studyId,
+        chapterId: d.chapterId,
+        openingFamily: opening,
+        side: side,
+      )) {
         if (scope.studyId != null || scope.chapterId != null) {
           totalDueCount++;
         } else if (scope.openingFamily != null) {
@@ -446,6 +613,29 @@ class ReviewService {
         ),
     };
 
+    final sideProgress = <Side, RepertoireProgress>{
+      for (final side in Side.values)
+        side: RepertoireProgress(
+          totalDecisions: sideTotals[side] ?? 0,
+          learnedDecisions: sideLearned[side] ?? 0,
+          dueDecisions: sideDueCounts[side] ?? 0,
+        ),
+    };
+
+    // Sparse: only sides with at least one decision in the study get an entry.
+    final studySideProgress = <String, Map<Side, RepertoireProgress>>{
+      for (final entry in studySideTotals.entries)
+        entry.key: {
+          for (final side in Side.values)
+            if ((entry.value[side] ?? 0) > 0)
+              side: RepertoireProgress(
+                totalDecisions: entry.value[side] ?? 0,
+                learnedDecisions: studySideLearned[entry.key]?[side] ?? 0,
+                dueDecisions: studySideDue[entry.key]?[side] ?? 0,
+              ),
+        },
+    };
+
     final effectiveTotalDue = remainingDailyQuota != null && remainingDailyQuota >= 0
         ? math.min(totalDueCount, remainingDailyQuota)
         : totalDueCount;
@@ -457,6 +647,10 @@ class ReviewService {
       studyProgress: studyProgress,
       chapterProgress: chapterProgress,
       openingProgress: openingProgress,
+      sideProgress: sideProgress,
+      studySideProgress: studySideProgress,
+      studyIdsBySide: studyIdsBySide,
+      openingsBySide: openingsBySide,
     );
   }
 
@@ -466,14 +660,26 @@ class ReviewService {
     return allDecisions.where((d) => activeStudyIds.contains(d.studyId)).toList();
   }
 
+  /// Decisions belonging to [chapters], in one pass over the decision table.
+  ///
+  /// The chapter id set is the authority, not the study: a chapter id names one
+  /// study, so an id match cannot pull in a decision from a paused study.
+  Future<List<RepertoireDecision>> _getSideDecisions(List<Chapter> chapters) async {
+    if (chapters.isEmpty) return const [];
+    final chapterIds = chapters.map((c) => c.id).toSet();
+    final allDecisions = await repository.getAllDecisions();
+    return allDecisions.where((d) => chapterIds.contains(d.chapterId)).toList();
+  }
+
   Future<List<RepertoireDecision>> _getOpeningDecisions(
     List<Chapter> allChapters,
     String openingFamily,
     List<Study> studies,
   ) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
+    final wanted = openingFamily.trim();
     final matchingChapterIds = allChapters
-        .where((c) => c.opening == openingFamily && activeStudyIds.contains(c.studyId))
+        .where((c) => (c.opening?.trim() ?? '') == wanted && activeStudyIds.contains(c.studyId))
         .map((c) => c.id)
         .toSet();
     final allDecisions = await repository.getAllDecisions();

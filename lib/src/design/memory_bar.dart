@@ -28,6 +28,27 @@ class SrsMemoryBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.srs;
     final r = BorderRadius.circular(radius);
+
+    // A bar with nothing in it (no positions at all) would otherwise render as a
+    // 5px-tall empty gap, which reads as a rendering fault rather than as "no
+    // material on this side yet". The outline keeps the slot legible without
+    // implying progress, and it is what `fresh` segments already look like.
+    if (retained == 0 && learning == 0 && fresh == 0) {
+      return Semantics(
+        label: 'no positions',
+        child: SizedBox(
+          height: height,
+          width: width,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: r,
+              border: Border.all(color: c.hairlineSoft, width: 1),
+            ),
+          ),
+        ),
+      );
+    }
+
     final segs = <Widget>[
       if (retained > 0)
         Expanded(
