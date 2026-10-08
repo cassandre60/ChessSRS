@@ -6,7 +6,6 @@ import 'package:chess_srs/src/model/analysis/opening_explorer_mixin.dart';
 import 'package:chess_srs/src/model/analysis/server_analysis_mixin.dart';
 import 'package:chess_srs/src/model/analysis/server_analysis_service.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
-import 'package:chess_srs/src/model/chat/chat_mixin.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/common/id.dart';
@@ -47,11 +46,7 @@ final studyControllerProvider = AsyncNotifierProvider.autoDispose
 enum ChapterServerAnalysisStatus { canRequest, notEnoughMoves, notWriteable, available }
 
 class StudyController extends AsyncNotifier<StudyState>
-    with
-        EngineEvaluationMixin,
-        ServerAnalysisMixin,
-        ChatMixin<StudyState>,
-        OpeningExplorerMixin<StudyState>
+    with EngineEvaluationMixin, ServerAnalysisMixin, OpeningExplorerMixin<StudyState>
     implements PgnTreeNotifier {
   StudyController(this.options);
 
@@ -86,18 +81,6 @@ class StudyController extends AsyncNotifier<StudyState>
   bool get canFetchMainlineOpenings => state.value?.root != null;
 
   @override
-  @protected
-  StringId get chatId => options.id;
-
-  @override
-  @protected
-  String get chatReportResource => 'study/${options.id}';
-
-  @override
-  @protected
-  bool get chatIsPublic => true;
-
-  @override
   Future<StudyState> build() async {
     ref.onDispose(() {
       _opponentFirstMoveTimer?.cancel();
@@ -126,7 +109,7 @@ class StudyController extends AsyncNotifier<StudyState>
       chapterId: options.initialChapter,
     );
 
-    return chapter.copyWith(chatState: await initChat(chapter.study.chat));
+    return chapter;
   }
 
   @override
@@ -195,7 +178,7 @@ class StudyController extends AsyncNotifier<StudyState>
     // stayed on the chapter the study opened on for the rest of the session: `nextChapter`
     // resolved the same neighbour every time it was pressed, and the chapter's own orientation,
     // gamebook flag and feature set never took effect.
-    state = AsyncData(chapter.copyWith(chatState: state.requireValue.chatState));
+    state = AsyncData(chapter);
 
     // Switching chapters does not re-run [runBuild], so fetch the new mainline's
     // openings explicitly here.
@@ -319,16 +302,7 @@ class StudyController extends AsyncNotifier<StudyState>
   }
 
   @protected
-  @override
-  void updateChatState(ChatState newState) {
-    state = AsyncValue.data(state.requireValue.copyWith(chatState: newState));
-  }
-
-  @protected
-  @override
   void handleSocketEvent(SocketEvent event) {
-    super.handleSocketEvent(event);
-
     if (!state.hasValue) {
       assert(false, 'received a study SocketEvent while StudyState is null');
       return;
@@ -796,7 +770,6 @@ sealed class StudyState
         _$StudyState,
         AnalysisExplosionMixin,
         EvaluationMixinState<StudyState>,
-        ChatMixinState,
         ServerAnalysisMixinState,
         OpeningExplorerMixinState
     implements CommonAnalysisState {
@@ -868,8 +841,6 @@ sealed class StudyState
 
     /// Optional ACPL chart data of the game, coming from lichess server analysis.
     IList<ExternalEval>? acplChartData,
-
-    ChatState? chatState,
   }) = _StudyState;
 
   /// Whether the current user is the owner of the study.
@@ -989,9 +960,6 @@ sealed class StudyState
   PlayersAnalysis? get playersAnalysis => analysisSummary != null
       ? (white: analysisSummary!.white, black: analysisSummary!.black)
       : null;
-
-  @override
-  bool get chatEnabled => study.chat != null;
 }
 
 @freezed

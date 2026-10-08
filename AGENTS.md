@@ -101,8 +101,17 @@ More than one agent works in this repository at a time. Each task gets its own
 git worktree and its own branch, so no two agents share a working tree. `main`
 is updated only by merging a PR that CI has passed — never pushed to directly.
 
+**The repository is `cassandre60/ChessSRS`. Nothing else.** A second repository,
+`cassandre60/chess-repertoire-srs`, held all 195 PRs until 2026-10-07 and is now
+an archived read-only fork. It was created four days *later* than ChessSRS and so
+looked newer, which is how every PR kept landing in the wrong place. Nothing has
+landed there since. Do not open a PR against it, do not push a branch to it, do
+not clone it, and if a remote resolves to `chess-repertoire-srs`, fix it before
+doing anything else.
+
 ```bash
 # once per task, from anywhere
+git remote set-url origin https://github.com/cassandre60/ChessSRS.git
 git worktree add ../chesssrs-<slug> -b <type>/<area>-<slug> origin/main
 cd ../chesssrs-<slug>
 
@@ -114,7 +123,7 @@ fvm dart run build_runner build --delete-conflicting-outputs
 
 # ... work, stage BY NAME, commit, push
 git push -u origin <branch>
-gh pr create -R mansourvery-hub/chess-repertoire-srs
+gh pr create -R cassandre60/ChessSRS
 
 # after the PR is green and merged
 git worktree remove ../chesssrs-<slug> && git worktree prune
@@ -302,7 +311,11 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
    address the root cause. After 3 failed attempts on the same gate, stop and
    report what you learned instead of iterating blindly.
 5. Run `./scripts/gates.sh t1` (needs `BASE_REF`, defaults to `origin/main`)
-   before pushing. The full suite stays CI's job per §3.1.
+   before pushing — **after committing**, because the diff-based gates read
+   `origin/main...HEAD` and see nothing at all while your work is still in the
+   working tree. A pre-commit run that reports G08 "clean" is not evidence; run
+   the same command again on the committed branch. The full suite stays CI's job
+   per §3.1.
 6. New tests cite their invariant (`// SPEC INV-xxx.`); G05 rejects
    orphaned invariants and unknown IDs.
 7. Fixing a bug the gates missed? Follow `docs/ESCAPE_TO_GATE.md` —
@@ -331,6 +344,16 @@ to green; report download link. Tags publish — never push casually,
 never move/delete a published tag.
 
 ## Lessons Learned
+
+- [2026-10-07, Space Bunny Free] `./scripts/gates.sh t1` run *before* committing is a
+  green light that means nothing: the diff-based gates read `origin/main...HEAD`, so
+  while the work is uncommitted HEAD is still the base and the diff is empty. Two
+  reskin PRs (#186, #187) both reported `no test-weakening patterns found` locally and
+  both failed CI's G08 with 8 and 13 findings respectively. Run the gate after the
+  commit, or run `python3 scripts/gates/test_weakening_check.py --base origin/main`
+  directly, which reads the same committed range and cannot be fooled by a dirty tree.
+  Verified by: `gates.sh t1` printing "clean" with six modified files unstaged, then
+  the same script run directly on the identical tree printing the findings CI did.
 
 - [2026-09-25, Space Bunny Free] The full suite is a pre-push gate, not a
   per-commit one; this file used to mandate the opposite, and an agent following

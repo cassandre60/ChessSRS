@@ -44,7 +44,7 @@ Study _study() => Study(
   liked: false,
   likes: 0,
   ownerId: null,
-  features: (cloneable: false, chat: false, sticky: false),
+  features: (cloneable: false, sticky: false),
   topics: const IList<String>.empty(),
   chapters: IList(const [
     StudyChapterMeta(id: _chapterOne, name: 'One', fen: null),

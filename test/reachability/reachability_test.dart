@@ -87,7 +87,6 @@ const _knownUnreachable = <String, String>{
   'lib/src/view/study/study_list_screen.dart':
       'Cut study browser, still tested but unimported. The library sheet replaced it.',
   'lib/src/view/study/create_study_chapter_bottom_sheet.dart': 'Superseded by the import flow.',
-  'lib/src/view/chat/chat_screen.dart': 'Chat was cut; the file is retained for the cut record.',
   'lib/src/view/analysis/analysis_hub_screen.dart':
       'Replaced by direct StudyScreen integration from the scope drawer.',
   'lib/src/view/explorer/opening_explorer_screen.dart':

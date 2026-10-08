@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game_history.dart';
 import 'package:chess_srs/src/model/user/user.dart';
@@ -6,11 +7,9 @@ import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/game/game_list_tile.dart';
 import 'package:chess_srs/src/view/user/game_history_screen.dart';
-import 'package:chess_srs/src/widgets/list.dart';
-import 'package:chess_srs/src/widgets/shimmer.dart';
-import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A widget that show a list of recent games.
 ///
@@ -40,17 +39,26 @@ class RecentGamesWidget extends ConsumerWidget {
           return const SizedBox.shrink();
         }
         final list = data.take(maxGamesToShow);
-        return ListSection(
-          header: Text(context.l10n.recentGames),
-          hasLeading: true,
-          onHeaderTap: nbOfGames > list.length
-              ? () {
-                  Navigator.of(
-                    context,
-                  ).push(GameHistoryScreen.buildRoute(user: user, isOnline: isOnline));
-                }
-              : null,
-          children: [for (final item in list) GameListTile(item: item)],
+        final c = context.srs;
+        // A tappable group header rather than `ListSection.onHeaderTap`: the words name
+        // where a tap goes, so the control is the words themselves.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SrsPressable(
+              onPressed: nbOfGames > list.length
+                  ? () => Navigator.of(
+                      context,
+                    ).push(GameHistoryScreen.buildRoute(user: user, isOnline: isOnline))
+                  : null,
+              semanticLabel: context.l10n.recentGames,
+              builder: (_, hover, _) => Padding(
+                padding: EdgeInsets.only(top: 18, bottom: 6, left: hover ? 2 : 0),
+                child: Text(context.l10n.recentGames, style: SrsText.groupTitle(c.ink3)),
+              ),
+            ),
+            for (final item in list) GameListTile(item: item),
+          ],
         );
       },
       error: (error, stackTrace) {
@@ -60,11 +68,13 @@ class RecentGamesWidget extends ConsumerWidget {
           child: Text('Could not load recent games.'),
         );
       },
-      loading: () => Shimmer(
-        child: ShimmerLoading(
-          isLoading: true,
-          child: ListSection.loading(itemsNumber: 10, header: true, hasLeading: true),
-        ),
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SrsGroupHeader('Recent games'),
+          for (var i = 0; i < 10; i++)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: SrsRowRule()),
+        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/styles/lichess_icons.dart';
@@ -5,9 +6,7 @@ import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/account/rating_pref_aware.dart';
 import 'package:chess_srs/src/view/user/game_history_screen.dart';
-import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/rating.dart';
-import 'package:chess_srs/src/widgets/shimmer.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -29,24 +28,26 @@ class UserActivityWidget extends ConsumerWidget {
         if (nonEmptyActivities.isEmpty) {
           return const SizedBox.shrink();
         }
-        return ListSection(
-          header: Text(context.l10n.activityActivity, style: Styles.sectionTitle),
-          hasLeading: true,
-          children: nonEmptyActivities
-              .take(10)
-              .map((entry) => UserActivityEntry(entry: entry, user: user))
-              .toList(),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SrsGroupHeader(context.l10n.activityActivity),
+            for (final entry in nonEmptyActivities.take(10))
+              UserActivityEntry(entry: entry, user: user),
+          ],
         );
       },
       error: (error, stackTrace) {
         debugPrint('SEVERE: [UserScreen] could not load user activity; $error\n$stackTrace');
         return const Text('Could not load user activity');
       },
-      loading: () => Shimmer(
-        child: ShimmerLoading(
-          isLoading: true,
-          child: ListSection.loading(itemsNumber: 10, header: true, hasLeading: true),
-        ),
+      loading: () => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SrsGroupHeader(context.l10n.activityActivity),
+          for (var i = 0; i < 10; i++)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: SrsRowRule()),
+        ],
       ),
     );
   }

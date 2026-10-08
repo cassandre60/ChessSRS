@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Repertoire mastery and learning progress metrics.
+library;
+
 import 'package:meta/meta.dart';
 
 /// Progress metrics for a repertoire study, chapter, or scope.

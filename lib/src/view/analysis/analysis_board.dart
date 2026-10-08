@@ -12,7 +12,6 @@ import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/view/analysis/game_analysis_board.dart';
-import 'package:chess_srs/src/view/analysis/retro_screen.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chess_srs/src/widgets/pgn.dart';
@@ -25,7 +24,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// An abstract widget that provides the common interface for analysis boards:
 /// - [GameAnalysisBoard]
 /// - [StudyAnalysisBoard]
-/// - [RetroAnalysisBoard]
 abstract class AnalysisBoard extends ConsumerStatefulWidget {
   const AnalysisBoard({super.key, required this.boardSize, this.boardRadius});
 
