@@ -317,6 +317,14 @@ sealed class Division with _$Division {
   factory Division.fromJson(Map<String, dynamic> json) => _$DivisionFromJson(json);
 }
 
+/// The [Division] a Lichess `division` object carries.
+///
+/// Next to the type it builds because the analysis summary and the exported
+/// game each carried their own copy of the same two-key mapping; a third key
+/// added to one and not the other would silently lose a phase.
+Division divisionFromPick(RequiredPick pick) =>
+    Division(middlegame: pick('middle').asIntOrNull(), endgame: pick('end').asIntOrNull());
+
 @freezed
 sealed class FullOpening with _$FullOpening implements Opening {
   const FullOpening._();
