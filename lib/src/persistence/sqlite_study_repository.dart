@@ -523,6 +523,7 @@ class SqliteStudyRepository implements StudyRepository {
       'difficulty': state.difficulty,
       'latencyEmaMs': state.latencyEmaMs,
       'latencySampleCount': state.latencySampleCount,
+      'lastExposedAt': state.lastExposedAt?.toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
     await saveReviewState(state.toReviewState(state.canonicalId));
@@ -554,6 +555,7 @@ class SqliteStudyRepository implements StudyRepository {
         'difficulty': s.difficulty,
         'latencyEmaMs': s.latencyEmaMs,
         'latencySampleCount': s.latencySampleCount,
+        'lastExposedAt': s.lastExposedAt?.toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
@@ -581,6 +583,7 @@ class SqliteStudyRepository implements StudyRepository {
           'difficulty': s.difficulty,
           'latencyEmaMs': s.latencyEmaMs,
           'latencySampleCount': s.latencySampleCount,
+          'lastExposedAt': s.lastExposedAt?.toIso8601String(),
         }, conflictAlgorithm: ConflictAlgorithm.replace);
 
         batch.insert(kTableSrsReviewState, {
@@ -698,6 +701,7 @@ class SqliteStudyRepository implements StudyRepository {
     final first = row['firstReviewedAt'] as String?;
     final last = row['lastReviewedAt'] as String?;
     final next = row['nextDueAt'] as String?;
+    final exposed = row['lastExposedAt'] as String?;
 
     return PositionKnowledgeState(
       canonicalId: row['canonicalId']! as String,
@@ -710,6 +714,7 @@ class SqliteStudyRepository implements StudyRepository {
       difficulty: (row['difficulty'] as num?)?.toDouble() ?? 5.0,
       latencyEmaMs: (row['latencyEmaMs'] as num?)?.toDouble(),
       latencySampleCount: (row['latencySampleCount'] as num?)?.toInt() ?? 0,
+      lastExposedAt: exposed != null ? DateTime.parse(exposed) : null,
     );
   }
 

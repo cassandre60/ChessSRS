@@ -307,6 +307,59 @@ void main() {
       expect(secondExposure.nextDueAt, equals(firstExposure.nextDueAt));
     });
 
+    // SPEC INV-028. Regression for review-2 C1: the "at most once per calendar day" cap has to
+    // survive an app restart. The throttle lived only in the coordinator's memory, so a fresh
+    // session started with an empty map and granted credit again on the same day — passive
+    // stability compounded once per session rather than once per day. Seeding the throttle from
+    // the store at construction is what closes that.
+    test('INV-028 a reseeded throttle still refuses a same-day grant after a restart', () {
+      const node = GraphNode(
+        decisionId: 'learned_dec',
+        parentId: null,
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      const initialStability = 5.0 * 86400000;
+      ReviewState learned() => ReviewState(
+        decisionId: 'learned_dec',
+        stability: initialStability,
+        difficulty: 4.5,
+        repetitionCount: 2,
+        lastReviewedAt: now.subtract(const Duration(days: 1)),
+        nextDueAt: now.add(const Duration(days: 5)),
+      );
+
+      // First session earns the day's credit.
+      repo.put('learned_dec', learned());
+      final first = coordinator.recordAutoTraversalExposure(node: node, now: now)!;
+      expect(first.stability, greaterThan(initialStability));
+      final persistedThrottle = coordinator.snapshotExposureThrottle();
+      expect(persistedThrottle['learned_dec'], equals(now));
+
+      // Restart: brand-new coordinator and repo, reseeded from what the store returns.
+      final restartedRepo = InMemoryReviewStateRepository()..put('learned_dec', first);
+      final restarted = GraphAwareReviewCoordinator(
+        scheduler: scheduler,
+        repo: restartedRepo,
+        initialExposureThrottle: persistedThrottle,
+      );
+
+      // Later the same calendar day: no second grant, so nothing compounds per session.
+      final sameDay = restarted.recordAutoTraversalExposure(
+        node: node,
+        now: now.add(const Duration(hours: 6)),
+      )!;
+      expect(sameDay.stability, equals(first.stability));
+      expect(sameDay.nextDueAt, equals(first.nextDueAt));
+
+      // The next calendar day grants again: the cap is daily, not a permanent lock.
+      final nextDay = restarted.recordAutoTraversalExposure(
+        node: node,
+        now: now.add(const Duration(days: 1)),
+      )!;
+      expect(nextDay.stability, greaterThan(first.stability));
+    });
+
     test('recordAutoTraversalExposure refuses exposure credit to already-due decisions', () {
       const node = GraphNode(
         decisionId: 'due_dec',
