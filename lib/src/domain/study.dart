@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Opening study models and repertoire collections.
+library;
+
 import 'package:chess_srs/src/domain/ids.dart';
 
 /// A user-owned collection of chapters imported from a single PGN source file.

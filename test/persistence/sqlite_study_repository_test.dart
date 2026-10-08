@@ -1410,7 +1410,7 @@ void main() {
           canonicalKeyForPosition('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -', [
             'e2e4',
             'd2d4',
-          ]),
+          ], repertoireSide: Side.white),
         );
 
         // And the legacy history followed the key across, rather than being stranded.

@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Scheduler contract and interface definitions.
+library;
+
 import 'package:chess_srs/src/domain/clock.dart';
 import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
@@ -105,6 +108,18 @@ class SimpleScheduler implements Scheduler {
         );
     }
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SimpleScheduler &&
+          firstInterval == other.firstInterval &&
+          baseInterval == other.baseInterval &&
+          intervalMultiplier == other.intervalMultiplier &&
+          maximumInterval == other.maximumInterval;
+
+  @override
+  int get hashCode => Object.hash(firstInterval, baseInterval, intervalMultiplier, maximumInterval);
 }
 
 /// Parametric spaced repetition scheduler adapted from chessrs SpacedRepetitionService.

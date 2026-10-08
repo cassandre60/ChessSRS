@@ -1,6 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/// Review scope models (all studies, side-scoped, or specific study/opening).
+library;
+
 import 'package:dartchess/dartchess.dart' show Side;
 
 /// Scope filter for a review session.
