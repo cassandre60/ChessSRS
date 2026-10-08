@@ -29,10 +29,8 @@ final Logger _logger = Logger('ReviewEngine');
 
 /// Default number of due decisions buffered in the active queue at once.
 ///
-/// Declared here, next to the [ReviewSession] field it feeds, because the
-/// engine (which forwards it) and the application service (which starts
-/// sessions) both used to carry their own copy of the number: three
-/// independent `25`s that had to be changed together to mean anything.
+/// One copy of the number the engine, service, and session used to carry
+/// independently (three `25`s that had to be changed together to mean anything).
 const int kDefaultPrefetchBatchSize = 25;
 
 /// Default threshold at which the active prefetch buffer refills.

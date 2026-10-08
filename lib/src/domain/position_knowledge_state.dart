@@ -72,15 +72,11 @@ class PositionKnowledgeState {
       PositionKnowledgeState(canonicalId: canonicalId);
 
   /// Builds the canonical knowledge state for [canonicalId] from an equivalent
-  /// [ReviewState].
+  /// [ReviewState]: the single mapping from decision-keyed review memory to
+  /// canonical-position knowledge, and the inverse of [toReviewState].
   ///
-  /// A review outcome carries the same memory fields as a knowledge state, keyed
-  /// by decision rather than by canonical position; this is the single mapping
-  /// from one to the other, and it is the inverse of [toReviewState].
-  ///
-  /// The latency fields have no counterpart on [ReviewState]: a caller holding
-  /// only a review outcome passes no samples, which the constructor defaults to
-  /// "never measured".
+  /// Latency fields have no counterpart on [ReviewState]; a caller holding only
+  /// a review outcome passes no samples ("never measured" by default).
   factory PositionKnowledgeState.fromReviewState(
     ReviewState state, {
     required String canonicalId,
