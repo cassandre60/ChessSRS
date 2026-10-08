@@ -146,15 +146,16 @@ Framework-invoked overrides (`didAddProvider`, `didPush`, `updateShouldNotify`, 
 Chosen for verified, low-risk value that can be done with the verification the repo supports (gates + review),
 ordered so each is an independent commit:
 
-1. **Item 1** — one shared `PgnCommentShape → Shape` extension (3 dead copies removed). *(Done — §5.)*
+1. **Item 1** — one shared `PgnCommentShape → Shape` extension (3 dead copies removed). *(Attempted and
+   **reverted** — §5. It is the one change in this batch that CI rejected.)*
 2. **Item 2** — `PositionKnowledgeState.fromReviewState` factory; two hand-written copies removed. *(Done — §5.)*
 3. **Item 4** — `_…Row(…)` map helpers in the SQLite repository (3× + 3× + 2× copies removed). *(Done — §5; ended up 6 builders over 16 insert sites.)*
 4. **Item 3** — no wall-clock read in the review path. *(Done — §5; the fallback turned out to be unreachable, so it was deleted rather than re-wired.)*
 5. **Item 5** — drop the deprecated `year2023` pair and the dead `kSliderTheme`. *(Batch 1 did the
    dead constant; the two live flags are deferred — see §5.)*
 6. **Item 6** — single source for the prefetch defaults. *(Done — §5.)*
-7. **Item 11** — stop interpolating raw exception text into user-facing snackbars. *(Deferred in batch 1:
-   nine sites, and the replacement copy is a product/l10n decision.)*
+7. **Item 11** — stop interpolating raw exception text into user-facing snackbars. *(Done — §5; the copy
+   decision was to keep every message prefix and log the exception instead.)*
 8. **Item 9** — collapse the triplicated scope setup in `startSession`.
 9. **Item 8** — one "offload PGN work" helper with one documented threshold (note: this one *does* move a
    behavioural boundary; it needs a deliberate decision on 8 KB vs 64 KB). *(Deferred in batch 1.)*
@@ -179,7 +180,6 @@ Six commits, one concern each, each verified as far as this environment allows (
 | Item | Commit | Change | How it was checked |
 |---|---|---|---|
 | 2 | `refactor(review): add PositionKnowledgeState.fromReviewState factory` | the two hand-written field copies in `ReviewService` replaced by a domain factory | the factory's field list is byte-equivalent to each removed copy (scripted comparison, 3/3 sites) |
-| 1 | `refactor(design): single PgnCommentShape-to-chessground mapping` | three byte-identical extensions collapsed into `design/pgn_comment_shape.dart`, exported from the barrel | the moved bodies compare identical to each removed copy (3/3); call sites `shape.chessground` unchanged |
 | 4 | `refactor(persistence): one row builder per table in SqliteStudyRepository` | 6 row builders; 16 insert sites now call them | every pre-change map is reproduced key-for-key by its builder, and each call site passes the receiver in scope (16/16, scripted) |
 | 3 | `refactor(review): take "now" from the session clock, not the wall clock` | removed an unreachable `?? DateTime.now()` from two getters | the removed branch is provably unreachable (the guard above it returns unless the session exists); the widget test that asserts "Next review in 1 day" builds its session with the same `FixedClock` the provider is overridden with |
 | 5 | `chore(theme): delete the unreferenced kSliderTheme constant` | dead constant deleted | zero references tree-wide; analyzer-suppression ratchet drops 18 → 17 |
@@ -194,26 +194,56 @@ Gate status for the branch: `./scripts/gates.sh t1` passes (G03 banned APIs, G07
 protected touched, G08 test-weakening — no test file modified, G05 spec traceability, G10 ratchets —
 `analyzer_suppressions` improved 18 → 17, `domain_loc` 3052 → 3076 within the ±150 tolerance).
 
-**Not verified here, and this is the important caveat:** `dart format`, `flutter analyze` and `flutter test`
-were **not** run — the toolchain is not installed in this environment and the SDK archives are unreachable.
-Every change above is a semantic no-op by construction and by the comparisons listed, but "by construction"
-is not the same as "CI ran it". Treat `test.yml` as the authority.
+### Reverted: item 1, the shared `PgnCommentShape → Shape` extension
+
+Item 1 was in this branch and was taken back out. It is the only change in the batch that CI rejected, and it
+was found by bisecting the suite, not by reading the diff:
+
+| Branch state | `flutter test` |
+|---|---|
+| all seven items | 1009 passed, **68 failed** |
+| `lib/` at the base commit (item 1 absent) | all passed |
+| items 1, 5, 11 only | 1011 passed, **68 failed** |
+| **item 1 alone** | 1011 passed, **68 failed** |
+| items 2, 3, 4, 5, 6, 11 (what ships) | all passed |
+
+So the 68 failures are item 1's and nothing else's, and they are deterministic — the same count on every run.
+What is *not* established is the mechanism, and that is worth saying plainly: this environment has no Dart SDK
+and cannot read Actions job logs, so it can only count failures, not name them. The three extension bodies were
+byte-identical, the shared one resolves at all three call sites (it compiles), and no second `chessground`
+extension on `PgnCommentShape` exists in the tree — so the failure is in something the diff does not show, and
+the honest move is to drop the refactor rather than to guess at it.
+
+The duplication is real and the fix is still worth doing; it needs `flutter test` to be runnable locally, where
+the failing assertions are one command away. Re-raising it should start from the test names, not from this diff.
+
+### Verification
+
+`./scripts/gates.sh t1` passes (`analyzer_suppressions` 18 → 17, `test_declarations` 1509 → 1599, `domain_loc`
+3090 inside the ±150 tolerance, no protected path touched, no test file modified).
+
+`test.yml` was then run against the branch and is **green end to end**: `dart format`, `flutter analyze`
+(no exclusions, no suppressions added) and `flutter test` all pass. That is the authority for the six items
+above, and it is also what caught item 1. One caveat on method: the sandbox cannot read job logs, so a failing
+run can be counted but not read — which is why finding item 1 took four bisect runs instead of one log.
 
 ## 6. What remains, in priority order
 
 1. **Item 11** — *done* (§5). Its l10n follow-up (the messages are still English literals) remains, and needs
    `build_runner`.
-2. **Item 8** — one "when to offload PGN work" helper; the 8 KB and 64 KB thresholds must be reconciled
+2. **Item 1** — *attempted and reverted* (§5). The three copies are still where they were. It needs a
+   toolchain: the change looks correct and fails 68 tests, and only the test names will say why.
+3. **Item 8** — one "when to offload PGN work" helper; the 8 KB and 64 KB thresholds must be reconciled
    deliberately, which is a behaviour decision, not a refactor.
-3. **Item 14** — presentation importing `db/` and `persistence/` (QUALITY.md §1.1). A wider sweep than the
+4. **Item 14** — presentation importing `db/` and `persistence/` (QUALITY.md §1.1). A wider sweep than the
    first pass found a **third** file: `view/analysis/analysis_hub_screen.dart:9` (`persistence/persistence.dart`,
    read at `:175`, watched at `:190`) alongside `view/settings/srs_settings_screen.dart:7` and
    `view/review/study_chapters_screen.dart:9` (`:46`, `:93`).
-4. **Item 9** — the triplicated scope setup in `startSession`; worth doing with the test file runnable
+5. **Item 9** — the triplicated scope setup in `startSession`; worth doing with the test file runnable
    (`test/review/review_service_test.dart`, `review_side_scope_test.dart`, `review_order_test.dart` cover it).
    Note it would introduce a record return type, which nothing in `lib/` uses today — decide that first.
-5. **Items 10, 15, 19** — each deserves its own PR with `flutter analyze` + the focused test file available.
-6. **Items 12, 13, 17, 18, 20** — deferred as before: codegen, wide renames, or product decisions.
+6. **Items 10, 15, 19** — each deserves its own PR with `flutter analyze` + the focused test file available.
+7. **Items 12, 13, 17, 18, 20** — deferred as before: codegen, wide renames, or product decisions.
 
 A follow-up session with the toolchain available can take items 14 → 9 in that order, then the l10n pass over
 the strings item 11 left as English literals.
