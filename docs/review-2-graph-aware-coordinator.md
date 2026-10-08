@@ -28,7 +28,7 @@ graph effects are numerically weaker or stronger than the spec says.
 
 **Two confirmed defects, one of them severe:**
 
-- **C1 (HIGH).** Auto-traversal exposure credit is unbounded. Its only cross-session throttle is
+- **C1 (HIGH) — fixed, see §6.** Auto-traversal exposure credit is unbounded. Its only cross-session throttle is
   in-memory, so the "once per calendar day" guarantee documented at `:215` holds only within a single
   session. An item merely *passed over* while drilling other lines compounds stability and due date
   geometrically — 10× a month at one session a day, 1000× at three. The "never grant credit to an
@@ -46,6 +46,10 @@ and are recorded in §5 so they are not re-raised.
 ## 2. Confirmed issues
 
 ### C1 — Exposure credit compounds without bound across sessions — **HIGH**
+
+**Status: fixed** (`af0988ca2`). `lastExposedAt` is now persisted and the coordinator's throttle is
+seeded from the store, so the cap holds across restarts. §6 records the two CI failures it took to
+land and the lessons from both.
 
 `graph_aware_review_coordinator.dart:215-247`
 
@@ -279,17 +283,17 @@ on the findings above.
 
 ---
 
-## 6. Attempted fix for C1, and why it was backed out
+## 6. Fixing C1, and the two CI failures it took to land
 
-Recorded so the work is not repeated blind, and so the open question is precise.
+The fix is landed and green. It took five extra CI runs, and both failures turned out to be
+concrete and avoidable, so they are written up here rather than dropped.
 
-### What was built
+### What the fix does
 
 The spec requires the cap to be per calendar day, and the bug is that the only record of the last
 grant dies with the session. So the fix persists it:
 
-1. `lastExposedAt TEXT` on `kTablePositionKnowledgeState` (`srs_schema.dart`), schema v15 → v16 with
-   the matching `ALTER` in `onUpgrade`.
+1. `lastExposedAt TEXT` on `kTablePositionKnowledgeState` (`srs_schema.dart`).
 2. `PositionKnowledgeState.lastExposedAt`, carried through `copyWith`, `==` and `hashCode`.
 3. The repository writes the column on all three write paths and reads it in the row mapper.
 4. `GraphAwareReviewCoordinator` takes `initialExposureThrottle`; `ReviewSession` and `ReviewEngine`
@@ -300,15 +304,16 @@ grant dies with the session. So the fix persists it:
 Step 5 is safe against erasure even though the write is `INSERT OR REPLACE`: the throttle is seeded
 for every in-scope canonical id, so a null means "never exposed" rather than "unknown".
 
-Two tests accompanied it — an `INV-028` coordinator test that reseeds a fresh coordinator and asserts
+Two tests accompany it — an `INV-028` coordinator test that reseeds a fresh coordinator and asserts
 the same-day refusal still holds (and that the next day grants again), plus a round-trip through
-`saveAnswerBatch`.
+`saveAnswerBatch`. That takes the coordinator file from 10 tests to 11 and the repository file from
+26 to 27.
 
-### Why it was backed out
+### Failure 1 — a migration this environment could not account for
 
-Adding the `database.dart` migration reproducibly fails **2 unit tests** in CI, and this environment
-cannot read CI logs (`results-receiver.actions.githubusercontent.com` and the other log hosts are
-unreachable), so the only available signal is the pass/fail count. Four runs isolated the cause:
+The first version of step 1 bumped the schema to v16 and added the `ALTER` to `onUpgrade`. That
+reproducibly failed **2 unit tests** in CI. Because this environment cannot read CI logs, the only
+available signal was the pass/fail count, and five runs isolated the cause:
 
 | Commit | Configuration | Result |
 |---|---|---|
@@ -320,27 +325,48 @@ unreachable), so the only available signal is the pass/fail count. Four runs iso
 The two failures are not in either file I touched: the coordinator regression test passes in both
 failing runs, and the second excludes the persistence round-trip test entirely.
 
-**The part I could not explain.** For a fresh database `openAppDatabase` runs `onCreate`, not
-`onUpgrade`, so the version bump and the `ALTER` are both inert — and the tests use fresh temp
-databases. I checked the mechanisms that could make them non-inert and ruled each out: no test
+The mechanism was never explained, and it is still not. For a fresh database `openAppDatabase` runs
+`onCreate`, not `onUpgrade`, so the version bump and the `ALTER` should both be inert — and the
+tests use fresh temp databases. Every explanation constructed contradicts the observation: no test
 exercises `onUpgrade`; there are no `.db` fixtures; no test asserts a schema version; the tests that
-build the schema by hand call `createSrsTables` directly and so get the new column. Every
-explanation I could construct contradicts the observation, so I backed the change out rather than
-ship a migration I cannot account for.
+build the schema by hand call `createSrsTables` directly and so already get the new column.
 
-### What would unblock it
+**Resolution: avoid the version bump.** The column is now added by an idempotent top-up in `onOpen`
+that reads `PRAGMA table_info` first. It leaves `version` and `onUpgrade` untouched, it converges
+for any database whether or not it predates the column, and it does not touch the one file the
+bisect implicated. That is green.
 
-- **Read the failure.** Anyone with CI log access, or a local `flutter test`, gets the two test names
-  immediately. That is the whole blocker.
-- **Or avoid the version bump.** Add the column idempotently (check `PRAGMA table_info` before the
-  `ALTER`, run from `onOpen`) so the schema version does not move. This trades the repo's versioned-
-  migration convention for a change that does not touch the one file implicated by the bisect.
+The cost is a deliberate departure from the repo's versioned-migration convention: this column is
+reconciled on open rather than by a numbered migration step. Anyone who later moves the schema to
+v16 should fold this top-up into the migration and delete it, and anyone debugging the two failures
+should start from the table above.
 
-### Also learned, and worth keeping
+### Failure 2 — `dart format` joins single-argument calls that fit
 
-The first version of these tests failed `dart format`. It was isolated by bisect and fixed by
-rewriting both tests to use only construct shapes already present in their file — single-line method
-calls with the times hoisted to locals, and list literals assigned to a local instead of passed
-inline. The rewrite passed formatting on the first attempt, which is a reusable rule: when the
-formatter cannot be run locally, copy the shape of neighbouring code rather than writing an
-equivalent-looking variant.
+The second failure was `Verify formatting`, and it was mine. The formatter joins a single-argument
+call onto one line when the result fits the 100-column page width, **even when the call carries a
+trailing comma**:
+
+```dart
+// written — failed formatting
+await db.execute(
+  'ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT',
+);
+
+// expected — 96 columns, fits
+await db.execute('ALTER TABLE $kTablePositionKnowledgeState ADD COLUMN lastExposedAt TEXT');
+```
+
+This is checkable without running `dart`. Across `lib/src` and `test` there are 17 split
+single-argument calls with trailing commas; before the fix, exactly one would have fitted on a
+single line, and it was this one. Every other split single-argument call in the repo is split
+because joining it would exceed the page width. So the repo is a reference for what the formatter
+wants: **if a split call would fit on one line, the formatter will join it, so write it joined.**
+
+The same rule generalises the earlier lesson. An earlier version of these two tests also failed
+formatting and was fixed by copying the construct shapes already used in their files — single-line
+method calls with the times hoisted to locals, list literals assigned to a local instead of passed
+inline. Both lessons are the same lesson: without a local toolchain, match the surrounding code
+exactly rather than writing an equivalent-looking variant, and verify by counting shapes in the
+existing tree.
+

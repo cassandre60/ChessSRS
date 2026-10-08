@@ -21,16 +21,18 @@ reachability, and one review-2 design concern (D5) was corrected before it was p
 
 Ordered by what a user would actually notice, not by the order they were found.
 
+The finding that originally ranked first — **review 2 · C1**, unbounded auto-traversal exposure
+credit — is now fixed (`af0988ca2`); see review 2 §6. The remaining items are renumbered below.
+
 | Rank | Finding | Why it ranks here |
 |---|---|---|
-| 1 | **Review 2 · C1** — auto-traversal exposure credit is unbounded | The only finding that grows without limit. An item merely passed over compounds 10× a month at one session a day, 1019× at three, and drifts toward never surfacing again. The guard that looks like it bounds this actually makes it worse. |
-| 2 | **Review 4 · C2** — timestamps are local time with no offset | The only finding that corrupts scheduling for real users with no unusual behaviour required. Changing timezone shifts every stored due date; one direction can flip future items to overdue and manufacture a backlog. Needs its own migration. |
-| 3 | **Review 4 · C1 + D1** — latency erased on every write, conversion triplicated | Silent data loss on a reserved field. Fix the duplication first (`PositionKnowledgeState.fromReviewState`), then make the write non-destructive. |
-| 4 | **Review 2 · C2** — contagion runs at 51.3% of documented strength | A whole subsystem is at half the strength the spec says. Two of three sources agree on the intended value. Changes scheduling, so it needs a deliberate decision. |
-| 5 | **Review 3 · C3** — auto-traversal follows only the first user continuation | Alternative lines are never traversed and never credited. Interacts with rank 1: the two errors pull in opposite directions and cannot be reasoned about together until this is settled. |
-| 6 | **Review 3 · C1 + C2** — the two progress counters disagree; the quota silently drops re-tests | C1 is invisible today (no production consumer) but is public API and checkpointed. C2 is a code comment promising the opposite of what the code does. |
-| 7 | **Review 1 · C4** — switching scheduler reinterprets `stability` | Real and demonstrable, but every remedy mutates stored memory. Blocked on a product decision, documented in review-1 §6. |
-| 8 | **Review 3 · C4, C5 · Review 4 · C3** | Free fixes; remove latent crashes and divergences. |
+| 1 | **Review 4 · C2** — timestamps are local time with no offset | The only finding that corrupts scheduling for real users with no unusual behaviour required. Changing timezone shifts every stored due date; one direction can flip future items to overdue and manufacture a backlog. Needs its own migration. |
+| 2 | **Review 4 · C1 + D1** — latency erased on every write, conversion triplicated | Silent data loss on a reserved field. Fix the duplication first (`PositionKnowledgeState.fromReviewState`), then make the write non-destructive. |
+| 3 | **Review 2 · C2** — contagion runs at 51.3% of documented strength | A whole subsystem is at half the strength the spec says. Two of three sources agree on the intended value. Changes scheduling, so it needs a deliberate decision. |
+| 4 | **Review 3 · C3** — auto-traversal follows only the first user continuation | Alternative lines are never traversed and never credited. Was ranked against review 2 · C1 because the two errors pull in opposite directions. C1 is now fixed, so this one now stands alone: alternative lines are simply never traversed. |
+| 5 | **Review 3 · C1 + C2** — the two progress counters disagree; the quota silently drops re-tests | C1 is invisible today (no production consumer) but is public API and checkpointed. C2 is a code comment promising the opposite of what the code does. |
+| 6 | **Review 1 · C4** — switching scheduler reinterprets `stability` | Real and demonstrable, but every remedy mutates stored memory. Blocked on a product decision, documented in review-1 §6. |
+| 7 | **Review 3 · C4, C5 · Review 4 · C3** | Free fixes; remove latent crashes and divergences. |
 
 ---
 
@@ -57,7 +59,7 @@ Ordered by what a user would actually notice, not by the order they were found.
 
 | ID | Finding | Disposition |
 |---|---|---|
-| C1 | Exposure credit unbounded; the throttle is in-memory so the "once per day" guarantee is per-session | **Open, HIGH** |
+| C1 | Exposure credit unbounded; the throttle is in-memory so the "once per day" guarantee is per-session | **Fixed** `af0988ca2` (schema top-up in `onOpen`, see review 2 §6) |
 | C2 | Contagion delivers 51.3% of the documented `λ0` (9.24% at depth 1, not 18%) | **Open, MEDIUM** |
 | C3 | `recordAutoTraversalExposure` returns a state it never stored | **Open, LOW** |
 | D1–D5 | Throttle/rollback conflated; depth cap vs prose; unused `parentId`; test double in `lib/`; implicit sibling-coupling contract | **Open**, recorded |
