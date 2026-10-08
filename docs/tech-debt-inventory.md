@@ -160,6 +160,8 @@ ordered so each is an independent commit:
 9. **Item 8** — one "offload PGN work" helper with one documented threshold (note: this one *does* move a
    behavioural boundary; it needs a deliberate decision on 8 KB vs 64 KB). *(Deferred in batch 1.)*
 10. **Item 14** — move the two presentation→persistence reads behind application providers.
+11. **Item 21** — mechanical dedupes (done for the `division` mapping; the widget-lifecycle ones want a mixin
+    and a screen that has tests).
 
 **Explicitly deferred (and why):** items 12, 13, 17 need codegen and/or wide renames and cannot be verified
 without the toolchain; 18 and 20 are product-scale decisions; 15, 19, 10 are legitimate but each deserves its
@@ -175,7 +177,7 @@ carry "no test files modified + behaviour-equivalence evidence", which is only s
 
 ## 5. Status: what batch 1 (this branch) changed
 
-Six commits, one concern each, each verified as far as this environment allows (see §0):
+Seven commits, one concern each, each verified as far as this environment allows (see §0):
 
 | Item | Commit | Change | How it was checked |
 |---|---|---|---|
@@ -184,6 +186,7 @@ Six commits, one concern each, each verified as far as this environment allows (
 | 3 | `refactor(review): take "now" from the session clock, not the wall clock` | removed an unreachable `?? DateTime.now()` from two getters | the removed branch is provably unreachable (the guard above it returns unless the session exists); the widget test that asserts "Next review in 1 day" builds its session with the same `FixedClock` the provider is overridden with |
 | 5 | `chore(theme): delete the unreferenced kSliderTheme constant` | dead constant deleted | zero references tree-wide; analyzer-suppression ratchet drops 18 → 17 |
 | 6 | `refactor(domain): one source for the prefetch defaults` | `kDefaultPrefetchBatchSize` / `kDefaultPrefetchRefillThreshold` replace three independent `25`/`3` defaults | the literals are gone from all three sites; no other `25`/`3` prefetch default exists |
+| 21 | `refactor(model): one mapping from the Lichess division object` | `divisionFromPick` moved next to `Division` in `model/common/chess.dart`; the two private `_divisionFromPick` copies deleted | the two copies were byte-for-byte identical (diff), and the shared one keeps the same keys and the same `asIntOrNull()` reads, so a missing `division` object still yields null |
 
 **Item 11** followed as a seventh commit on the same branch (`fix(view): keep raw exception text out of error
 toasts`) once the copy decision was made: keep every message prefix, drop the `": $e"` suffix, log the exception
@@ -223,27 +226,30 @@ the failing assertions are one command away. Re-raising it should start from the
 3090 inside the ±150 tolerance, no protected path touched, no test file modified).
 
 `test.yml` was then run against the branch and is **green end to end**: `dart format`, `flutter analyze`
-(no exclusions, no suppressions added) and `flutter test` all pass. That is the authority for the six items
+(no exclusions, no suppressions added) and `flutter test` all pass. That is the authority for the seven items
 above, and it is also what caught item 1. One caveat on method: the sandbox cannot read job logs, so a failing
 run can be counted but not read — which is why finding item 1 took four bisect runs instead of one log.
 
 ## 6. What remains, in priority order
 
-1. **Item 11** — *done* (§5). Its l10n follow-up (the messages are still English literals) remains, and needs
+1. **Item 21** — *the `division` mapping is done* (§5). The other four duplications it names are widget
+   lifecycle boilerplate (`didChangeAppLifecycleState`, the focus-detector `dispose`, scroll listeners); each
+   wants a mixin rather than a helper, and two of the three files are cut-surface code (item 20).
+2. **Item 11** — *done* (§5). Its l10n follow-up (the messages are still English literals) remains, and needs
    `build_runner`.
-2. **Item 1** — *attempted and reverted* (§5). The three copies are still where they were. It needs a
+3. **Item 1** — *attempted and reverted* (§5). The three copies are still where they were. It needs a
    toolchain: the change looks correct and fails 68 tests, and only the test names will say why.
-3. **Item 8** — one "when to offload PGN work" helper; the 8 KB and 64 KB thresholds must be reconciled
+4. **Item 8** — one "when to offload PGN work" helper; the 8 KB and 64 KB thresholds must be reconciled
    deliberately, which is a behaviour decision, not a refactor.
-4. **Item 14** — presentation importing `db/` and `persistence/` (QUALITY.md §1.1). A wider sweep than the
+5. **Item 14** — presentation importing `db/` and `persistence/` (QUALITY.md §1.1). A wider sweep than the
    first pass found a **third** file: `view/analysis/analysis_hub_screen.dart:9` (`persistence/persistence.dart`,
    read at `:175`, watched at `:190`) alongside `view/settings/srs_settings_screen.dart:7` and
    `view/review/study_chapters_screen.dart:9` (`:46`, `:93`).
-5. **Item 9** — the triplicated scope setup in `startSession`; worth doing with the test file runnable
+6. **Item 9** — the triplicated scope setup in `startSession`; worth doing with the test file runnable
    (`test/review/review_service_test.dart`, `review_side_scope_test.dart`, `review_order_test.dart` cover it).
    Note it would introduce a record return type, which nothing in `lib/` uses today — decide that first.
-6. **Items 10, 15, 19** — each deserves its own PR with `flutter analyze` + the focused test file available.
-7. **Items 12, 13, 17, 18, 20** — deferred as before: codegen, wide renames, or product decisions.
+7. **Items 10, 15, 19** — each deserves its own PR with `flutter analyze` + the focused test file available.
+8. **Items 12, 13, 17, 18, 20** — deferred as before: codegen, wide renames, or product decisions.
 
 A follow-up session with the toolchain available can take items 14 → 9 in that order, then the l10n pass over
 the strings item 11 left as English literals.
