@@ -17,6 +17,40 @@ reachability, and one review-2 design concern (D5) was corrected before it was p
 
 ---
 
+## CI gate status: G10 is blocked on a stale baseline, not on this branch
+
+`T1 fast gates` fails at **G10 ratchets** on this branch, and it is not caused by anything in the
+review series. `domain_loc` is ratcheted at `3020` with a `150`-line tolerance, so the ceiling is
+**3170**. Measured with the gate's own `collect_metrics.py` on the PR merged into `main`, which is
+what CI judges:
+
+| tree | `domain_loc` | vs 3170 |
+|---|---|---|
+| branch point `fd12d85` | 3052 | 118 under |
+| `main` at `23a3c5a` (today) | 3134 | **36 under** |
+| `ff6f637e5` — this branch *before* the C1 fix, CI-green when pushed | **3200** | **30 over** |
+| `f866be47f` — this branch now | **3194** | **24 over** |
+
+`ff6f637e5` passed every workflow when it was pushed, and it contains none of the C1 work. It fails
+now purely because `main` grew the domain by **88 insertions across 21 files** while this PR was
+open, consuming the entire tolerance. `main` on its own sits 36 lines from the ceiling, so the
+ratchet currently blocks any PR that touches `lib/src/domain` at all.
+
+What was done about it here: the doc comments this series added were compressed from 74 lines to 33,
+which cut this branch's footprint by 41 lines and took the merged total from 3200 to 3194. Every
+fact is retained. Compressing further would mean deleting the rationale the reviews exist to record,
+in order to satisfy a number that `main` itself has already overtaken — so it stops here.
+
+**The remaining fix is a one-line re-baseline of `.gates/ratchet-baseline.json`** (`domain_loc` 3020
+to, say, 3150), which is the same maintenance as `#170` (2876 to 3020). That file is a protected path
+under G07, and a PR that edits its own referee and self-approves the `gate-approved` label is exactly
+what G07 exists to stop, so it is deliberately **not** done here. It needs an owner.
+
+Everything else on this branch is green: `dart format`, `flutter analyze` and `flutter test` all pass
+(`f866be47f`), and G03, G05, G07 and G08 pass in the same run that fails G10.
+
+---
+
 ## Fix these first
 
 Ordered by what a user would actually notice, not by the order they were found.
