@@ -119,6 +119,76 @@ void main() {
       expect(s2.stability, closeTo(s1.stability * 1.02, 100));
     });
 
+    // SPEC INV-025. Architecture §C.7: a rapid re-review skips the full DSR update, and
+    // difficulty is part of that update.
+    test('INV-025 rapid re-review freezes difficulty instead of ratcheting it', () {
+      final mature = ReviewState(
+        decisionId: 'd1',
+        stability: 10.0 * 86400000,
+        difficulty: 4.93,
+        repetitionCount: 3,
+        firstReviewedAt: t0.subtract(const Duration(days: 30)),
+        lastReviewedAt: t0,
+        nextDueAt: t0.add(const Duration(days: 10)),
+      );
+
+      // One lapse 5 minutes later: stability still shrinks, but D must not move.
+      final afterLapse = scheduler.schedule(
+        previous: mature,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(minutes: 5)),
+      );
+      expect(afterLapse.lapseCount, 1);
+      expect(afterLapse.stability, closeTo(mature.stability * 0.85, 1000));
+      expect(afterLapse.difficulty, closeTo(mature.difficulty, 1e-9));
+
+      // A failed decision is re-queued and re-tested in the same session, so three
+      // misses inside one session are reachable. They must not push D to the ceiling.
+      var state = mature;
+      var now = t0;
+      for (var i = 0; i < 3; i++) {
+        now = now.add(const Duration(minutes: 5));
+        state = scheduler.schedule(previous: state, result: ReviewResult.incorrect, now: now);
+      }
+      expect(state.lapseCount, 3);
+      expect(state.difficulty, closeTo(mature.difficulty, 1e-9));
+      expect(state.difficulty, lessThan(10.0));
+
+      // A rapid re-review that succeeds must not mean-revert D either — §C.7 skips the
+      // whole update, in both directions. Use a D that is not the fixed point of the
+      // success update (w7*w4/(1-(1-w7)) == D0(good) == 4.93), or the assertion is vacuous.
+      final strained = mature.copyWith(difficulty: 7.0);
+      final afterSuccess = scheduler.schedule(
+        previous: strained,
+        result: ReviewResult.correct,
+        now: t0.add(const Duration(minutes: 5)),
+      );
+      expect(afterSuccess.difficulty, closeTo(7.0, 1e-9));
+      expect(afterSuccess.stability, closeTo(mature.stability * 1.02, 1000));
+    });
+
+    // SPEC INV-025. The freeze is bounded by sameDayThresholdDays: once the item is
+    // genuinely overdue, the full DSR update resumes and D responds to the rating again.
+    test('INV-025 difficulty updates resume past the same-day threshold', () {
+      final mature = ReviewState(
+        decisionId: 'd1',
+        stability: 10.0 * 86400000,
+        difficulty: 4.93,
+        repetitionCount: 3,
+        firstReviewedAt: t0.subtract(const Duration(days: 30)),
+        lastReviewedAt: t0,
+        nextDueAt: t0.add(const Duration(days: 10)),
+      );
+
+      final afterLapse = scheduler.schedule(
+        previous: mature,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(days: 10)),
+      );
+      expect(afterLapse.difficulty, greaterThan(mature.difficulty));
+      expect(afterLapse.difficulty, closeTo(7.009, 0.001));
+    });
+
     test('tournament mode target retention produces tighter review intervals', () {
       const normalScheduler = ChessFsrsScheduler(targetRetention: 0.88);
       const tournamentScheduler = ChessFsrsScheduler(targetRetention: 0.95);

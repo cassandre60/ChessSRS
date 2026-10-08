@@ -230,17 +230,25 @@ class ChessFsrsScheduler implements Scheduler {
           ? fsrsInitialDifficulty(FsrsRating.good, params)
           : previous.difficulty;
 
-      final r = fsrsRetrievability(elapsedDays, prevStabilityDays);
-      newDifficulty = fsrsNextDifficulty(prevDifficulty, rating, params);
+      final bool isRapidReReview = elapsedDays < params.sameDayThresholdDays;
 
-      if (elapsedDays < params.sameDayThresholdDays) {
+      if (isRapidReReview) {
+        // Architecture §C.7: a rapid re-review (elapsed < sameDayThresholdDays) skips the
+        // full DSR update and applies only a small linear stability nudge. Difficulty is
+        // part of that update, so it freezes too. Updating D here let a burst of
+        // intra-session failures ratchet it to the 10.0 clamp — three misses in one session
+        // were enough — which then shrank the (11 - D) growth term from 6.07 to 1.00 and
+        // took ~390 successful reviews of mean reversion at w7 to unwind.
+        newDifficulty = prevDifficulty;
         newStabilityDays = rating == FsrsRating.again
             ? prevStabilityDays * params.sameDayLapseFactor
             : prevStabilityDays * params.sameDayGainFactor;
-      } else if (rating == FsrsRating.again) {
-        newStabilityDays = fsrsNextStabilityLapse(newDifficulty, prevStabilityDays, r, params);
       } else {
-        newStabilityDays = fsrsNextStabilitySuccess(newDifficulty, prevStabilityDays, r, params);
+        final r = fsrsRetrievability(elapsedDays, prevStabilityDays);
+        newDifficulty = fsrsNextDifficulty(prevDifficulty, rating, params);
+        newStabilityDays = rating == FsrsRating.again
+            ? fsrsNextStabilityLapse(newDifficulty, prevStabilityDays, r, params)
+            : fsrsNextStabilitySuccess(newDifficulty, prevStabilityDays, r, params);
       }
     }
 
