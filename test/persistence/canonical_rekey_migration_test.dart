@@ -397,6 +397,28 @@ void main() {
       );
     });
 
+    test('two occurrences with identical legacy stats backfill without throwing', () async {
+      // SPEC INV-005. Identical stats reach the comparator's final tie-break, which read a
+      // canonicalId from the raw legacy row (which has none) and threw, aborting the upgrade.
+      await seedDecision(
+        decisionId: 'occ-a',
+        canonicalId: 'canon-tie',
+        repetitions: 2,
+        stability: 30,
+      );
+      await seedDecision(
+        decisionId: 'occ-b',
+        canonicalId: 'canon-tie',
+        repetitions: 2,
+        stability: 30,
+      );
+
+      final result = await backfillCanonicalStatesFromLegacy(db);
+
+      expect(result.statesCreated, 1);
+      expect(await db.query(kTablePositionKnowledgeState), hasLength(1));
+    });
+
     test('an existing canonical state is never overwritten by a legacy one', () async {
       await seedDecision(
         decisionId: 'occ-1',

@@ -126,3 +126,49 @@ URLs, and secret storage across `lib/`.
 - The exporter test relies on dartchess tolerating escaped tag values when it re-parses the output.
   The test asserts only the escaped header text and the mainline moves. If CI disagrees, the
   finding stands and the test assertion needs to change, not the escaping.
+
+---
+
+## Round 2 — persistence and data integrity
+
+**Scope read:** `lib/src/db/database.dart` (open, `onConfigure`, `onOpen`, `onCreate`, every
+`onUpgrade` branch through v16), `lib/src/persistence/srs_schema.dart`,
+`canonical_rekey_migration.dart`, `sqlite_study_repository.dart` (deletes, saves, and the
+transaction boundaries), and the matching tests in `test/persistence/`.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R2-F1 | `backfillCanonicalStatesFromLegacy` throws when two legacy occurrences tie on repetitions, last review, stability and lapses. The comparator's last tie-break reads `canonicalId` from the raw legacy row, which has none, so the null check fails. The throw is inside `onUpgrade` for any install below v16, so the upgrade rolls back and the database fails to open. | Medium (crash on upgrade). Likelihood low: a tie needs identical stats and timestamps. | **Fixed in the PR for this round.** The candidate row is built with its canonical id before it is compared, and the comparator is null-safe. A regression test fails on the old code. |
+| R2-F2 | `ON DELETE CASCADE` is declared in the schema, but `PRAGMA foreign_keys` is never set, so the cascades never run. Deletes are hand-written and correct today. | Low (design risk) | **Open.** Issue text in `review-register.md`. |
+| R2-F4 | The v11 migration writes `DEFAULT "white"`, a double-quoted identifier that works only through SQLite's legacy string fallback. | Low (hygiene) | **Open.** Issue text in `review-register.md`. |
+| R2-F3 | `srs_review_event` has no retention policy and grows by one row per answer, with JSON state on each row. | Info | **Not filed.** Growth is small at repertoire scale. Revisit with Round 10 (performance). |
+
+Round 1's R1-F3, R1-F4 and R1-F5 are also open. Their text is in `review-register.md`.
+
+### Dismissed
+
+- **`savePositionTree` and `saveDecisions` are not atomic with each other, so a crash could leave a tree and its decisions out of step.** No production code calls either method. A search of `lib/` finds callers only in tests, so the concern is dead code, not a live defect. It goes to Round 11 (dead code).
+- **`deleteStudy` removes review state that other studies share.** It does not. The shared-canonical guard keeps any state whose canonical id another study's decision still references, and it is tested.
+
+### Checked and sound
+
+- **Migration chain.** Each version step from v1 to v16 is present, and the schema is created in `onCreate` with the same shape as the upgrade path. The data migrations run after `batch.commit()`, so they see the upgraded tables.
+- **Transactions.** `saveImportResult` (study, chapters and decisions) and `saveAnswerBatch` (knowledge states and event) are each one transaction. `deleteStudy` and `deleteChapter` delete inside a transaction.
+- **Rekey idempotency.** A decision already on the new key recomputes to its own id and is skipped, so a second run is a no-op. The test for this exists.
+- **Rekey collisions.** Two old ids that land on one new id merge deterministically, and the test "merges two old keys that resolve to one" covers it.
+- **Backfill never overwrites a newer canonical row.** Covered by the existing test "an existing canonical state is never overwritten by a legacy one".
+- **Study timestamps.** `createdAt` is preserved when set. Only the `null` case falls back to now.
+- **Backup exclusion of secure storage.** Covered in Round 1.
+
+### Verification status of this round's PR
+
+- **Stacked.** The branch is `arena/e97f199a-chesssrs`, and the PR's base is `main`. Until PR #32 merges, the PR diff also shows PR #32's Round 1 commits. Its own change is the single commit labelled as Round 2.
+- **Not compiled or run here.** Same constraint as Round 1. CI is the first compiler.
+- **Tie test.** The new test in `canonical_rekey_migration_test.dart` is written to fail on the old code and pass on the fix. The reason it fails is the thrown null check, not an assertion. Reviewers should check the failure message on the base to confirm that.
+
+### Process notes
+
+- **GitHub Issues are disabled on this repository.** `gh issue create` returns "the repository has disabled issues". The findings are written as issue-ready text in `docs/review-register.md` instead. Enabling Issues is a repository setting, which is yours to change.
+- **Local clone reset during the session.** The local branch was found reset to `be6941e` between turns, with the remote branch intact at `eb5a39a`. I restored the branch from `origin` and confirmed the Round 1 files match the committed versions before committing anything new.
