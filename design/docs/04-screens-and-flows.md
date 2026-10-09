@@ -108,7 +108,7 @@ stateDiagram-v2
   visible switch is 44x26; pad its hit area vertically to reach 44).
 - **Focus visibility:** 2px accent ring, 2px offset, on every focusable control (buttons, switches, segmented
   items, accent dots, rows, sheet items).
-- **Reflow:** nothing requires horizontal scrolling at any supported width; the settings rows stack under 520.
+- **Reflow:** nothing requires horizontal scrolling at any supported width. On the main settings screen below 520px, controls with sufficient horizontal space (such as switches, accent dots, short selectors, and wide selectors on wider phones) stay inline with their labels, while selectors that would otherwise wrap stack beneath labels; longer explanations can be expanded with a 44px help target. Other settings rows may stack their controls below labels.
 
 ## 7. Memory-state thresholds (product decision required)
 
