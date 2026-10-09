@@ -121,12 +121,12 @@ class SrsTopBar extends StatelessWidget {
 
         const Spacer(),
 
-        // 3. Overflow button (Library & Settings)
+        // 3. Overflow button (Settings)
         Tooltip(
-          message: 'Library and settings',
+          message: 'Settings',
           child: SrsPressable(
             onPressed: onOverflowPressed,
-            semanticLabel: 'Library and settings',
+            semanticLabel: 'Settings',
             radius: 999,
             builder: (context, hovered, pressed) => Container(
               // Was a hardcoded 44. The token it should have read went to 48, and this is the one
