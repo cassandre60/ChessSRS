@@ -12,6 +12,9 @@ fork of [Lichess Mobile](https://github.com/lichess-org/mobile) (GPL-3.0).
   they're due again.
 - Everything runs locally; no account, no network on the training path.
 
+**Website:** <https://cassandre60.github.io/chesssrs-site/> — downloads for
+Linux and Android, a live interactive demo, and FAQ.
+
 ## Status
 
 Foundation phase — the app is the Lichess Mobile foundation with product
