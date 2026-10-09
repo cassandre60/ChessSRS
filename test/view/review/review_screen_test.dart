@@ -1,6 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-060, INV-062, INV-063.
+// SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
@@ -1272,12 +1272,8 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      expect(find.byTooltip('Library and settings'), findsOneWidget);
-      await tester.tap(find.byTooltip('Library and settings'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Settings'), findsOneWidget);
-      await tester.tap(find.text('Settings'));
+      expect(find.byTooltip('Settings'), findsOneWidget);
+      await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
 
       expect(find.byType(SrsSettingsScreen), findsOneWidget);
@@ -1665,6 +1661,193 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    // SPEC INV-030. Automatic colour review that runs dry offers the other
+    // colour's dues; tapping it switches session without opening a drawer.
+    testWidgets('offers the other colour when it still has due cards', (tester) async {
+      await tester.runAsync(() async {
+        await repo.saveImportResult(
+          importPgn('1. e4 e5 2. Nf3 *', studyTitle: 'White book', repertoireSide: Side.white),
+        );
+        await repo.saveImportResult(
+          importPgn(
+            '[Event "French Defence"]\n1. e4 e6 *',
+            studyTitle: 'Black book',
+            repertoireSide: Side.black,
+          ),
+        );
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Finish the White queue: 1. e4 (opponent ...e5 auto-played), then 2. Nf3.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 700);
+      await playMove(tester, 'g1', 'f3');
+      await pumpAsync(tester, 700);
+
+      expect(find.text('Nothing due.'), findsOneWidget);
+      expect(find.text('Review Black — 1 due'), findsOneWidget);
+
+      await tester.tap(find.text('Review Black — 1 due'));
+      await pumpAsync(tester);
+
+      // Now reviewing Black: board oriented Black, no drawer opened.
+      expect(find.text('Black to play'), findsOneWidget);
+      expect(find.byType(ReviewScopeDrawer), findsNothing);
+    });
+
+    // SPEC INV-030. No other-colour dues means no button, not an empty offer.
+    testWidgets('hides the cross-colour button when the other colour has nothing due', (
+      tester,
+    ) async {
+      await tester.runAsync(() async {
+        await repo.saveImportResult(
+          importPgn('1. e4 e5 2. Nf3 *', studyTitle: 'White book', repertoireSide: Side.white),
+        );
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 700);
+      await playMove(tester, 'g1', 'f3');
+      await pumpAsync(tester, 700);
+
+      expect(find.text('Nothing due.'), findsOneWidget);
+      expect(find.textContaining('Review Black'), findsNothing);
+      expect(find.textContaining('Review White'), findsNothing);
+    });
+
+    // SPEC INV-030. A narrowed scope (study/opening picked from the menu) is
+    // the user's explicit choice, so finishing it never suggests elsewhere.
+    testWidgets('hides the cross-colour button in a narrowed study scope', (tester) async {
+      await tester.runAsync(() async {
+        await repo.saveImportResult(
+          importPgn('1. e4 e5 2. Nf3 *', studyTitle: 'White book', repertoireSide: Side.white),
+        );
+        await repo.saveImportResult(
+          importPgn(
+            '[Event "French Defence"]\n1. e4 e6 *',
+            studyTitle: 'Black book',
+            repertoireSide: Side.black,
+          ),
+        );
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 700);
+      await playMove(tester, 'g1', 'f3');
+      await pumpAsync(tester, 700);
+
+      // Sanity: the automatic scope does offer Black here.
+      expect(find.text('Review Black — 1 due'), findsOneWidget);
+
+      // Narrow to the White study the way the user does: square → drawer → row.
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+      await tester.tap(
+        find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('White book')),
+      );
+      await pumpAsync(tester);
+
+      expect(find.text('Nothing due.'), findsOneWidget);
+      expect(find.textContaining('Review Black'), findsNothing);
+    });
+
+    // SPEC INV-031. The daily quota is one global allowance: reaching it hides
+    // the cross-colour offer (switching could serve nothing) and the copy says
+    // the limit spans both colours.
+    testWidgets('hides the cross-colour button when the daily limit is reached', (tester) async {
+      final white = importPgn(
+        '1. e4 e5 2. Nf3 *',
+        studyTitle: 'White book',
+        repertoireSide: Side.white,
+      );
+      final black = importPgn(
+        '[Event "French Defence"]\n1. e4 e6 *',
+        studyTitle: 'Black book',
+        repertoireSide: Side.black,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(white);
+        await repo.saveImportResult(black);
+        final dec = white.decisions.first;
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: dec.id,
+            when: clock.now(),
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'dec'),
+            newState: const ReviewState(decisionId: 'dec', repetitionCount: 1),
+          ),
+        );
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
+      await container.read(studyPreferencesProvider.notifier).setMaxDailyReviews(1);
+      await pumpAsync(tester);
+
+      expect(find.text('Daily limit reached.'), findsOneWidget);
+      expect(find.textContaining('White and Black combined'), findsOneWidget);
+      expect(find.textContaining('Review Black'), findsNothing);
+    });
   });
 }
 

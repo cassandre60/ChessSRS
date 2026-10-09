@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -147,6 +148,10 @@ void main() {
     // The six-way control wraps inside a narrow viewport rather than overflowing.
     await tester.ensureVisible(find.text('Daily limit'));
     expect(tester.getRect(find.text('None')).right, lessThanOrEqualTo(width));
+    expect(
+      (tester.getCenter(find.text('Daily limit')).dy - tester.getCenter(find.text('25')).dy).abs(),
+      greaterThan(20),
+    );
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(find.text('Show move notation'), 200);
@@ -166,6 +171,40 @@ void main() {
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+
+    // Short selectors like Theme and Accent dots fit inline even on phones.
+    await tester.scrollUntilVisible(find.text('Theme'), 200);
+    expect(
+      (tester.getCenter(find.text('Theme')).dy - tester.getCenter(find.text('Light')).dy).abs(),
+      lessThan(20),
+    );
+
+    await tester.scrollUntilVisible(find.text('Accent'), 200);
+    expect(
+      (tester.getCenter(find.text('Accent')).dy - tester.getCenter(find.byType(SrsAccentDots)).dy)
+          .abs(),
+      lessThan(20),
+    );
+  });
+
+  testWidgets('phone settings put selectors inline when width allows', (tester) async {
+    const width = 500.0;
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const SrsSettingsScreen(),
+      surfaceSize: const Size(width, 800),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    // At 500px, Scheduling algorithm has enough space to be inline beside its label.
+    await tester.ensureVisible(find.text('Scheduling algorithm'));
+    expect(
+      (tester.getCenter(find.text('Scheduling algorithm')).dy -
+              tester.getCenter(find.text('FSRS')).dy)
+          .abs(),
+      lessThan(20),
+    );
   });
 
   testWidgets('wide settings retain visible descriptions', (tester) async {
@@ -178,5 +217,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sign in to import private and unlisted studies.'), findsOneWidget);
     expect(find.byTooltip('About Lichess account'), findsNothing);
+  });
+
+  testWidgets('About section links to AboutPage and disables Rate this app for now', (
+    tester,
+  ) async {
+    final app = await makeTestProviderScopeApp(tester, home: const SrsSettingsScreen());
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    // Rate this app is disabled until app store release.
+    expect(find.text('Rate this app'), findsNothing);
+
+    // About and licences is reachable and opens AboutPage.
+    await tester.scrollUntilVisible(find.text('About and licences'), 200);
+    expect(find.text('About and licences'), findsOneWidget);
+
+    await tester.tap(find.text('About and licences'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AboutPage), findsOneWidget);
   });
 }

@@ -55,27 +55,33 @@ class SrsTopBar extends StatelessWidget {
       children: [
         if (showScopeAndDue) ...[
           // 1. Colour squares
-          Transform.translate(
-            offset: const Offset(-10, 0),
-            child: wordmark != null
-                ? Text(wordmark!, style: SrsText.scopeName(c.ink))
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _ColourSquare(
-                        side: Side.white,
-                        isActive: activeSide == Side.white,
-                        onPressed: onSidePressed,
-                      ),
-                      const SizedBox(width: 2),
-                      _ColourSquare(
-                        side: Side.black,
-                        isActive: activeSide == Side.black,
-                        onPressed: onSidePressed,
-                      ),
-                    ],
-                  ),
-          ),
+          //
+          // No `Transform.translate(-10, 0)` here any more. The reference's scope button carries
+          // `margin-left:-10px` *and* `padding:7px 10px`, so the two cancelled and its label
+          // landed on the bar's 16px padding edge. The squares that replaced it have no such
+          // inset, so the nudge was left pulling them 10px outside the padding box while layout
+          // still reserved the full 98px -- 10px of window the bar demanded and never used, and
+          // the cause of the overflow at narrow widths. `top_bar_narrow_test.dart` pins both
+          // halves of that.
+          if (wordmark != null)
+            Text(wordmark!, style: SrsText.scopeName(c.ink))
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ColourSquare(
+                  side: Side.white,
+                  isActive: activeSide == Side.white,
+                  onPressed: onSidePressed,
+                ),
+                const SizedBox(width: 2),
+                _ColourSquare(
+                  side: Side.black,
+                  isActive: activeSide == Side.black,
+                  onPressed: onSidePressed,
+                ),
+              ],
+            ),
 
           const SizedBox(width: 6),
 
@@ -121,12 +127,12 @@ class SrsTopBar extends StatelessWidget {
 
         const Spacer(),
 
-        // 3. Overflow button (Library & Settings)
+        // 3. Overflow button (Settings)
         Tooltip(
-          message: 'Library and settings',
+          message: 'Settings',
           child: SrsPressable(
             onPressed: onOverflowPressed,
-            semanticLabel: 'Library and settings',
+            semanticLabel: 'Settings',
             radius: 999,
             builder: (context, hovered, pressed) => Container(
               // Was a hardcoded 44. The token it should have read went to 48, and this is the one

@@ -12,7 +12,6 @@ import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
-import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
@@ -227,7 +226,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           activeSide: Side.white,
           dueCount: 0,
           onSidePressed: (side) => _openColourDrawer(context, side),
-          onOverflowPressed: () => _showOverflowSheet(context),
+          onOverflowPressed: () => _openSettings(context),
         ),
         Expanded(
           child: Center(
@@ -356,6 +355,21 @@ class _NothingDueView extends ConsumerWidget {
     final displayTitle = state.isDailyLimitReached ? 'Daily limit reached.' : 'Nothing due.';
     final headlineSize = math.max(44.0, math.min(mediaQuery.size.width * 0.09, 72.0));
 
+    // Cross-colour continuation: automatic colour review that runs dry offers
+    // the other colour's dues, which live in a separate session (INV-030).
+    // Narrowed scopes (study/opening/chapter), practice mode, and an exhausted
+    // global daily quota (INV-031) never offer it: switching then could only
+    // land on another empty board.
+    final isAutoSideScope =
+        state.scope.side != null &&
+        state.scope.studyId == null &&
+        state.scope.chapterId == null &&
+        state.scope.openingFamily == null;
+    final otherSide = state.scope.side == Side.white ? Side.black : Side.white;
+    final otherSideDue = state.sideProgress[otherSide]?.dueDecisions ?? 0;
+    final showCrossSideButton =
+        isAutoSideScope && !state.isPracticeMode && !state.isDailyLimitReached && otherSideDue > 0;
+
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyP): () {
@@ -371,7 +385,7 @@ class _NothingDueView extends ConsumerWidget {
               dueCount: 0,
               isPracticeMode: state.isPracticeMode,
               onSidePressed: (side) => _openColourDrawer(context, side),
-              onOverflowPressed: () => _showOverflowSheet(context),
+              onOverflowPressed: () => _openSettings(context),
               onExitPractice: state.isPracticeMode
                   ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
                   : null,
@@ -421,7 +435,7 @@ class _NothingDueView extends ConsumerWidget {
                                     fontFeatures: SrsText.tabular,
                                   ),
                                 ),
-                                const TextSpan(text: ' positions today.'),
+                                const TextSpan(text: ' positions today. White and Black combined.'),
                               ],
                             ),
                           )
@@ -513,6 +527,14 @@ class _NothingDueView extends ConsumerWidget {
                           runSpacing: 10.0,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            if (showCrossSideButton)
+                              SrsPillButton(
+                                label:
+                                    'Review ${otherSide == Side.white ? 'White' : 'Black'} — $otherSideDue due',
+                                onPressed: () {
+                                  ref.read(reviewControllerProvider.notifier).selectSide(otherSide);
+                                },
+                              ),
                             SrsPillButton(
                               label: context.l10n.reviewNothingDuePractice,
                               shortcut: 'P',
@@ -755,7 +777,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             dueCount: state.totalDueCount,
             isPracticeMode: state.isPracticeMode,
             onSidePressed: (side) => _openColourDrawer(context, side),
-            onOverflowPressed: () => _showOverflowSheet(context),
+            onOverflowPressed: () => _openSettings(context),
             onExitPractice: state.isPracticeMode
                 ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
                 : null,
@@ -1084,8 +1106,8 @@ class _NoteSlot extends StatelessWidget {
   }
 }
 
-void _showOverflowSheet(BuildContext context) {
-  SrsLibrarySheet.show(context);
+void _openSettings(BuildContext context) {
+  Navigator.of(context).push(SrsSettingsScreen.buildRoute());
 }
 
 /// Quiet bridge from a drill position into the analysis board, for the "why is this the
