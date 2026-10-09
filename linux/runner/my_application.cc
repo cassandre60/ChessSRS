@@ -55,6 +55,14 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // A floor, not a preference. `gtk_window_set_default_size` only seeds the initial geometry,
+  // so without this the window drags down to a few hundred pixels -- and the review screen has
+  // no layout below that: its top bar alone needs ~206px (two 48px touch targets, a 6px gap,
+  // the due count and the overflow button), so a narrow window ends in a RenderFlex overflow
+  // and an unreadable board. 320x480 is the narrowest viewport the product supports and the
+  // narrowest surface `test/design/top_bar_narrow_test.dart` exercises.
+  gtk_widget_set_size_request(GTK_WIDGET(window), 320, 480);
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
