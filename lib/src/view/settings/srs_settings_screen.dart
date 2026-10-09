@@ -696,6 +696,43 @@ class _SettingRow extends StatelessWidget {
   final String? help;
   final Widget control;
 
+  static double _estimateControlWidth(Widget control, TextScaler textScaler) {
+    if (control is SrsSwitch) return 44.0;
+    if (control is SrsAccentDots) return control.estimatedWidth(textScaler);
+    if (control is SrsSegmented) return control.estimatedWidth(textScaler);
+    if (control is SizedBox && control.width != null) return control.width!;
+    if (control is Text && control.data != null) {
+      final painter = TextPainter(
+        text: TextSpan(text: control.data, style: control.style),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      return painter.width;
+    }
+    return double.infinity;
+  }
+
+  static double _estimateLabelWidth(
+    String label,
+    String? help,
+    bool compact,
+    TextScaler textScaler,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(fontFamily: SrsText.ui, fontSize: 16, fontWeight: FontWeight.w500),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final textW = math.min(painter.width, label.length * 16.0 * 0.6);
+    final helpWidth = (compact && help != null) ? 44.0 : 0.0;
+    return textW + helpWidth;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
@@ -703,9 +740,15 @@ class _SettingRow extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 520;
         final text = _SettingsLabel(label: label, help: help, compact: compact);
-        // Only bounded, short controls belong beside the text on a phone.
-        // Segments and colour pickers need the full width so they can wrap.
-        final inline = control is SrsSwitch || control is SizedBox || control is Text;
+        final textScaler = MediaQuery.textScalerOf(context);
+        final gap = compact ? 12.0 : 24.0;
+        final labelWidth = _estimateLabelWidth(label, help, compact, textScaler);
+        final controlWidth = _estimateControlWidth(control, textScaler);
+        final fitsInline = constraints.maxWidth >= (labelWidth + gap + controlWidth + 8.0);
+        // Switches, fixed boxes, and short texts always stay inline.
+        // Selectors and pickers stay inline ONLY if there is sufficient width
+        // so their options don't wrap awkwardly or crush the label.
+        final inline = control is SrsSwitch || control is SizedBox || control is Text || fitsInline;
         return Container(
           padding: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
           decoration: BoxDecoration(
@@ -721,7 +764,7 @@ class _SettingRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(child: text),
-                    SizedBox(width: compact ? 12 : 24),
+                    SizedBox(width: gap),
                     control,
                   ],
                 ),
