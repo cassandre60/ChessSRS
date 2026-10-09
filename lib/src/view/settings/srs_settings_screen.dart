@@ -39,9 +39,9 @@ class SrsSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
-  Widget _buildSectionHeader(String title, SrsColors c) {
+  Widget _buildSectionHeader(String title, SrsColors c, {required bool compact}) {
     return Padding(
-      padding: const EdgeInsets.only(top: 28, bottom: 8),
+      padding: EdgeInsets.only(top: compact ? 16 : 28, bottom: 8),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
@@ -73,6 +73,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
         generalPrefs.themeMode == BackgroundThemeMode.amoled;
     final isSoundOn = generalPrefs.isSoundEnabled;
 
+    final compact = mediaQuery.size.width < 520;
     final headlineSize = math.max(38.0, math.min(mediaQuery.size.width * 0.08, 56.0));
 
     return Scaffold(
@@ -125,7 +126,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 660),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 6, 24, 56),
+                      padding: EdgeInsets.fromLTRB(compact ? 16 : 24, 6, compact ? 16 : 24, 56),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -140,7 +141,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                               color: c.ink,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          SizedBox(height: compact ? 4 : 12),
 
                           // 1. Section: Account
                           //
@@ -150,7 +151,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           // page all sat in widgets nothing could navigate to. The import dialog
                           // offers sign-in in context for private studies; this is the way back
                           // for everything else, including signing out again.
-                          _buildSectionHeader('Account', c),
+                          _buildSectionHeader('Account', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -163,10 +164,10 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   Navigator.of(context).push(AccountMenuScreen.buildRoute(context)),
                             ),
                           ),
-                          const SizedBox(height: 28),
+                          SizedBox(height: compact ? 4 : 28),
 
                           // 2. Section: Review & Spaced Repetition
-                          _buildSectionHeader('Review & Spaced Repetition', c),
+                          _buildSectionHeader('Review & Spaced Repetition', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -321,7 +322,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
 
                           // 3. Section: Appearance
-                          _buildSectionHeader('Appearance', c),
+                          _buildSectionHeader('Appearance', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -406,7 +407,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
 
                           // 4. Section: Game behaviour
-                          _buildSectionHeader('Game behaviour', c),
+                          _buildSectionHeader('Game behaviour', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -466,7 +467,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
 
                           // 5. Section: Sound
-                          _buildSectionHeader('Sound', c),
+                          _buildSectionHeader('Sound', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -499,7 +500,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ),
 
                           // 6. Section: Chess Engine
-                          _buildSectionHeader('Chess Engine', c),
+                          _buildSectionHeader('Chess Engine', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -518,7 +519,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
 
                           // 7. Section: Data & Diagnostics (debug/beta only)
                           if (kDebugMode) ...[
-                            _buildSectionHeader('Data & Diagnostics', c),
+                            _buildSectionHeader('Data & Diagnostics', c, compact: compact),
                             Container(
                               decoration: BoxDecoration(
                                 border: Border(top: BorderSide(color: c.hairline)),
@@ -559,7 +560,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           ],
 
                           // 8. Section: About & Licences
-                          _buildSectionHeader('About', c),
+                          _buildSectionHeader('About', c, compact: compact),
                           Container(
                             decoration: BoxDecoration(
                               border: Border(top: BorderSide(color: c.hairline)),
@@ -617,6 +618,82 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
   }
 }
 
+/// Keeps long explanations on demand on phones without removing them or
+/// shrinking the text. Desktop retains the original always-visible descriptions.
+class _SettingsLabel extends StatefulWidget {
+  const _SettingsLabel({required this.label, this.help, required this.compact});
+
+  final String label;
+  final String? help;
+  final bool compact;
+
+  @override
+  State<_SettingsLabel> createState() => _SettingsLabelState();
+}
+
+class _SettingsLabelState extends State<_SettingsLabel> {
+  bool expanded = false;
+
+  @override
+  void didUpdateWidget(_SettingsLabel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Conditional scheduler rows can shift the elements below them.
+    if (oldWidget.label != widget.label) expanded = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final help = widget.help;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                widget.label,
+                style: TextStyle(
+                  fontFamily: SrsText.ui,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: c.ink,
+                ),
+              ),
+            ),
+            if (widget.compact && help != null)
+              IconButton(
+                tooltip: 'About ${widget.label}',
+                // The 44dp target is also usable when the label is on a tight row.
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                icon: Icon(expanded ? Icons.info : Icons.info_outline, color: c.ink2),
+                onPressed: () => setState(() => expanded = !expanded),
+              ),
+          ],
+        ),
+        if (help != null && (!widget.compact || expanded)) ...[
+          const SizedBox(height: 3),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Text(
+              help,
+              style: TextStyle(
+                fontFamily: SrsText.ui,
+                fontSize: 14,
+                color: c.ink2,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _SettingRow extends StatelessWidget {
   const _SettingRow({required this.label, this.help, required this.control});
 
@@ -627,64 +704,34 @@ class _SettingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.hairlineSoft)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 520;
-          final textColumn = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: SrsText.ui,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: c.ink,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        final text = _SettingsLabel(label: label, help: help, compact: compact);
+        // Only bounded, short controls belong beside the text on a phone.
+        // Segments and colour pickers need the full width so they can wrap.
+        final inline = control is SrsSwitch || control is SizedBox || control is Text;
+        return Container(
+          padding: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.hairlineSoft)),
+          ),
+          child: compact && !inline
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [text, const SizedBox(height: 6), control],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: text),
+                    SizedBox(width: compact ? 12 : 24),
+                    control,
+                  ],
                 ),
-              ),
-              if (help != null) ...[
-                const SizedBox(height: 3),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: Text(
-                    help!,
-                    style: TextStyle(
-                      fontFamily: SrsText.ui,
-                      fontSize: 14,
-                      color: c.ink2,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          );
-
-          if (isNarrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [textColumn, const SizedBox(height: 12), control],
-            );
-          }
-
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: textColumn),
-              const SizedBox(width: 24),
-              control,
-            ],
-          );
-        },
-      ),
+        );
+      },
     );
   }
 }
@@ -748,70 +795,49 @@ class _NavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.hairlineSoft)),
-      ),
-      child: SrsPressable(
-        onPressed: onTap,
-        radius: 8,
-        builder: (context, hovered, _) => Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          color: hovered ? c.page : Colors.transparent,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontFamily: SrsText.ui,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: c.ink,
-                      ),
-                    ),
-                    if (help != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        help!,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 520;
+        return Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.hairlineSoft)),
+          ),
+          child: SrsPressable(
+            onPressed: onTap,
+            radius: 8,
+            builder: (context, hovered, _) => Container(
+              padding: EdgeInsets.symmetric(vertical: compact ? 8 : 18),
+              color: hovered ? c.page : Colors.transparent,
+              child: Row(
+                children: [
+                  Expanded(child: _SettingsLabel(label: label, help: help, compact: compact)),
+                  const SizedBox(width: 12),
+                  if (value != null) ...[
+                    Flexible(
+                      child: Text(
+                        value!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: SrsText.ui,
                           fontSize: 14,
+                          fontWeight: FontWeight.w500,
                           color: c.ink2,
-                          height: 1.4,
                         ),
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
                   ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              if (value != null) ...[
-                Text(
-                  value!,
-                  style: TextStyle(
-                    fontFamily: SrsText.ui,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: c.ink2,
+                  CustomPaint(
+                    size: const Size(14, 14),
+                    painter: _ChevronRightPainter(color: c.ink3),
                   ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              CustomPaint(
-                size: const Size(14, 14),
-                painter: _ChevronRightPainter(color: c.ink3),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

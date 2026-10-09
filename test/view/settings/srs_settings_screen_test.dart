@@ -1,8 +1,10 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../binding.dart';
 import '../../test_provider_scope.dart';
@@ -118,4 +120,65 @@ void main() {
     await tester.tap(find.text('Review Diagnostics HUD'));
     await tester.pumpAndSettle();
   });
+
+  testWidgets('phone settings keep small controls inline and disclose help on demand', (
+    tester,
+  ) async {
+    const width = 320.0;
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const SrsSettingsScreen(),
+      surfaceSize: const Size(width, 800),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    // Account navigation remains tappable; its explanation is opt-in on phones.
+    const accountHelp = 'Sign in to import private and unlisted studies.';
+    expect(find.text(accountHelp), findsNothing);
+    await tester.tap(find.byTooltip('About Lichess account'));
+    await tester.pumpAndSettle();
+    expect(find.text(accountHelp), findsOneWidget);
+    expect(find.byType(SrsSettingsScreen), findsOneWidget);
+    await tester.tap(find.byTooltip('About Lichess account'));
+    await tester.pumpAndSettle();
+    expect(find.text(accountHelp), findsNothing);
+
+    // The six-way control wraps inside a narrow viewport rather than overflowing.
+    await tester.ensureVisible(find.text('Daily limit'));
+    expect(tester.getRect(find.text('None')).right, lessThanOrEqualTo(width));
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(find.text('Show move notation'), 200);
+    final switchFinder = find.byWidgetPredicate(
+      (widget) => widget is SrsSwitch && widget.semanticLabel == 'Show move notation',
+    );
+    expect(
+      (tester.getCenter(find.text('Show move notation')).dy -
+              tester.getCenter(switchFinder).dy)
+          .abs(),
+      lessThan(20),
+    );
+    const moveHelp = 'Display preceding moves (e.g. 1. e4 e5) in the review screen.';
+    expect(find.text(moveHelp), findsNothing);
+    await tester.tap(find.byTooltip('About Show move notation'));
+    await tester.pumpAndSettle();
+    expect(find.text(moveHelp), findsOneWidget);
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide settings retain visible descriptions', (tester) async {
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const SrsSettingsScreen(),
+      surfaceSize: const Size(900, 800),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to import private and unlisted studies.'), findsOneWidget);
+    expect(find.byTooltip('About Lichess account'), findsNothing);
+  });
+
 }
