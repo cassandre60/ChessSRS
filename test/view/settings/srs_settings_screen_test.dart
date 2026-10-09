@@ -147,6 +147,10 @@ void main() {
     // The six-way control wraps inside a narrow viewport rather than overflowing.
     await tester.ensureVisible(find.text('Daily limit'));
     expect(tester.getRect(find.text('None')).right, lessThanOrEqualTo(width));
+    expect(
+      (tester.getCenter(find.text('Daily limit')).dy - tester.getCenter(find.text('25')).dy).abs(),
+      greaterThan(20),
+    );
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(find.text('Show move notation'), 200);
@@ -166,6 +170,40 @@ void main() {
     await tester.tap(switchFinder);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+
+    // Short selectors like Theme and Accent dots fit inline even on phones.
+    await tester.scrollUntilVisible(find.text('Theme'), 200);
+    expect(
+      (tester.getCenter(find.text('Theme')).dy - tester.getCenter(find.text('Light')).dy).abs(),
+      lessThan(20),
+    );
+
+    await tester.scrollUntilVisible(find.text('Accent'), 200);
+    expect(
+      (tester.getCenter(find.text('Accent')).dy - tester.getCenter(find.byType(SrsAccentDots)).dy)
+          .abs(),
+      lessThan(20),
+    );
+  });
+
+  testWidgets('phone settings put selectors inline when width allows', (tester) async {
+    const width = 500.0;
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: const SrsSettingsScreen(),
+      surfaceSize: const Size(width, 800),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    // At 500px, Scheduling algorithm has enough space to be inline beside its label.
+    await tester.ensureVisible(find.text('Scheduling algorithm'));
+    expect(
+      (tester.getCenter(find.text('Scheduling algorithm')).dy -
+              tester.getCenter(find.text('FSRS')).dy)
+          .abs(),
+      lessThan(20),
+    );
   });
 
   testWidgets('wide settings retain visible descriptions', (tester) async {

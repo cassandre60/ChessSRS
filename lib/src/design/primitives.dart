@@ -2,6 +2,8 @@
 // control, switch, keyboard chip, accent dots.
 // Only package:flutter/widgets.dart.
 // Adapted from design/flutter/primitives.dart.
+import 'dart:math' as math;
+
 import 'package:chess_srs/src/design/hatch.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:flutter/foundation.dart';
@@ -291,6 +293,23 @@ class SrsSegmented<T> extends StatelessWidget {
   final void Function(T key, bool on)? onToggled;
 
   bool _isOn(T key) => values != null ? values!.contains(key) : key == value;
+
+  /// Estimated single-line width of the control (including padding and border).
+  double estimatedWidth([TextScaler textScaler = TextScaler.noScaling]) {
+    double total = 8.0;
+    for (final text in options.values) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: SrsText.seg(const Color(0xFF000000))),
+        textDirection: TextDirection.ltr,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      final textW = math.min(painter.width, text.length * 13.5 * 0.6);
+      final itemW = math.max(38.0, textW + 26.0);
+      total += itemW;
+    }
+    return total;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -613,6 +632,11 @@ class SrsAccentDots extends StatelessWidget {
   const SrsAccentDots({super.key, required this.value, required this.onChanged});
   final SrsAccent value;
   final ValueChanged<SrsAccent> onChanged;
+
+  /// Estimated width of the accent dots control (including padding and border).
+  double estimatedWidth([TextScaler textScaler = TextScaler.noScaling]) {
+    return (SrsAccent.values.length * 24.0) + 12.0;
+  }
 
   @override
   Widget build(BuildContext context) {
