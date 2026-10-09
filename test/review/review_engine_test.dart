@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 class _FixedRandom implements Random {
   _FixedRandom(this._value);
@@ -984,6 +985,46 @@ void main() {
       // Session completes because quota of 1 position was reached!
       expect(session.isComplete, isTrue);
       expect(session.currentPrompt, isNull);
+    });
+
+    test('the truncation log names the cause, not a quota that was never reached', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+
+      final messages = <String>[];
+      final subscription = Logger.root.onRecord.listen((r) => messages.add(r.message));
+      addTearDown(subscription.cancel);
+
+      // 3 due decisions, 1 remaining today: the queue is longer than the day's allowance, so
+      // the session keeps the most urgent 1. Nothing has been reviewed, so no quota was
+      // "reached" -- the log used to say exactly that, which reads as 1 of 1 done when 0 were.
+      engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        remainingDailyQuota: 1,
+      );
+
+      final truncation = messages.firstWhere(
+        (m) => m.contains('quota'),
+        orElse: () => fail('no quota log emitted; messages were $messages'),
+      );
+
+      expect(
+        truncation,
+        contains('3'),
+        reason:
+            'the log must say how long the due queue actually was, or a truncated queue '
+            'leaves no trace of what was dropped',
+      );
+      expect(
+        truncation,
+        isNot(contains('reached')),
+        reason:
+            'nothing reached the quota -- 0 of 1 positions reviewed -- so "reached" sends '
+            'the reader after the wrong number',
+      );
     });
 
     test('SRS review queue prioritizes overdue items by nextDueAt urgency', () {
