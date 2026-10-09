@@ -1,6 +1,5 @@
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/design/folio_board_schemes.dart';
-import 'package:chess_srs/src/design/piece_set.dart';
 import 'package:chess_srs/src/design/srs_board_color_scheme.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -218,11 +217,7 @@ sealed class BoardPrefs with _$BoardPrefs implements Serializable {
       brightness != kBoardDefaultBrightnessFilter || hue != kBoardDefaultHueFilter;
 
   ChessboardSettings toBoardSettings(Variant variant, {SrsColors? srsColors}) {
-    // If the user has explicitly selected a custom piece set other than the default (cburnett),
-    // respect the user's choice; otherwise use Diagram piece assets if srsColors is active.
-    final pieceAssets = (pieceSet != PieceSet.cburnett || srsColors == null)
-        ? pieceSet.assets
-        : srsPieceAssets(dark: srsColors.isDark);
+    final pieceAssets = pieceSet.assets;
 
     // If the boardTheme is diagram (or fallback default), and srsColors is present,
     // use Diagram's bespoke hatched color scheme.

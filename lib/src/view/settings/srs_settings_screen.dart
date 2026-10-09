@@ -13,6 +13,7 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/view/account/account_menu.dart';
+import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/app_log_settings_screen.dart';
 import 'package:chess_srs/src/view/settings/board_choice_screen.dart';
 import 'package:chess_srs/src/view/settings/engine_settings_screen.dart';
@@ -39,6 +40,8 @@ class SrsSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
+  static const _kRateAppEnabled = false;
+
   Widget _buildSectionHeader(String title, SrsColors c, {required bool compact}) {
     return Padding(
       padding: EdgeInsets.only(top: compact ? 16 : 28, bottom: 8),
@@ -567,39 +570,35 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                             ),
                             child: Column(
                               children: [
-                                // Was on the legacy settings screen, which no user could reach
-                                // because its buildRoute forwarded here. Restored rather than
-                                // dropped: the capability is worth having, and this is the screen
-                                // the app actually shows. The store ids come from constants.dart,
-                                // which app_store_links_test guards.
-                                SrsSettingsRow(
-                                  label: 'Rate this app',
-                                  help: 'Open the store listing for Chess Repertoire SRS.',
-                                  onTap: () async {
-                                    final isAndroid =
-                                        Theme.of(context).platform == TargetPlatform.android;
-                                    final links = androidAppStoreLinks();
-                                    final launched = await launchUrl(
-                                      isAndroid
-                                          ? links.native
-                                          : appStoreListingUrl(isAndroid: false),
-                                      mode: LaunchMode.externalApplication,
-                                    );
-                                    if (!launched && isAndroid) {
-                                      await launchUrl(
-                                        links.web,
+                                // Rate this app is disabled until published to the app stores.
+                                // Code preserved for future release.
+                                if (_kRateAppEnabled) ...[
+                                  SrsSettingsRow(
+                                    label: 'Rate this app',
+                                    help: 'Open the store listing for Chess Repertoire SRS.',
+                                    onTap: () async {
+                                      final isAndroid =
+                                          Theme.of(context).platform == TargetPlatform.android;
+                                      final links = androidAppStoreLinks();
+                                      final launched = await launchUrl(
+                                        isAndroid
+                                            ? links.native
+                                            : appStoreListingUrl(isAndroid: false),
                                         mode: LaunchMode.externalApplication,
                                       );
-                                    }
-                                  },
-                                ),
-                                _NavRow(
-                                  label: 'Licences & open source',
-                                  help: 'GPL-3.0, chessground, dartchess, and third-party notices.',
-                                  onTap: () => showLicensePage(
-                                    context: context,
-                                    applicationName: 'Chess Repertoire SRS',
+                                      if (!launched && isAndroid) {
+                                        await launchUrl(
+                                          links.web,
+                                          mode: LaunchMode.externalApplication,
+                                        );
+                                      }
+                                    },
                                   ),
+                                ],
+                                _NavRow(
+                                  label: 'About and licences',
+                                  help: 'Attributions, GPL-3.0, and third-party notices.',
+                                  onTap: () => Navigator.of(context).push(AboutPage.buildRoute()),
                                 ),
                               ],
                             ),
