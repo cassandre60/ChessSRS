@@ -150,6 +150,37 @@ void main() {
 
       expect(reimported.chapters.map((c) => c.title).toList(), ['Italian Game', 'Sicilian']);
     });
+    test('quotes and backslashes in a title are escaped so the tag stays one tag', () {
+      // SPEC INV-014. A user-renamed study title reached the header unescaped, so a quote closed
+      // the tag early and the header came out malformed.
+      const pgn = '[Event "Sicilian"]\n1. e4 c5 2. Nf3 d6 *';
+      final importResult = importPgn(pgn, studyTitle: 'Sicilian');
+
+      final exported = chapterToPgn(
+        importResult.chapters.first,
+        studyTitle: r'Najdorf "Poisoned" \ line',
+      );
+      expect(exported, contains(r'[Study "Najdorf \"Poisoned\" \\ line"]'));
+
+      final parsed = PgnGame.parseMultiGamePgn(exported);
+      expect(parsed.length, 1);
+      expect(parsed.first.moves.mainline().map((m) => m.san).toList(), [
+        'e4',
+        'c5',
+        'Nf3',
+        'd6',
+      ]);
+    });
+
+    test('a line break in a title cannot split its tag across lines', () {
+      const pgn = '[Event "Sicilian"]\n1. e4 c5 *';
+      final importResult = importPgn(pgn, studyTitle: 'Sicilian');
+
+      final exported = chapterToPgn(importResult.chapters.first, studyTitle: 'Line one\nLine two');
+
+      expect(exported, contains('[Study "Line one Line two"]'));
+    });
+
     test('falls back to Untitled Study when no title is available', () {
       final chapter = Chapter.create(studyId: 'study-1', sourceOrder: 0);
       final exported = chapterToPgn(chapter);

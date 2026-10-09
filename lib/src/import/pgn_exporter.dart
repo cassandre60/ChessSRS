@@ -15,7 +15,7 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   final event = (chapter.title != null && !chapter.title!.startsWith('Game '))
       ? chapter.title!
       : (studyTitle ?? chapter.title ?? 'Untitled Study');
-  buffer.writeln('[Event "$event"]');
+  buffer.writeln('[Event "${_tagValue(event)}"]');
   buffer.writeln('[Site "ChessSRS"]');
   buffer.writeln('[Date "${_formatDate(chapter.createdAt ?? DateTime.now())}"]');
   final isBlack = chapter.orientation == Side.black;
@@ -24,16 +24,16 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   buffer.writeln('[Orientation "${isBlack ? 'black' : 'white'}"]');
   buffer.writeln('[Result "*"]');
   if (studyTitle != null && studyTitle.trim().isNotEmpty) {
-    buffer.writeln('[Study "${studyTitle.trim()}"]');
+    buffer.writeln('[Study "${_tagValue(studyTitle.trim())}"]');
   }
   if (chapter.title != null && chapter.title!.trim().isNotEmpty) {
-    buffer.writeln('[Chapter "${chapter.title!.trim()}"]');
+    buffer.writeln('[Chapter "${_tagValue(chapter.title!.trim())}"]');
   }
   // Preserve opening classification across export → re-import so opening
   // scopes and breakdowns survive the round-trip (`extractOpeningFamily`
   // reads `Opening` first, before `Event`/ECO fallbacks).
   if (chapter.opening != null && chapter.opening!.trim().isNotEmpty) {
-    buffer.writeln('[Opening "${chapter.opening!.trim()}"]');
+    buffer.writeln('[Opening "${_tagValue(chapter.opening!.trim())}"]');
   }
 
   if (chapter.startingFen != null && chapter.startingFen!.isNotEmpty) {
@@ -154,6 +154,14 @@ Position? _playMove(Position pos, RepertoireMove move) {
     return null;
   }
 }
+
+/// Escapes a value for a quoted PGN tag. PGN (section 8.1.1) allows only `\"` and `\\` inside the
+/// quotes, and a tag occupies a single line. Unescaped, a title such as `Najdorf "Poisoned"` closed
+/// the tag early and left the rest of the header malformed in every file it was exported to.
+String _tagValue(String value) => value
+    .replaceAll(r'\', r'\\')
+    .replaceAll('"', r'\"')
+    .replaceAll(RegExp(r'[\r\n]+'), ' ');
 
 String _formatDate(DateTime date) {
   final y = date.year.toString().padLeft(4, '0');
