@@ -158,10 +158,10 @@ Position? _playMove(Position pos, RepertoireMove move) {
 /// Escapes a value for a quoted PGN tag. PGN (section 8.1.1) allows only `\"` and `\\` inside the
 /// quotes, and a tag occupies a single line. Unescaped, a title such as `Najdorf "Poisoned"` closed
 /// the tag early and left the rest of the header malformed in every file it was exported to.
-String _tagValue(String value) => value
-    .replaceAll(r'\', r'\\')
-    .replaceAll('"', r'\"')
-    .replaceAll(RegExp(r'[\r\n]+'), ' ');
+String _tagValue(String value) {
+  final quoted = value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+  return quoted.replaceAll(RegExp(r'[\r\n]+'), ' ');
+}
 
 String _formatDate(DateTime date) {
   final y = date.year.toString().padLeft(4, '0');

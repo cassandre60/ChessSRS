@@ -164,12 +164,7 @@ void main() {
 
       final parsed = PgnGame.parseMultiGamePgn(exported);
       expect(parsed.length, 1);
-      expect(parsed.first.moves.mainline().map((m) => m.san).toList(), [
-        'e4',
-        'c5',
-        'Nf3',
-        'd6',
-      ]);
+      expect(parsed.first.moves.mainline().map((m) => m.san).toList(), ['e4', 'c5', 'Nf3', 'd6']);
     });
 
     test('a line break in a title cannot split its tag across lines', () {
