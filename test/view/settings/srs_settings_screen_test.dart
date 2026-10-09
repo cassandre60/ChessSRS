@@ -140,7 +140,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(accountHelp), findsOneWidget);
     expect(find.byType(SrsSettingsScreen), findsOneWidget);
-    await tester.tap(find.byTooltip('About Lichess account'));
+    await tester.tap(find.byTooltip('Hide details for Lichess account'));
     await tester.pumpAndSettle();
     expect(find.text(accountHelp), findsNothing);
 

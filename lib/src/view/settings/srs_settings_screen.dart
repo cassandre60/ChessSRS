@@ -664,7 +664,7 @@ class _SettingsLabelState extends State<_SettingsLabel> {
             ),
             if (widget.compact && help != null)
               IconButton(
-                tooltip: 'About ${widget.label}',
+                tooltip: expanded ? 'Hide details for ${widget.label}' : 'About ${widget.label}',
                 // The 44dp target is also usable when the label is on a tight row.
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 padding: EdgeInsets.zero,
