@@ -680,12 +680,7 @@ class _SettingsLabelState extends State<_SettingsLabel> {
             constraints: const BoxConstraints(maxWidth: 360),
             child: Text(
               help,
-              style: TextStyle(
-                fontFamily: SrsText.ui,
-                fontSize: 14,
-                color: c.ink2,
-                height: 1.4,
-              ),
+              style: TextStyle(fontFamily: SrsText.ui, fontSize: 14, color: c.ink2, height: 1.4),
             ),
           ),
         ],
@@ -810,7 +805,9 @@ class _NavRow extends StatelessWidget {
               color: hovered ? c.page : Colors.transparent,
               child: Row(
                 children: [
-                  Expanded(child: _SettingsLabel(label: label, help: help, compact: compact)),
+                  Expanded(
+                    child: _SettingsLabel(label: label, help: help, compact: compact),
+                  ),
                   const SizedBox(width: 12),
                   if (value != null) ...[
                     Flexible(

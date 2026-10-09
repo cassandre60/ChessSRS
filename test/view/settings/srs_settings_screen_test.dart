@@ -154,8 +154,7 @@ void main() {
       (widget) => widget is SrsSwitch && widget.semanticLabel == 'Show move notation',
     );
     expect(
-      (tester.getCenter(find.text('Show move notation')).dy -
-              tester.getCenter(switchFinder).dy)
+      (tester.getCenter(find.text('Show move notation')).dy - tester.getCenter(switchFinder).dy)
           .abs(),
       lessThan(20),
     );
@@ -180,5 +179,4 @@ void main() {
     expect(find.text('Sign in to import private and unlisted studies.'), findsOneWidget);
     expect(find.byTooltip('About Lichess account'), findsNothing);
   });
-
 }
