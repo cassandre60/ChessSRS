@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/tokens.dart';
+import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
+import 'package:chessground/chessground.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,5 +78,24 @@ void main() {
     expect(BoardTheme.paper.colors.darkSquare, const Color(0xffeee6d3));
     expect(BoardTheme.slate.colors.lightSquare, const Color(0xffe9eef3));
     expect(BoardTheme.slate.colors.darkSquare, const Color(0xffd6dee8));
+  });
+
+  test('piece sets rendered on the board agree with the piece set assets', () {
+    // Owner report 2026-10-09: Colin Burnett piece set preview in settings
+    // differed from the active review board because toBoardSettings previously
+    // overrode cburnett with srsPieceAssets.
+    const basePrefs = BoardPrefs.defaults;
+    for (final set in PieceSet.values) {
+      final prefs = basePrefs.copyWith(pieceSet: set);
+      final boardSettings = prefs.toBoardSettings(
+        Variant.standard,
+        srsColors: SrsColors.light(kSrsDefaultAccent),
+      );
+      expect(
+        boardSettings.pieceAssets,
+        equals(set.assets),
+        reason: '${set.name} board settings must match the piece set preview assets',
+      );
+    }
   });
 }

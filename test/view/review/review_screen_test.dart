@@ -1272,12 +1272,8 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      expect(find.byTooltip('Library and settings'), findsOneWidget);
-      await tester.tap(find.byTooltip('Library and settings'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Settings'), findsOneWidget);
-      await tester.tap(find.text('Settings'));
+      expect(find.byTooltip('Settings'), findsOneWidget);
+      await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
 
       expect(find.byType(SrsSettingsScreen), findsOneWidget);

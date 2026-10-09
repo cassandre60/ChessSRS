@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -216,5 +217,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sign in to import private and unlisted studies.'), findsOneWidget);
     expect(find.byTooltip('About Lichess account'), findsNothing);
+  });
+
+  testWidgets('About section links to AboutPage and disables Rate this app for now', (
+    tester,
+  ) async {
+    final app = await makeTestProviderScopeApp(tester, home: const SrsSettingsScreen());
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    // Rate this app is disabled until app store release.
+    expect(find.text('Rate this app'), findsNothing);
+
+    // About and licences is reachable and opens AboutPage.
+    await tester.scrollUntilVisible(find.text('About and licences'), 200);
+    expect(find.text('About and licences'), findsOneWidget);
+
+    await tester.tap(find.text('About and licences'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AboutPage), findsOneWidget);
   });
 }
