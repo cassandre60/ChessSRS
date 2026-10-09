@@ -38,6 +38,14 @@ on:
       - 'QUALITY.md'
       - 'TEST_STRATEGY.md'
       - 'PRODUCT.md'
+      # AGENTS.md's loop tells every contributor to record what shipped in
+      # IMPLEMENTATION_PLAN.md. Without it here, a PR touching only that file runs neither
+      # this workflow nor test.yml, so the required "T1 fast gates" check never reports and
+      # branch protection blocks the merge permanently -- admin override included, because
+      # the check is "expected" and never arrives. Named individually rather than `**.md`:
+      # the cheap prose lane is deliberate (see docs-check.yml), and only this file records
+      # what shipped and what stays open.
+      - 'IMPLEMENTATION_PLAN.md'
       - 'MVP.md'
       - 'ARCHITECTURE.md'
       - 'AGENTS.md'
