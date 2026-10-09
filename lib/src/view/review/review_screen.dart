@@ -356,6 +356,21 @@ class _NothingDueView extends ConsumerWidget {
     final displayTitle = state.isDailyLimitReached ? 'Daily limit reached.' : 'Nothing due.';
     final headlineSize = math.max(44.0, math.min(mediaQuery.size.width * 0.09, 72.0));
 
+    // Cross-colour continuation: automatic colour review that runs dry offers
+    // the other colour's dues, which live in a separate session (INV-030).
+    // Narrowed scopes (study/opening/chapter), practice mode, and an exhausted
+    // global daily quota (INV-031) never offer it: switching then could only
+    // land on another empty board.
+    final isAutoSideScope =
+        state.scope.side != null &&
+        state.scope.studyId == null &&
+        state.scope.chapterId == null &&
+        state.scope.openingFamily == null;
+    final otherSide = state.scope.side == Side.white ? Side.black : Side.white;
+    final otherSideDue = state.sideProgress[otherSide]?.dueDecisions ?? 0;
+    final showCrossSideButton =
+        isAutoSideScope && !state.isPracticeMode && !state.isDailyLimitReached && otherSideDue > 0;
+
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyP): () {
@@ -421,7 +436,7 @@ class _NothingDueView extends ConsumerWidget {
                                     fontFeatures: SrsText.tabular,
                                   ),
                                 ),
-                                const TextSpan(text: ' positions today.'),
+                                const TextSpan(text: ' positions today. White and Black combined.'),
                               ],
                             ),
                           )
@@ -513,6 +528,14 @@ class _NothingDueView extends ConsumerWidget {
                           runSpacing: 10.0,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            if (showCrossSideButton)
+                              SrsPillButton(
+                                label:
+                                    'Review ${otherSide == Side.white ? 'White' : 'Black'} — $otherSideDue due',
+                                onPressed: () {
+                                  ref.read(reviewControllerProvider.notifier).selectSide(otherSide);
+                                },
+                              ),
                             SrsPillButton(
                               label: context.l10n.reviewNothingDuePractice,
                               shortcut: 'P',
