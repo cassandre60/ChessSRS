@@ -91,6 +91,9 @@ const _knownUnreachable = <String, String>{
       'Replaced by direct StudyScreen integration from the scope drawer.',
   'lib/src/view/explorer/opening_explorer_screen.dart':
       'Opening explorer now used inline within StudyScreen explorer tab; standalone screen unlinked.',
+  'lib/src/view/review/library_sheet.dart':
+      'Replaced by direct settings navigation from the overflow button. Retained with '
+      'its tests for reversibility.',
 
   'lib/src/view/game/game_common_widgets.dart':
       'NOT DELETABLE, despite having an unreachable class. Two top-level functions here are '
