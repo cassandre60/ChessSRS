@@ -121,6 +121,7 @@ dartchess, the Riverpod/domain architecture). See `CUT_PROPOSALS.md` for what te
 ## 7. Future Horizons (Post-MVP)
 
 - **Lichess Integration**: Authenticate and directly import/sync user's Lichess studies.
+- **Full Local Backup & Restore**: Export all studies (PGN) plus all SRS data, and re-import it (see P-EXPORT-ALL). Local file/share only; no cloud dependency.
 - **Cross-Device Async Sync**: Background synchronization of study content and SRS review history across mobile, web, and desktop.
 - **Advisory Import Health Check**: Optional asynchronous one-time engine pass warning users of severe evaluation collapses in their own lines (advisory only, never blocking).
 - **Cross-Study Opening Categorization**: Aggregate repertoire positions by opening family across separate study files.
