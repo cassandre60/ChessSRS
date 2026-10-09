@@ -175,7 +175,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                               children: [
                                 _SettingRow(
                                   label: 'Daily limit',
-                                  help: 'Positions reviewed per day.',
+                                  help: 'Positions reviewed per day, White and Black combined.',
                                   control: SrsSegmented<int>(
                                     options: const {
                                       25: '25',
