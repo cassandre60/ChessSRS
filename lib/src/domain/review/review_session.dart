@@ -144,8 +144,15 @@ class ReviewSession {
       if (remainingDailyQuota != null &&
           remainingDailyQuota! >= 0 &&
           _unbufferedQueue.length > remainingDailyQuota!) {
+        // Not "quota reached". Nothing has been reached here: the due queue is simply longer
+        // than what is left of today's allowance, so the session keeps the most urgent N. The
+        // old wording printed the *remaining* allowance next to the word "reached", so a user
+        // who had reviewed 6 of 100 read "Daily review quota (94) reached" and went looking for
+        // 94 reviews. It also never said how long the queue was, so a truncated queue left no
+        // trace of what was dropped.
         _logger.info(
-          'Daily review quota ($remainingDailyQuota) reached, truncating queue to most urgent due items',
+          'Due queue (${_unbufferedQueue.length}) is longer than the remaining daily quota '
+          '($remainingDailyQuota); keeping the $remainingDailyQuota most urgent',
         );
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
