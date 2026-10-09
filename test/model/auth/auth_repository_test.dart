@@ -15,6 +15,11 @@ import '../../test_helpers.dart';
 const _accountResponse =
     '{"id":"test","username":"test","createdAt":1290415680000,"seenAt":1290415680000,"perfs":{}}';
 
+/// Scopes Lichess owns for its own signed clients, which no other `client_id` may request.
+///
+/// Kept in the test as well as the source so the two cannot drift apart silently.
+const _clientOwnedScopes = {'web:mobile', 'web:polygon'};
+
 /// Fake [FlutterAppAuth] that returns a canned token response (or throws) instead of opening a real
 /// browser session and performing the OAuth code exchange.
 class FakeFlutterAppAuth implements FlutterAppAuth {
@@ -70,15 +75,18 @@ Future<ProviderContainer> appAuthContainer(MockClient mockClient, FlutterAppAuth
 }
 
 void main() {
-  // A real failure, owner-reported 2026-10-08: signing in through the browser on a device that
-  // takes the desktop loopback path returned Lichess's "bad scope". The desktop flow built its
-  // own /oauth URI and asked for `study:read study:write preference:read` as the OAuth scope.
-  // Those are token *capabilities*, not OAuth scopes -- Lichess validates the parameter against
-  // its own scope set and rejects anything else. The mobile path never sent a scope at all,
-  // which is why only the hand-built URL was wrong.
+  // A real failure, owner-reported 2026-10-08: signing in on a device returned Lichess's
+  // "Bad authorization request / Invalid scopes". The mobile path went through
+  // flutter_appauth, which put `scope=web:mobile` on the authorize URL; that scope belongs to the
+  // official `lichess_mobile` client, so any other `client_id` is refused with HTTP 400.
   //
-  // The regression test is on the URI, not on a network call: launching a real browser is not
-  // something a widget test can do, but the query it builds is exactly what the server reads.
+  // The desktop flow, meanwhile, sent no `scope` at all -- which is why only the device failed,
+  // and why "remove the scope" looked like a fix last time: it cured the desktop symptom without
+  // noticing that the mobile path was asking for a scope it can never be granted. The scopes this
+  // app *can* ask for are the ones its own endpoints need (see [oauthScopes]).
+  //
+  // The regression tests are on the URI the app builds, not on a network call: opening a real
+  // browser is not something a test can do, but the query is exactly what the server reads.
   test('the desktop OAuth URI asks only for a scope Lichess accepts', () {
     final uri = buildDesktopOAuthUri(
       clientId: 'chesssrs.test',
@@ -93,11 +101,33 @@ void main() {
           oauthScopes,
           contains(requested),
           reason:
-              'Lichess answers "bad scope" for anything outside $oauthScopes, and '
-              'study:read / study:write / preference:read are token capabilities, not scopes',
+              'Lichess answers "bad scope" for anything outside $oauthScopes, and web:mobile / '
+              'web:polygon are answered with "Invalid scopes" because they belong to Lichess\'s '
+              'own signed clients',
         );
       }
     }
+  });
+
+  test('the mobile flow never asks for a scope Lichess reserves for its own clients', () {
+    // The exact defect: `scope=web:mobile` from `client_id=chess_srs` is a 400, so the account
+    // never reaches the authorize screen and sign-in cannot complete on any device.
+    expect(oauthScopes, isNotEmpty);
+    expect(
+      oauthScopes,
+      isNot(anyElement(isIn(_clientOwnedScopes))),
+      reason:
+          'Lichess reserves these scopes for its own signed clients and refuses any other '
+          'client_id that asks for one with "Invalid scopes"',
+    );
+  });
+
+  test('the mobile flow asks for the study and preference scopes its endpoints need', () {
+    // Lichess checks the `scope` parameter against its own scope set. These three are valid
+    // scopes, and each one is an endpoint this app calls while signed in:
+    // study:read -> GET /api/study/:id.pgn, study:write -> POST /api/study/:id/import-pgn,
+    // preference:read -> GET /api/account/preferences.
+    expect(oauthScopes, containsAll(['study:read', 'study:write', 'preference:read']));
   });
 
   test('the desktop OAuth URI carries PKCE and the redirect', () {
@@ -140,6 +170,25 @@ void main() {
 
       expect(redirectUrl, kOAuthRedirectUri);
       expect(redirectUrl, startsWith('org.chesssrs.app://'));
+    });
+
+    test('requests scopes Lichess will grant this client', () async {
+      // flutter_appauth serialises this list into the authorize URL's `scope` parameter, so
+      // whatever is here is what decides whether the authorize screen renders at all. A single
+      // reserved `web:*` entry turns the whole request into a 400 "Invalid scopes".
+      List<String>? requestedScopes;
+      final container = await appAuthContainer(
+        accountClient(),
+        FakeFlutterAppAuth((request) async {
+          requestedScopes = request.scopes;
+          return tokenResponse();
+        }),
+      );
+      await container.read(authRepositoryProvider).signIn();
+
+      expect(requestedScopes, oauthScopes);
+      expect(requestedScopes, isNot(anyElement(isIn(_clientOwnedScopes))));
+      expect(requestedScopes, containsAll(['study:read', 'study:write', 'preference:read']));
     });
 
     test('throws SignInCancelledException when the user cancels the auth session', () async {

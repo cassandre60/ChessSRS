@@ -92,6 +92,48 @@ production. Desktop uses OAuth and is verified. If a phone build is ever run,
 that is the one remaining check, and the query-parameter fallback in #123 is what
 it exercises.
 
+## Sixth defect (2026-10-09): `scope=web:mobile` on the mobile OAuth request
+
+Sign-in on a phone stopped at Lichess's *Bad authorization request / Invalid
+scopes* page. The mobile path goes through `flutter_appauth`, which serialises
+its `scopes` list into the authorize URL's `scope` parameter — and that list was
+`['web:mobile']`.
+
+`web:mobile` is a scope lila **owns**: it is the scope of its `lichess_mobile`
+signed client, and `OAuthSignedClients.forReq` refuses the whole request unless
+the `client_id` and redirect origins match that registered client. So no
+third-party `client_id` — `chess_srs` included — can ever be granted it, and
+asking for it is what 400s. `web:polygon` behaves the same for `takex3`.
+
+Verified against production with the exact query from the owner's screenshot
+(`client_id=chess_srs`, `redirect_uri=org.chesssrs.app://login-callback`):
+
+| `scope` | `/oauth` answer |
+|---|---|
+| `web:mobile` | 400 Invalid scopes |
+| `web:polygon` | 400 Invalid scopes |
+| `study:read study:write preference:read` | 303 → /login (accepted) |
+| *(absent)* | 303 → /login (accepted) |
+
+So *any* ordinary scope is accepted for a third-party client; only the
+client-owned `web:*` names are refused. The fix asks for the three scopes this
+app's endpoints actually need — `study:read` (`GET /api/study/:id.pgn`),
+`study:write` (`POST /api/study/:id/import-pgn`), `preference:read`
+(`GET /api/account/preferences`) — and the regression tests assert that no
+client-owned name can come back.
+
+The trap worth remembering: the previous sign-in fix read *bad scope* and
+concluded "this app must send no scope", removed it from the desktop URI, and
+left the mobile list holding the one scope that can never be granted. Study and
+preference names are ordinary scopes, not "token capabilities" — that comment was
+what kept the wrong value in place.
+
+**Not fixed, and not fixable by scope:** `POST /api/account/preferences/:name` is
+`ScopedBody(_.Web.Mobile)` in lila, so a third-party token can never write an
+account preference. Reads work; the settings screen's writes still fail while
+signed in, on every platform (the desktop path has the same failure, since it
+requests no scope at all). Worth its own bug report before beta.
+
 ## Regression coverage
 
 | What | Where |
@@ -99,6 +141,7 @@ it exercises.
 | mobile-code query-parameter fallback | `test/model/auth/auth_repository_test.dart` |
 | session survives navigation | `test/model/auth/auth_controller_test.dart` |
 | sri in the socket query string | `test/network/socket_test.dart` |
+| mobile OAuth scopes never include a client-owned `web:*` name | `test/model/auth/auth_repository_test.dart` |
 
 The sri case could not be gated: G05 judges a PR's test citations against the
 **base** ref's `SPEC.md`, so no PR can introduce a new SPEC invariant. That

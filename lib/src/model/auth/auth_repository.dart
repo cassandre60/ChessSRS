@@ -25,20 +25,34 @@ const _kOAuthCustomSchemeCallbackHost = 'login-callback';
 /// Custom schemes are more universally supported across Android browsers/OEMs than
 /// HTTPS App Link redirects, so they are used on every platform and host.
 const kOAuthRedirectUri = '$kLichessCustomUriSchemeName://$_kOAuthCustomSchemeCallbackHost';
-const oauthScopes = ['web:mobile'];
+
+/// OAuth scopes requested by the mobile (flutter_appauth) flow.
+///
+/// Each one is a valid Lichess scope that the app's own endpoints require:
+/// - `study:read`: `GET /api/study/:id.pgn` — a private study cannot be fetched without it.
+/// - `study:write`: `POST /api/study/:id/import-pgn` — pushing a PGN chapter into a study.
+/// - `preference:read`: `GET /api/account/preferences` — reading the signed-in account's prefs.
+///
+/// **No `web:*` scope may ever be added here.** `web:mobile` and `web:polygon` belong to
+/// Lichess's own signed clients, so a request carrying one from any other `client_id` — this
+/// app's `chess_srs`, for example — is answered with
+/// *Bad authorization request / Invalid scopes* (HTTP 400) instead of the authorize screen.
+/// That is exactly what sign-in on a device returned while this list was `['web:mobile']`.
+/// Verified 2026-10-09 against `https://lichess.org/oauth` with `client_id=chess_srs`:
+/// both `web:mobile` and `web:polygon` answer 400, and every scope above is accepted.
+const oauthScopes = ['study:read', 'study:write', 'preference:read'];
 
 /// Builds the `/oauth` URI the desktop loopback flow opens in the system browser.
 ///
 /// Extracted so it can be asserted on: the URL was previously assembled inline in the middle of
 /// an async method that also binds a socket and exchanges a code, which is why a wrong scope went
-/// unnoticed until the owner signed in on a device and Lichess answered *bad scope*.
+/// unnoticed until the owner signed in on a device and Lichess answered *Invalid scopes*.
 ///
-/// **No `scope` parameter is sent, deliberately.** Lichess validates that field against its own
-/// OAuth scope set (`oauthScopes`) and rejects anything else with *bad scope*. The
-/// `study:read` / `study:write` / `preference:read` strings that were being sent here are token
-/// *capabilities*, not scopes; asking for them as scopes is what broke sign-in. The mobile path
-/// has always sent none, and it works -- the resulting token carries the study capabilities
-/// already, which is how a private study import reads.
+/// **No `scope` parameter is sent, deliberately.** The desktop flow therefore grants the token no
+/// study or preference capabilities, and the mobile flow must not copy that choice: it needs
+/// [oauthScopes] to read a private study or an account's preferences. Lichess validates the
+/// parameter against its own scope set — any name outside it is answered with *bad scope* — and
+/// the `web:*` names it owns are refused outright (see [oauthScopes]).
 Uri buildDesktopOAuthUri({
   required String clientId,
   required String redirectUri,
