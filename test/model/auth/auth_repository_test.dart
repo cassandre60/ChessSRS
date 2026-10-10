@@ -441,5 +441,36 @@ void main() {
       await request.response.close();
       expect(await pending, contains('200'));
     });
+
+    test('the authorize URI carries the state that binds the callback', () {
+      final uri = buildDesktopOAuthUri(
+        clientId: 'chess_srs',
+        redirectUri: 'http://127.0.0.1:9/callback',
+        codeChallenge: 'challenge',
+        state: 'state-value',
+      );
+
+      expect(uri.queryParameters['state'], 'state-value');
+    });
+
+    test('a callback with the wrong state gets a 404 while the wait carries on', () async {
+      // R1-F3: Lichess echoes `state` unchanged on the code and error redirects, so anything
+      // else on /callback is not ours — another local flow, or a planted one — and must not
+      // complete (or break) this sign-in.
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+
+      final callback = awaitOAuthCallback(server, expectedState: 'ours');
+
+      expect(await rawGet(server.port, '/callback?code=abc&state=theirs'), contains('404'));
+
+      final pending = rawGet(server.port, '/callback?code=abc&state=ours');
+      final request = await callback;
+      expect(request.uri.queryParameters['code'], 'abc');
+
+      request.response.statusCode = HttpStatus.ok;
+      await request.response.close();
+      expect(await pending, contains('200'));
+    });
   });
 }

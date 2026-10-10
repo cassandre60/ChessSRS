@@ -1318,6 +1318,42 @@ void main() {
     });
   });
 
+  test('a version-gap retry scheduled before a disconnect does not resurrect the client', () {
+    fakeAsync((async) {
+      final channels = <FakeWebSocketChannel>[];
+      final socketClient = makeTestSocketClient(
+        fakeChannelFactory: FakeWebSocketChannelFactory((uri) {
+          final channel = FakeWebSocketChannel(uri);
+          channels.add(channel);
+          return channel;
+        }),
+        version: 0,
+      );
+      socketClient.connect();
+      socketClient.stream.listen((_) {});
+      async.elapse(kFakeWebSocketConnectionLag);
+      expect(channels, hasLength(1));
+
+      // v4 arrives with v3 missing: a retry is scheduled 200ms out.
+      sendServerSocketMessages(defaultSocketUri, ['{"t":"test","v":4, "d":"data"}']);
+      async.flushMicrotasks();
+
+      // The subscription goes away before the retry fires. The orphaned timer used to keep
+      // reprocessing the stale event, run its retries out, and schedule a reconnect — waking
+      // a client that was deliberately closed.
+      socketClient.close();
+      async.elapse(const Duration(seconds: 3));
+      async.flushMicrotasks();
+
+      expect(
+        channels,
+        hasLength(1),
+        reason: 'the orphaned gap retry must not reconnect a client that was closed',
+      );
+      async.flushTimers();
+    });
+  });
+
   test('a reply that arrives before anyone is listening is dropped, not buffered', () async {
     // This is what makes request ordering load-bearing. A request that subscribes after it has
     // sent loses the reply outright — the event is never queued for a listener that turns up

@@ -232,3 +232,46 @@ register entries without claiming the fixes.
 - New tests fail on base (wrong-reason-free): coordinator proof worktree 10 pass / 3 fail on `origin/main`; engine proof 30 pass / 6 fail. Failure reasons recorded in the PR (double-count 4-vs-3, `Bad state: No element` at `:416`, occurrence-vs-canonical id, 0.9076-vs-0.82 decay, first-listed-continuation walked). The checkpoint test references the new checkpoint field, so it cannot compile on base by construction.
 - Full files green on the fix: coordinator 13/13, engine 37/37; the rollback, contagion-persistence, and retry-side-effects service tests pass by name.
 - `fvm flutter analyze` clean on all touched files; `dart format` stable; `domain_loc` 3308 against the 3350 ceiling (no re-baseline needed).
+
+---
+
+## Round 4 — network and sync
+
+**Scope read:** `lib/src/network/http.dart` (1075 lines, all), `socket.dart` (1152, all),
+`aggregator.dart`, `connectivity.dart`, `server_status.dart`, `lib/src/model/auth/` (all six
+files), the FCM-registration remnants, the H4 redaction implementation against
+`docs/h4-credential-redaction.md`, and every request URL built app-wide for secret-bearing
+query strings. Unlike rounds 1–2, a Dart toolchain was available, so fixes were run locally.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R4-F1 | Four log sites and eleven exception constructors interpolated the raw URL: `_checkResponseSuccess`, `readNdJsonStream`, and two `downloadFile` lines logged `$url`, and every `ClientException`/`ServerException` thrown by the `ClientExtension` helpers stored the raw `url` — whose `toString()` renders it into the UI, the logs and crash reports. No current caller passes secrets there (the auth endpoints deliberately throw with the clean URL), but the vector was open for any future one. | Low–medium | **Fixed in this PR.** All wrapped with `redactUriForLogging`; nothing reads `.url`/`.uri` programmatically (only `statusCode`/`message`), so nothing is lost. Guard test extended with the three `$url` patterns; message + `toString` regression tests. |
+| R4-F2 | Desktop OAuth sent no `state` (open since Round 1 as R1-F3, blocked on Lichess confirmation). | Low (hardening) | **Fixed in this PR.** The blocker is resolved from lila source (`AuthorizationRequest` parses `Option[State]`; `RedirectUri.code/error` echo it) plus a live probe (`/oauth?...&state=PROBE123XYZ` survives the login redirect in the referrer). `buildDesktopOAuthUri` takes an optional state, `_desktopSignIn` generates one per attempt, `awaitOAuthCallback` 404s non-matching callbacks while waiting. R1-F3 register entry removed (fixed items are tracked by PR). |
+| R4-F3 | `_versionGapRetryTimer` was not cancelled in `_disconnect`, so a gap retry scheduled before a disconnect reprocessed its stale event on the replacement connection — and after a `close()` with no replacement, its retries ran out and scheduled a reconnect, resurrecting a deliberately closed client. | Low | **Fixed in this PR.** One-line cancel in `_disconnect`, covering connect/close/dispose/channel-gone. Regression test proves the old code opens a second channel. |
+| R4-F4 | The `kSensitiveQueryParameters` doc claimed `http_redaction_test.dart` fails if any app-wide query parameter goes unclassified — a test that does not exist (the classification-guard attempt was dropped for false positives). | Hygiene | **Fixed in this PR.** Comment now says review discipline, not automation, guards the list, and names the per-review sweep. |
+
+### Checked and sound (do not re-raise)
+
+- **H4 redaction as implemented (#10):** the helper, the denylist (case-insensitive), the FCM path prefix, and all six request/error log sites route through it; the `http_log` row stores the redacted URL. The guard test's two patterns held before this round and still hold with three more.
+- **Auth endpoints throw with the clean URL:** `requestEmailLoginCode`/`signInWithEmailCode` build their `ServerException`s from the body-first URL, never the query-fallback one — so even the failure path after a fallback carries no code, email or username.
+- **FCM is fully cut:** no `FirebaseMessaging` reference remains in `lib/`; the `/mobile/register/firebase` redaction prefix is now a dormant guard, kept deliberately.
+- **Secret-bearing URLs app-wide:** only the two mobile-code fallbacks (denylisted params, redacted at every log site). `/report?username=` carries public profile ids, over-redacted harmlessly by the same denylist.
+- **Socket auth and routes:** bearer fully in headers (never logged), routes are bare paths with sri/version added inside `connect()`; the pool's default client is never disposed because its constructor passes no `onStreamCancel`, so no idle timer is ever armed for it (noted at the declaration now). `onAuthChanged` drops both queues before reconnecting as the new account.
+- **Reconnect/backoff/epoch/timer bookkeeping** in `SocketClient` and the revision fencing in `connectivity.dart` read correctly; `isOnline` probes are HEAD-only (hence absent from `http_log` by construction) and the quiet header's strip is pinned by test.
+- **`checkToken` dedup, generation fence, startup swallow** (F-AUTHTOKEN) all present; `kLichessWSSecret` comes from `--dart-define`, defaulting to a no-op placeholder — not bundled.
+- **`reportSignInFailure` stays local:** `Logger('Auth')` at WARNING never reaches the Crashlytics SEVERE gate, and the errors it can carry hold clean URLs (see above).
+
+### Left open deliberately
+
+- **R1-F4, R1-F5, R2-F2, R2-F4, review-4 C1–C3:** other rounds' scope; untouched.
+- **Response bodies in exception messages** (`_checkResponseSuccess` appends the body): server-controlled content, no secret-bearing echo endpoint in use. Accepted, flagged for the day one appears.
+- **`send()` after `dispose()` queues into `_resendWhenOpen`:** upstream pattern; the client is discarded with its queue, so growth is bounded by a caller that no longer exists. Not touched.
+- **HEAD requests absent from `http_log`:** the only HEAD sender is the connectivity probe, so the gap is exactly "probes leave no rows" — accepted as diagnostic quietness, not fixed.
+
+### Verification status of this round's PR
+
+- New tests fail on base: redaction file 10 pass / 4 fail on stashed `http.dart` (guard + all three message tests); socket resurrection test fails on stashed `socket.dart` with 2 channels opened where 1 is expected. The state tests reference the new `state:`/`expectedState:` parameters, which do not exist on base — verified by grep that old `auth_repository.dart` contains no state plumbing, so they cannot pass there by construction.
+- On the fix: redaction 14/14, auth 23/23, socket 47/47, `http_test.dart` 25/25 (download + quiet groups).
+- `fvm flutter analyze` clean on all touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push (see PR checks for the committed-range result).
