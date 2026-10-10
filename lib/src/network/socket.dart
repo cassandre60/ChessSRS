@@ -482,6 +482,11 @@ class SocketClient {
     _pongTimeoutTimer?.cancel();
     _reconnectTimer?.cancel();
     _ackResendTimer?.cancel();
+    // The version-gap grace timer belongs to the connection it was scheduled on: left running,
+    // it would reprocess a stale event on whatever connection replaces this one — and after a
+    // close() with no replacement, its retries would run out and schedule a reconnect all by
+    // themselves, resurrecting a client that was deliberately closed.
+    _versionGapRetryTimer?.cancel();
 
     // Now, rather than when the close completes: closing a sink can take as long as it likes, and
     // by the time it does the client may well be connected again — a lag blanked then would be the
@@ -766,7 +771,8 @@ class SocketClient {
 /// the default client.
 class SocketPool {
   SocketPool(this._ref, {this.idleTimeout = _kIdleTimeout}) {
-    // Create a default socket client. This one is never disposed.
+    // Create a default socket client. This one is never disposed: the constructor below passes no
+    // onStreamCancel, so no idle timer is ever armed for it and the pool map always holds it.
     final client = SocketClient(
       _currentRoute,
       sri: _ref.read(preloadedDataProvider).requireValue.sri,

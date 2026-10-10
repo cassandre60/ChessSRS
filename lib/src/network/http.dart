@@ -63,10 +63,11 @@ const kRedactedLogValue = '***';
 /// This is a denylist rather than an allowlist on purpose. Its opposite — allowlisting the
 /// parameters known to be safe — fails quietly and in the direction nobody notices: a
 /// parameter added later is blanked, the log gets less informative exactly when a new feature
-/// is being debugged, and no test fails. A denylist keeps the log useful, and the risk of a new
-/// secret-bearing parameter is handled where it can be seen: [test/network/http_redaction_test.dart]
-/// fails if a query parameter is used anywhere in the app without being classified here. So a
-/// credential can only be added by someone who is told to classify it.
+/// is being debugged, and no test fails. A denylist keeps the log useful. What stops a new
+/// secret-bearing parameter slipping past this list is review discipline, not automation: there
+/// is no app-wide scan (an earlier classification-guard attempt produced only false positives
+/// and was dropped). So when a credential is put in a query string, its name must be added
+/// here in the same change — and the sweep is part of every network review (see Round 4).
 ///
 /// Add a name when a credential is put in a query string, not when an ordinary parameter is.
 const Set<String> kSensitiveQueryParameters = {
@@ -324,10 +325,10 @@ Future<bool> downloadFile(
   int? expectedLength,
   void Function(int received, int length)? onProgress,
 }) async {
-  _logger.fine('Downloading $url to ${file.path}');
+  _logger.fine('Downloading ${redactUriForLogging(url)} to ${file.path}');
 
   Future<bool> discard(String reason, [Object? error, StackTrace? stackTrace]) async {
-    _logger.warning('Download of $url failed: $reason', error, stackTrace);
+    _logger.warning('Download of ${redactUriForLogging(url)} failed: $reason', error, stackTrace);
     try {
       if (await file.exists()) await file.delete();
     } catch (e, st) {
@@ -782,7 +783,10 @@ class ServerException extends ClientException {
 /// Throws an error if [response] is not successful.
 void _checkResponseSuccess(Uri url, Response response) {
   if (response.statusCode < 400) return;
-  var message = 'Request to $url failed with status ${response.statusCode}';
+  // The URL goes into the exception message, which surfaces in the UI and in crash reports, so
+  // it is redacted like every other logged URL (a secret-bearing query string must never ride
+  // along in an error).
+  var message = 'Request to ${redactUriForLogging(url)} failed with status ${response.statusCode}';
   Map<String, dynamic>? jsonError;
   if (response.body.isNotEmpty) {
     try {
@@ -797,7 +801,7 @@ void _checkResponseSuccess(Uri url, Response response) {
       message = '$message: ${response.body}';
     }
   }
-  throw ServerException(response.statusCode, message, url, jsonError);
+  throw ServerException(response.statusCode, message, redactUriForLogging(url), jsonError);
 }
 
 /// A JSON decoder that decodes UTF-8 bytes.
@@ -862,13 +866,16 @@ extension ClientExtension on Client {
     final json = jsonUtf8Decoder.convert(response.bodyBytes);
     if (json is! Map<String, dynamic>) {
       _logger.severe('Could not read JSON object as $T: expected an object.');
-      throw ClientException('Could not read JSON object as $T: expected an object.', url);
+      throw ClientException(
+        'Could not read JSON object as $T: expected an object.',
+        redactUriForLogging(url),
+      );
     }
     try {
       return mapper(json);
     } catch (e, st) {
       _logger.severe('Could not read JSON object as $T:', e, st);
-      throw ClientException('Could not read JSON object as $T: $e\n$st', url);
+      throw ClientException('Could not read JSON object as $T: $e\n$st', redactUriForLogging(url));
     }
   }
 
@@ -888,14 +895,20 @@ extension ClientExtension on Client {
     final json = jsonUtf8Decoder.convert(response.bodyBytes);
     if (json is! List<dynamic>) {
       _logger.severe('Could not read JSON object as List: expected a list.');
-      throw ClientException('Could not read JSON object as List: expected a list.', url);
+      throw ClientException(
+        'Could not read JSON object as List: expected a list.',
+        redactUriForLogging(url),
+      );
     }
 
     final List<T> list = [];
     for (final e in json) {
       if (e is! Map<String, dynamic>) {
         _logger.severe('Could not read JSON object as $T: expected an object.');
-        throw ClientException('Could not read JSON object as $T: expected an object.', url);
+        throw ClientException(
+          'Could not read JSON object as $T: expected an object.',
+          redactUriForLogging(url),
+        );
       }
       try {
         final mapped = mapper(e);
@@ -904,7 +917,7 @@ extension ClientExtension on Client {
         }
       } catch (e, st) {
         _logger.severe('Could not read JSON object as $T:', e, st);
-        throw ClientException('Could not read JSON object as $T: $e', url);
+        throw ClientException('Could not read JSON object as $T: $e', redactUriForLogging(url));
       }
     }
     return IList(list);
@@ -941,11 +954,12 @@ extension ClientExtension on Client {
     if (headers != null) request.headers.addAll(headers);
     final response = await send(request);
     if (response.statusCode >= 400) {
-      var message = 'Request to $url failed with status ${response.statusCode}';
+      var message =
+          'Request to ${redactUriForLogging(url)} failed with status ${response.statusCode}';
       if (response.reasonPhrase != null) {
         message = '$message: ${response.reasonPhrase}';
       }
-      throw ServerException(response.statusCode, '$message.', url, null);
+      throw ServerException(response.statusCode, '$message.', redactUriForLogging(url), null);
     }
     try {
       return response.stream.map(utf8.decode).where((e) => e.isNotEmpty && e != '\n').map((e) {
@@ -954,7 +968,7 @@ extension ClientExtension on Client {
       });
     } catch (e, st) {
       _logger.severe('Could not read nd-json object as $T.', e, st);
-      throw ClientException('Could not read nd-json object as $T: $e', url);
+      throw ClientException('Could not read nd-json object as $T: $e', redactUriForLogging(url));
     }
   }
 
@@ -976,13 +990,16 @@ extension ClientExtension on Client {
     final json = jsonUtf8Decoder.convert(response.bodyBytes);
     if (json is! Map<String, dynamic>) {
       _logger.severe('Could not read json object as $T: expected an object.');
-      throw ClientException('Could not read json object as $T: expected an object.', url);
+      throw ClientException(
+        'Could not read json object as $T: expected an object.',
+        redactUriForLogging(url),
+      );
     }
     try {
       return mapper(json);
     } catch (e, st) {
       _logger.severe('Could not read json as $T:', e, st);
-      throw ClientException('Could not read json as $T: $e', url);
+      throw ClientException('Could not read json as $T: $e', redactUriForLogging(url));
     }
   }
 
@@ -1018,7 +1035,7 @@ extension ClientExtension on Client {
       _logger.severe('Could not read nd-json objects as List<$T>.', e, st);
       throw ClientException(
         'Could not read nd-json objects as List<$T>: $e',
-        response.request?.url,
+        response.request == null ? null : redactUriForLogging(response.request!.url),
       );
     }
   }

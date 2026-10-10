@@ -4,23 +4,6 @@ The repository has GitHub Issues disabled, so these were not filed as issues. Ea
 is written to be pasted into an issue as-is once Issues are enabled. Title, label and body are
 given for each. Fixed findings are tracked by their PR instead. See `review-program.md`.
 
-## R1-F3: Desktop OAuth sends no state parameter
-
-**Suggested label:** `enhancement`
-
-**Found by:** whole-codebase review, Round 1 (`docs/review-program.md`), finding R1-F3.
-**Severity:** low (hardening). **Not exploitable today**, as explained below.
-
-`lib/src/model/auth/auth_repository.dart` builds the desktop OAuth URI (`buildDesktopOAuthUri`) without a `state` parameter, and the loopback callback never checks one. RFC 6749 §10.12 and RFC 8252 §8.9 recommend `state` to bind a callback to the request that started it.
-
-**Why this is not an active exploit:** PKCE already blocks the classic code-injection attack. A code an attacker obtains for their own challenge fails the token exchange, because the app exchanges it with its own verifier.
-
-**Why it is still worth fixing:** `state` is the standard defence-in-depth. It also stops an unrelated local request from completing a sign-in attempt the user did not start.
-
-**Blocker before changing it:** confirm that Lichess's `/oauth` endpoint echoes `state` unchanged on the redirect. If it does not, a strict check would break sign-in for every desktop user. This needs verification against the live endpoint first, not a guess.
-
-**Suggested change once confirmed:** generate `state` from `Random.secure()`, add it to `buildDesktopOAuthUri`, and reject the callback when `request.uri.queryParameters['state']` does not match. Add a test for the URI and for the mismatch path.
-
 ## R1-F4: PGN export silently drops moves that fail to replay
 
 **Suggested label:** `bug`

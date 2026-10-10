@@ -5,6 +5,9 @@ import 'dart:io';
 
 import 'package:chess_srs/src/network/http.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart';
+import 'package:http/testing.dart';
+import 'package:logging/logging.dart';
 
 /// The redaction helper, over the shapes it actually has to handle.
 ///
@@ -121,6 +124,11 @@ void main() {
       for (final pattern in {
         r'\$\{request\.url\}': r'${request.url}',
         r'requestUrl: request\.url': 'requestUrl: request.url',
+        // The same leak through a local: error and download messages that interpolate the raw
+        // `$url` instead of the redacted one (round-4 R4-F1).
+        r'Request to \$url failed': r'Request to $url failed',
+        r'Downloading \$url': r'Downloading $url',
+        r'Download of \$url': r'Download of $url',
       }.entries) {
         expect(
           source,
@@ -130,6 +138,66 @@ void main() {
               'Wrap it: ${pattern.value.replaceAll(r'$', '')} would store the credential',
         );
       }
+    });
+  });
+
+  group('error and download messages carry no secrets', () {
+    // Round-4 R4-F1: ServerException messages surface in the UI and in crash reports, and
+    // download failures are logged, so both go through the helper like every other logged URL.
+    test('a failed request reports the redacted URL in its exception', () async {
+      final client = MockClient((request) async => Response('{"error":"nope"}', 400));
+
+      final uri = Uri.https('lichess.dev', '/auth/mobile-code/bearer', {
+        'code': '123456',
+        'username': 'alice',
+      });
+      try {
+        await client.readResponse(uri);
+        fail('readResponse must throw on a 400');
+      } on ServerException catch (e) {
+        // Both the message and the stored uri: ClientException.toString renders the uri, and
+        // that string is what reaches the UI, the logs and crash reports. Asserted on what the
+        // value does not contain (the marker itself is percent-encoded in string form, so it
+        // is not pinned); the parameters must still be there, redacted, not dropped.
+        expect(e.message, isNot(contains('123456')));
+        expect(e.message, isNot(contains('alice')));
+        expect(e.toString(), isNot(contains('123456')));
+        expect(e.toString(), isNot(contains('alice')));
+        expect(e.message, contains('code='));
+        expect(e.message, contains('username='));
+      }
+    });
+
+    test('a mapping failure carries the redacted URL on the exception', () async {
+      final client = MockClient((request) async => Response('[]', 200));
+
+      final uri = Uri.https('lichess.dev', '/api/account', {'token': 'sekrit'});
+      try {
+        await client.readJson(uri, mapper: (json) => json);
+        fail('readJson must throw when the body is not an object');
+      } on ClientException catch (e) {
+        expect(e.toString(), isNot(contains('sekrit')));
+      }
+    });
+
+    test('a failed download logs the redacted URL', () async {
+      final messages = <String>[];
+      final subscription = Logger.root.onRecord.listen((r) => messages.add(r.message));
+      addTearDown(subscription.cancel);
+
+      final tempDir = await Directory.systemTemp.createTemp('redaction_test_');
+      addTearDown(() => tempDir.delete(recursive: true));
+      final file = File('${tempDir.path}/file.bin');
+      final client = MockClient((request) async => Response('nope', 500));
+
+      final result = await downloadFile(
+        client,
+        Uri.https('example.org', '/weights.bin', {'token': 'sekrit'}),
+        file,
+      );
+
+      expect(result, isFalse);
+      expect(messages.join('\n'), isNot(contains('sekrit')));
     });
   });
 }

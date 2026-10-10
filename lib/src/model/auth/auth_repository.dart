@@ -57,12 +57,14 @@ Uri buildDesktopOAuthUri({
   required String clientId,
   required String redirectUri,
   required String codeChallenge,
+  String? state,
 }) => lichessUri('/oauth', {
   'response_type': 'code',
   'client_id': clientId,
   'redirect_uri': redirectUri,
   'code_challenge': codeChallenge,
   'code_challenge_method': 'S256',
+  'state': ?state,
 });
 
 /// Waits for the browser to reach the loopback redirect and returns that request.
@@ -71,11 +73,25 @@ Uri buildDesktopOAuthUri({
 /// `/favicon.ico`, another local process probing it) gets a 404 and the wait carries on. Before
 /// this, the first request on any path was taken as the callback, so one stray request aborted
 /// sign-in with "Authorization code missing". The caller answers the returned request.
-Future<HttpRequest> awaitOAuthCallback(HttpServer server) async {
+///
+/// When [expectedState] is given, the callback is additionally bound to the request that started
+/// it (RFC 6749 §10.12, RFC 8252 §8.9): Lichess echoes `state` unchanged on both the code and
+/// the error redirect, so a callback carrying anything else is not ours — another local flow, or
+/// a planted one — and gets a 404 while the wait carries on. Without the binding, any process
+/// that can reach the loopback port could complete (or break) a sign-in the user did not start.
+Future<HttpRequest> awaitOAuthCallback(HttpServer server, {String? expectedState}) async {
   await for (final request in server) {
-    if (request.uri.path == '/callback') return request;
-    request.response.statusCode = HttpStatus.notFound;
-    await request.response.close();
+    if (request.uri.path != '/callback') {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      continue;
+    }
+    if (expectedState != null && request.uri.queryParameters['state'] != expectedState) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      continue;
+    }
+    return request;
   }
   throw const SignInCancelledException();
 }
@@ -176,18 +192,22 @@ class AuthRepository {
       final codeVerifier = base64UrlEncode(verifierBytes).replaceAll('=', '');
       final challengeBytes = sha256.convert(ascii.encode(codeVerifier)).bytes;
       final codeChallenge = base64UrlEncode(challengeBytes).replaceAll('=', '');
+      final state = base64UrlEncode(
+        List<int>.generate(32, (_) => random.nextInt(256)),
+      ).replaceAll('=', '');
 
       final authUri = buildDesktopOAuthUri(
         clientId: kLichessClientId,
         redirectUri: redirectUri,
         codeChallenge: codeChallenge,
+        state: state,
       );
 
       if (!await launchUrl(authUri, mode: LaunchMode.externalApplication)) {
         throw Exception('Could not launch system browser for authentication.');
       }
 
-      final request = await awaitOAuthCallback(server).timeout(
+      final request = await awaitOAuthCallback(server, expectedState: state).timeout(
         const Duration(minutes: 5),
         onTimeout: () => throw const SignInCancelledException(),
       );
