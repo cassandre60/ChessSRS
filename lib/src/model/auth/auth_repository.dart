@@ -65,6 +65,21 @@ Uri buildDesktopOAuthUri({
   'code_challenge_method': 'S256',
 });
 
+/// Waits for the browser to reach the loopback redirect and returns that request.
+///
+/// Only `/callback` ends the wait. Anything else that reaches the port (a browser prefetching
+/// `/favicon.ico`, another local process probing it) gets a 404 and the wait carries on. Before
+/// this, the first request on any path was taken as the callback, so one stray request aborted
+/// sign-in with "Authorization code missing". The caller answers the returned request.
+Future<HttpRequest> awaitOAuthCallback(HttpServer server) async {
+  await for (final request in server) {
+    if (request.uri.path == '/callback') return request;
+    request.response.statusCode = HttpStatus.notFound;
+    await request.response.close();
+  }
+  throw const SignInCancelledException();
+}
+
 /// Thrown when the user dismisses the OAuth session before completing it.
 ///
 /// This is distinct from a genuine sign-in failure: the UI should silently
@@ -172,7 +187,7 @@ class AuthRepository {
         throw Exception('Could not launch system browser for authentication.');
       }
 
-      final request = await server.first.timeout(
+      final request = await awaitOAuthCallback(server).timeout(
         const Duration(minutes: 5),
         onTimeout: () => throw const SignInCancelledException(),
       );
