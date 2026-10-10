@@ -1,7 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-012, INV-015, INV-016, INV-017, INV-020, INV-021, INV-022, INV-023, INV-027,
-//   INV-028, INV-029, INV-031, INV-033, INV-041.
+// SPEC coverage: INV-010, INV-012, INV-015, INV-016, INV-017, INV-020, INV-021, INV-022,
+//   INV-023, INV-027, INV-028, INV-029, INV-031, INV-033, INV-041.
 
 import 'dart:math';
 
@@ -1168,6 +1168,384 @@ void main() {
         isFalse,
         reason: 'attempts are not positions; only the completed one counts',
       );
+    });
+
+    // SPEC INV-031. Regression for review-3 C1: completedCount used to be a hand-incremented
+    // int while the quota used a set, so a lapse corrected on re-test counted twice (and a
+    // retry-driven session reported zero). Deriving it from the quota set makes the
+    // double-count impossible by construction.
+    test('completedCount counts positions, not attempts: a re-tested lapse counts once', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+      );
+
+      // Lapse dec-1, then answer the kept prompt correctly (a corrected false-start: no SRS
+      // write, but it used to tick the progress counter).
+      expect(session.submitMove(from: 'd2', to: 'd4').isCorrect, isFalse);
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+      // Traversal prompts dec-2, then dec-3; then the re-queued dec-1 comes back for re-test.
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.submitMove(from: 'f1', to: 'c4').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+
+      expect(session.isComplete, isTrue);
+      expect(
+        session.completedCount,
+        3,
+        reason: 'three positions reviewed; the lapse plus its re-test is one position',
+      );
+    });
+
+    // SPEC INV-021, INV-031. Regression for review-3 C2: when the quota filled up while a
+    // lapsed decision still waited for its re-test, the advance cleared both queues and the
+    // re-test never happened — voiding the lapse handler's promise. Pending re-tests now
+    // survive the cut; only new work is set aside.
+    test('a pending re-test survives the daily quota cut', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+        remainingDailyQuota: 2,
+      );
+
+      // Lapse dec-1 first: it is re-queued and still owed a re-test.
+      expect(session.submitMove(from: 'd2', to: 'd4').isCorrect, isFalse);
+      session.continueAfterIncorrect();
+      // Answer dec-2, whose traversal discovers due dec-3 off-queue and prompts it.
+      expect(session.currentPrompt?.decision.id, 'dec-2');
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-3');
+      expect(session.submitMove(from: 'f1', to: 'c4').isCorrect, isTrue);
+
+      // The quota (2) is now full, but dec-1's re-test was promised: it must be prompted,
+      // not dropped with the cut.
+      expect(
+        session.currentPrompt?.decision.id,
+        'dec-1',
+        reason: 'the re-test was re-queued before the quota filled; it is owed, not new work',
+      );
+      expect(session.isComplete, isFalse);
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+
+      expect(session.isComplete, isTrue);
+      expect(session.completedCount, 3);
+    });
+
+    // SPEC INV-020. Regression for review-3 C4: the incorrect branch indexed
+    // prompt.expectedMoves.first with no guard, so a decision with no recorded moves threw
+    // StateError mid-answer. With nothing to match, the move is incorrect — graded as a lapse,
+    // never a crash. (The importer only derives decisions from nodes with children, so this
+    // takes malformed or hand-edited data to reach.)
+    test('a decision with no expected moves grades incorrect instead of throwing', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      const emptyDecision = RepertoireDecision(
+        id: 'dec-empty',
+        studyId: 'study-openings',
+        chapterId: 'chapter-italian',
+        nodeId: 'node-root',
+        expectedMoves: [],
+      );
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: [emptyDecision, decisions[1], decisions[2]],
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+      );
+
+      final result = session.submitMove(from: 'a2', to: 'a4');
+      expect(result.isCorrect, isFalse);
+      expect(result.updatedState.lapseCount, 1);
+      expect(result.updatedState.nextDueAt, isNotNull);
+    });
+
+    // SPEC INV-016. Regression for review-3 C5: the retry fallback built its fresh state under    // the occurrence id while submitMove used the canonical id, so the same lookup disagreed
+    // about what identifies a decision. Both now use the canonical id.
+    test('retryMove falls back to a canonical-id state like submitMove does', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      const canonId = 'canonical-dec-1';
+      final d0 = decisions[0];
+      final dec1WithCanon = RepertoireDecision(
+        id: d0.id,
+        studyId: d0.studyId,
+        chapterId: d0.chapterId,
+        nodeId: d0.nodeId,
+        expectedMoves: d0.expectedMoves,
+        canonicalStateId: canonId,
+      );
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: [dec1WithCanon, decisions[1], decisions[2]],
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+      );
+
+      // No stored state anywhere, so the fallback runs; retrying first is just answering.
+      final result = session.retryMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      expect(
+        result.updatedState.decisionId,
+        canonId,
+        reason: 'the fallback state must carry the scheduling identity, not the occurrence id',
+      );
+    });
+
+    // Builds a repertoire where one user position offers two continuations: the mainline
+    // 2. Nf3 leading to a due decision, and the sideline 2. Bc4 whose line is all reviewed.
+    // The sideline is listed first, so list position alone would walk it (review-3 C3).
+    (Study, Chapter, List<RepertoireDecision>) buildBranchingRepertoire() {
+      const study = Study(id: 'study-branch', title: 'Branch');
+      const rootNode = RepertoireNode(
+        id: 'node-root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'node-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-bc4alt',
+                    fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+                    children: [
+                      RepertoireNode(
+                        id: 'node-nf6alt',
+                        fen: 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 2 3',
+                        fenKey: 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq -',
+                        incomingMove: RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
+                      ),
+                    ],
+                  ),
+                  RepertoireNode(
+                    id: 'node-nf3',
+                    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                    children: [
+                      RepertoireNode(
+                        id: 'node-nc6',
+                        fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+                        fenKey: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq -',
+                        incomingMove: RepertoireMove(from: 'b8', to: 'c6', san: 'Nc6'),
+                        children: [
+                          RepertoireNode(
+                            id: 'node-bc4main',
+                            fen:
+                                'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+                            fenKey: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq -',
+                            incomingMove: RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final chapter = Chapter(
+        id: 'chapter-branch',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Branch',
+        startingFen: rootNode.fen,
+        root: rootNode,
+        createdAt: baseTime,
+      );
+
+      const decisions = [
+        RepertoireDecision(
+          id: 'dec-r',
+          studyId: 'study-branch',
+          chapterId: 'chapter-branch',
+          nodeId: 'node-root',
+          expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        ),
+        RepertoireDecision(
+          id: 'dec-u',
+          studyId: 'study-branch',
+          chapterId: 'chapter-branch',
+          nodeId: 'node-e5',
+          expectedMoves: [
+            RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+            RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+          ],
+        ),
+        RepertoireDecision(
+          id: 'dec-w',
+          studyId: 'study-branch',
+          chapterId: 'chapter-branch',
+          nodeId: 'node-nc6',
+          expectedMoves: [RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4')],
+        ),
+        RepertoireDecision(
+          id: 'dec-z',
+          studyId: 'study-branch',
+          chapterId: 'chapter-branch',
+          nodeId: 'node-nf6alt',
+          expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+        ),
+      ];
+
+      return (study, chapter, decisions);
+    }
+
+    // SPEC INV-022, INV-010. Regression for review-3 C3: auto-traversal followed
+    // opponentChild.children.first however many continuations a position recorded, so the
+    // sideline was always walked and the mainline's due decision never steered the walk.
+    // The traversal now follows the branch holding due material.
+    test('auto-traversal follows the user continuation holding due material, not list order', () {
+      final (study, chapter, decisions) = buildBranchingRepertoire();
+      // dec-u (junction) and dec-z (sideline end) learned and not due; dec-r and dec-w due.
+      final reviewStates = {
+        'dec-u': ReviewState(
+          decisionId: 'dec-u',
+          stability: 5.0 * 86400000,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: baseTime.subtract(const Duration(days: 2)),
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+        ),
+        'dec-z': ReviewState(
+          decisionId: 'dec-z',
+          stability: 5.0 * 86400000,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: baseTime.subtract(const Duration(days: 5)),
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+        ),
+      };
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+        mode: ReviewMode.srs,
+      );
+
+      expect(session.currentPrompt?.decision.id, 'dec-r');
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+
+      // The user continuation auto-played must be 2. Nf3 (due material below it), even though
+      // 2. Bc4 is listed first.
+      final userMoves = result.autoPlayedMoves.where((m) => m.isUserMove).toList();
+      expect(userMoves, isNotEmpty);
+      expect(
+        userMoves.first.move.san,
+        'Nf3',
+        reason: 'the Nf3 branch holds due dec-w; list position must not decide',
+      );
+      expect(result.nextPrompt?.decision.id, 'dec-w');
+    });
+
+    // SPEC INV-022, INV-028. The passed-over sideline still earns traversal credit for the
+    // first decision below it: the junction was traversed, so §B.2 covers the alternative too.
+    test('a passed-over alternative earns exposure credit for its first decision', () {
+      final (study, chapter, decisions) = buildBranchingRepertoire();
+      const sidelineStability = 5.0 * 86400000;
+      final reviewStates = {
+        'dec-u': ReviewState(
+          decisionId: 'dec-u',
+          stability: 5.0 * 86400000,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: baseTime.subtract(const Duration(days: 2)),
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+        ),
+        'dec-z': ReviewState(
+          decisionId: 'dec-z',
+          stability: sidelineStability,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: baseTime.subtract(const Duration(days: 5)),
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+        ),
+      };
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+        mode: ReviewMode.srs,
+      );
+
+      session.submitMove(from: 'e2', to: 'e4');
+
+      expect(
+        session.reviewStates['dec-z']!.stability,
+        closeTo(sidelineStability * 1.08, 100),
+        reason: 'the Bc4 alternative was passed over at the junction but never followed',
+      );
+    });
+
+    // Review-3 D5: the checkpoint must carry the pending re-test set, or a restored session
+    // silently drops the re-test the quota cut would otherwise have kept.
+    test('checkpoint and restore preserve pending re-tests across the quota cut', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+        remainingDailyQuota: 2,
+      );
+
+      // Lapse dec-1: re-queued and pending.
+      expect(session.submitMove(from: 'd2', to: 'd4').isCorrect, isFalse);
+      final checkpoint = session.checkpoint();
+      expect(checkpoint.pendingRetestIds, contains('dec-1'));
+
+      // Drive on without restoring: dec-2, traversal to dec-3, quota fills, re-test kept.
+      session.continueAfterIncorrect();
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.submitMove(from: 'f1', to: 'c4').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      // Restore to just after the lapse: progress reverts, the pending re-test survives.
+      session.restoreCheckpoint(checkpoint);
+      expect(session.completedCount, 0);
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      // Drive the restored session to the same conclusion.
+      session.continueAfterIncorrect();
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.submitMove(from: 'f1', to: 'c4').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+      expect(session.isComplete, isTrue);
+      expect(session.completedCount, 3);
     });
 
     test('a review is scheduled against the question that was asked, not a different one '

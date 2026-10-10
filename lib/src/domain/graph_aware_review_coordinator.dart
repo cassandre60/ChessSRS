@@ -11,7 +11,6 @@ import 'package:chess_srs/src/domain/scheduler.dart';
 class GraphNode {
   const GraphNode({
     required this.decisionId,
-    required this.parentId,
     required this.fen4,
     required this.expectedMoveUci,
     this.hasCanonicalIdentity = false,
@@ -19,9 +18,6 @@ class GraphNode {
 
   /// The decision ID.
   final String decisionId;
-
-  /// The parent decision ID, if any.
-  final String? parentId;
 
   /// Normalized 4-field FEN of the decision position.
   final String fen4;
@@ -52,44 +48,6 @@ abstract class ReviewStateRepository {
   String? canonicalIdFor(String fen4, String expectedMoveUci);
 }
 
-/// In-memory implementation of [ReviewStateRepository] for testing and in-memory sessions.
-class InMemoryReviewStateRepository implements ReviewStateRepository {
-  InMemoryReviewStateRepository({
-    Map<String, ReviewState>? initialStates,
-    Map<String, List<String>>? childrenMap,
-    Map<String, String>? canonicalKeyMap,
-  }) : _states = Map.of(initialStates ?? {}),
-       _children = Map.of(childrenMap ?? {}),
-       _canonicalKeys = Map.of(canonicalKeyMap ?? {});
-
-  final Map<String, ReviewState> _states;
-  final Map<String, List<String>> _children;
-  final Map<String, String> _canonicalKeys;
-
-  @override
-  ReviewState? get(String decisionId) => _states[decisionId];
-
-  @override
-  void put(String decisionId, ReviewState state) {
-    _states[decisionId] = state;
-  }
-
-  @override
-  List<String> childrenOf(String decisionId) => _children[decisionId] ?? const [];
-
-  void setChildren(String decisionId, List<String> children) {
-    _children[decisionId] = List.unmodifiable(children);
-  }
-
-  @override
-  String? canonicalIdFor(String fen4, String expectedMoveUci) =>
-      _canonicalKeys['$fen4|$expectedMoveUci'];
-
-  void setCanonicalId(String fen4, String expectedMoveUci, String canonicalId) {
-    _canonicalKeys['$fen4|$expectedMoveUci'] = canonicalId;
-  }
-}
-
 /// Tunable parameters for graph propagation effects (ChessSRS Scheduling Architecture §B).
 class GraphAwareParams {
   const GraphAwareParams({
@@ -108,6 +66,9 @@ class GraphAwareParams {
   final double contagionTau;
 
   /// Maximum ply depth for lapse contagion propagation.
+  ///
+  /// Cut at 3: with the depth-1-based decay the residual at depth 4 would be ~2.4%, which
+  /// §B.1's "essentially gone by depth 4" already concedes (review-2 D2).
   final int maxContagionDepth;
 
   /// Difficulty increase factor for lapsed subtree (beta = 0.6).
@@ -181,6 +142,11 @@ class GraphAwareReviewCoordinator {
   }
 
   /// Records an active recall attempt at [node], propagating graph effects as appropriate.
+  ///
+  /// [playedMoveUci] and [siblings] together are the switch for §B.4 confusion coupling:
+  /// coupling runs only when both are supplied. The incorrect branch passes both and the
+  /// correct branch passes neither; a future call site that omits them silently disables
+  /// coupling rather than failing, so pass both or neither deliberately (review-2 D5).
   GraphAwareReviewResult recordActiveReview({
     required GraphNode node,
     required ReviewResult result,
@@ -219,9 +185,11 @@ class GraphAwareReviewCoordinator {
   ReviewState? recordAutoTraversalExposure({required GraphNode node, required DateTime now}) {
     final canonicalId = _resolveCanonicalId(node);
     final previous = repo.get(canonicalId);
-    if (previous == null || previous.stability <= 0) {
-      return previous ?? ReviewState.initial(decisionId: canonicalId);
-    }
+    // Unknown nodes get nothing: materialising a fresh initial state here would persist a row
+    // for a position the user never engaged with (review-2 C3). The call site already treats
+    // null as "no credit granted".
+    if (previous == null) return null;
+    if (previous.stability <= 0) return previous;
 
     // Never grant exposure credit to an item that is already due
     if (scheduler.isDue(previous, now)) return previous;
@@ -257,7 +225,10 @@ class GraphAwareReviewCoordinator {
     required List<ReviewState> collector,
   }) {
     if (depth > params.maxContagionDepth) return;
-    final decay = params.contagionBase * math.exp(-depth / params.contagionTau);
+    // Depth counts from 1 at the immediate child, which takes the full λ0:
+    // exp(-(1 - 1)/τ) = 1. Entering at depth 1 with exp(-depth/τ) delivered
+    // only 51.3% of the documented haircut at every depth (review-2 C2).
+    final decay = params.contagionBase * math.exp(-(depth - 1) / params.contagionTau);
 
     for (final childId in repo.childrenOf(parentId)) {
       final childState = repo.get(childId);

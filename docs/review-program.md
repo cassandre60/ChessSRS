@@ -172,3 +172,63 @@ Round 1's R1-F3, R1-F4 and R1-F5 are also open. Their text is in `review-registe
 
 - **GitHub Issues are disabled on this repository.** `gh issue create` returns "the repository has disabled issues". The findings are written as issue-ready text in `docs/review-register.md` instead. Enabling Issues is a repository setting, which is yours to change.
 - **Local clone reset during the session.** The local branch was found reset to `be6941e` between turns, with the remote branch intact at `eb5a39a`. I restored the branch from `origin` and confirmed the Round 1 files match the committed versions before committing anything new.
+
+---
+
+## Round 3 — scheduling domain
+
+**Scope read:** `lib/src/domain/chess_fsrs_scheduler.dart`, `scheduler.dart`, `review_state.dart`,
+`graph_aware_review_coordinator.dart`, `lib/src/domain/review/` (`review_session.dart` at 1016
+lines, `review_engine.dart`, value types), the importer decision derivation
+(`pgn_importer.dart:626-669`) for the one open question review-3 left ("can a user node have more
+than one continuation?"), plus the open review-1/2/3 items from `docs/review-index.md`.
+
+**Environment difference from rounds 1–2:** a Dart toolchain was available, so every fix below
+was run locally (new tests fail on base, pass on the fix) rather than verified by CI alone.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R3-F1 | `completedCount` (hand-incremented int) and the quota set counted different things: a lapse corrected on re-test counted twice, a retry-driven session reported zero (review-3 C1). | Medium | **Fixed in this PR.** `completedCount` derives from `_completedDecisionIds.length`; the field and its checkpoint slot are gone. Regression test + INV-031. |
+| R3-F2 | The quota cut cleared both queues including re-queued lapses, voiding the re-test promise (review-3 C2). | Medium | **Fixed in this PR.** New `_pendingRetest` set (checkpointed): the cut drops new work only and keeps going while a re-test is owed; re-tests cost nothing since the set already holds them. Regression test + INV-021, INV-031. |
+| R3-F3 | Auto-traversal followed `children.first` at user junctions although variations are first-class siblings, so alternative lines were never traversed nor credited (review-3 C3). The invariant question is settled: the importer derives decisions from nodes with children and recurses into all of them, so multi-continuation user nodes are real. | Medium | **Fixed in this PR.** Due-density selection among user continuations (ties keep list order, so no-due behaviour is unchanged) plus exposure credit for the first decision below each passed-over alternative. Two regression tests + INV-022, INV-010. |
+| R3-F4 | `prompt.expectedMoves.first` threw `StateError` on an empty list (review-3 C4). Unreachable from the importer (decisions need children) but representable in the DB. | Low | **Fixed in this PR.** Grades incorrect through the scheduler directly, no throw. Regression test + INV-020. |
+| R3-F5 | `retryMove`'s fresh-state fallback used the occurrence id where `submitMove` used the canonical id (review-3 C5). | Low | **Fixed in this PR.** Both use `canonicalId`. Regression test + INV-016. |
+| R3-F6 | Contagion entered at depth 1 with `exp(-depth/τ)`, delivering 51.3% of the documented λ0 at every depth (review-2 C2). Two of three sources (prose, `:104` comment) say the immediate child takes 18%. | Medium | **Fixed in this PR.** Exponent is now `-(depth-1)/τ`; §B.1 formula aligned (that doc is not a protected path). Existing decay expectations updated with an `Ack-G08:` trailer, plus a pinning test. INV-027. |
+| R3-F7 | `recordAutoTraversalExposure` returned a fresh `ReviewState.initial` for unknown nodes, which the session persisted as rows for unengaged positions (review-2 C3). | Low | **Fixed in this PR.** Returns null; the call site already null-checks. Regression test + INV-028. |
+| R3-F8 | `GraphNode.parentId` required but never read (review-2 D3). | Hygiene | **Fixed in this PR.** Dropped (4 lib sites, 13 test sites; compiler-verified). |
+| R3-F9 | `InMemoryReviewStateRepository` shipped in `lib/` although production never uses it (review-2 D4). | Hygiene | **Fixed in this PR.** Moved to `test/domain/in_memory_review_state_repository.dart`. |
+| R3-F10 | `movePlayed` constructed three times with two shadows (review-3 D2). | Hygiene | **Fixed in this PR.** Built once per entry point. |
+
+### Deliberately not fixed
+
+- **Review-1 C4 (scheduler switch reinterprets stability):** still deferred — every remedy mutates stored memory; needs the product decision recorded in review-1 §6.
+- **Review-1 C6 (`isColdStart` never re-arms):** stays open. A failed first attempt yielding weaker memory than a clean one is arguably intended grading; re-arming needs a product definition of "forgotten".
+- **Review-1 D4 / review-4 C2 (offset-less timestamps):** stays open. A migration with data risk; it was Round 2's assigned scope and Round 2 did not take it (see gap note below).
+- **Review-1 D5 (`repetitionCount` semantics differ per scheduler):** stays open. Live consumers exist (`review_service.dart:493`, `review_controller.dart:1034`); unifying means changing two schedulers' lapse behaviour — bigger than this round.
+- **Review-1 D7, review-3 D4:** no action (self-consistent / trivial forwarder).
+- **Review-2 D1 (throttle/rollback conflation), review-3 D1 (extract grading block):** working code; the refactors' risk outweighed their value inside the `domain_loc` headroom (3308 of 3350 at PR time).
+- **Review-4 C1/C3/D1–D4:** out of scope (Round 2's assignment). They are now the only confirmed scheduler-stack findings with neither a fix nor a register entry — see gap note.
+
+### Gap note (for Round 4+ planning, not this PR)
+
+Round 2's scope line claimed "the open review-4 C1/C2 items (latency erasure, offset-less
+timestamps)" but its findings table never dispositioned them, and the register has no entries for
+review-4 C1–C3. The highest-ranked open item in `review-index.md` (review-4 C2, timezone-shifting
+due dates) is therefore tracked nowhere but the review-4 doc. This round adds the three missing
+register entries without claiming the fixes.
+
+### Checked and sound (do not re-raise)
+
+- **Review-1 C1/C2/C3 fixes on main:** the same-day difficulty freeze, the false-start single-Again, and the clamped preview are all present with their tests.
+- **Review-2 C1 fix on main:** the persisted exposure throttle and its restart test are present.
+- **Traversal prompting off-queue due spine items** (`_continueWithCorrectMove` prompting a due decision not in the queue) is existing intended behaviour, not a quota bypass: the quota truncation keeps the most urgent N, and the walk surfaces what is due along the line.
+- **`_selectWeighted` empty-candidate path** cannot fire: every caller guards non-emptiness first.
+- **`childMoves` `!` on `incomingMove`:** the importer always sets it; decisions are never derived at childless nodes.
+
+### Verification status of this round's PR
+
+- New tests fail on base (wrong-reason-free): coordinator proof worktree 10 pass / 3 fail on `origin/main`; engine proof 30 pass / 6 fail. Failure reasons recorded in the PR (double-count 4-vs-3, `Bad state: No element` at `:416`, occurrence-vs-canonical id, 0.9076-vs-0.82 decay, first-listed-continuation walked). The checkpoint test references the new checkpoint field, so it cannot compile on base by construction.
+- Full files green on the fix: coordinator 13/13, engine 37/37; the rollback, contagion-persistence, and retry-side-effects service tests pass by name.
+- `fvm flutter analyze` clean on all touched files; `dart format` stable; `domain_loc` 3308 against the 3350 ceiling (no re-baseline needed).
