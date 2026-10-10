@@ -182,7 +182,10 @@ double fsrsNextStabilityLapse(double d, double s, double r, ChessFsrsParams p) {
   return p.w11 * math.pow(d, -p.w12) * (math.pow(safeS + 1, p.w13) - 1) * math.exp((1 - r) * p.w14);
 }
 
-/// Domain-adapted FSRS-5 spaced repetition scheduler for chess repertoires.
+/// Domain-adapted FSRS spaced repetition scheduler for chess repertoires.
+///
+/// The difficulty update below is the FSRS-4.5 form (no FSRS-5 linear damping); the class
+/// used to claim "FSRS-5", which misleads anyone porting the published optimizer (review-1 D6).
 ///
 /// Implements continuous Difficulty-Stability-Retrievability (DSR) power-law forgetting curves
 /// with binary grading (Decision D015) and explicit target retention solving ($R_{\text{target}}$).

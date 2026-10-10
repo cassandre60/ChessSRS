@@ -9,6 +9,8 @@ import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'in_memory_review_state_repository.dart';
+
 void main() {
   group('GraphAwareReviewCoordinator', () {
     late InMemoryReviewStateRepository repo;
@@ -25,7 +27,6 @@ void main() {
     test('recordActiveReview on correct move updates primary state without side effects', () {
       const node = GraphNode(
         decisionId: 'root_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'e2e4',
       );
@@ -108,7 +109,6 @@ void main() {
 
       const node = GraphNode(
         decisionId: 'root_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'e2e4',
       );
@@ -129,8 +129,8 @@ void main() {
       final updatedChild3 = repo.get('child_3')!;
       final updatedChild4 = repo.get('child_4')!;
 
-      // Depth 1: decay = 0.18 * exp(-1 / 1.5)
-      final expectedDecay1 = 0.18 * math.exp(-1 / 1.5);
+      // Depth 1 takes the full λ0: decay = 0.18 * exp(-(1 - 1) / 1.5) = 0.18 (review-2 C2).
+      final expectedDecay1 = 0.18 * math.exp(-(1 - 1) / 1.5);
       expect(updatedChild1.stability, closeTo(stateChild1.stability * (1 - expectedDecay1), 100));
       expect(
         updatedChild1.difficulty,
@@ -142,16 +142,16 @@ void main() {
       expect(updatedChild1.lapseCount, stateChild1.lapseCount);
       expect(updatedChild1.lastReviewedAt, stateChild1.lastReviewedAt);
 
-      // Depth 2: decay = 0.18 * exp(-2 / 1.5)
-      final expectedDecay2 = 0.18 * math.exp(-2 / 1.5);
+      // Depth 2: decay = 0.18 * exp(-(2 - 1) / 1.5)
+      final expectedDecay2 = 0.18 * math.exp(-(2 - 1) / 1.5);
       expect(updatedChild2.stability, closeTo(stateChild2.stability * (1 - expectedDecay2), 100));
       expect(
         updatedChild2.difficulty,
         closeTo(stateChild2.difficulty + 0.6 * expectedDecay2, 0.001),
       );
 
-      // Depth 3: decay = 0.18 * exp(-3 / 1.5)
-      final expectedDecay3 = 0.18 * math.exp(-3 / 1.5);
+      // Depth 3: decay = 0.18 * exp(-(3 - 1) / 1.5)
+      final expectedDecay3 = 0.18 * math.exp(-(3 - 1) / 1.5);
       expect(updatedChild3.stability, closeTo(stateChild3.stability * (1 - expectedDecay3), 100));
 
       // Depth 4: exceeds maxContagionDepth (3), remains untouched
@@ -166,7 +166,6 @@ void main() {
 
       const node = GraphNode(
         decisionId: 'root_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'e2e4',
       );
@@ -182,22 +181,62 @@ void main() {
       expect(repo.get('cold_child')!.stability, 0.0);
     });
 
+    // SPEC INV-027. Regression for review-2 C2: the immediate child of a lapse takes the full
+    // λ0 = 18% haircut. The exponent used to read -depth/τ while entering at depth 1, which
+    // delivered only 9.24% — 51.3% of the documented strength — at every depth.
+    test('INV-027 lapse contagion applies the full lambda0 haircut at depth 1', () {
+      repo.setChildren('root_dec', ['child_1']);
+      const stability = 10.0 * 86400000;
+      repo.put(
+        'child_1',
+        ReviewState(
+          decisionId: 'child_1',
+          stability: stability,
+          difficulty: 4.0,
+          repetitionCount: 3,
+          nextDueAt: now.add(const Duration(days: 10)),
+        ),
+      );
+
+      const node = GraphNode(
+        decisionId: 'root_dec',
+        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'e2e4',
+      );
+      repo.put('root_dec', ReviewState.initial(decisionId: 'root_dec'));
+
+      coordinator.recordActiveReview(node: node, result: ReviewResult.incorrect, now: now);
+
+      expect(repo.get('child_1')!.stability, closeTo(stability * 0.82, 100));
+    });
+
+    // SPEC INV-028. Regression for review-2 C3: a node with no stored state gets nothing, not a
+    // materialised initial state. The old branch returned ReviewState.initial, which the session
+    // then persisted through sideEffects — a row for a position the user never engaged with.
+    test('recordAutoTraversalExposure returns null for nodes with no stored state', () {
+      const node = GraphNode(
+        decisionId: 'never_seen',
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+
+      expect(coordinator.recordAutoTraversalExposure(node: node, now: now), isNull);
+      expect(repo.get('never_seen'), isNull);
+    });
+
     test('recordActiveReview couples difficulty on confusable sibling moves', () {
       const node = GraphNode(
         decisionId: 'study1_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'e2e4',
       );
       const sibMatching = GraphNode(
         decisionId: 'study2_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'd2d4',
       );
       const sibOther = GraphNode(
         decisionId: 'study3_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'c2c4',
       );
@@ -238,7 +277,6 @@ void main() {
     test('recordAutoTraversalExposure grants micro-stability bump and extends due date', () {
       const node = GraphNode(
         decisionId: 'learned_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'g1f3',
       );
@@ -278,7 +316,6 @@ void main() {
     test('recordAutoTraversalExposure is throttled to once per calendar day', () {
       const node = GraphNode(
         decisionId: 'learned_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'g1f3',
       );
@@ -314,7 +351,6 @@ void main() {
     test('INV-028 a reseeded throttle still refuses a same-day grant after a restart', () {
       const node = GraphNode(
         decisionId: 'learned_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'g1f3',
       );
@@ -363,7 +399,6 @@ void main() {
     test('recordAutoTraversalExposure refuses exposure credit to already-due decisions', () {
       const node = GraphNode(
         decisionId: 'due_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'g1f3',
       );
@@ -392,7 +427,6 @@ void main() {
     test('recordAutoTraversalExposure ignores unlearned / cold decisions', () {
       const node = GraphNode(
         decisionId: 'cold_dec',
-        parentId: null,
         fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
         expectedMoveUci: 'g1f3',
       );
@@ -434,7 +468,6 @@ void main() {
 
       const nodeA = GraphNode(
         decisionId: 'question_a',
-        parentId: null,
         fen4: fen,
         expectedMoveUci: 'e2e4',
         hasCanonicalIdentity: true,
@@ -469,12 +502,7 @@ void main() {
         ),
       );
 
-      const nodeLegacy = GraphNode(
-        decisionId: 'occurrence_1',
-        parentId: null,
-        fen4: fen,
-        expectedMoveUci: 'e2e4',
-      );
+      const nodeLegacy = GraphNode(decisionId: 'occurrence_1', fen4: fen, expectedMoveUci: 'e2e4');
       final result = coordinator.recordActiveReview(
         node: nodeLegacy,
         result: ReviewResult.correct,

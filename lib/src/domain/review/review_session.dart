@@ -232,8 +232,12 @@ class ReviewSession {
   /// re-test; when that re-test succeeds it is a *corrected false-start*, which Decision D015
   /// grades as a single Again rather than a lapse plus an independent success seconds later.
   final Set<String> _lapsedThisSession = {};
+
+  /// Canonical ids of lapsed decisions still waiting for their re-test. The daily quota caps
+  /// *new* work: re-tests cost nothing (the set already holds them, INV-031) and the lapse
+  /// handler promises them, so the quota cut keeps these and drops the rest (review-3 C2).
+  final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
-  int _completedCount = 0;
   late final int _initialDueCount;
 
   void _refillPrefetchBuffer() {
@@ -254,7 +258,11 @@ class ReviewSession {
   ReviewPrompt? get currentPrompt => _currentPrompt;
   int get remainingDueCount =>
       _dueQueue.length + _unbufferedQueue.length + (_currentPrompt != null ? 1 : 0);
-  int get completedCount => _completedCount;
+
+  /// Positions completed this session. Derived from the quota set rather than counted by hand:
+  /// a re-test of an already-completed lapse must not count twice, and a retry-driven session
+  /// must not report zero (review-3 C1). One source of truth, by construction.
+  int get completedCount => _completedDecisionIds.length;
   int get initialDueCount => _initialDueCount;
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
@@ -282,8 +290,8 @@ class ReviewSession {
       unbufferedQueue: List<RepertoireDecision>.of(_unbufferedQueue),
       completedDecisionIds: Set<String>.of(_completedDecisionIds),
       lapsedDecisionIds: Set<String>.of(_lapsedThisSession),
+      pendingRetestIds: Set<String>.of(_pendingRetest),
       currentPrompt: _currentPrompt,
-      completedCount: _completedCount,
       exposureThrottle: _coordinator.snapshotExposureThrottle(),
     );
   }
@@ -309,8 +317,10 @@ class ReviewSession {
     _lapsedThisSession
       ..clear()
       ..addAll(checkpoint.lapsedDecisionIds);
+    _pendingRetest
+      ..clear()
+      ..addAll(checkpoint.pendingRetestIds);
     _currentPrompt = checkpoint.currentPrompt;
-    _completedCount = checkpoint.completedCount;
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
   }
 
@@ -344,10 +354,11 @@ class ReviewSession {
       _completedDecisionIds.add(decision.canonicalId);
       // -----------------------------------------------------------------------
       // CORRECT MOVE
-      // -----------------------------------------------------------------------
-      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
+      // -----------------------------------------------------------------------      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
       // the re-test as a success too would tick repetitionCount up and push the due date out.
+      // The re-test landing also clears the lapse's pending marker (review-3 C2).
       final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
+      if (isCorrectedFalseStart) _pendingRetest.remove(decision.canonicalId);
 
       ReviewState nextState;
       ReviewEvent? event;
@@ -358,7 +369,6 @@ class ReviewSession {
       } else {
         final graphNode = GraphNode(
           decisionId: decision.canonicalId,
-          parentId: null,
           fen4: prompt.fenKey,
           expectedMoveUci: expectedMatch.uci,
           hasCanonicalIdentity: decision.canonicalStateId != null,
@@ -381,8 +391,6 @@ class ReviewSession {
         );
       }
 
-      _completedCount++;
-
       _logger.info(
         'Move correct: ${expectedMatch.san ?? expectedMatch.uci} for decision ${decision.canonicalId} '
         '(reps: ${nextState.repetitionCount}, stability: ${nextState.stability.toStringAsFixed(2)})',
@@ -399,7 +407,7 @@ class ReviewSession {
       // -----------------------------------------------------------------------
       // INCORRECT MOVE
       // -----------------------------------------------------------------------
-      final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
+      // [movePlayed] is built once above and shared by both branches (review-3 D2).
 
       ReviewState nextState;
       ReviewEvent? event;
@@ -409,25 +417,42 @@ class ReviewSession {
         nextState = prevState;
         event = null;
       } else {
-        final graphNode = GraphNode(
-          decisionId: decision.canonicalId,
-          parentId: null,
-          fen4: prompt.fenKey,
-          expectedMoveUci: prompt.expectedMoves.first.uci,
-          hasCanonicalIdentity: decision.canonicalStateId != null,
-        );
-        final siblings = _findSiblingGraphNodes(decision);
-        final graphResult = _coordinator.recordActiveReview(
-          node: graphNode,
-          result: ReviewResult.incorrect,
-          now: now,
-          playedMoveUci: movePlayed.uci,
-          siblings: siblings,
-        );
-        nextState = graphResult.primaryState;
-        _reviewStates[decision.canonicalId] = nextState;
-        _reviewStates[decision.id] = nextState;
-        sideEffects = graphResult.sideEffectStates;
+        // No repertoire move recorded here (malformed or hand-edited data: the importer only
+        // derives decisions from nodes with children). There is nothing to match, so grade
+        // incorrect through the scheduler directly — the coordinator needs an expected move
+        // for its graph effects — and never index into the empty list (review-3 C4, INV-020).
+        final firstExpected = prompt.expectedMoves.firstOrNull;
+        if (firstExpected == null) {
+          _logger.warning(
+            'No expected moves for decision ${decision.canonicalId}; grading incorrect',
+          );
+          nextState = scheduler.schedule(
+            previous: prevState,
+            result: ReviewResult.incorrect,
+            now: now,
+          );
+          _reviewStates[decision.canonicalId] = nextState;
+          _reviewStates[decision.id] = nextState;
+        } else {
+          final graphNode = GraphNode(
+            decisionId: decision.canonicalId,
+            fen4: prompt.fenKey,
+            expectedMoveUci: firstExpected.uci,
+            hasCanonicalIdentity: decision.canonicalStateId != null,
+          );
+          final siblings = _findSiblingGraphNodes(decision);
+          final graphResult = _coordinator.recordActiveReview(
+            node: graphNode,
+            result: ReviewResult.incorrect,
+            now: now,
+            playedMoveUci: movePlayed.uci,
+            siblings: siblings,
+          );
+          nextState = graphResult.primaryState;
+          _reviewStates[decision.canonicalId] = nextState;
+          _reviewStates[decision.id] = nextState;
+          sideEffects = graphResult.sideEffectStates;
+        }
 
         event = ReviewEvent(
           decisionId: decision.canonicalId,
@@ -448,7 +473,9 @@ class ReviewSession {
       }
 
       // Decision D015: remember this was graded, so a later re-test is not graded twice.
+      // It also stays pending until that re-test lands, so the quota cut cannot drop it.
       _lapsedThisSession.add(decision.canonicalId);
+      _pendingRetest.add(decision.canonicalId);
 
       // Re-queue the failed decision at the end of the session queue
       // so the user can re-test it before completing the session
@@ -492,13 +519,17 @@ class ReviewSession {
     final currentState =
         _reviewStates[prompt.decision.canonicalId] ??
         _reviewStates[prompt.decision.id] ??
-        ReviewState.initial(decisionId: prompt.decision.id);
+        // Same scheduling identity as submitMove's fallback: the canonical id, so transposed
+        // occurrences share one memory (INV-016). The occurrence id here disagreed (review-3 C5).
+        ReviewState.initial(decisionId: prompt.decision.canonicalId);
 
     if (expectedMatch != null) {
       // The position counts toward the day's reviews whether it was answered right first time or
       // only after a lapse. Counting it here is what stops a run of retries from exceeding the
-      // daily quota.
+      // daily quota. A correct retry is also the re-test landing, so it clears the pending
+      // marker set by the lapse (review-3 C2).
       _completedDecisionIds.add(prompt.decision.canonicalId);
+      _pendingRetest.remove(prompt.decision.canonicalId);
       return _continueWithCorrectMove(
         prompt: prompt,
         expectedMatch: expectedMatch,
@@ -507,7 +538,6 @@ class ReviewSession {
         startNode: transposedStart,
       );
     } else {
-      final movePlayed = RepertoireMove(from: from, to: to, promotion: promotion);
       return ReviewStepResult(
         isCorrect: false,
         movePlayed: movePlayed,
@@ -585,9 +615,13 @@ class ReviewSession {
         }
       }
 
-      // User position was not due: auto-play learned user continuation
+      // User position was not due: auto-play a learned user continuation. With several
+      // continuations (PGN variations are first-class siblings, QUALITY.md §2.2), follow the
+      // branch holding due material rather than list position, and still credit the first
+      // decision below each passed-over alternative — every junction option was traversed
+      // past, not just the one followed (review-3 C3, INV-022).
       if (opponentChild.children.isNotEmpty) {
-        final userChild = opponentChild.children.first;
+        final userChild = _selectUserContinuation(opponentChild, now);
         final userMove = userChild.incomingMove!;
         autoPlayed.add(
           AutoPlayedMove(
@@ -603,7 +637,6 @@ class ReviewSession {
         if (mode != ReviewMode.practice && nextDecision != null) {
           final expNode = GraphNode(
             decisionId: nextDecision.canonicalId,
-            parentId: prompt.decision.canonicalId,
             fen4: opponentChild.fenKey,
             expectedMoveUci: userMove.uci,
             hasCanonicalIdentity: nextDecision.canonicalStateId != null,
@@ -613,6 +646,31 @@ class ReviewSession {
             _reviewStates[nextDecision.canonicalId] = exposedState;
             _reviewStates[nextDecision.id] = exposedState;
             sideEffects.add(exposedState);
+          }
+        }
+
+        if (mode != ReviewMode.practice) {
+          for (final sibling in opponentChild.children) {
+            if (identical(sibling, userChild)) continue;
+            final siblingDecision = _firstDecisionInSubtree(sibling);
+            if (siblingDecision == null) continue;
+            final siblingNode = _nodesById[siblingDecision.nodeId];
+            final firstExpected = siblingDecision.expectedMoves.firstOrNull;
+            if (siblingNode == null || firstExpected == null) continue;
+            final sibExposed = _coordinator.recordAutoTraversalExposure(
+              node: GraphNode(
+                decisionId: siblingDecision.canonicalId,
+                fen4: siblingNode.fenKey,
+                expectedMoveUci: firstExpected.uci,
+                hasCanonicalIdentity: siblingDecision.canonicalStateId != null,
+              ),
+              now: now,
+            );
+            if (sibExposed != null) {
+              _reviewStates[siblingDecision.canonicalId] = sibExposed;
+              _reviewStates[siblingDecision.id] = sibExposed;
+              sideEffects.add(sibExposed);
+            }
           }
         }
 
@@ -667,20 +725,33 @@ class ReviewSession {
     if (mode == ReviewMode.srs &&
         remainingDailyQuota != null &&
         _completedDecisionIds.length >= remainingDailyQuota!) {
+      // The quota caps new work, not pending re-tests: they cost nothing (the set already holds
+      // them, INV-031) and the lapse handler promised them before the session ends (INV-021).
+      // Drop everything else so the day's allowance is honoured, then keep going only while a
+      // re-test is still owed; otherwise the session concludes here.
+      final droppedNew =
+          _dueQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length +
+          _unbufferedQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length;
+      _dueQueue.removeWhere((d) => !_pendingRetest.contains(d.canonicalId));
+      _unbufferedQueue.removeWhere((d) => !_pendingRetest.contains(d.canonicalId));
+      if (_dueQueue.isEmpty && _unbufferedQueue.isEmpty) {
+        _logger.info(
+          'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota), concluding review session',
+        );
+        _currentPrompt = null;
+        return;
+      }
       _logger.info(
-        'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota), concluding review session',
+        'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota); '
+        'set aside $droppedNew new item(s), concluding ${_dueQueue.length + _unbufferedQueue.length} pending re-test(s)',
       );
-      _dueQueue.clear();
-      _unbufferedQueue.clear();
-      _currentPrompt = null;
-      return;
     }
     if (_dueQueue.length <= prefetchRefillThreshold) {
       _refillPrefetchBuffer();
     }
     if (_dueQueue.isEmpty) {
       _currentPrompt = null;
-      _logger.info('ReviewSession queue empty. Completed decisions: $_completedCount');
+      _logger.info('ReviewSession queue empty. Completed decisions: $completedCount');
       return;
     }
     final nextDecision = _dueQueue.removeAt(0);
@@ -863,6 +934,37 @@ class ReviewSession {
     return _selectWeighted(node.children, subtreeSizes);
   }
 
+  /// Selects the user continuation to auto-play when several are recorded.
+  ///
+  /// Deterministic: the branch whose subtree holds the most due decisions, ties broken by
+  /// list order (mainline first), so behaviour is unchanged when nothing is due (review-3 C3).
+  RepertoireNode _selectUserContinuation(RepertoireNode opponentChild, DateTime now) {
+    var best = opponentChild.children.first;
+    var bestDue = -1;
+    for (final child in opponentChild.children) {
+      final due = _countDueDecisionsInSubtree(child, now);
+      if (due > bestDue) {
+        bestDue = due;
+        best = child;
+      }
+    }
+    return best;
+  }
+
+  /// First decision in pre-order DFS below [node], or null when the subtree holds none.
+  ///
+  /// Used to credit the passed-over alternative of a junction: the position the traversal
+  /// would have met first had it followed that branch (review-3 C3).
+  RepertoireDecision? _firstDecisionInSubtree(RepertoireNode node) {
+    final direct = _decisionForNode[node.id];
+    if (direct != null) return direct;
+    for (final child in node.children) {
+      final found = _firstDecisionInSubtree(child);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
   int _countDueDecisionsInSubtree(RepertoireNode node, DateTime now) {
     var count = 0;
     final decision = _decisionForNode[node.id];
@@ -943,7 +1045,6 @@ class ReviewSession {
         siblings.add(
           GraphNode(
             decisionId: other.canonicalId,
-            parentId: null,
             fen4: node.fenKey,
             expectedMoveUci: m.uci,
             hasCanonicalIdentity: other.canonicalStateId != null,
@@ -1000,8 +1101,8 @@ class ReviewSessionCheckpoint {
     required this.unbufferedQueue,
     required this.completedDecisionIds,
     required this.lapsedDecisionIds,
+    required this.pendingRetestIds,
     required this.currentPrompt,
-    required this.completedCount,
     required this.exposureThrottle,
   });
 
@@ -1010,7 +1111,7 @@ class ReviewSessionCheckpoint {
   final List<RepertoireDecision> unbufferedQueue;
   final Set<String> completedDecisionIds;
   final Set<String> lapsedDecisionIds;
+  final Set<String> pendingRetestIds;
   final ReviewPrompt? currentPrompt;
-  final int completedCount;
   final Map<String, DateTime> exposureThrottle;
 }

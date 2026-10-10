@@ -47,14 +47,14 @@ Latency (`latencyEmaMs`) is preserved as optional post-hoc telemetry only, stric
 We apply **exponentially-decaying lapse contagion**, scoped to *direct descendants in the same chosen branch only* (not siblings — see B.4 for sibling handling):
 
 $$
-S_{\text{child}}' = S_{\text{child}} \times \bigl(1 - \lambda_0 \cdot e^{-\text{depth}/\tau}\bigr)
+S_{\text{child}}' = S_{\text{child}} \times \bigl(1 - \lambda_0 \cdot e^{-(\text{depth}-1)/\tau}\bigr)
 $$
 
 $$
-D_{\text{child}}' = \operatorname{clip}\bigl(D_{\text{child}} + \beta \cdot \lambda_0 \cdot e^{-\text{depth}/\tau},\ 1,\ 10\bigr)
+D_{\text{child}}' = \operatorname{clip}\bigl(D_{\text{child}} + \beta \cdot \lambda_0 \cdot e^{-(\text{depth}-1)/\tau},\ 1,\ 10\bigr)
 $$
 
-with defaults $\lambda_0 = 0.18$ (max 18% stability haircut, applied only to the immediate child), $\tau = 1.5$ plies (contagion is essentially gone by depth 4), $\beta = 0.6$ (a smaller permanent difficulty nudge, since "the line as a whole is trickier" is durable signal even after the transient stability hit is regained). The corresponding `nextDueAt` is pulled forward proportionally to the same decay (not reset to "now") — this makes the child *more likely to surface soon* without lying about its actual measured retrievability.
+with defaults $\lambda_0 = 0.18$ (max 18% stability haircut, applied only to the immediate child), $\tau = 1.5$ plies (contagion is essentially gone by depth 4), $\beta = 0.6$ (a smaller permanent difficulty nudge, since "the line as a whole is trickier" is durable signal even after the transient stability hit is regained). Depth counts from 1 at the immediate child, so it takes the full $\lambda_0$; earlier the exponent read $-\text{depth}/\tau$, which delivered only 51.3% of the documented haircut at every depth (review-2 C2, fixed 2026-10-10). The corresponding `nextDueAt` is pulled forward proportionally to the same decay (not reset to "now") — this makes the child *more likely to surface soon* without lying about its actual measured retrievability.
 
 This is intentionally a **soft nudge, not a state-machine reset**: it never touches `repetitionCount` or `lapseCount` of the child (that child was not tested), and the true FSRS update for the child still happens normally the next time it is *actually reviewed*.
 
