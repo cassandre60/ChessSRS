@@ -250,7 +250,10 @@ bool _knowledgeProgress({
   final byLapses = intOf(row, 'lapseCount').compareTo(intOf(incumbent, 'lapseCount'));
   if (byLapses != 0) return byLapses < 0;
 
-  return (row['canonicalId']! as String).compareTo(incumbent['canonicalId']! as String) < 0;
+  // Last resort. A row without an id sorts first, so a missing id can never throw here.
+  final idA = row['canonicalId'] as String? ?? '';
+  final idB = incumbent['canonicalId'] as String? ?? '';
+  return idA.compareTo(idB) < 0;
 }
 
 /// The result of a backfill pass, for logging and tests.
@@ -319,11 +322,12 @@ Future<LegacyBackfillResult> backfillCanonicalStatesFromLegacy(DatabaseExecutor 
     if (canonical == null || existing.contains(canonical)) continue;
 
     seenPerCanonical[canonical] = (seenPerCanonical[canonical] ?? 0) + 1;
+    // Compared under the canonical id it is about to be stored under. The raw legacy row has no
+    // canonicalId, and the comparator reads one as its last tie-break.
+    final candidate = Map<String, Object?>.of(row)..['canonicalId'] = canonical;
     final current = candidates[canonical];
-    if (current == null) {
-      candidates[canonical] = Map<String, Object?>.of(row)..['canonicalId'] = canonical;
-    } else if (_knowledgeProgress(row: row, incumbent: current)) {
-      candidates[canonical] = Map<String, Object?>.of(row)..['canonicalId'] = canonical;
+    if (current == null || _knowledgeProgress(row: candidate, incumbent: current)) {
+      candidates[canonical] = candidate;
     }
   }
 

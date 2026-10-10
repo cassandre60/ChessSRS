@@ -1,5 +1,8 @@
 // SPEC coverage: INV-006.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:chess_srs/src/model/auth/auth_repository.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/network/http.dart';
@@ -409,6 +412,34 @@ void main() {
         'code': 'xxxxxx',
       });
       expect(authUser.token, 'lio_token');
+    });
+  });
+
+  group('awaitOAuthCallback', () {
+    // Raw socket rather than HttpClient: flutter_test replaces HttpClient with a stub that never
+    // reaches the server, so a real request has to be written by hand.
+    Future<String> rawGet(int port, String path) async {
+      final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
+      socket.write('GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n');
+      final response = await utf8.decodeStream(socket);
+      return response.split('\r\n').first;
+    }
+
+    test('answers other paths with 404 and returns the callback request', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+
+      final callback = awaitOAuthCallback(server);
+
+      expect(await rawGet(server.port, '/favicon.ico'), contains('404'));
+
+      final pending = rawGet(server.port, '/callback?code=abc');
+      final request = await callback;
+      expect(request.uri.queryParameters['code'], 'abc');
+
+      request.response.statusCode = HttpStatus.ok;
+      await request.response.close();
+      expect(await pending, contains('200'));
     });
   });
 }
