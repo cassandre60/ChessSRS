@@ -79,10 +79,66 @@ void main() {
       );
     });
 
+    test('case-insensitive matching for opening families', () {
+      const scope = ReviewScope.opening('Sicilian Defense');
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'sicilian defense'),
+        isTrue,
+        reason: 'lowercase variant should match',
+      );
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'SICILIAN DEFENSE'),
+        isTrue,
+        reason: 'uppercase variant should match',
+      );
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'SiCiLiAn DeFeNsE'),
+        isTrue,
+        reason: 'mixed case variant should match',
+      );
+    });
+
+    test('repeated whitespace is normalized in opening names', () {
+      const scope = ReviewScope.opening('Sicilian Defense');
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'Sicilian  Defense'),
+        isTrue,
+        reason: 'double space should normalize to single space',
+      );
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'Sicilian   Defense'),
+        isTrue,
+        reason: 'triple space should normalize to single space',
+      );
+    });
+
+    test('combined case and whitespace normalization', () {
+      const scope = ReviewScope.opening('Sicilian Defense');
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: '  SICILIAN   DEFENSE  '),
+        isTrue,
+        reason: 'case and whitespace combined should normalize',
+      );
+    });
+
     test('different openings still do not match', () {
       const scope = ReviewScope.opening('Sicilian Defense');
       expect(scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'French Defense'), isFalse);
       expect(scope.matches(studyId: 's', chapterId: 'c'), isFalse);
+    });
+
+    test('empty opening family on scope does not filter chapters', () {
+      const scope = ReviewScope.study('s');
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'Sicilian Defense'),
+        isTrue,
+        reason: 'study scope should not filter by opening family',
+      );
+      expect(
+        scope.matches(studyId: 's', chapterId: 'c', openingFamily: null),
+        isTrue,
+        reason: 'study scope should match chapters with no opening family',
+      );
     });
   });
 }
