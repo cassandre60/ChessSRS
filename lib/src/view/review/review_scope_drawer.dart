@@ -13,10 +13,13 @@ import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('ReviewScopeDrawer');
 
 /// Modal scope selector (hybrid of Diagram bottom sheet and rich repertoire list).
 ///
@@ -48,7 +51,7 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: c.scrim,
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return ReviewScopeDrawer(side: side);
       },
@@ -201,7 +204,15 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           Expanded(
                             child: TextField(
                               controller: _searchController,
-                              autofocus: isWide,
+                              // design/docs/03-components.md §6: autofocus only where a
+                              // hardware keyboard is plausible (desktop/web) — never
+                              // raise the soft keyboard on a touch device.
+                              autofocus:
+                                  isWide &&
+                                  (kIsWeb ||
+                                      Theme.of(context).platform == TargetPlatform.macOS ||
+                                      Theme.of(context).platform == TargetPlatform.windows ||
+                                      Theme.of(context).platform == TargetPlatform.linux),
                               style: TextStyle(
                                 fontFamily: SrsText.ui,
                                 fontSize: 15.5,
@@ -452,7 +463,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: c.scrim,
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
       pageBuilder: (dialogContext, animation, secondaryAnimation) => StudyActionsSheet(
         study: study,
         side: side,
@@ -499,7 +510,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
               })
               .catchError((Object e) {
                 if (!context.mounted) return null;
-                _logger.severe('Could not create it', e);
+                _logger.severe('Could not create it.', e);
                 showSnackBar(context, 'Could not create it', type: SnackBarType.error);
                 return null;
               });

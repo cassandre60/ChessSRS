@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/design/design.dart';
@@ -28,7 +29,10 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('PerfStatsScreen');
 
 final _dateFormatter = DateFormat.yMMMd();
 
@@ -156,9 +160,7 @@ class _Body extends ConsumerWidget {
                 );
               },
               error: (error, stackTrace) {
-                debugPrint(
-                  'SEVERE: [PerfStatsScreen] could not load rating history data; $error\n$stackTrace',
-                );
+                _logger.severe('Could not load rating history data.', error, stackTrace);
                 return const Text('Could not show chart elo chart');
               },
               loading: () {
@@ -396,7 +398,7 @@ class _Body extends ConsumerWidget {
         );
       },
       error: (error, stackTrace) {
-        debugPrint('SEVERE: [PerfStatsScreen] could not load data; $error\n$stackTrace');
+        _logger.severe('Could not load data.', error, stackTrace);
         return const Center(child: Text('Could not load user stats.'));
       },
       loading: () => const CenterLoadingIndicator(),

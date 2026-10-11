@@ -14,7 +14,10 @@ import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('CreateStudyChapterBottomSheet');
 
 sealed class CreateStudyChapterParams {}
 
@@ -285,7 +288,7 @@ class _CreateStudyChapterBottomSheetState extends ConsumerState<CreateStudyChapt
       if (!mounted) return;
       // Keep the sheet open so the user can amend the input and retry.
       setState(() => _isSubmitting = false);
-      debugPrint('SEVERE: [CreateStudyChapterBottomSheet] could not create chapter: $e');
+      _logger.severe('Could not create chapter.', e);
       showSnackBar(context, 'Could not create chapter', type: SnackBarType.error);
     }
   }
@@ -331,7 +334,7 @@ class _CreateStudyChapterBottomSheetState extends ConsumerState<CreateStudyChapt
       }
     } catch (e) {
       if (mounted) {
-        debugPrint('SEVERE: [CreateStudyChapterBottomSheet] error loading file: $e');
+        _logger.severe('Error loading file.', e);
         showSnackBar(context, 'Error loading file', type: SnackBarType.error);
       }
     }

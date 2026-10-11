@@ -9,7 +9,10 @@ import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/explorer/explorer_view.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('TablebaseView');
 
 class TablebaseView extends ConsumerWidget {
   const TablebaseView({required this.position, this.onMoveSelected, super.key});
@@ -143,7 +146,7 @@ class TablebaseView extends ConsumerWidget {
         return _TablebaseListView(isLoading: false, children: children);
 
       case AsyncError(:final error):
-        debugPrint('SEVERE: [TablebaseView] could not load tablebase data; $error');
+        _logger.severe('Could not load tablebase data.', error);
         final message = ref.watch(isDeviceOnlineProvider)
             ? 'Could not load tablebase data.'
             : 'Tablebase is not available offline.';

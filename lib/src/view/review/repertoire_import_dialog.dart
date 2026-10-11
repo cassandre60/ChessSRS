@@ -19,9 +19,9 @@ import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
-enum ImportSource { lichess, file }
-
 final _logger = Logger('RepertoireImportDialog');
+
+enum ImportSource { lichess, file }
 
 /// Bottom sheet dialog for importing a repertoire PGN or Lichess study.
 class RepertoireImportDialog extends ConsumerStatefulWidget {
@@ -191,7 +191,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        _logger.severe('Lichess import failed', e);
+        _logger.severe('Lichess import failed.', e);
         showSnackBar(context, 'Lichess import failed', type: SnackBarType.error);
       }
     } finally {
@@ -244,7 +244,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        _logger.severe('Import failed', e);
+        _logger.severe('Import failed.', e);
         showSnackBar(context, 'Import failed', type: SnackBarType.error);
       }
     } finally {

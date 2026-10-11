@@ -60,7 +60,7 @@ class ExportPgnDialog extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _logger.severe('Could not save file', e);
+        _logger.severe('Could not save file.', e);
         showSnackBar(context, 'Could not save file', type: SnackBarType.error);
       }
     }
@@ -82,7 +82,7 @@ class ExportPgnDialog extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        _logger.severe('Sharing failed', e);
+        _logger.severe('Sharing failed.', e);
         showSnackBar(context, 'Sharing failed', type: SnackBarType.error);
       }
     }
