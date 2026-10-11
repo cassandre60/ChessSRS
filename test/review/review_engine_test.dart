@@ -2234,18 +2234,14 @@ void main() {
         ]..sort();
         final median = samples[samples.length ~/ 2];
 
-        // ignore: avoid_print
-        print(
-          'deep auto-traversal over $chainLength nodes: '
-          'median ${median.inMilliseconds}ms over $timedRounds rounds '
-          '(${samples.map((s) => s.inMilliseconds).join(', ')}ms)',
-        );
         expect(
           median,
           lessThan(const Duration(seconds: 1)),
           reason:
               'auto-traversal must be linear in tree size; without memoised due '
-              'counts this line takes several seconds of counting work',
+              'counts this line takes several seconds of counting work. Median '
+              'was ${median.inMilliseconds}ms over $timedRounds rounds '
+              '(${samples.map((s) => s.inMilliseconds).join(', ')}ms)',
         );
       });
     });
