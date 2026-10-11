@@ -680,32 +680,49 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       } else {
         newPosition = null;
       }
+      // The session was replaced, so an advancement still waiting on the old one must not run:
+      // it would write the old line's dues math onto this fresh state (and resurrect its prompt).
+      // The answer itself was already graded and persisted; only the UI step is discarded.
+      _pendingAdvancement = null;
     }
 
     // A scope change or reload that started after this toggle owns the screen now; the counts
     // computed here are from a pool it has already replaced.
     if (generation != _generation || !ref.mounted) return;
 
-    state = AsyncData(
-      currentState.copyWith(
-        studies: updatedStudies,
-        totalDueCount: summary.totalDueCount,
-        studyDueCounts: summary.studyDueCounts,
-        openingDueCounts: summary.openingDueCounts,
-        studyProgress: summary.studyProgress,
-        chapterProgress: summary.chapterProgress,
-        openingProgress: summary.openingProgress,
-        sideProgress: summary.sideProgress,
-        studySideProgress: summary.studySideProgress,
-        studyIdsBySide: summary.studyIdsBySide,
-        openingsBySide: summary.openingsBySide,
-        session: newSession,
-        currentPrompt: newPrompt,
-        clearPrompt: newPrompt == null,
-        boardPosition: newPosition,
-        boardOrientation: newOrientation,
-      ),
+    var published = currentState.copyWith(
+      studies: updatedStudies,
+      totalDueCount: summary.totalDueCount,
+      studyDueCounts: summary.studyDueCounts,
+      openingDueCounts: summary.openingDueCounts,
+      studyProgress: summary.studyProgress,
+      chapterProgress: summary.chapterProgress,
+      openingProgress: summary.openingProgress,
+      sideProgress: summary.sideProgress,
+      studySideProgress: summary.studySideProgress,
+      studyIdsBySide: summary.studyIdsBySide,
+      openingsBySide: summary.openingsBySide,
+      session: newSession,
+      currentPrompt: newPrompt,
+      clearPrompt: newPrompt == null,
+      boardPosition: newPosition,
+      boardOrientation: newOrientation,
     );
+    if (needsSessionRefresh) {
+      // The prompt is fresh, so no answer UI from the old line may survive on it: no banner,
+      // no arrow, no comment, no pending Continue — the same reset acknowledging a lapse or
+      // skipping performs.
+      published = published.copyWith(
+        feedback: ReviewFeedback.none,
+        clearExpectedMove: true,
+        isLapseAcknowledged: true,
+        isAwaitingAdvance: false,
+        clearLastMove: true,
+        clearRevealedComment: true,
+        clearLastStepResult: true,
+      );
+    }
+    state = AsyncData(published);
   }
 
   /// Renames a study to [newTitle].
@@ -756,6 +773,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       // Superseded while the delete and the summary were being computed.
       if (generation != _generation || !ref.mounted) return;
 
+      // The session is replaced, so a waiting advancement from the old line is discarded with
+      // it (see toggleStudyActive): its answer was graded and persisted; only the UI step goes.
+      _pendingAdvancement = null;
+
       final prompt = newSession.currentPrompt;
       state = AsyncData(
         currentState.copyWith(
@@ -775,6 +796,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           clearPrompt: prompt == null,
           boardPosition: prompt != null ? _parseFen(prompt.fen) : null,
           boardOrientation: prompt?.sideToMove ?? Side.white,
+          feedback: ReviewFeedback.none,
+          clearExpectedMove: true,
+          isLapseAcknowledged: true,
+          isAwaitingAdvance: false,
+          clearLastMove: true,
+          clearRevealedComment: true,
+          clearLastStepResult: true,
         ),
       );
     }
@@ -1103,8 +1131,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // lapse is still one position reviewed today, and the session's own quota count includes it —
     // counting it here too is what keeps the number on screen equal to the one being enforced.
     // This cannot double-count: a prompt answered correctly has already advanced, so it cannot
-    // complete a second time.
-    final updatedDailyCount = currentState.dailyReviewedCount + 1;
+    // complete a second time. Practice rehearsals are not counted: the repository total they are
+    // displayed against only ever contains persisted SRS answers (INV-031), so counting them
+    // here would drift the screen away from it until the next reload.
+    final updatedDailyCount = currentState.isPracticeMode
+        ? currentState.dailyReviewedCount
+        : currentState.dailyReviewedCount + 1;
 
     state = AsyncData(
       state.value!.copyWith(
