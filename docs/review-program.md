@@ -342,7 +342,7 @@ files. A Dart toolchain was available; fixes were run locally, including widget 
 | R6-F4 | Accent dots were exactly their 24px visual with no expanded hit area, although §6 names them. | Medium | **Fixed in this PR.** 44px target around the 24px dot (switch precedent); `estimatedWidth` updated with it. Widget test (24px on old code). |
 | R6-F5 | The drawer's clear-search `IconButton` shipped zero constraints (~18–24px target). | Low | **Fixed in this PR.** `SrsIconButton` (48px, same accessibility name). Widget test; one existing finder updated from tooltip to semantics label (same control tapped). |
 | R6-F6 | First-launch side-by-side row needed ~980px but switched on at 900px, overflowing resizable desktop windows. Captures only checked 390/1440, and the harness swallows RenderFlex errors suite-wide, so nothing could see it. | Low | **Fixed in this PR.** Breakpoint 900→1100 with the arithmetic in a comment. Geometry test (board present-but-overflowing on old code at 900, single column now, fits at 1280). |
-| R6-F7 | Five `debugPrint('SEVERE: ...')` error paths (drawer, import ×2, export ×2) bypassed the logger — invisible to app_log and Crashlytics. | Hygiene | **Fixed in this PR.** `_logger.severe` with file-level loggers. |
+| R6-F7 | Five `debugPrint('SEVERE: ...')` error paths (drawer, import ×2, export ×2) bypassed the logger — invisible to app_log and Crashlytics. | Hygiene | **Landed independently as #55 while this round was in flight** (identical refactor, merged first). This PR carries no logger changes; the row stays as the record that the finding was real and is now fixed. |
 
 ### Checked and sound (do not re-raise)
 
