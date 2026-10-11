@@ -14,7 +14,10 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('ImportPgnScreen');
 
 /// A provider for picking PGN files. Can be overridden in tests.
 final pickPgnFileProvider = Provider<Future<PlatformFile?> Function()>((ref) {
@@ -142,7 +145,7 @@ class _BodyState extends ConsumerState<_Body> {
       }
     } catch (e) {
       if (mounted) {
-        debugPrint('SEVERE: [ImportPgnScreen] error loading file: $e');
+        _logger.severe('Error loading file.', e);
         showSnackBar(context, 'Error loading file', type: SnackBarType.error);
       }
     }

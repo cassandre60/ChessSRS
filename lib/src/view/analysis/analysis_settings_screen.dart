@@ -11,7 +11,10 @@ import 'package:chess_srs/src/view/analysis/engine_settings_widget.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_settings.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('AnalysisSettingsScreen');
 
 /// Analysis settings, as a Diagram page: a page head over a column of [SrsSettingsRow]s.
 ///
@@ -161,7 +164,7 @@ class AnalysisSettingsScreen extends ConsumerWidget {
           ),
         );
       case AsyncError(:final error):
-        debugPrint('Error loading analysis: $error');
+        _logger.warning('Error loading analysis.', error);
         return const SizedBox.shrink();
       case _:
         return const CenterLoadingIndicator();
