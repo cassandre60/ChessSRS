@@ -11752,6 +11752,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Practice is still available and does not change your schedule.'**
   String get reviewNothingDuePracticeStillAvailable;
+
+  /// Toast shown after copying the PGN of the current node to the clipboard from the game tree view.
+  ///
+  /// In en, this message translates to:
+  /// **'PGN copied.'**
+  String get pgnCopied;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
