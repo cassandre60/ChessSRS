@@ -74,7 +74,9 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester, 200);
+        // Poll the empty state rather than sleeping a fixed interval: the first load is a
+        // database read, and under CPU contention a fixed wait expires before it lands.
+        await pumpUntilFound(tester, find.text('Bring your study.'));
 
         expect(find.text('Bring your study.'), findsOneWidget);
         expect(find.text('Choose file'), findsWidgets);
@@ -113,7 +115,7 @@ void main() {
         await tester.runAsync(() async {
           await container.read(reviewControllerProvider.notifier).reload();
         });
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.text('Italian Game Repertoire'));
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
@@ -135,7 +137,15 @@ void main() {
         // Step 5: Intentional Lapse on move 2 (play 2. d4 instead of 2. Nf3)
         // -----------------------------------------------------------------------
         await playMove(tester, 'd2', 'd4');
-        await pumpAsync(tester, 100);
+        // This wait was a fixed 100ms of real time for the lapse's database write and
+        // controller reload to render the answer slot. Under CPU contention that window
+        // closed first, and the assertion below failed on both PR #50 and PR #51 while
+        // main passed the same commit minutes earlier (TEST-FIX-19). Poll for the banner
+        // instead: the condition, not the clock, decides completion.
+        await pumpUntilFound(
+          tester,
+          find.text('Play this move to continue. The position will come back soon.'),
+        );
 
         // Verify lapse feedback banner and arrow
         expect(

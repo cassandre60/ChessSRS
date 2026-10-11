@@ -433,6 +433,41 @@ void main() {
       expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
     });
 
+    test('scope mismatch shows same due in summary and session', () async {
+      // SPEC INV-031: effective scope must be used consistently for summary and session.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Two Repertoires"]
+1. e4 e5 2. Nf3 Nc6 *
+''';
+
+      // White and Black chapters coexist with neither drawer selected, so the
+      // bare all() resolves to the White drawer before anything is counted.
+      await controller.importPgnText(pgnText: pgn, title: 'White book', repertoireSide: Side.white);
+      await controller.importPgnText(pgnText: pgn, title: 'Black book', repertoireSide: Side.black);
+
+      await controller.changeScope(const ReviewScope.all());
+      final state = container.read(reviewControllerProvider).requireValue;
+
+      expect(state.scope, const ReviewScope.white());
+      expect(state.totalDueCount, greaterThan(0));
+      expect(
+        state.session?.initialDueCount,
+        state.totalDueCount,
+        reason: 'summary and session were built for different scopes',
+      );
+      final prompt = state.currentPrompt;
+      expect(prompt, isNotNull);
+      final orientations = await repo.getChapterOrientations();
+      expect(
+        orientations[prompt!.chapterId],
+        state.scope.side,
+        reason: 'queued prompt is from the other drawer',
+      );
+    });
+
     test('handles incorrect move (lapse) and allows user to reguess on the board', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);
