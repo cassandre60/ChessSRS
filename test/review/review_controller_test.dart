@@ -629,6 +629,106 @@ void main() {
       expect(updatedStudies.firstWhere((s) => s.id == res2.study.id).isActive, isFalse);
     });
 
+    test('toggling a study that replaces the session discards a waiting advancement', () async {
+      // A correct answer with commentary pauses for Continue: the grading is persisted, only
+      // the UI step waits. Pausing the answered study replaces the session — and the waiting
+      // step belongs to the old line, so it must not run (it would write the old dues math
+      // onto the fresh state and resurrect its prompt).
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final res1 = await controller.importPgnText(
+        pgnText: '1. e4 {Good move} e5 *',
+        title: 'Open',
+        repertoireSide: Side.white,
+      );
+      await controller.importPgnText(
+        pgnText: '1. d4 {Good move} d5 *',
+        title: 'Closed',
+        repertoireSide: Side.white,
+      );
+      await controller.changeScope(const ReviewScope.all());
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt?.studyId, res1.study.id);
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.isAwaitingAdvance, isTrue);
+
+      await controller.toggleStudyActive(res1.study.id, false);
+
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.isAwaitingAdvance,
+        isFalse,
+        reason: 'the session was replaced; nothing is waiting anymore',
+      );
+      expect(state.feedback, ReviewFeedback.none);
+      expect(state.currentPrompt, isNotNull);
+
+      // A Continue now must be a no-op, not the discarded line advancing.
+      final promptBefore = state.currentPrompt;
+      await controller.continueAdvancement();
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt?.decision.id, promptBefore?.decision.id);
+    });
+
+    test('deleting a study while an advancement waits publishes a fresh prompt', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 {Good move} e5 *',
+        title: 'Open',
+        repertoireSide: Side.white,
+      );
+      final res2 = await controller.importPgnText(
+        pgnText: '1. d4 {Good move} d5 *',
+        title: 'Closed',
+        repertoireSide: Side.white,
+      );
+      await controller.changeScope(const ReviewScope.all());
+
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+      expect(container.read(reviewControllerProvider).requireValue.isAwaitingAdvance, isTrue);
+
+      // Deleting the *other* study restarts the session (all-scope): the waiting step dies
+      // with the old session instead of advancing it onto the fresh state.
+      await controller.deleteStudy(res2.study.id);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.isAwaitingAdvance, isFalse);
+      expect(state.feedback, ReviewFeedback.none);
+      expect(state.studies.any((s) => s.id == res2.study.id), isFalse);
+    });
+
+    test('practice rehearsals do not inflate the daily reviewed count', () async {
+      // INV-031 counts persisted SRS positions; practice writes nothing, so the number on
+      // screen must not move either — it is displayed against the repository total.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'Open',
+        repertoireSide: Side.white,
+      );
+      await controller.startPracticeMode();
+
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.mode, ReviewMode.practice);
+      expect(
+        state.dailyReviewedCount,
+        0,
+        reason: 'nothing was persisted, so the displayed daily count must not move',
+      );
+    });
+
     test(
       'a scope change overtaken mid-load leaves the board and the grader on the same session',
       () async {

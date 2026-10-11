@@ -275,3 +275,49 @@ query strings. Unlike rounds 1–2, a Dart toolchain was available, so fixes wer
 - New tests fail on base: redaction file 10 pass / 4 fail on stashed `http.dart` (guard + all three message tests); socket resurrection test fails on stashed `socket.dart` with 2 channels opened where 1 is expected. The state tests reference the new `state:`/`expectedState:` parameters, which do not exist on base — verified by grep that old `auth_repository.dart` contains no state plumbing, so they cannot pass there by construction.
 - On the fix: redaction 14/14, auth 23/23, socket 47/47, `http_test.dart` 25/25 (download + quiet groups).
 - `fvm flutter analyze` clean on all touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push (see PR checks for the committed-range result).
+
+---
+
+## Round 5 — state and lifecycle
+
+**Scope read:** `lib/src/review/review_controller.dart` (1518 lines, all),
+`review_service.dart` (688, all), `lib/src/model/auth/auth_controller.dart` + `auth_storage.dart`
+(for the generation-fence precedent), `study_controller.dart` disposal, every `ref.onDispose` in
+the review/study layer, and the provider wiring around sessions (scheduler reload, quota
+listeners, socket pool callbacks). A Dart toolchain was available; fixes were run locally.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R5-F1 | A correct answer that pauses for commentary leaves a `_pendingAdvancement` bound to the old session, and `toggleStudyActive`/`deleteStudy` replaced the session without clearing it: tapping Continue afterwards wrote the old line's dues math onto the fresh state and resurrected its prompt. Every `_loadAndPublish` path already cleared it; only the two direct session-replacement paths did not. | Medium | **Fixed in this PR.** Both paths clear the pending step and reset the answer UI (banner, arrow, comment, awaiting flag) to match the fresh prompt — the same reset acknowledging a lapse or skipping performs. The grading itself was already persisted, so only the UI step is discarded. Two regression tests. |
+| R5-F2 | Practice rehearsals incremented `dailyReviewedCount`, drifting the displayed daily total away from the repository figure it is shown against (which only ever contains persisted SRS answers, INV-031). Enforcement already excluded practice; only the display drifted, until the next reload. | Low | **Fixed in this PR.** The increment is skipped in practice mode. Regression test. |
+
+### Checked and sound (do not re-raise)
+
+- **Generation discipline** across controller (`_loadAndPublish`, `_loadState` abandonment, toggle/delete claims, advancement animation windows) and service (`generation >= _activeGeneration`, newest wins, superseded starts still return their session): every replacement path bumps, every consumer re-checks. The gated-repository race test pins screen/grader agreement.
+- **Pause/skip/acknowledge pair with the service session:** all three read the active session and rebuild the UI from it; a scope change in between is unreachable because the new load resets the flags the buttons depend on.
+- **`toggleStudyActive` convergence:** the optimistic publish can only be overtaken by a newer generation, whose load publishes fresh counts afterwards; a persist failure propagates to the caller (noted below, not changed).
+- **Specific-scope pause is deliberate (B2):** pausing a study reviewed directly keeps its session — only pool scopes narrow on `isActive`.
+- **Due-count/scope agreement:** study/chapter-scope counts and session queues are both occurrence-counted (no dedup), while all-scope deducts transpositions in both — consistent with each other in each scope.
+- **Quota plumbing:** repo-read per load (not carried), clamped, practice-unrestricted; `isDailyLimitReached` excludes practice.
+- **Optimistic due decrements** (first-attempt only, clamped, self-healing on reload); `isLearned`-transition celebration reads event old/new states.
+- **`_playIncomingPreMove` identity check** aborts on scope change; retry detection via `feedback == incorrect` resets with every load.
+- **Import paths** (duplicate-by-hash-then-title, side-aware dedup, empty-import rejection, scope restore after cross-side copy) generation-ordered; failure leaves scope untouched.
+- **Study socket open/versioned routes are bare paths** (sri/version added in `connect()`); `StudyController.onDispose` cancels timers, subscription and debouncer — correct on rebuild as well as disposal.
+- **Auth controller fencing** (F-AUTHTOKEN generation + token identity, startup swallow) unchanged and intact.
+- **No `completedCount` consumers outside the session; `ReviewSessionCheckpoint` is session-internal** (both R3 API changes confirmed contained).
+- **All-scope session loads inactive chapters' trees** alongside active ones (decisions were already active-only, so queues/counts are unaffected — pure deserialization waste against the S2 docstring). Observed, not changed: no testable behaviour difference, and the fix belongs with a perf pass (Round 10), not a lifecycle one.
+
+### Left open deliberately
+
+- **R1-F4/F5, R2-F2/F4, review-4 C1–C3, review-1 C4/C6/D4/D5:** other rounds' scope; untouched.
+- **Toggle persist failure leaves the optimistic flip published** until the next reload recomputes from the DB. Changing it needs a failing-repository harness the controller suite does not have; recorded for a testability pass, not fixed blind.
+- **`currentState.session ?? _service.activeSession!`:** the fallback is unreachable (session and prompt are always paired); left as the documented assumption rather than softened.
+- **404-message matching for study-not-found branching:** fragile string matching, but the dialog branching depends on it and the redacted messages preserve the status codes. Not touched.
+
+### Verification status of this round's PR
+
+- New tests fail on base: all three red on stashed `review_controller.dart`, the toggle one on exactly `isAwaitingAdvance` staying true.
+- On the fix: controller file 40/40. Neighbouring suites untouched by these paths (service/engine suites ran green in Round 3; the full suite runs in CI).
+- `fvm flutter analyze` clean on both touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push.
