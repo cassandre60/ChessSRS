@@ -7102,4 +7102,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get reviewNothingDuePracticeStillAvailable =>
       'Practice is still available and does not change your schedule.';
+
+  @override
+  String get pgnCopied => 'PGN copied.';
 }
