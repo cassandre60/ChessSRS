@@ -29,8 +29,6 @@ final _logger = Logger('ReviewScopeDrawer');
 /// opened it already says which one this is. The two drawers share no state
 /// beyond that colour, and selecting anything in one leaves the other
 /// untouched.
-final _logger = Logger('ReviewScopeDrawer');
-
 class ReviewScopeDrawer extends ConsumerStatefulWidget {
   const ReviewScopeDrawer({super.key, required this.side});
 
