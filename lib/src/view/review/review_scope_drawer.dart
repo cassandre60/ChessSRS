@@ -15,8 +15,11 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('ReviewScopeDrawer');
 
 /// Modal scope selector (hybrid of Diagram bottom sheet and rich repertoire list).
 ///
@@ -507,7 +510,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
               })
               .catchError((Object e) {
                 if (!context.mounted) return null;
-                debugPrint('SEVERE: [ReviewScopeDrawer] could not create it: $e');
+                _logger.severe('Could not create it.', e);
                 showSnackBar(context, 'Could not create it', type: SnackBarType.error);
                 return null;
               });
