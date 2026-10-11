@@ -14,7 +14,7 @@ Units are logical pixels (Flutter dp / CSS px). Colour values are sRGB.
 | `surface` | `#FAFBFB` | `#151920` | Sheets/popovers, switch knob (off) |
 | `ink` | `#101318` | `#ECEEF1` | Primary text, board frame, solid controls, retained bar |
 | `ink2` | `#4B5361` | `#9BA2AE` | Secondary text, unselected controls |
-| `ink3` | `#868D98` | `#666D79` | Quiet text, coordinates (outside), dashed blank, new-state outline |
+| `ink3` | `#676E7A` | `#8B929D` | Quiet text, coordinates (outside), dashed blank, new-state outline |
 | `hairline` | `rgba(16,19,24,.13)` | `rgba(236,238,241,.14)` | 1px separators, control outlines, switch track (off) |
 | `hairlineSoft` | `rgba(16,19,24,.055)` | `rgba(236,238,241,.06)` | Hover fill, segmented track, pressed states |
 | `scrim` | `rgba(16,19,24,.22)` | `rgba(0,0,0,.5)` | Behind sheets |

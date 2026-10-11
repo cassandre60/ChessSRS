@@ -321,3 +321,51 @@ listeners, socket pool callbacks). A Dart toolchain was available; fixes were ru
 - New tests fail on base: all three red on stashed `review_controller.dart`, the toggle one on exactly `isAwaitingAdvance` staying true.
 - On the fix: controller file 40/40. Neighbouring suites untouched by these paths (service/engine suites ran green in Round 3; the full suite runs in CI).
 - `fvm flutter analyze` clean on both touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push.
+
+---
+
+## Round 6 — UI and accessibility
+
+**Scope read:** `lib/src/view/review/` (all seven files, review_screen 1305 + drawer 1017 lines in
+full), `lib/src/design/primitives.dart` (interactive controls, focus, shortcuts), `tokens.dart`
+(colours, motion), the import dialog / chapters / export / library surfaces for targets and
+semantics, `design/docs/04` §6 against the code, and the H4-adjacent error paths in the same
+files. A Dart toolchain was available; fixes were run locally, including widget tests.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R6-F1 | `ink3` failed WCAG AA for normal text: 3.05:1 light, 3.68:1 dark, against the 4.5 the design claims for all text (04 §6). A dozen small-text usages (row subs, group titles, note attributions, the `due` word, helper text). Accents all pass (4.6–10.1). | Medium | **Fixed in this PR.** Light `#868D98`→`#676E7A` (4.68:1), dark `#666D79`→`#8B929D` (6.12:1), on ground/surface/page-checked; `02-tokens.md` and the reference CSS updated to match. New contrast test pins AA mechanically per theme (failed on both old themes). Captures regenerated as evidence. |
+| R6-F2 | The selected scope row sits on the accentSoft tint, where even fixed ink3 falls to ~3.9 — and the demo bakes ink3 subs there too. | Low | **Fixed in this PR.** Selected rows step quiet labels (name when paused, positions, numeral-if-quiet, `due`) up to ink2 (5.7–6.1 on every accent tint). Widget test asserts the {ink2, ink3} partition. |
+| R6-F3 | Segmented items were ~33px tall (13.5px text + padding) against the 44px minimum 04 §6 names explicitly. | Medium | **Fixed in this PR.** `minHeight: 44` on the item. Widget test (35px on old code). |
+| R6-F4 | Accent dots were exactly their 24px visual with no expanded hit area, although §6 names them. | Medium | **Fixed in this PR.** 44px target around the 24px dot (switch precedent); `estimatedWidth` updated with it. Widget test (24px on old code). |
+| R6-F5 | The drawer's clear-search `IconButton` shipped zero constraints (~18–24px target). | Low | **Fixed in this PR.** `SrsIconButton` (48px, same accessibility name). Widget test; one existing finder updated from tooltip to semantics label (same control tapped). |
+| R6-F6 | First-launch side-by-side row needed ~980px but switched on at 900px, overflowing resizable desktop windows. Captures only checked 390/1440, and the harness swallows RenderFlex errors suite-wide, so nothing could see it. | Low | **Fixed in this PR.** Breakpoint 900→1100 with the arithmetic in a comment. Geometry test (board present-but-overflowing on old code at 900, single column now, fits at 1280). |
+| R6-F7 | Five `debugPrint('SEVERE: ...')` error paths (drawer, import ×2, export ×2) bypassed the logger — invisible to app_log and Crashlytics. | Hygiene | **Fixed in this PR.** `_logger.severe` with file-level loggers. |
+
+### Checked and sound (do not re-raise)
+
+- **Focus rings:** `SrsPressable` renders the specified 2px accent ring at 2px offset; pills, text buttons, segmented items, switches, icon buttons, sheet rows and scope rows all route through it. Kbd hints gate on desktop platforms (web-desktop included via host-OS targeting); phones never show them.
+- **Reduced motion:** `SrsMotion.resolve` zeroes token durations under `disableAnimationsOf`; the correction arrow resolves through it. The 300–350ms controller pacing delays are flow timing, not animation, and are intentionally not token-driven.
+- **Live verdict region (R13):** announces on label change; static answer text stays explorable. The old comment misdescribed what `ExcludeSemantics` covers (fixed in place).
+- **Keyboard map** (Space/S/P/Esc) matches 04 §4; shortcuts no-op outside their states; autofocus single-mounted per view.
+- **Chapters screen** (legacy Material): default 48px icon buttons with tooltips throughout; visuals untouched per the R12 cut decision.
+- **Sheets/dialogs:** scrim-tap + Esc dismissal, focus-trapped modal routes, scroll-bounded bodies, no-red delete copy, rename/dispose hygiene on controllers.
+- **Import error paths:** private-study notice placement, sign-in-resume listener with mounted guards, empty-PGN rejection — all as specified.
+- **HEAD absence from `http_log`, quiet-header strip, `checkToken` fencing:** Round 4 items, re-confirmed untouched.
+- **No-`state` OAuth, FCM remnants:** none — Round 4 closed R1-F3 and FCM is fully cut.
+
+### Left open deliberately
+
+- **Hardcoded English strings** (error view, Nothing-due titles/legends, dialog copy): Round 7 owns the l10n pipeline and key parity; touching copy now would collide with it.
+- **`send()` after `dispose()` queueing, response bodies in exception messages, toggle persist-failure revert:** prior rounds' accepted observations; untouched.
+- **Board gesture semantics** (04 §4 asks that invalid-destination taps count as attempts; chessground only fires legal moves): product/board-layer redesign, not a review-round fix. Noted for the differentiation backlog, not filed.
+- **view/study screens** (study viewing/analysis): read for disposal only (timers/subscription/debouncer correctly cancelled); their visuals are inherited Lichess surface per R12, not reskin scope.
+
+### Verification status of this round's PR
+
+- New tests fail on base for the documented reason: contrast both themes (<4.5), segmented 35px, dots 24px, clear button (absent semantics), 900px board overflowing, selected row all-ink3.
+- On the fix: design primitives + contrast 14/14, scope drawer file 8/8, export/import dialog files green, review screen file 37/38 with one pre-existing search test updated to the new finder's accessibility name (same control tapped, same assertions after).
+- Captures regenerated with `SRS_CAPTURE_SCREENSHOTS=1 --update-goldens` (120 files, CI skips them); scope capture eyeballed for layout and the darker quiet text.
+- `fvm flutter analyze` clean on all touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push.

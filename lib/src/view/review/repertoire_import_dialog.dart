@@ -15,10 +15,13 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
 enum ImportSource { lichess, file }
+
+final _logger = Logger('RepertoireImportDialog');
 
 /// Bottom sheet dialog for importing a repertoire PGN or Lichess study.
 class RepertoireImportDialog extends ConsumerStatefulWidget {
@@ -188,7 +191,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        debugPrint('SEVERE: [RepertoireImportDialog] Lichess import failed: $e');
+        _logger.severe('Lichess import failed', e);
         showSnackBar(context, 'Lichess import failed', type: SnackBarType.error);
       }
     } finally {
@@ -241,7 +244,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
       }
     } catch (e) {
       if (mounted) {
-        debugPrint('SEVERE: [RepertoireImportDialog] import failed: $e');
+        _logger.severe('Import failed', e);
         showSnackBar(context, 'Import failed', type: SnackBarType.error);
       }
     } finally {

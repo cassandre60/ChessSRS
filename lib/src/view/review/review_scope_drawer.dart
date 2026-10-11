@@ -14,6 +14,7 @@ import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -25,6 +26,8 @@ import 'package:material_ui/material_ui.dart';
 /// opened it already says which one this is. The two drawers share no state
 /// beyond that colour, and selecting anything in one leaves the other
 /// untouched.
+final _logger = Logger('ReviewScopeDrawer');
+
 class ReviewScopeDrawer extends ConsumerStatefulWidget {
   const ReviewScopeDrawer({super.key, required this.side});
 
@@ -222,11 +225,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                             ),
                           ),
                           if (_searchQuery.isNotEmpty)
-                            IconButton(
-                              icon: Icon(Symbols.close_rounded, size: 18, color: c.ink3),
+                            SrsIconButton(
+                              icon: Symbols.close_rounded,
                               tooltip: 'Clear search',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
                               onPressed: () {
                                 _searchController.clear();
                                 setState(() => _searchQuery = '');
@@ -498,7 +499,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
               })
               .catchError((Object e) {
                 if (!context.mounted) return null;
-                debugPrint('SEVERE: [ReviewScopeDrawer] could not create it: $e');
+                _logger.severe('Could not create it', e);
                 showSnackBar(context, 'Could not create it', type: SnackBarType.error);
                 return null;
               });
@@ -652,7 +653,7 @@ class _ScopeRow extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: SrsText.rowName(isPaused ? c.ink3 : c.ink),
+                  style: SrsText.rowName(isSelected ? c.ink2 : (isPaused ? c.ink3 : c.ink)),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -675,7 +676,9 @@ class _ScopeRow extends StatelessWidget {
                         isPaused ? 'Paused' : '${progress.totalDecisions} positions',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: SrsText.rowSub(c.ink3),
+                        // Stepped up on the selected row: it sits on the accentSoft tint,
+                        // where ink3 falls below AA (round-6 R6-F2).
+                        style: SrsText.rowSub(isSelected ? c.ink2 : c.ink3),
                       ),
                     ),
                   ],
@@ -699,7 +702,7 @@ class _ScopeRow extends StatelessWidget {
                       children: [
                         Expanded(child: label),
                         const SizedBox(width: 14),
-                        _DueCell(count: dueCount, isActive: !isPaused),
+                        _DueCell(count: dueCount, isActive: !isPaused, isSelected: isSelected),
                         if (actions != null) ...[
                           const SizedBox(width: 2),
                           SrsIconButton(
@@ -741,15 +744,18 @@ class _ScopeRow extends StatelessWidget {
 /// tabular figures and `due` is `12.5 ink3`, 5px apart. Zero due drops the numeral to `ink3` at
 /// weight 500; a paused scope only recolours it.
 class _DueCell extends StatelessWidget {
-  const _DueCell({required this.count, required this.isActive});
+  const _DueCell({required this.count, required this.isActive, required this.isSelected});
 
   final int count;
   final bool isActive;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
     final isZero = count == 0;
+    // Quiet variants step up on the selected row for the same tint reason as the row labels.
+    final quiet = isSelected ? c.ink2 : c.ink3;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -758,12 +764,12 @@ class _DueCell extends StatelessWidget {
         Text(
           '$count',
           style: SrsText.rowDue(
-            isZero || !isActive ? c.ink3 : c.ink,
+            isZero || !isActive ? quiet : c.ink,
           ).copyWith(fontWeight: isZero ? FontWeight.w500 : FontWeight.w600),
         ),
         const SizedBox(width: 5),
         // The demo sets tabular figures on `.row-sub` for the figure, not on the word beside it.
-        Text('due', style: SrsText.rowSub(c.ink3).copyWith(fontFeatures: null)),
+        Text('due', style: SrsText.rowSub(quiet).copyWith(fontFeatures: null)),
       ],
     );
   }

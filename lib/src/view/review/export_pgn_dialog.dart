@@ -9,9 +9,12 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
+
+final _logger = Logger('ExportPgnDialog');
 
 /// Modal dialog displaying generated PGN text with options to copy, save to file, or share.
 class ExportPgnDialog extends StatelessWidget {
@@ -57,7 +60,7 @@ class ExportPgnDialog extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        debugPrint('SEVERE: [ExportPgnDialog] could not save file: $e');
+        _logger.severe('Could not save file', e);
         showSnackBar(context, 'Could not save file', type: SnackBarType.error);
       }
     }
@@ -79,7 +82,7 @@ class ExportPgnDialog extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        debugPrint('SEVERE: [ExportPgnDialog] sharing failed: $e');
+        _logger.severe('Sharing failed', e);
         showSnackBar(context, 'Sharing failed', type: SnackBarType.error);
       }
     }

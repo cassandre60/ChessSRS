@@ -332,7 +332,13 @@ class SrsSegmented<T> extends StatelessWidget {
                   semanticLabel: e.value,
                   semanticsToggled: isOn,
                   builder: (_, hover, _) => Container(
-                    constraints: const BoxConstraints(minWidth: 38),
+                    constraints: const BoxConstraints(
+                      minWidth: 38,
+                      // Every interactive control meets the 44px minimum (04 §6): the text
+                      // plus padding only reached ~33px, so short options were thinner
+                      // targets than the rows around them (round-6 R6-F3).
+                      minHeight: 44,
+                    ),
                     padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
                     decoration: BoxDecoration(
                       color: isOn ? c.ink : const Color(0x00000000),
@@ -635,7 +641,7 @@ class SrsAccentDots extends StatelessWidget {
 
   /// Estimated width of the accent dots control (including padding and border).
   double estimatedWidth([TextScaler textScaler = TextScaler.noScaling]) {
-    return (SrsAccent.values.length * 24.0) + 12.0;
+    return (SrsAccent.values.length * 44.0) + 34.0;
   }
 
   @override
@@ -658,31 +664,39 @@ class SrsAccentDots extends StatelessWidget {
               semanticsToggled: a == value,
               builder: (_, _, _) {
                 final color = c.isDark ? kSrsAccents[a]!.dark : kSrsAccents[a]!.light;
+                // The dot stays 24px, but the target is 44: every interactive control meets
+                // the 44px minimum (04 §6), like the switch's expanded hit area (round-6 R6-F4).
                 return SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                        ),
-                      ),
-                      if (a == value)
-                        Positioned(
-                          left: -3.5,
-                          top: -3.5,
-                          right: -3.5,
-                          bottom: -3.5,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: c.ink, width: 1.5),
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                             ),
                           ),
-                        ),
-                    ],
+                          if (a == value)
+                            Positioned(
+                              left: -3.5,
+                              top: -3.5,
+                              right: -3.5,
+                              bottom: -3.5,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: c.ink, width: 1.5),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 );
               },
