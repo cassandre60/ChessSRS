@@ -335,11 +335,7 @@ void main() {
         expect(read.nextDueAt!.isUtc, isTrue);
 
         // Review state path round-trips UTC too.
-        const rState = ReviewState(
-          decisionId: 'r-utc',
-          nextDueAt: null,
-          repetitionCount: 2,
-        );
+        const rState = ReviewState(decisionId: 'r-utc', nextDueAt: null, repetitionCount: 2);
         await repo.saveReviewState(rState.copyWith(nextDueAt: localDue));
         final rRead = await repo.getReviewState('r-utc');
         expect(rRead!.nextDueAt!.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());

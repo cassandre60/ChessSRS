@@ -537,9 +537,9 @@ class SqliteStudyRepository implements StudyRepository {
           WHERE canonicalStateId = ?
         ''',
           [
-            s.firstReviewedAt?.toIso8601String(),
-            s.lastReviewedAt?.toIso8601String(),
-            s.nextDueAt?.toIso8601String(),
+            s.firstReviewedAt?.toUtc().toIso8601String(),
+            s.lastReviewedAt?.toUtc().toIso8601String(),
+            s.nextDueAt?.toUtc().toIso8601String(),
             s.repetitionCount,
             s.lapseCount,
             s.stability,
@@ -628,16 +628,16 @@ class SqliteStudyRepository implements StudyRepository {
 
     return PositionKnowledgeState(
       canonicalId: row['canonicalId']! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first) : null,
-      lastReviewedAt: last != null ? DateTime.parse(last) : null,
-      nextDueAt: next != null ? DateTime.parse(next) : null,
+      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
+      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
+      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
       difficulty: (row['difficulty'] as num?)?.toDouble() ?? 5.0,
       latencyEmaMs: (row['latencyEmaMs'] as num?)?.toDouble(),
       latencySampleCount: (row['latencySampleCount'] as num?)?.toInt() ?? 0,
-      lastExposedAt: exposed != null ? DateTime.parse(exposed) : null,
+      lastExposedAt: exposed != null ? DateTime.parse(exposed).toUtc() : null,
     );
   }
 
@@ -648,16 +648,16 @@ class SqliteStudyRepository implements StudyRepository {
   /// copy and missed in another loses a field silently.
   static Map<String, Object?> _knowledgeStateRow(PositionKnowledgeState state) => {
     'canonicalId': state.canonicalId,
-    'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-    'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-    'nextDueAt': state.nextDueAt?.toIso8601String(),
+    'firstReviewedAt': state.firstReviewedAt?.toUtc().toIso8601String(),
+    'lastReviewedAt': state.lastReviewedAt?.toUtc().toIso8601String(),
+    'nextDueAt': state.nextDueAt?.toUtc().toIso8601String(),
     'repetitionCount': state.repetitionCount,
     'lapseCount': state.lapseCount,
     'stability': state.stability,
     'difficulty': state.difficulty,
     'latencyEmaMs': state.latencyEmaMs,
     'latencySampleCount': state.latencySampleCount,
-    'lastExposedAt': state.lastExposedAt?.toIso8601String(),
+    'lastExposedAt': state.lastExposedAt?.toUtc().toIso8601String(),
   };
 
   // ---------------------------------------------------------------------------
@@ -755,7 +755,7 @@ class SqliteStudyRepository implements StudyRepository {
     final rows = await _db.query(
       kTableSrsReviewState,
       where: 'nextDueAt IS NULL OR nextDueAt <= ?',
-      whereArgs: [now.toIso8601String()],
+      whereArgs: [now.toUtc().toIso8601String()],
       orderBy: 'nextDueAt ASC',
     );
     return rows.map(_reviewStateFromRow).toList(growable: false);
@@ -822,10 +822,11 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<int> getTodayReviewedPositionsCount(DateTime now) async {
-    // Local midnight: event timestamps are local `toIso8601String()` values
-    // (no offset suffix), and `now` comes from `SystemClock` (local wall time).
-    // Using UTC midnight here shifted the day boundary by the device offset.
-    final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+    // Local calendar day boundary, expressed as the UTC form of that instant:
+    // event timestamps are stored as UTC `toIso8601String()` values (review-4
+    // C2), so the comparison arg must be UTC too or the device offset would
+    // leak into the string comparison.
+    final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
     final result = await _db.rawQuery(
       '''
       SELECT COUNT(DISTINCT decisionId) as count
@@ -943,9 +944,9 @@ class SqliteStudyRepository implements StudyRepository {
 
     return ReviewState(
       decisionId: (row['canonicalId'] ?? row['decisionId'])! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first) : null,
-      lastReviewedAt: last != null ? DateTime.parse(last) : null,
-      nextDueAt: next != null ? DateTime.parse(next) : null,
+      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
+      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
+      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
@@ -960,9 +961,9 @@ class SqliteStudyRepository implements StudyRepository {
   /// copy and missed in another loses a field silently.
   static Map<String, Object?> _reviewStateRow(ReviewState state) => {
     'decisionId': state.decisionId,
-    'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-    'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-    'nextDueAt': state.nextDueAt?.toIso8601String(),
+    'firstReviewedAt': state.firstReviewedAt?.toUtc().toIso8601String(),
+    'lastReviewedAt': state.lastReviewedAt?.toUtc().toIso8601String(),
+    'nextDueAt': state.nextDueAt?.toUtc().toIso8601String(),
     'repetitionCount': state.repetitionCount,
     'lapseCount': state.lapseCount,
     'stability': state.stability,
@@ -972,7 +973,7 @@ class SqliteStudyRepository implements StudyRepository {
   static ReviewEvent _reviewEventFromRow(Map<String, Object?> row) {
     return ReviewEvent(
       decisionId: row['decisionId']! as String,
-      when: DateTime.parse(row['whenTimestamp']! as String),
+      when: DateTime.parse(row['whenTimestamp']! as String).toUtc(),
       result: ReviewResult.values.byName(row['result']! as String),
       oldState: reviewStateFromJson(
         jsonDecode(row['oldStateJson']! as String) as Map<String, dynamic>,
@@ -990,7 +991,7 @@ class SqliteStudyRepository implements StudyRepository {
   /// copy and missed in another loses a field silently.
   static Map<String, Object?> _reviewEventRow(ReviewEvent event) => {
     'decisionId': event.decisionId,
-    'whenTimestamp': event.when.toIso8601String(),
+    'whenTimestamp': event.when.toUtc().toIso8601String(),
     'result': event.result.name,
     'oldStateJson': jsonEncode(reviewStateToJson(event.oldState)),
     'newStateJson': jsonEncode(reviewStateToJson(event.newState)),
