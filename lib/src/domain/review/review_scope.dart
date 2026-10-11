@@ -73,11 +73,13 @@ class ReviewScope {
       other is ReviewScope &&
           other.studyId == studyId &&
           other.chapterId == chapterId &&
-          other.openingFamily == openingFamily &&
+          _normalizeOpeningName(other.openingFamily) ==
+              _normalizeOpeningName(openingFamily) &&
           other.side == side;
 
   @override
-  int get hashCode => Object.hash(studyId, chapterId, openingFamily, side);
+  int get hashCode =>
+      Object.hash(studyId, chapterId, _normalizeOpeningName(openingFamily), side);
 
   @override
   String toString() =>
