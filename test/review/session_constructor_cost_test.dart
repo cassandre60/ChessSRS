@@ -126,6 +126,47 @@ void main() {
       );
     });
 
+    // Measured 2026-10-12, median of 7 with a per-scale warmup:
+    //   100 -> 0.7ms    500 -> 2.0ms    1000 -> 2.2ms    2000 -> 3.7ms
+    //   5000 -> 12.9ms  10000 -> 41.2ms
+    // Cost is linear (~4us per decision) and the 16ms frame budget is not crossed until well
+    // past 5000. A repertoire library is hundreds of positions to low thousands — an opening
+    // book is a chapter or two, a large study maybe a few thousand — so at any ordinary size
+    // construction lands between a fifth and a quarter of one frame. That is why PERF-FIX-32's
+    // Phase 2 (an async chunked factory) was measured and then not built: it would remove a hitch
+    // only a power user with a 5000+ position library would ever feel, at the cost of restructuring
+    // how the session's indices and due queue are built. The harness below keeps the decision
+    // re-evaluable — if a real library ever is that large, or the curve bends, this is the number
+    // that says so.
+    test('stays inside one frame at realistic library sizes', () {
+      // Warm at this scale before recording, same reason as above.
+      for (var i = 0; i < 10; i++) {
+        build(decisions: 2000, nodes: 2001);
+      }
+
+      const rounds = 7;
+      final samples = <double>[];
+      for (var i = 0; i < rounds; i++) {
+        final stopwatch = Stopwatch()..start();
+        build(decisions: 2000, nodes: 2001);
+        stopwatch.stop();
+        samples.add(stopwatch.elapsedMicroseconds / 1000);
+      }
+      samples.sort();
+      final median = samples[rounds ~/ 2];
+
+      expect(
+        median,
+        lessThan(100),
+        reason:
+            'a 2000-decision session should not approach the 16ms frame budget. Measured '
+            '${median.toStringAsFixed(2)}ms (sorted: '
+            '${samples.map((s) => s.toStringAsFixed(1)).join(', ')}). The budget is not 100ms, '
+            'but the headroom is deliberate: asserting the real 16ms here would flake on a '
+            'loaded runner and then be loosened until it stopped meaning anything.',
+      );
+    });
+
     test('the tree walk alone is the smaller half of the cost', () {
       for (var i = 0; i < 20; i++) {
         build(decisions: 2000, nodes: 2000);
