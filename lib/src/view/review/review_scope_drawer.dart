@@ -54,7 +54,9 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
         return ReviewScopeDrawer(side: side);
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        // A dialog route has no LayoutBuilder box above it, so this measures the window.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -85,8 +87,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
-    final maxHeight = math.min(mediaQuery.size.height * 0.82, 720.0);
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
+    // DESIGN 03 §6: wide max-height H - 80; narrow max-height min(82% of H, 720).
+    final maxHeight = isWide
+        ? math.max(0.0, mediaQuery.size.height - 80.0)
+        : math.min(mediaQuery.size.height * 0.82, 720.0);
     final maxWidth = isWide ? math.min(470.0, mediaQuery.size.width - 52.0) : double.infinity;
 
     final reviewStateAsync = ref.watch(reviewControllerProvider);
@@ -538,7 +543,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         },
       ),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        // A dialog route has no LayoutBuilder box above it, so this measures the window.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) return FadeTransition(opacity: animation, child: child);
         final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
         return SlideTransition(
@@ -823,14 +830,14 @@ class StudyActionsSheet extends StatelessWidget {
   /// are replies.
   final VoidCallback onCreateOpposite;
 
-  static const double _wideBreakpoint = 768;
-  static const double _popoverWidth = 300;
+  // Aligned with SrsLibrarySheet (310 px) per POLISH-FIX-09 and design/docs/03-components.md §12.
+  static const double _popoverWidth = 310;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
     final size = MediaQuery.sizeOf(context);
-    final isWide = size.width >= _wideBreakpoint && anchor != null;
+    final isWide = SrsLayout.isWide(size.width) && anchor != null;
 
     // The demo's `openActs`: three hairline-separated groups, in this order, with these labels and
     // sub lines. §12 says "no icons", so no row carries the chevron the Library sheet's rows do.

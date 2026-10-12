@@ -74,10 +74,14 @@ void main() {
     } catch (_) {}
   });
 
-  Future<ProviderContainer> pumpDrawer(WidgetTester tester, Side side) async {
+  Future<ProviderContainer> pumpDrawer(
+    WidgetTester tester,
+    Side side, {
+    Size surfaceSize = const Size(1400, 900),
+  }) async {
     final app = await makeTestProviderScopeApp(
       tester,
-      surfaceSize: const Size(1400, 900),
+      surfaceSize: surfaceSize,
       home: ReviewScopeDrawer(side: side),
       overrides: {
         srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
@@ -188,5 +192,29 @@ void main() {
     expect(inDrawer(find.text('Black book')), findsNothing);
     expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
     expect(find.text('Nothing matches “French”.'), findsOneWidget);
+  });
+
+  // DESIGN 02 §3 (tokens): wide if app-area width >= 720 via SrsLayout.isWide.
+  // DESIGN 03 §6: drawer wide max-height H - 80, width min(470, W - 52).
+  testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (tester) async {
+    // Width 730 is between 720 and the former 768 breakpoint.
+    await pumpDrawer(tester, Side.white, surfaceSize: const Size(730, 900));
+
+    final wideAlign = tester.widget<Align>(inDrawer(find.byType(Align)).first);
+    expect(
+      wideAlign.alignment,
+      Alignment.topLeft,
+      reason: '730 px width should layout as wide popover',
+    );
+
+    // Width 710 is below the 720 breakpoint -> narrow layout.
+    await pumpDrawer(tester, Side.white, surfaceSize: const Size(710, 900));
+
+    final narrowAlign = tester.widget<Align>(inDrawer(find.byType(Align)).first);
+    expect(
+      narrowAlign.alignment,
+      Alignment.bottomCenter,
+      reason: '710 px width should layout as narrow bottom sheet',
+    );
   });
 }
