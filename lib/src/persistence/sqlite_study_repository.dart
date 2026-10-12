@@ -103,27 +103,50 @@ class SqliteStudyRepository implements StudyRepository {
       return _studyFromRow(rows.first);
     }
 
-    // Auto-backfill: if any existing studies have null pgnHash, inspect their chapters
+    // Auto-backfill: if any existing studies have null pgnHash, inspect their chapters.
+    // Batched (INV-051): one IN query fetches every unhashed study's chapters
+    // and one batch writes the hashes back, instead of a SELECT plus an UPDATE
+    // per study on the import path.
     final unhashedRows = await _db.query(kTableSrsStudy, where: 'pgnHash IS NULL');
-    for (final row in unhashedRows) {
-      final study = _studyFromRow(row);
-      final chapters = await getChaptersByStudy(study.id);
-      if (chapters.isNotEmpty) {
-        final computedHash = computeRepertoireTreeHash(chapters);
-        await _db.update(
-          kTableSrsStudy,
-          {'pgnHash': computedHash},
-          where: 'id = ?',
-          whereArgs: [study.id],
-        );
-        if (computedHash == pgnHash &&
-            (forSide == null || chapters.every((c) => c.orientation == forSide))) {
-          return study.copyWith(pgnHash: computedHash);
-        }
-      }
+    if (unhashedRows.isEmpty) return null;
+
+    final unhashedIds = unhashedRows.map((r) => r['id']! as String).toList();
+    final placeholders = List.filled(unhashedIds.length, '?').join(',');
+    final chapterRows = await _db.query(
+      kTableSrsChapter,
+      where: 'studyId IN ($placeholders)',
+      whereArgs: unhashedIds,
+      orderBy: 'studyId ASC, sourceOrder ASC',
+    );
+
+    final chaptersByStudy = <String, List<Map<String, Object?>>>{};
+    for (final chapterRow in chapterRows) {
+      (chaptersByStudy[chapterRow['studyId']! as String] ??= []).add(chapterRow);
     }
 
-    return null;
+    final batch = _db.batch();
+    Study? match;
+    for (final row in unhashedRows) {
+      final study = _studyFromRow(row);
+      final chapters =
+          chaptersByStudy[study.id]?.map(_chapterFromRow).toList(growable: false) ??
+          const <Chapter>[];
+      if (chapters.isEmpty) continue;
+      final computedHash = computeRepertoireTreeHash(chapters);
+      batch.update(
+        kTableSrsStudy,
+        {'pgnHash': computedHash},
+        where: 'id = ?',
+        whereArgs: [study.id],
+      );
+      if (match == null &&
+          computedHash == pgnHash &&
+          (forSide == null || chapters.every((c) => c.orientation == forSide))) {
+        match = study.copyWith(pgnHash: computedHash);
+      }
+    }
+    await batch.commit(noResult: true);
+    return match;
   }
 
   @override
