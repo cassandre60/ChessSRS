@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
 
+import 'dart:typed_data';
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
@@ -12,6 +14,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
@@ -20,6 +23,7 @@ import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -30,6 +34,47 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../binding.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
+
+/// A picked file reporting its size the way a native picker does.
+///
+/// [sizeBytes] is what the guard reads, and [readAttempts] counts what it should
+/// never do with an oversized file: read it.
+final class _FakePlatformFile extends PlatformFile {
+  _FakePlatformFile({required this.name, required this.sizeBytes});
+
+  @override
+  final String name;
+
+  final int sizeBytes;
+
+  /// Incremented by every read path, so a test can assert the file was refused
+  /// *before* its contents were pulled into memory.
+  int readAttempts = 0;
+
+  @override
+  Uri get uri => Uri.file('/tmp/$name');
+
+  @override
+  Never get xFile => throw UnimplementedError('the dialog reads by path, not through xFile');
+
+  @override
+  int? lengthSync() => sizeBytes;
+
+  @override
+  Future<int?> length() => Future.value(sizeBytes);
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    readAttempts++;
+    throw StateError('an oversized file must never be read');
+  }
+
+  @override
+  Stream<Uint8List> readAsByteStream() {
+    readAttempts++;
+    throw StateError('an oversized file must never be read');
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -98,6 +143,59 @@ void main() {
       await pumpAsync(tester);
 
       expect(find.byType(RepertoireImportDialog), findsOneWidget);
+    });
+
+    testWidgets('an oversized PGN file is refused instead of read into memory', (tester) async {
+      // A repertoire PGN is kilobytes. A master-games dump is hundreds of megabytes, and the
+      // dialog used to read the whole file into a String before deciding anything — the largest
+      // allocation in the import path, on a phone with 4 GB to spare in total. Asking the file
+      // system for the length first costs one stat call and refuses the file before any of it
+      // is read.
+      //
+      // The file is a real one, made sparse with setLength, because the dialog reads through
+      // dart:io and a stubbed PlatformFile would prove nothing about that path.
+      // The picker reports the size; nothing is read.
+      final oversized = _FakePlatformFile(
+        name: 'master-games.pgn',
+        sizeBytes: kMaxPgnInputBytes + 1,
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+          pickPgnFileProvider: pickPgnFileProvider.overrideWithValue(() async => oversized),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // First tap opens the dialog from the empty state.
+      await tester.tap(find.text('Choose file').first);
+      await tester.pump();
+      await pumpAsync(tester);
+
+      // The dialog's own file button is the code path that reads a picked file.
+      await tester.tap(find.text('Pick .pgn file from disk'));
+      await tester.pump();
+      await pumpAsync(tester);
+
+      expect(
+        find.textContaining('too large'),
+        findsOneWidget,
+        reason: 'the user must be told the file was refused, not left with an empty field',
+      );
+      expect(
+        oversized.readAttempts,
+        0,
+        reason: 'the oversized file was read despite being refused',
+      );
     });
 
     testWidgets('renders active board and handles moves when studies exist', (tester) async {
