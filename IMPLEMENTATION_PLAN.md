@@ -328,11 +328,13 @@ A full-codebase review (2026-10-11/12) produced 29 self-contained task briefs
 in `docs/tasks/`, each one worktree + one PR, executable by an agent without
 further context. Status at merge:
 
-- **Done**: REVIEW-FIX-01 (scope mismatch, #45); PERSIST-FIX-13/14/15/16
-  in flight (#46–#49, all green, merging in lane order 14→13→15→16).
+- **Merged**: 01 (#45), 04 (#58), 05 (#57), 12 (#50), 18 (#53), 19 (#52),
+  22 (#54), 24 (#55); PERSIST-FIX-14 (#48).
 - **Withdrawn**: REVIEW-FIX-02 (transposition FEN — audit proved non-bug).
-- **Ready, parallel-safe lanes**: 03, 04, 05, 06, 09, 10, 11, 12, 17, 18,
-  19, 20, 21, 22, 23, 24, 25, 27, 29.
+- **In flight**: 13 (#49), 15 (#47), 16 (#46) — merging in lane order
+  14→13→15→16 with branch updates between.
+- **Ready, parallel-safe lanes**: 03, 06, 09, 10, 11, 17, 20, 21, 23, 25,
+  27, 29, 30, 31, 32.
 - **Blocked on persistence lane** (all touch `sqlite_study_repository.dart`):
   07, 08, 26, 28 — pick up only after #46 merges, then serialize.
 
