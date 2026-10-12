@@ -10,7 +10,7 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
-import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
+import 'package:chess_srs/src/view/analysis/analysis_options.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
@@ -21,8 +21,6 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-
-export 'package:chess_srs/src/view/review/study_chapters_screen.dart';
 
 /// Board-dominant Review screen for active spaced-repetition training.
 class ReviewScreen extends ConsumerWidget {
