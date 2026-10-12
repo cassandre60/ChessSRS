@@ -269,4 +269,22 @@ void main() {
       );
     });
   });
+
+  group('touch targets (INV-062)', () {
+    // 04 §6 names accent dots alongside buttons and rows: every interactive control meets
+    // 44px. The dots were exactly their 24px visual with no expanded hit area.
+    testWidgets('accent dots offer a 44px target around the 24px dot', (tester) async {
+      await tester.pumpWidget(
+        _wrap(SrsAccentDots(value: SrsAccent.ultramarine, onChanged: (_) {})),
+      );
+
+      final pressables = find.byType(SrsPressable);
+      expect(pressables, findsNWidgets(4));
+      for (var i = 0; i < 4; i++) {
+        final box = tester.getRect(pressables.at(i));
+        expect(box.width, greaterThanOrEqualTo(44));
+        expect(box.height, greaterThanOrEqualTo(44));
+      }
+    });
+  });
 }

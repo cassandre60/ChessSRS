@@ -189,4 +189,17 @@ void main() {
     expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
     expect(find.text('Nothing matches “French”.'), findsOneWidget);
   });
+
+  testWidgets('the clear-search button meets the 44px touch target', (tester) async {
+    await pumpDrawer(tester, Side.white);
+
+    await tester.enterText(find.byType(EditableText).first, 'Sicilian');
+    await pumpAsync(tester);
+
+    final clear = inDrawer(find.bySemanticsLabel('Clear search'));
+    expect(clear, findsOneWidget);
+    final box = tester.getRect(clear);
+    expect(box.width, greaterThanOrEqualTo(44));
+    expect(box.height, greaterThanOrEqualTo(44));
+  });
 }
