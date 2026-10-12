@@ -50,7 +50,8 @@ class RepertoireImportDialog extends ConsumerStatefulWidget {
       pageBuilder: (dialogContext, animation, secondaryAnimation) =>
           RepertoireImportDialog(initialSource: initialSource, initialSide: initialSide),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -281,7 +282,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
     final bottomInset = mediaQuery.viewInsets.bottom;
     final maxWidth = isWide ? math.min(520.0, mediaQuery.size.width - 48.0) : double.infinity;
     final isSignedIn = ref.watch(isLoggedInProvider);

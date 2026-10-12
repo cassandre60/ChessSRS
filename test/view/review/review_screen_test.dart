@@ -122,6 +122,46 @@ void main() {
       expect(find.text('Choose file'), findsWidgets);
     });
 
+    testWidgets('first launch at a medium window lays out without overflow', (tester) async {
+      // The welcome view goes side-by-side at 900px: 500px of copy plus the ambient board.
+      // At exactly 900 that row needed ~980px and overflowed on resizable desktop windows,
+      // while the captures only ever checked 390 and 1440 (round-6 R6-F6). The harness swallows
+      // RenderFlex errors suite-wide, so this asserts geometry, not the absence of errors.
+      Future<void> pumpNoStudies(Size size) async {
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          surfaceSize: size,
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
+        await tester.pumpWidget(app);
+        await pumpAsync(tester, 500);
+      }
+
+      await pumpNoStudies(const Size(900, 800));
+      expect(find.text('Bring your study.'), findsOneWidget);
+      expect(
+        find.byType(SrsBoardBackground),
+        findsNothing,
+        reason: 'at 900px the copy and the 380px board cannot sit side by side; single column',
+      );
+
+      await pumpNoStudies(const Size(1280, 800));
+      expect(find.text('Bring your study.'), findsOneWidget);
+      expect(find.byType(SrsBoardBackground), findsOneWidget);
+      expect(
+        tester.getRect(find.byType(SrsBoardBackground)).right,
+        lessThanOrEqualTo(1280),
+        reason: 'the side-by-side row must fit the window it asked for',
+      );
+    });
+
     testWidgets('tapping import button opens RepertoireImportDialog', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
@@ -1436,8 +1476,8 @@ void main() {
       expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
 
-      // Tap clear search button
-      await tester.tap(find.byTooltip('Clear search'));
+      // Tap clear search button (an SrsIconButton: name exposed as semantics, not a Tooltip)
+      await tester.tap(find.bySemanticsLabel('Clear search'));
       await tester.pumpAndSettle();
 
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
@@ -1547,6 +1587,62 @@ void main() {
 
       expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       expect(inDrawer('King Pawn Lines'), findsNothing);
+    });
+
+    testWidgets('the selected scope row steps quiet labels up to ink2 for the tint', (
+      tester,
+    ) async {
+      // The current-scope row sits on the accentSoft tint, where ink3 falls below AA. Only the
+      // selected row may use ink2 for its quiet labels; every other row stays ink3 (round-6 R6-F2).
+      // Driven entirely through the UI — tapping a row pops the drawer and scopes to it — then
+      // the drawer is reopened onto the settled scope.
+      final open = importPgn('1. e4 e5 *', studyTitle: 'Open', repertoireSide: Side.white);
+      final closed = importPgn('1. d4 d5 *', studyTitle: 'Closed', repertoireSide: Side.white);
+      await tester.runAsync(() async {
+        await repo.saveImportResult(open);
+        await repo.saveImportResult(closed);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      Future<void> openWhiteDrawer() async {
+        await tester.tap(find.byTooltip('White repertoire'));
+        await pumpAsync(tester);
+        expect(find.byType(ReviewScopeDrawer), findsOneWidget);
+      }
+
+      await openWhiteDrawer();
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      // Tapping scopes and pops; reopen directly (no scope reset), the way the Nothing-due
+      // screen's button does, so the drawer opens onto the settled study scope.
+      await tester.tap(inDrawer('Open'));
+      await pumpAsync(tester);
+      ReviewScopeDrawer.show(tester.element(find.byType(ReviewScreen)), Side.white);
+      await pumpAsync(tester);
+
+      final light = SrsColors.light(SrsAccent.ultramarine);
+      final dueColors = tester
+          .widgetList<Text>(find.descendant(of: drawer, matching: find.text('due')))
+          .map((t) => t.style?.color)
+          .toSet();
+      expect(dueColors, {
+        light.ink2,
+        light.ink3,
+      }, reason: 'exactly the selected row renders its quiet labels in ink2');
     });
 
     testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {

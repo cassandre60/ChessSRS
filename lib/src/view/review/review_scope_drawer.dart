@@ -54,7 +54,9 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
         return ReviewScopeDrawer(side: side);
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        // A dialog route has no LayoutBuilder box above it, so this measures the window.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -85,8 +87,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
-    final maxHeight = math.min(mediaQuery.size.height * 0.82, 720.0);
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
+    // DESIGN 03 §6: wide max-height H - 80; narrow max-height min(82% of H, 720).
+    final maxHeight = isWide
+        ? math.max(0.0, mediaQuery.size.height - 80.0)
+        : math.min(mediaQuery.size.height * 0.82, 720.0);
     final maxWidth = isWide ? math.min(470.0, mediaQuery.size.width - 52.0) : double.infinity;
 
     final reviewStateAsync = ref.watch(reviewControllerProvider);
@@ -234,11 +239,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                             ),
                           ),
                           if (_searchQuery.isNotEmpty)
-                            IconButton(
-                              icon: Icon(Symbols.close_rounded, size: 18, color: c.ink3),
+                            SrsIconButton(
+                              icon: Symbols.close_rounded,
                               tooltip: 'Clear search',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
                               onPressed: () {
                                 _searchController.clear();
                                 setState(() => _searchQuery = '');
@@ -538,7 +541,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         },
       ),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        // A dialog route has no LayoutBuilder box above it, so this measures the window.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) return FadeTransition(opacity: animation, child: child);
         final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
         return SlideTransition(
@@ -664,7 +669,7 @@ class _ScopeRow extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: SrsText.rowName(isPaused ? c.ink3 : c.ink),
+                  style: SrsText.rowName(isSelected ? c.ink2 : (isPaused ? c.ink3 : c.ink)),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -687,7 +692,9 @@ class _ScopeRow extends StatelessWidget {
                         isPaused ? 'Paused' : '${progress.totalDecisions} positions',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: SrsText.rowSub(c.ink3),
+                        // Stepped up on the selected row: it sits on the accentSoft tint,
+                        // where ink3 falls below AA (round-6 R6-F2).
+                        style: SrsText.rowSub(isSelected ? c.ink2 : c.ink3),
                       ),
                     ),
                   ],
@@ -711,7 +718,7 @@ class _ScopeRow extends StatelessWidget {
                       children: [
                         Expanded(child: label),
                         const SizedBox(width: 14),
-                        _DueCell(count: dueCount, isActive: !isPaused),
+                        _DueCell(count: dueCount, isActive: !isPaused, isSelected: isSelected),
                         if (actions != null) ...[
                           const SizedBox(width: 2),
                           SrsIconButton(
@@ -753,15 +760,18 @@ class _ScopeRow extends StatelessWidget {
 /// tabular figures and `due` is `12.5 ink3`, 5px apart. Zero due drops the numeral to `ink3` at
 /// weight 500; a paused scope only recolours it.
 class _DueCell extends StatelessWidget {
-  const _DueCell({required this.count, required this.isActive});
+  const _DueCell({required this.count, required this.isActive, required this.isSelected});
 
   final int count;
   final bool isActive;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
     final isZero = count == 0;
+    // Quiet variants step up on the selected row for the same tint reason as the row labels.
+    final quiet = isSelected ? c.ink2 : c.ink3;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -770,12 +780,12 @@ class _DueCell extends StatelessWidget {
         Text(
           '$count',
           style: SrsText.rowDue(
-            isZero || !isActive ? c.ink3 : c.ink,
+            isZero || !isActive ? quiet : c.ink,
           ).copyWith(fontWeight: isZero ? FontWeight.w500 : FontWeight.w600),
         ),
         const SizedBox(width: 5),
         // The demo sets tabular figures on `.row-sub` for the figure, not on the word beside it.
-        Text('due', style: SrsText.rowSub(c.ink3).copyWith(fontFeatures: null)),
+        Text('due', style: SrsText.rowSub(quiet).copyWith(fontFeatures: null)),
       ],
     );
   }
@@ -823,14 +833,14 @@ class StudyActionsSheet extends StatelessWidget {
   /// are replies.
   final VoidCallback onCreateOpposite;
 
-  static const double _wideBreakpoint = 768;
-  static const double _popoverWidth = 300;
+  // Aligned with SrsLibrarySheet (310 px) per POLISH-FIX-09 and design/docs/03-components.md §12.
+  static const double _popoverWidth = 310;
 
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
     final size = MediaQuery.sizeOf(context);
-    final isWide = size.width >= _wideBreakpoint && anchor != null;
+    final isWide = SrsLayout.isWide(size.width) && anchor != null;
 
     // The demo's `openActs`: three hairline-separated groups, in this order, with these labels and
     // sub lines. §12 says "no icons", so no row carries the chevron the Library sheet's rows do.

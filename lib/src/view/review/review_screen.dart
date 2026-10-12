@@ -111,7 +111,11 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 900;
+    // Side-by-side needs 500 (copy) + 64 (gap) + ~412 (380 board plus outside coordinates) +
+    // 80 (page padding) = ~1056, so the breakpoint sits at 1100 rather than 900: a 900px
+    // desktop window showed the row overflowing by ~150px, which the captures never checked
+    // (390 and 1440 only) and the suite never reported (it swallows RenderFlex errors).
+    final isWide = mediaQuery.size.width >= 1100;
     final headlineSize = math.max(38.0, math.min(mediaQuery.size.width * 0.08, 56.0));
 
     final welcomeContent = ConstrainedBox(
@@ -1035,8 +1039,9 @@ class _MetaView extends StatelessWidget {
 ///
 /// A live region announces when its label changes, which is the behaviour the design asks for: the
 /// verdict is spoken once, as it happens, rather than being something the user has to go and find.
-/// `container: true` forces the node to exist even though the child has no size, and `ExcludeSemantics`
-/// stops the visually identical text underneath being announced a second time.
+/// `container: true` forces the node to exist even though the child has no size. `ExcludeSemantics`
+/// covers only that empty child — the visible answer text stays in the tree for exploration, and
+/// is not announced a second time because only label *changes* speak, not static text.
 class _VerdictLiveRegion extends StatelessWidget {
   const _VerdictLiveRegion(this.message);
 
