@@ -28,7 +28,8 @@ class SrsLibrarySheet extends ConsumerWidget {
         return const SrsLibrarySheet();
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -45,7 +46,7 @@ class SrsLibrarySheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
 
     final content = isWide
         ? Align(
