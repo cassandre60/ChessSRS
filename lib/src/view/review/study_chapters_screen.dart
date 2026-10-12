@@ -6,8 +6,8 @@ import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
-import 'package:chess_srs/src/persistence/study_repository.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/review/study_browser_providers.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
@@ -43,8 +43,7 @@ Future<void> openStudyExplorer(
     return;
   }
 
-  final repo = await ref.read(srsStudyRepositoryProvider.future);
-  final study = await repo.getStudy(targetId);
+  final study = await ref.read(studyByIdProvider(targetId).future);
   if (study == null) {
     if (context.mounted) {
       showSnackBar(context, 'Study not found', type: SnackBarType.error);
@@ -52,7 +51,7 @@ Future<void> openStudyExplorer(
     return;
   }
 
-  final chapters = await repo.getChaptersByStudy(targetId);
+  final chapters = await ref.read(studyChaptersProvider(targetId).future);
   if (chapters.isEmpty) {
     if (context.mounted) {
       showSnackBar(context, 'Study has no chapters to explore', type: SnackBarType.info);
@@ -88,12 +87,9 @@ Future<void> openChapterAnalysis(
   required Chapter chapter,
   NavigatorState? navigator,
 }) async {
-  Chapter fullChapter = chapter;
-  if (fullChapter.root == null) {
-    final repo = await ref.read(srsStudyRepositoryProvider.future);
-    final root = await repo.getPositionTree(chapter.id);
-    fullChapter = chapter.copyWith(root: root);
-  }
+  // hydratedChapterProvider returns the chapter untouched when it already carries its
+  // tree, so a cached chapter costs no repository read.
+  final fullChapter = await ref.read(hydratedChapterProvider(chapter).future);
 
   final pgn = chapterToPgn(fullChapter, studyTitle: study.title);
   if (pgn.trim().isEmpty) {

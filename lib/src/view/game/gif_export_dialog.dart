@@ -9,7 +9,10 @@ import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/settings.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('GifExportDialog');
 
 class GifExport extends ConsumerStatefulWidget {
   const GifExport({super.key, required this.gameId, required this.orientation});
@@ -76,7 +79,7 @@ class _GifExportState extends ConsumerState<GifExport> {
       );
     } catch (e) {
       if (mounted) {
-        debugPrint('SEVERE: [GifExport] failed to export GIF: $e');
+        _logger.severe('Failed to export GIF.', e);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Failed to export GIF')));

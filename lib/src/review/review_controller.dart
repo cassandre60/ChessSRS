@@ -459,7 +459,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     final session = await _service.startSession(
-      scope: scope,
+      scope: effectiveScope,
       mode: mode,
       remainingDailyQuota: remainingQuota,
       generation: generation,

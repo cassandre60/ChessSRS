@@ -22,7 +22,10 @@ import 'package:chess_srs/src/widgets/list.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('GameHistoryScreen');
 
 class GameHistoryScreen extends ConsumerWidget {
   const GameHistoryScreen({
@@ -331,7 +334,7 @@ class _BodyState extends ConsumerState<_Body> {
               );
       },
       error: (e, s) {
-        debugPrint('SEVERE: [GameHistoryScreen] could not load game list');
+        _logger.severe('Could not load game list.', e, s);
         return const Center(child: Text('Could not load Game History'));
       },
       loading: () => const CenterLoadingIndicator(),

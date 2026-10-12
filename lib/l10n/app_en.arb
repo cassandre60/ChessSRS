@@ -3871,5 +3871,9 @@
   "reviewNothingDueChooseRepertoire": "Choose a study",
   "reviewNothingDueChangeDailyLimit": "Change daily limit",
   "reviewNothingDuePracticeDoesNotChangeSchedule": "Practice never changes your schedule.",
-  "reviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule."
+  "reviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule.",
+  "pgnCopied": "PGN copied.",
+  "@pgnCopied": {
+    "description": "Toast shown after copying the PGN of the current node to the clipboard from the game tree view."
+  }
 }
