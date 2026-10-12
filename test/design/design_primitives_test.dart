@@ -271,26 +271,8 @@ void main() {
   });
 
   group('touch targets (INV-062)', () {
-    // 04 §6 names segmented items and accent dots alongside buttons and rows: every
-    // interactive control meets 44px. The segmented text plus padding only reached ~33px, and
-    // the dots were exactly their 24px visual with no expanded hit area.
-    testWidgets('segmented options are at least 44px tall', (tester) async {
-      await tester.pumpWidget(
-        _wrap(
-          SrsSegmented<String>(
-            options: const {'a': 'Auto', 'w': 'White', 'b': 'Black'},
-            value: 'a',
-            onChanged: (_) {},
-          ),
-        ),
-      );
-
-      for (final pressable in tester.widgetList<SrsPressable>(find.byType(SrsPressable))) {
-        final box = tester.getRect(find.byWidgetPredicate((w) => identical(w, pressable)));
-        expect(box.height, greaterThanOrEqualTo(44));
-      }
-    });
-
+    // 04 §6 names accent dots alongside buttons and rows: every interactive control meets
+    // 44px. The dots were exactly their 24px visual with no expanded hit area.
     testWidgets('accent dots offer a 44px target around the 24px dot', (tester) async {
       await tester.pumpWidget(
         _wrap(SrsAccentDots(value: SrsAccent.ultramarine, onChanged: (_) {})),

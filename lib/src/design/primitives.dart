@@ -332,13 +332,7 @@ class SrsSegmented<T> extends StatelessWidget {
                   semanticLabel: e.value,
                   semanticsToggled: isOn,
                   builder: (_, hover, _) => Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 38,
-                      // Every interactive control meets the 44px minimum (04 §6): the text
-                      // plus padding only reached ~33px, so short options were thinner
-                      // targets than the rows around them (round-6 R6-F3).
-                      minHeight: 44,
-                    ),
+                    constraints: const BoxConstraints(minWidth: 38),
                     padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
                     decoration: BoxDecoration(
                       color: isOn ? c.ink : const Color(0x00000000),

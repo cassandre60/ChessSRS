@@ -180,10 +180,19 @@ void main() {
     );
 
     await tester.scrollUntilVisible(find.text('Accent'), 200);
+    // The 44px dots (04 §6) no longer fit beside the label at 320px, so the sanctioned narrow
+    // fallback applies instead of overflowing: the control stacks beneath its label (04 §Reflow;
+    // P-#30 keeps controls inline only when horizontal space allows).
     expect(
       (tester.getCenter(find.text('Accent')).dy - tester.getCenter(find.byType(SrsAccentDots)).dy)
           .abs(),
-      lessThan(20),
+      greaterThan(20),
+      reason: '210px of dots cannot sit beside the label in 320px; they stack per the reflow rule',
+    );
+    expect(
+      tester.getRect(find.byType(SrsAccentDots)).right,
+      lessThanOrEqualTo(320),
+      reason: 'stacked is fine, overflowing is not',
     );
   });
 
