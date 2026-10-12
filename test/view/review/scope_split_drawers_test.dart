@@ -194,6 +194,19 @@ void main() {
     expect(find.text('Nothing matches “French”.'), findsOneWidget);
   });
 
+  testWidgets('the clear-search button meets the 44px touch target', (tester) async {
+    await pumpDrawer(tester, Side.white);
+
+    await tester.enterText(find.byType(EditableText).first, 'Sicilian');
+    await pumpAsync(tester);
+
+    final clear = inDrawer(find.bySemanticsLabel('Clear search'));
+    expect(clear, findsOneWidget);
+    final box = tester.getRect(clear);
+    expect(box.width, greaterThanOrEqualTo(44));
+    expect(box.height, greaterThanOrEqualTo(44));
+  });
+
   // DESIGN 02 §3 (tokens): wide if app-area width >= 720 via SrsLayout.isWide.
   // DESIGN 03 §6: drawer wide max-height H - 80, width min(470, W - 52).
   testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (tester) async {
