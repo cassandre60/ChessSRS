@@ -584,8 +584,12 @@ RepertoireNode _buildChildren(
     final Move? parsed;
     try {
       parsed = position.parseSan(san);
-    } catch (e) {
+    } catch (e, st) {
       final skipped = _countDescendantMoves(pgnChild);
+      // The stack is logged rather than appended to the message: the message is shown to the
+      // user, and a dartchess stack trace in it helps nobody decide what to fix. Without it the
+      // only record is "couldn't parse move X", which cannot tell a parser gap from a bug.
+      _logger.warning('Could not parse move "$san" in "$chapterTitle" at move $moveIndex.', e, st);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,
