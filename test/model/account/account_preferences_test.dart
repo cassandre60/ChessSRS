@@ -6,6 +6,7 @@ import 'package:chess_srs/src/network/http.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:logging/logging.dart';
 
 import '../../binding.dart';
 import '../../network/fake_http_client_factory.dart';
@@ -107,6 +108,34 @@ void main() {
       final prefs = await container.read(accountPreferencesProvider.future);
 
       expect(prefs, defaultAccountPreferences);
+    });
+
+    // Resetting to defaults is the correct behaviour; what was missing is any record of *why*.
+    // The user sees their customisations vanish with no explanation, and support has nothing to
+    // look at. The corruption has to reach the Logger pipeline so it appears in the in-app log
+    // viewer, with the stack that says where the decode failed.
+    test('corrupt stored preferences are reported through the Logger, with a stack', () async {
+      final binding = TestLichessBinding.ensureInitialized();
+      await binding.setInitialSharedPreferencesValues({
+        PrefCategory.account.storageKey: 'not valid json {',
+      });
+
+      final records = <LogRecord>[];
+      final subscription = Logger.root.onRecord.listen(records.add);
+      addTearDown(subscription.cancel);
+
+      final container = await makeContainer();
+      await container.read(accountPreferencesProvider.future);
+
+      final report = records.where((r) => r.level >= Level.SEVERE).toList();
+      expect(
+        report,
+        isNotEmpty,
+        reason: 'a silent reset to defaults left no trace of the corrupted payload',
+      );
+      expect(report.first.message, contains('corrupt'));
+      expect(report.first.error, isNotNull);
+      expect(report.first.stackTrace, isNotNull);
     });
 
     test('setting a preference updates the in-memory state without any network call', () async {
