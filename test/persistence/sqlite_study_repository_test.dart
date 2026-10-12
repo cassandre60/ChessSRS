@@ -7,11 +7,28 @@ import 'dart:io';
 
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Counts per-study chapter fetches so the backfill batching test can tell
+/// N sequential fetches apart from one batched fetch. The batched backfill
+/// reads chapters with a single `IN` query straight from the database, so it
+/// never calls this override; the old N+1 loop called it once per study.
+class _BackfillCountingRepository extends SqliteStudyRepository {
+  _BackfillCountingRepository(super.db);
+
+  int chapterFetches = 0;
+
+  @override
+  Future<List<Chapter>> getChaptersByStudy(String studyId) {
+    chapterFetches++;
+    return super.getChaptersByStudy(studyId);
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -846,6 +863,63 @@ void main() {
 
         final notFound = await repo.getStudyByPgnHash('non_existent_hash');
         expect(notFound, isNull);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('pgnHash backfill is batched, not N+1', () async {
+      // SPEC INV-051: bulk lookups stay bounded. Backfilling N studies whose
+      // pgnHash predates the column must not issue N sequential chapter
+      // fetches plus N sequential updates.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = _BackfillCountingRepository(db);
+
+      const firstMoves = ['e4', 'd4', 'c4', 'Nf3', 'e3', 'd3', 'c3', 'g3', 'b3', 'a3', 'h3', 'f4'];
+      final studyIds = <String>[];
+      late final String targetHash;
+      late final String targetId;
+      try {
+        for (var i = 0; i < firstMoves.length; i++) {
+          final result = importPgn(
+            '[Orientation "white"]\n\n1. ${firstMoves[i]} *',
+            studyTitle: 'Book $i',
+            repertoireSide: Side.white,
+          );
+          expect(result.errors, isEmpty);
+          await repo.saveStudy(result.study);
+          for (final chapter in result.chapters) {
+            await repo.saveChapter(chapter);
+          }
+          studyIds.add(result.study.id);
+          if (i == firstMoves.length - 1) {
+            targetId = result.study.id;
+            targetHash = computeRepertoireTreeHash(result.chapters);
+          }
+        }
+
+        // Pretend every study was stored before the pgnHash column existed.
+        await db.update(kTableSrsStudy, {'pgnHash': null});
+
+        final found = await repo.getStudyByPgnHash(targetHash, forSide: Side.white);
+
+        expect(found?.id, targetId);
+        expect(
+          repo.chapterFetches,
+          0,
+          reason:
+              'the backfill fetched chapters per study instead of in one batch '
+              '(${repo.chapterFetches} fetches for ${firstMoves.length} studies)',
+        );
+        for (final id in studyIds) {
+          expect(
+            (await repo.getStudy(id))?.pgnHash,
+            isNotNull,
+            reason: 'study $id was not backfilled',
+          );
+        }
+        // The side filter survives batching: nothing here trains Black.
+        expect(await repo.getStudyByPgnHash(targetHash, forSide: Side.black), isNull);
       } finally {
         await db.close();
       }

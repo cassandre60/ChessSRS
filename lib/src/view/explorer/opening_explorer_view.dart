@@ -8,7 +8,10 @@ import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/explorer/opening_explorer_widgets.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('OpeningExplorerView');
 
 /// Displays an opening explorer for the given position.
 ///
@@ -150,7 +153,7 @@ class _OpeningExplorerState extends ConsumerState<OpeningExplorerView> {
 
         return _buildListView(children: children);
       case AsyncError(:final error):
-        debugPrint('SEVERE: [OpeningExplorerView] could not load opening explorer data; $error');
+        _logger.severe('Could not load opening explorer data.', error);
         final message = ref.watch(isDeviceOnlineProvider)
             ? 'Could not load opening explorer data.'
             : context.l10n.mobileOpeningExplorerNotAvailableOffline;

@@ -559,6 +559,13 @@ class ReviewSession {
     RepertoireNode? startNode,
   }) {
     final now = clock.now();
+    // Due counts are computed once per node for the whole traversal below.
+    // This is sound because nothing in the loop flips due-ness at this `now`:
+    // auto-traversal exposure returns already-due states unchanged and only
+    // pushes not-due states further into the future, and `mode` is fixed for
+    // the session. Without the memo every level re-walks its entire subtree,
+    // making one move cost O(depth x subtree) instead of O(tree) (INV-050).
+    final dueCountMemo = <String, int>{};
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
     // A transposed acceptance traverses from the reached line instead.
@@ -571,7 +578,7 @@ class ReviewSession {
       }
 
       // Opponent turn: select response using due-aware & weighted selection (Listudy semantics)
-      final opponentChild = _selectOpponentChild(activeNode, now);
+      final opponentChild = _selectOpponentChild(activeNode, now, dueCountMemo);
       final opponentMove = opponentChild.incomingMove!;
       autoPlayed.add(
         AutoPlayedMove(
@@ -621,7 +628,7 @@ class ReviewSession {
       // decision below each passed-over alternative — every junction option was traversed
       // past, not just the one followed (review-3 C3, INV-022).
       if (opponentChild.children.isNotEmpty) {
-        final userChild = _selectUserContinuation(opponentChild, now);
+        final userChild = _selectUserContinuation(opponentChild, now, dueCountMemo);
         final userMove = userChild.incomingMove!;
         autoPlayed.add(
           AutoPlayedMove(
@@ -908,14 +915,18 @@ class ReviewSession {
   ///    randomness proportional to due move density.
   /// 3. In practice mode or if no branch has due moves, selects among all branches
   ///    using anti-repetition weighted randomness proportional to subtree size.
-  RepertoireNode _selectOpponentChild(RepertoireNode node, DateTime now) {
+  RepertoireNode _selectOpponentChild(
+    RepertoireNode node,
+    DateTime now,
+    Map<String, int> dueCountMemo,
+  ) {
     if (node.children.length == 1) {
       return node.children.first;
     }
 
     final dueCounts = <RepertoireNode, int>{};
     for (final child in node.children) {
-      dueCounts[child] = _countDueDecisionsInSubtree(child, now);
+      dueCounts[child] = _countDueDecisionsInSubtree(child, now, dueCountMemo);
     }
 
     final dueChildren = node.children.where((c) => (dueCounts[c] ?? 0) > 0).toList();
@@ -938,11 +949,15 @@ class ReviewSession {
   ///
   /// Deterministic: the branch whose subtree holds the most due decisions, ties broken by
   /// list order (mainline first), so behaviour is unchanged when nothing is due (review-3 C3).
-  RepertoireNode _selectUserContinuation(RepertoireNode opponentChild, DateTime now) {
+  RepertoireNode _selectUserContinuation(
+    RepertoireNode opponentChild,
+    DateTime now,
+    Map<String, int> dueCountMemo,
+  ) {
     var best = opponentChild.children.first;
     var bestDue = -1;
     for (final child in opponentChild.children) {
-      final due = _countDueDecisionsInSubtree(child, now);
+      final due = _countDueDecisionsInSubtree(child, now, dueCountMemo);
       if (due > bestDue) {
         bestDue = due;
         best = child;
@@ -965,7 +980,9 @@ class ReviewSession {
     return null;
   }
 
-  int _countDueDecisionsInSubtree(RepertoireNode node, DateTime now) {
+  int _countDueDecisionsInSubtree(RepertoireNode node, DateTime now, Map<String, int> memo) {
+    final cached = memo[node.id];
+    if (cached != null) return cached;
     var count = 0;
     final decision = _decisionForNode[node.id];
     if (decision != null) {
@@ -976,8 +993,9 @@ class ReviewSession {
       }
     }
     for (final child in node.children) {
-      count += _countDueDecisionsInSubtree(child, now);
+      count += _countDueDecisionsInSubtree(child, now, memo);
     }
+    memo[node.id] = count;
     return count;
   }
 
