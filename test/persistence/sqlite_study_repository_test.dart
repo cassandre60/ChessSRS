@@ -326,6 +326,71 @@ void main() {
       }
     });
 
+    test('latency survives answer persistence (upsert must not REPLACE columns)', () async {
+      // SPEC INV-002. review-4 C1: every persisted answer must preserve latency
+      // telemetry — INSERT OR REPLACE must not erase columns the caller did not
+      // mention (upsert).
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+
+        // Seed two canonical rows carrying latency telemetry the answer path
+        // does not know about: the answered position and a side-effect
+        // position (auto-traversal contagion lands in the same batch).
+        Future<void> seedWithLatency(String canonicalId) async {
+          await db.insert(kTablePositionKnowledgeState, {
+            'canonicalId': canonicalId,
+            'firstReviewedAt': now.toIso8601String(),
+            'lastReviewedAt': now.toIso8601String(),
+            'nextDueAt': now.toIso8601String(),
+            'repetitionCount': 3,
+            'lapseCount': 1,
+            'stability': 10.0,
+            'difficulty': 5.0,
+            'latencyEmaMs': 1234.5,
+            'latencySampleCount': 7,
+            'lastExposedAt': now.toIso8601String(),
+          });
+        }
+
+        await seedWithLatency('k-answered');
+        await seedWithLatency('k-side-effect');
+
+        // A normal answer: ReviewState carries no latency fields, so the
+        // written rows cannot mention them.
+        const answered = ReviewState(decisionId: 'k-answered', repetitionCount: 9, stability: 42.0);
+        const sideEffect = ReviewState(decisionId: 'k-side-effect', repetitionCount: 4);
+
+        await repo.saveAnswerBatch(
+          knowledgeStates: [
+            PositionKnowledgeState.fromReviewState(answered, canonicalId: 'k-answered'),
+            PositionKnowledgeState.fromReviewState(
+              sideEffect,
+              canonicalId: 'k-side-effect',
+            ).copyWith(lastExposedAt: now),
+          ],
+        );
+
+        final readAnswered = await repo.getPositionKnowledgeState('k-answered');
+        final readSideEffect = await repo.getPositionKnowledgeState('k-side-effect');
+
+        // Latency columns the caller did not mention survive the write.
+        expect(readAnswered?.latencyEmaMs, 1234.5);
+        expect(readAnswered?.latencySampleCount, 7);
+        expect(readSideEffect?.latencyEmaMs, 1234.5);
+        expect(readSideEffect?.latencySampleCount, 7);
+
+        // The columns that were mentioned do update.
+        expect(readAnswered?.repetitionCount, 9);
+        expect(readAnswered?.stability, 42.0);
+        expect(readSideEffect?.lastExposedAt, now);
+      } finally {
+        await db.close();
+      }
+    });
+
     test('deleteStudy cascades and cleans up chapters, decisions, states, and events', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);
