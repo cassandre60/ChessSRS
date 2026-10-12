@@ -4,7 +4,6 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/constants.dart';
-import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/transpose_scope.dart';
@@ -12,6 +11,7 @@ import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/review/srs_settings_providers.dart';
 import 'package:chess_srs/src/view/account/account_menu.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/app_log_settings_screen.dart';
