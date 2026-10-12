@@ -9,7 +9,10 @@ import 'package:chess_srs/src/view/game/game_list_tile.dart';
 import 'package:chess_srs/src/view/user/game_history_screen.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('RecentGames');
 
 /// A widget that show a list of recent games.
 ///
@@ -62,7 +65,7 @@ class RecentGamesWidget extends ConsumerWidget {
         );
       },
       error: (error, stackTrace) {
-        debugPrint('SEVERE: [RecentGames] could not load recent games: $error\n$stackTrace');
+        _logger.severe('Could not load recent games.', error, stackTrace);
         return const Padding(
           padding: Styles.bodySectionPadding,
           child: Text('Could not load recent games.'),

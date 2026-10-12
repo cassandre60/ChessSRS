@@ -6,8 +6,8 @@ import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
-import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/review/study_browser_providers.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
@@ -158,7 +158,7 @@ class AnalysisHubScreen extends ConsumerWidget {
   /// a second purpose. The picker keeps the duplication one level deeper, where it is a choice
   /// rather than a competing home.
   Future<void> _pickStudyToBrowse(BuildContext context, WidgetRef ref) async {
-    final studies = await ref.read(_studiesProvider.future);
+    final studies = await ref.read(studyListProvider.future);
     if (!context.mounted) return;
 
     if (studies.isEmpty) {
@@ -172,8 +172,7 @@ class AnalysisHubScreen extends ConsumerWidget {
     );
     if (study == null || !context.mounted) return;
 
-    final repo = await ref.read(srsStudyRepositoryProvider.future);
-    final chapters = await repo.getChaptersByStudy(study.id);
+    final chapters = await ref.read(studyChaptersProvider(study.id).future);
     if (!context.mounted) return;
     await Navigator.of(
       context,
@@ -181,15 +180,6 @@ class AnalysisHubScreen extends ConsumerWidget {
     ).push(StudyChaptersScreen.buildRoute(study: study, chapters: chapters));
   }
 }
-
-/// The user's repertoires, for the chapters picker.
-///
-/// Plain [Study]s, not a wrapper carrying chapter counts: the picker does not display counts, and
-/// fetching one per study to decorate a list the user is about to leave is work with no reader.
-final _studiesProvider = FutureProvider.autoDispose<List<Study>>((ref) async {
-  final repo = await ref.watch(srsStudyRepositoryProvider.future);
-  return await repo.getAllStudies();
-});
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.title);
