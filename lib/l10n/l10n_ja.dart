@@ -6458,70 +6458,275 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get settingsBoardLandscapePosition => 'Board position in landscape mode';
-
+  String get mobilePgnCopied => 'PGN copied.';
   @override
-  String get settingsBoardMoveOnRelease => 'Move on release';
-
+  String mobileReviewAlreadyOpposite(String param) {
+    return 'Already in the $param';
+  }
   @override
-  String get settingsBoardMoveOnReleaseHelp =>
-      'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.';
-
+  String get mobileReviewAnalyzeAction => 'Analyze';
   @override
-  String get settingsAccountPrefsSaved =>
-      'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.';
-
+  String get mobileReviewAnalyzeSubtitle => 'Browse moves and variations';
   @override
-  String get toggleSoundTooltip => 'Toggle sound';
-
+  String get mobileReviewBlackRepertoire => 'Black repertoire';
   @override
-  String get reviewNoStudiesHeadline => 'Bring your study.';
-
+  String get mobileReviewBlackToPlay => 'Black to play';
   @override
-  String get reviewNoStudiesSubtext =>
+  String get mobileReviewChapterNoMoves => 'Chapter has no moves to export';
+  @override
+  String get mobileReviewClearSearch => 'Clear search';
+  @override
+  String mobileReviewCollapseSection(String param) {
+    return 'Collapse $param section';
+  }
+  @override
+  String get mobileReviewContinue => 'Continue';
+  @override
+  String get mobileReviewCopyAction => 'Copy';
+  @override
+  String get mobileReviewCopyDetails => 'Copy details';
+  @override
+  String mobileReviewCreatedOpposite(String param) {
+    return 'Created $param';
+  }
+  @override
+  String mobileReviewCrossSideButton(String param1, String param2) {
+    return 'Review $param1 — $param2 due';
+  }
+  @override
+  String get mobileReviewDailyLimitReached => 'Daily limit reached.';
+  @override
+  String mobileReviewDailyProgress(String param1, String param2) {
+    return 'You reviewed $param1 of $param2 positions today. White and Black combined.';
+  }
+  @override
+  String mobileReviewDeleteStudyConfirm(String param1, String param2) {
+    return 'Delete “$param1” and its $param2 positions? This cannot be undone.';
+  }
+  @override
+  String get mobileReviewDeleteStudyTitle => 'Delete study?';
+  @override
+  String mobileReviewDeletedStudy(String param) {
+    return 'Deleted “$param”.';
+  }
+  @override
+  String get mobileReviewDueWord => 'due';
+  @override
+  String mobileReviewDuplicateStudy(String param1) {
+    return 'Study \"$param1\" is already imported and up to date';
+  }
+  @override
+  String get mobileReviewEnterLichessUrl =>
+      'Please enter a Lichess study URL or study ID';
+  @override
+  String get mobileReviewEnterPgn => 'Please enter or select PGN content';
+  @override
+  String mobileReviewExpandSection(String param) {
+    return 'Expand $param section';
+  }
+  @override
+  String get mobileReviewExportPgnAction => 'Export PGN';
+  @override
+  String get mobileReviewExportPgnSubtitle =>
+      'Share or copy standard PGN notation';
+  @override
+  String get mobileReviewFetchImport => 'Fetch & Import from Lichess';
+  @override
+  String get mobileReviewFetching => 'Fetching from Lichess...';
+  @override
+  String get mobileReviewFromYourStudy => 'From your study';
+  @override
+  String get mobileReviewImportSourceLichess => 'Lichess Study';
+  @override
+  String get mobileReviewImportSourcePgn => 'PGN Text / File';
+  @override
+  String get mobileReviewImportStart => 'Import and Start Review';
+  @override
+  String get mobileReviewImportTitle => 'Import Repertoire';
+  @override
+  String mobileReviewImportedChapters(String param1, String param2, String param3) {
+    return 'Imported \"$param1\" ($param2 recall positions across $param3 chapters)';
+  }
+  @override
+  String mobileReviewImportedPlain(String param1, String param2) {
+    return 'Imported \"$param1\" ($param2 recall positions)';
+  }
+  @override
+  String get mobileReviewImporting => 'Importing...';
+  @override
+  String get mobileReviewInvalidLichessUrl =>
+      'Invalid Lichess study URL or ID. Example: https://lichess.org/study/xxxxxx';
+  @override
+  String get mobileReviewLegendLearning => 'learning';
+  @override
+  String get mobileReviewLegendNew => 'new';
+  @override
+  String get mobileReviewLegendRetained => 'retained';
+  @override
+  String get mobileReviewLibraryAbout => 'About and licences';
+  @override
+  String get mobileReviewLibrarySubtitle => 'Review, board, engine, and sound';
+  @override
+  String get mobileReviewLichessUrlHint =>
+      'https://lichess.org/study/... or 8-char ID';
+  @override
+  String get mobileReviewLichessUrlLabel => 'Lichess Study URL or ID';
+  @override
+  String get mobileReviewNextReviewAutomatic =>
+      'Next review will appear automatically.';
+  @override
+  String get mobileReviewNoExportMoves => 'No moves to export in this study';
+  @override
+  String get mobileReviewNoStudiesAuto => 'Auto';
+  @override
+  String get mobileReviewNoStudiesChooseFile => 'Choose file';
+  @override
+  String get mobileReviewNoStudiesDropZone => 'Drop a PGN file here';
+  @override
+  String get mobileReviewNoStudiesHeadline => 'Bring your study.';
+  @override
+  String get mobileReviewNoStudiesImportLichess => 'Import a Lichess study';
+  @override
+  String get mobileReviewNoStudiesPastePgn => 'Paste PGN text';
+  @override
+  String get mobileReviewNoStudiesSubtext =>
       'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.';
-
   @override
-  String get reviewNoStudiesDropZone => 'Drop a PGN file here';
-
+  String get mobileReviewNoStudiesTrainAs => 'Train as';
   @override
-  String get reviewNoStudiesChooseFile => 'Choose file';
-
+  String get mobileReviewNothingDueChangeDailyLimit => 'Change daily limit';
   @override
-  String get reviewNoStudiesPastePgn => 'Paste PGN text';
-
+  String get mobileReviewNothingDueChooseRepertoire => 'Choose a study';
   @override
-  String get reviewNoStudiesImportLichess => 'Import a Lichess study';
-
-  @override
-  String get reviewNoStudiesTrainAs => 'Train as';
-
-  @override
-  String get reviewNoStudiesAuto => 'Auto';
-
-  @override
-  String get reviewNoStudiesWhite => 'White';
-
-  @override
-  String get reviewNoStudiesBlack => 'Black';
-
-  @override
-  String get reviewNothingDuePractice => 'Practice';
-
-  @override
-  String get reviewNothingDueChooseRepertoire => 'Choose a study';
-
-  @override
-  String get reviewNothingDueChangeDailyLimit => 'Change daily limit';
-
-  @override
-  String get reviewNothingDuePracticeDoesNotChangeSchedule =>
+  String get mobileReviewNothingDuePracticeDoesNotChangeSchedule =>
       'Practice never changes your schedule.';
-
   @override
-  String get reviewNothingDuePracticeStillAvailable =>
+  String get mobileReviewNothingDuePracticeStillAvailable =>
       'Practice is still available and does not change your schedule.';
-
   @override
-  String get pgnCopied => 'PGN copied.';
+  String get mobileReviewNothingDueTitle => 'Nothing due.';
+  @override
+  String mobileReviewNothingMatches(String param) {
+    return 'Nothing matches “$param”.';
+  }
+  @override
+  String get mobileReviewOpenInAnalysis => 'Open in analysis';
+  @override
+  String get mobileReviewPasteClipboard => 'Paste from clipboard';
+  @override
+  String get mobileReviewPauseAction => 'Pause';
+  @override
+  String get mobileReviewPauseSubtitle => 'Suspend from active review pool';
+  @override
+  String get mobileReviewPausedWord => 'Paused';
+  @override
+  String get mobileReviewPgnTextHint => 'Paste PGN moves here...';
+  @override
+  String get mobileReviewPgnTextLabel => 'PGN text';
+  @override
+  String get mobileReviewPickPgnFile => 'Pick .pgn file from disk';
+  @override
+  String get mobileReviewPlayThisMoveToContinue =>
+      'Play this move to continue. The position will come back soon.';
+  @override
+  String mobileReviewPositionsCount(String param) {
+    return '$param positions';
+  }
+  @override
+  String get mobileReviewPracticeSubtitle =>
+      'Drill lines without changing your schedule';
+  @override
+  String get mobileReviewPrivateHint => 'Importing a private study? Sign in';
+  @override
+  String get mobileReviewPrivateNotice =>
+      'Lichess answers the same for a private study as for one that does not exist. Sign in to tell the two apart.';
+  @override
+  String get mobileReviewRenameAction => 'Rename';
+  @override
+  String get mobileReviewRenameStudyTitle => 'Rename study';
+  @override
+  String mobileReviewRenamedTo(String param) {
+    return 'Renamed to “$param”.';
+  }
+  @override
+  String get mobileReviewResumeAction => 'Resume';
+  @override
+  String get mobileReviewResumeSubtitle => 'Activate in review pool';
+  @override
+  String get mobileReviewRevealAnswer => 'Reveal answer';
+  @override
+  String get mobileReviewSaveFileAction => 'Save File';
+  @override
+  String get mobileReviewShareAction => 'Share';
+  @override
+  String get mobileReviewSignInRetry => 'Sign in and retry';
+  @override
+  String get mobileReviewSkip => 'Skip';
+  @override
+  String get mobileReviewStudiesGroup => 'Studies';
+  @override
+  String get mobileReviewStudyNameLabel => 'Study name';
+  @override
+  String get mobileReviewStudyOptions => 'Study options';
+  @override
+  String get mobileReviewStudyTitleLabel => 'Study Title (optional)';
+  @override
+  String get mobileReviewStudyTitleLichessHint =>
+      'Derived from Lichess if left blank';
+  @override
+  String get mobileReviewStudyTitlePgnHint =>
+      'e.g. French Defense / 1.d4 Repertoire';
+  @override
+  String get mobileReviewTrainAsLabel => 'Train as:';
+  @override
+  String get mobileReviewTryAgain => 'Try again';
+  @override
+  String get mobileReviewVerdictCorrectBare => 'Correct.';
+  @override
+  String mobileReviewVerdictCorrectMove(String param) {
+    return 'Correct. $param.';
+  }
+  @override
+  String get mobileReviewVerdictWrongBare => 'Not this move.';
+  @override
+  String mobileReviewVerdictWrongMove(String param) {
+    return 'Not this move. The study move is $param.';
+  }
+  @override
+  String get mobileReviewWhiteRepertoire => 'White repertoire';
+  @override
+  String get mobileReviewWhiteToPlay => 'White to play';
+  @override
+  String get mobileSettingsAccountPrefsSaved =>
+      'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.';
+  @override
+  String get mobileSettingsBoardLandscapePosition =>
+      'Board position in landscape mode';
+  @override
+  String get mobileSettingsBoardMoveOnRelease => 'Move on release';
+  @override
+  String get mobileSettingsBoardMoveOnReleaseHelp =>
+      'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.';
+  @override
+  String mobileReviewCreateOpposite(String param) {
+    return 'Create $param';
+  }
+  @override
+  String get mobileReviewOppositeSubtitle =>
+      'Same positions, in the other drawer';
+  @override
+  String mobileReviewNextReviewTime(String param) {
+    return 'Next review $param.';
+  }
+  @override
+  String get mobileReviewStudyNotFound =>
+      'Study not found on Lichess. Ensure the study is public or unlisted.';
+  @override
+  String get mobileReviewPgnCopiedClipboard => 'PGN copied to clipboard';
+  @override
+  String get mobileReviewDismissBarrier => 'Dismiss';
+  @override
+  String get mobileReviewPreferencesGroup => 'Preferences';
+  @override
+  String get mobileReviewExitPractice => 'Exit practice';
 }

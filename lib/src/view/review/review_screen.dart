@@ -134,7 +134,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 32.0),
           Text(
-            context.l10n.reviewNoStudiesHeadline,
+            context.l10n.mobileReviewNoStudiesHeadline,
             style: TextStyle(
               fontFamily: SrsText.ui,
               fontSize: headlineSize,
@@ -146,7 +146,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
           ),
           const SizedBox(height: 16.0),
           Text(
-            context.l10n.reviewNoStudiesSubtext,
+            context.l10n.mobileReviewNoStudiesSubtext,
             style: TextStyle(fontFamily: SrsText.ui, fontSize: 17, height: 1.45, color: c.ink2),
           ),
           const SizedBox(height: 28.0),
@@ -159,12 +159,12 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    context.l10n.reviewNoStudiesDropZone,
+                    context.l10n.mobileReviewNoStudiesDropZone,
                     style: TextStyle(fontFamily: SrsText.ui, fontSize: 15.5, color: c.ink),
                   ),
                   const SizedBox(height: 16.0),
                   SrsPillButton(
-                    label: context.l10n.reviewNoStudiesChooseFile,
+                    label: context.l10n.mobileReviewNoStudiesChooseFile,
                     onPressed: () => RepertoireImportDialog.show(
                       context,
                       initialSource: ImportSource.file,
@@ -181,7 +181,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             runSpacing: 8.0,
             children: [
               SrsTextButton(
-                label: context.l10n.reviewNoStudiesPastePgn,
+                label: context.l10n.mobileReviewNoStudiesPastePgn,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.file,
@@ -189,7 +189,7 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
                 ),
               ),
               SrsTextButton(
-                label: context.l10n.reviewNoStudiesImportLichess,
+                label: context.l10n.mobileReviewNoStudiesImportLichess,
                 onPressed: () => RepertoireImportDialog.show(
                   context,
                   initialSource: ImportSource.lichess,
@@ -203,15 +203,15 @@ class _NoStudiesViewState extends State<_NoStudiesView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                context.l10n.reviewNoStudiesTrainAs,
+                context.l10n.mobileReviewNoStudiesTrainAs,
                 style: TextStyle(fontFamily: SrsText.ui, fontSize: 14, color: c.ink2),
               ),
               const SizedBox(width: 12.0),
               SrsSegmented<Side?>(
                 options: {
-                  null: context.l10n.reviewNoStudiesAuto,
-                  Side.white: context.l10n.reviewNoStudiesWhite,
-                  Side.black: context.l10n.reviewNoStudiesBlack,
+                  null: context.l10n.mobileReviewNoStudiesAuto,
+                  Side.white: context.l10n.white,
+                  Side.black: context.l10n.black,
                 },
                 value: _trainSide,
                 onChanged: (val) => setState(() => _trainSide = val),
@@ -354,7 +354,9 @@ class _NothingDueView extends ConsumerWidget {
     final learning = dueDecisions;
     final fresh = (totalDecisions - learnedDecisions).clamp(0, totalDecisions);
 
-    final displayTitle = state.isDailyLimitReached ? 'Daily limit reached.' : 'Nothing due.';
+    final displayTitle = state.isDailyLimitReached
+        ? context.l10n.mobileReviewDailyLimitReached
+        : context.l10n.mobileReviewNothingDueTitle;
     final headlineSize = math.max(44.0, math.min(mediaQuery.size.width * 0.09, 72.0));
 
     // Cross-colour continuation: automatic colour review that runs dry offers
@@ -415,53 +417,21 @@ class _NothingDueView extends ConsumerWidget {
                         ),
                         const SizedBox(height: 18.0),
                         if (state.isDailyLimitReached)
-                          Text.rich(
-                            TextSpan(
-                              style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
-                              children: [
-                                const TextSpan(text: 'You reviewed '),
-                                TextSpan(
-                                  text: '${state.dailyReviewedCount}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: c.ink,
-                                    fontFeatures: SrsText.tabular,
-                                  ),
-                                ),
-                                const TextSpan(text: ' of '),
-                                TextSpan(
-                                  text: '${state.maxDailyReviews}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: c.ink,
-                                    fontFeatures: SrsText.tabular,
-                                  ),
-                                ),
-                                const TextSpan(text: ' positions today. White and Black combined.'),
-                              ],
+                          Text(
+                            context.l10n.mobileReviewDailyProgress(
+                              state.dailyReviewedCount.toString(),
+                              state.maxDailyReviews.toString(),
                             ),
+                            style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           )
                         else if (state.timeUntilNextReview != null)
-                          Text.rich(
-                            TextSpan(
-                              style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
-                              children: [
-                                const TextSpan(text: 'Next review '),
-                                TextSpan(
-                                  text: state.timeUntilNextReview,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: c.ink,
-                                    fontFeatures: SrsText.tabular,
-                                  ),
-                                ),
-                                const TextSpan(text: '.'),
-                              ],
-                            ),
+                          Text(
+                            context.l10n.mobileReviewNextReviewTime(state.timeUntilNextReview!),
+                            style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           )
                         else
                           Text(
-                            'Next review will appear automatically.',
+                            context.l10n.mobileReviewNextReviewAutomatic,
                             style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           ),
                         const SizedBox(height: 38.0),
@@ -489,7 +459,7 @@ class _NothingDueView extends ConsumerWidget {
                                 ),
                               ),
                               count: retained,
-                              label: 'retained',
+                              label: context.l10n.mobileReviewLegendRetained,
                             ),
                             _LegendItem(
                               shape: Container(
@@ -507,7 +477,7 @@ class _NothingDueView extends ConsumerWidget {
                                 ),
                               ),
                               count: learning,
-                              label: 'learning',
+                              label: context.l10n.mobileReviewLegendLearning,
                             ),
                             _LegendItem(
                               shape: Container(
@@ -519,7 +489,7 @@ class _NothingDueView extends ConsumerWidget {
                                 ),
                               ),
                               count: fresh,
-                              label: 'new',
+                              label: context.l10n.mobileReviewLegendNew,
                             ),
                           ],
                         ),
@@ -531,21 +501,23 @@ class _NothingDueView extends ConsumerWidget {
                           children: [
                             if (showCrossSideButton)
                               SrsPillButton(
-                                label:
-                                    'Review ${otherSide == Side.white ? 'White' : 'Black'} — $otherSideDue due',
+                                label: context.l10n.mobileReviewCrossSideButton(
+                                  otherSide == Side.white ? context.l10n.white : context.l10n.black,
+                                  otherSideDue.toString(),
+                                ),
                                 onPressed: () {
                                   ref.read(reviewControllerProvider.notifier).selectSide(otherSide);
                                 },
                               ),
                             SrsPillButton(
-                              label: context.l10n.reviewNothingDuePractice,
+                              label: context.l10n.practice,
                               shortcut: 'P',
                               onPressed: () {
                                 ref.read(reviewControllerProvider.notifier).startPracticeMode();
                               },
                             ),
                             SrsTextButton(
-                              label: context.l10n.reviewNothingDueChooseRepertoire,
+                              label: context.l10n.mobileReviewNothingDueChooseRepertoire,
                               // Opens the live colour's drawer rather than
                               // switching colour: this button is about choosing
                               // what to review next, and the squares are what
@@ -555,7 +527,7 @@ class _NothingDueView extends ConsumerWidget {
                             ),
                             if (state.isDailyLimitReached)
                               SrsTextButton(
-                                label: context.l10n.reviewNothingDueChangeDailyLimit,
+                                label: context.l10n.mobileReviewNothingDueChangeDailyLimit,
                                 onPressed: () => Navigator.push(
                                   context,
                                   MaterialPageRoute<void>(
@@ -568,8 +540,8 @@ class _NothingDueView extends ConsumerWidget {
                         const SizedBox(height: 18.0),
                         Text(
                           state.isDailyLimitReached
-                              ? context.l10n.reviewNothingDuePracticeStillAvailable
-                              : context.l10n.reviewNothingDuePracticeDoesNotChangeSchedule,
+                              ? context.l10n.mobileReviewNothingDuePracticeStillAvailable
+                              : context.l10n.mobileReviewNothingDuePracticeDoesNotChangeSchedule,
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],
@@ -941,12 +913,14 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     if (result == null) return null;
     if (result.isCorrect) {
       final played = result.movePlayed.san;
-      return played == null || played.isEmpty ? 'Correct.' : 'Correct. $played.';
+      return played == null || played.isEmpty
+          ? context.l10n.mobileReviewVerdictCorrectBare
+          : context.l10n.mobileReviewVerdictCorrectMove(played);
     }
     if (expectedMoveSan == null || expectedMoveSan.isEmpty) {
-      return 'Not this move.';
+      return context.l10n.mobileReviewVerdictWrongBare;
     }
-    return 'Not this move. The study move is $expectedMoveSan.';
+    return context.l10n.mobileReviewVerdictWrongMove(expectedMoveSan);
   }
 
   Widget _buildActions(
@@ -965,13 +939,21 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           if (isLapse && canReveal)
             // Recall has already failed, so "Skip" mislabels what is left: revealing the
             // study move by playing it on the learner's behalf through the retry path.
-            SrsTextButton(label: 'Reveal answer', shortcut: 'S', onPressed: onRevealAnswer)
+            SrsTextButton(
+              label: context.l10n.mobileReviewRevealAnswer,
+              shortcut: 'S',
+              onPressed: onRevealAnswer,
+            )
           else
-            SrsTextButton(label: 'Skip', shortcut: 'S', onPressed: onSkip)
+            SrsTextButton(label: context.l10n.mobileReviewSkip, shortcut: 'S', onPressed: onSkip)
         else
           const SizedBox.shrink(),
         if (isAwaitingAdvance)
-          SrsPillButton(label: 'Continue', shortcut: 'Space', onPressed: onContinue)
+          SrsPillButton(
+            label: context.l10n.mobileReviewContinue,
+            shortcut: 'Space',
+            onPressed: onContinue,
+          )
         else
           const SizedBox.shrink(),
       ],
@@ -990,7 +972,9 @@ class _MetaView extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.srs;
     final isWhite = orientation == Side.white;
-    final turnText = isWhite ? 'White to play' : 'Black to play';
+    final turnText = isWhite
+        ? context.l10n.mobileReviewWhiteToPlay
+        : context.l10n.mobileReviewBlackToPlay;
 
     final turnWidget = Row(
       mainAxisSize: MainAxisSize.min,
@@ -1074,7 +1058,7 @@ class _AnswerSlot extends StatelessWidget {
         SrsSan(san, style: SrsText.answerMove(wide, c.accent)),
         const SizedBox(height: 8),
         Text(
-          'Play this move to continue. The position will come back soon.',
+          context.l10n.mobileReviewPlayThisMoveToContinue,
           style: SrsText.answerHelp(wide, c.ink2),
         ),
       ],
@@ -1102,7 +1086,7 @@ class _NoteSlot extends StatelessWidget {
         children: [
           Text(comment, style: SrsText.note(c.ink)),
           const SizedBox(height: 10),
-          Text('From your study', style: SrsText.noteSource(c.ink3)),
+          Text(context.l10n.mobileReviewFromYourStudy, style: SrsText.noteSource(c.ink3)),
         ],
       ),
     );
@@ -1130,7 +1114,7 @@ class _OpenInAnalysisButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: SrsTextButton(
-        label: 'Open in analysis',
+        label: context.l10n.mobileReviewOpenInAnalysis,
         onPressed: () => Navigator.of(context, rootNavigator: true).push(
           AnalysisScreen.buildRoute(
             analysisOptionsForReviewPosition(fen: fen, orientation: state.boardOrientation),
