@@ -2859,6 +2859,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get toggleLocalEvaluation => 'Helyi elemzés bekapcsolása';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Változat feljebb léptetése';
 
   @override

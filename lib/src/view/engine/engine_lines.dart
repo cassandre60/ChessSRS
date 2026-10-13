@@ -5,6 +5,7 @@ import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:collection/collection.dart';
 import 'package:dartchess/dartchess.dart';
@@ -115,53 +116,63 @@ class Engineline extends ConsumerWidget {
     final line = lineBuffer.toString();
     final evalString = pvData.evalString;
 
-    return InkWell(
-      onTap: () {
-        final move = Move.parse(pvData.moves[0]);
-        if (move != null) onTapMove?.call(move);
-      },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: kEngineLineHeight),
-        child: Padding(
-          padding: const EdgeInsets.all(2.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: pvData.winningSide == Side.black
-                      ? EngineGauge.backgroundColor(context)
-                      : EngineGauge.valueColor(context),
-                  borderRadius: BorderRadius.circular(4.0),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                child: Text(
-                  evalString,
-                  style: TextStyle(
-                    color: pvData.winningSide == Side.black ? Colors.white : Colors.black,
-                    fontSize: kEngineLineFontSize,
-                    fontWeight: FontWeight.w600,
+    return Semantics(
+      // Without this the line is tappable chrome with no role: a screen reader finds the
+      // bare eval text and PV text but nothing saying what they are or that tapping plays
+      // the line. The label carries both, composed from the same values on screen.
+      // excludeSemantics: the visible texts stay for sighted users, but announcing them
+      // again below the label would speak every line twice.
+      button: true,
+      excludeSemantics: true,
+      label: context.l10n.engineLineSemantics(evalString, line),
+      child: InkWell(
+        onTap: () {
+          final move = Move.parse(pvData.moves[0]);
+          if (move != null) onTapMove?.call(move);
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kEngineLineHeight),
+          child: Padding(
+            padding: const EdgeInsets.all(2.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: pvData.winningSide == Side.black
+                        ? EngineGauge.backgroundColor(context)
+                        : EngineGauge.valueColor(context),
+                    borderRadius: BorderRadius.circular(4.0),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                  child: Text(
+                    evalString,
+                    style: TextStyle(
+                      color: pvData.winningSide == Side.black ? Colors.white : Colors.black,
+                      fontSize: kEngineLineFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8.0),
-              Expanded(
-                child: Text(
-                  line,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: TextStyle(
-                    fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
-                    fontWeight: FontWeight.w500,
-                    color: onTapMove == null ? c.ink2 : c.ink,
-                    fontFeatures: SrsText.tabular,
+                const SizedBox(width: 8.0),
+                Expanded(
+                  child: Text(
+                    line,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontFamily: pieceNotation == PieceNotation.symbol ? 'ChessFont' : SrsText.ui,
+                      fontWeight: FontWeight.w500,
+                      color: onTapMove == null ? c.ink2 : c.ink,
+                      fontFeatures: SrsText.tabular,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

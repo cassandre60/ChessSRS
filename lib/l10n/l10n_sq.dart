@@ -2859,6 +2859,11 @@ class AppLocalizationsSq extends AppLocalizations {
   String get toggleLocalEvaluation => 'Aktivizoni/Çaktivizoni vlerësim vendor';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promovoni variacion';
 
   @override

@@ -2869,6 +2869,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get toggleLocalEvaluation => 'Activar avaluació local';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promoure variant';
 
   @override

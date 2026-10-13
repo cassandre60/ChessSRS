@@ -324,17 +324,46 @@ then differentiation features justified by specs or beta feedback.
 
 ### Orchestrated review-fix task queue (docs/tasks/)
 
-A full-codebase review (2026-10-11/12) produced 29 self-contained task briefs
-in `docs/tasks/`, each one worktree + one PR, executable by an agent without
-further context. Status at merge:
+A full-codebase review produced 37 self-contained task briefs in `docs/tasks/`,
+each one worktree + one PR, executable by an agent without further context.
+Status:
 
-- **Done**: REVIEW-FIX-01 (scope mismatch, #45); PERSIST-FIX-13/14/15/16
-  in flight (#46–#49, all green, merging in lane order 14→13→15→16).
-- **Withdrawn**: REVIEW-FIX-02 (transposition FEN — audit proved non-bug).
-- **Ready, parallel-safe lanes**: 03, 04, 05, 06, 09, 10, 11, 12, 17, 18,
-  19, 20, 21, 22, 23, 24, 25, 27, 29.
-- **Blocked on persistence lane** (all touch `sqlite_study_repository.dart`):
-  07, 08, 26, 28 — pick up only after #46 merges, then serialize.
+- **Merged**:
+  - 01 (#45, scope mismatch)
+  - 03 (#51, tree count memo)
+  - 04 (#58, pgnHash backfill batching)
+  - 05 (#57, presentation-db boundary)
+  - 09 (#63, drawer breakpoint/sizing)
+  - 10 (#69, isolate threshold / notation reserve)
+  - 12 (#50, offload helper & drawer a11y)
+  - 13 (#49, timezone UTC persistence)
+  - 14 (#48, latency preservation)
+  - 15 (#47, remove deleteDecisionsByStudy)
+  - 18 (#53, pgn copied l10n)
+  - 19 (#52, pumpAsync flake polling)
+  - 22 (#54, reachability test prune)
+  - 24 (#55, debugPrint to Logger)
+  - 25 (#64, import 10 MB size guard)
+  - 29 (#66, route swallowed catches to Logger)
+  - 31 (#65, prefs corruption backup & log)
+  - 32 (#67/#68, session constructor cost pinning)
+- **Withdrawn / Obviated**:
+  - 02 (transposition FEN — audit proved non-bug)
+  - 17 (chapters diagram reskin — screen deleted in #61)
+  - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
+- **In flight / Finishing CI**:
+  - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
+  - 30 (A11Y-FIX-30: analysis screen semantics)
+- **New Batch 9 (Ready)**:
+  - 33 (DOMAIN-FIX-33: retryMove duplicate ghost prompt in due queue)
+  - 34 (AUDIO-FIX-34: review mode move feedback & error sound/haptics)
+  - 35 (SYSTEM-FIX-35: Linux sound player process pipe & zombie leak)
+  - 36 (DOMAIN-FIX-36: FSRS stability collapse & contagion division-by-zero)
+  - 37 (DESKTOP-FIX-37: Enter / ArrowRight keyboard shortcuts for review advance)
+- **Parallel-safe ready lanes**:
+  06, 11, 20, 21, 23, 27, 33, 34, 35, 36, 37.
+- **Persistence lane tail** (blocked until #46 merges, then serialized):
+  07 → 08 → 26 → 28.
 
 ---
 

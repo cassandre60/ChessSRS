@@ -71,7 +71,6 @@ abstract class StudyRepository {
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId);
   Future<List<RepertoireDecision>> getDecisionsByStudy(String studyId);
   Future<List<RepertoireDecision>> getAllDecisions();
-  Future<void> deleteDecisionsByStudy(String studyId);
 
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);
@@ -90,7 +89,11 @@ abstract class StudyRepository {
   Future<ReviewState?> getReviewState(String decisionId);
   Future<List<ReviewState>> getAllReviewStates();
   Future<List<ReviewState>> getDueReviewStates(DateTime now);
-  Future<List<ReviewState>> getReviewStatesByDecisions(List<String> decisionIds);
+
+  /// Reads from `srs_review_state` for any of the given ids, which may be
+  /// per-occurrence `decisionId`s **or** canonical ids — see
+  /// `SqliteStudyRepository.saveAnswerBatch`'s mirroring.
+  Future<List<ReviewState>> getReviewStatesByIds(List<String> ids);
 
   // Review events (SRS log)
   Future<void> saveReviewEvent(ReviewEvent event);

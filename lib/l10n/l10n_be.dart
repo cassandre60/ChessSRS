@@ -2902,6 +2902,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get toggleLocalEvaluation => 'Пераключыць лакальны аналіз';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Прасунуць варыянт';
 
   @override

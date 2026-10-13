@@ -2847,6 +2847,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get toggleLocalEvaluation => 'Lülita kohalik hindamine';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Edenda varient';
 
   @override

@@ -2865,6 +2865,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get toggleLocalEvaluation => 'Ligar/desligar a avaliação local';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promover variante';
 
   @override

@@ -2650,6 +2650,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get toggleLocalEvaluation => 'ローカル評価値のオン/オフ';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => '変化を主手順にする';
 
   @override

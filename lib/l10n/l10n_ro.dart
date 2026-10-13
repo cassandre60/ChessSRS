@@ -2889,6 +2889,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get toggleLocalEvaluation => 'Pornește/oprește evaluarea locală';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promovează variația';
 
   @override

@@ -2876,6 +2876,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get toggleLocalEvaluation => 'Ieslēgt/izslēgt vērtēšanu pārlūkprogrammā';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Izvēlēties variantu';
 
   @override

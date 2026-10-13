@@ -223,10 +223,12 @@ class ReviewService {
       decisions = await _getActiveDecisions(allStudies);
     }
 
+    // Both key kinds are queryable because saveAnswerBatch mirrors each
+    // canonical state into every per-occurrence decisionId row.
     final decisionIds = decisions.map((d) => d.id).toList();
     final canonicalIds = decisions.map((d) => d.canonicalId).toSet().toList();
     final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
-    final reviewStatesList = await repository.getReviewStatesByDecisions(allQueryIds);
+    final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
     final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
     for (final k in kStates) {

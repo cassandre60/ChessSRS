@@ -414,3 +414,48 @@ toolchain was available; fixes were run locally.
 - Hand-written getters verified two ways: `flutter analyze` clean across all 52 locale files, and a committed fallback test asserting English rendering (plain + parameterized) in de/fr/ja/ar.
 - Rendered-text suites green unchanged: review screen 38/38, drawer/sheets/actions/library, export/import dialogs, design incl. contrast, top bar, board settings, l10n utils 16/16 — English output is byte-identical, so no assertion needed updating.
 - `fvm flutter analyze` clean on all touched lib/test files; `dart format` stable (`lib/l10n` excluded from CI format checks, matching its frozen style); `./scripts/gates.sh t1` run pre-push.
+
+---
+
+## Round 8 — dependencies, build, and release
+
+**Scope read:** `pubspec.yaml` + `pubspec.lock` (65 direct deps, 3 overrides, 2 git pins),
+`scripts/package.json` + lock, the prior `docs/dependency-audit.md` (verified, not redone),
+`android/app/build.gradle.kts` + manifest + backup rules, `ios/Runner/Info.plist` +
+entitlements, `.github/workflows/release.yml` + `release-proof.yml`, `LICENSE`/`COPYING.md`,
+and the git history of all of the above.(Duration and tooling available: OSV.dev queried live,
+npm registry reachable, lila/GitHub APIs for pin checks.)
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R8-F1 | iOS carried three dead capabilities: `NSPhotoLibraryUsageDescription` (references the cut app-background feature; no image picking exists anywhere), `UIBackgroundModes fetch + remote-notification`, and `aps-environment: development` (no push code, no messaging plugin, no APNs registration at all). | Low | **Fixed in this PR.** All three removed (entitlement keeps its explanatory comment style with a removal note). Plists validated as XML. Release-side validation path noted below. |
+| R8-F2 | Android claimed `/training`, `/tv`, `/broadcast` and `/tournament` link patterns while the resolver handles none of them (Puzzles/Watch cut): tapping one opens the app into a silent dead end (no route, and browser fallback is off by design against loops). | Low | **Fixed in this PR.** Dead patterns removed with an in-manifest comment; study/game/editor/user patterns kept. Manifest validated as XML. The existing tv test asserts nothing navigable and stays green. |
+| R8-F3 | `scripts/` had 2 advisories: js-yaml 4.3.1 HIGH (unused devDependency — nothing imports it) and xml2js <0.5.0 MODERATE (prototype pollution in the translation parser, which reads Crowdin-supplied XML). | Medium (dev-only surface) | **Fixed in this PR.** js-yaml removed outright; xml2js bumped to 0.6.2 (diffed the two tarballs first: exactly the pollution fix, no API change). Lockfile edited surgically (xml2js entry + js-yaml/argparse removal; sax 1.4.1 already satisfies the new range). `npm audit` now reports 0. Pipeline equivalence proven: full `gen-arb.mjs` regen with the new tree is byte-identical to the committed ARBs. |
+| R8-F4 | OSV.dev: 0 advisories across all 212 pub.dev-hosted locked packages. | Info | **Checked, no action.** (Caveat stands: thin Pub feed coverage; strictly better than the GitHub-only read the prior audit had.) |
+
+### Checked and sound (do not re-raise)
+
+- **Git pins resolve and are sane:** lc0 pin == its branch tip (no drift; unmerged-branch risk is documented in `pubspec.yaml` itself); multistockfish pin is 4 commits behind main, fast-forwardable — upgrading is the engine refactor's call, not this round's. Both repos GPL-3.0, like dartchess/chessground/stockfish: no licence conflict anywhere in the chess stack. `LICENSE` + `COPYING.md` present.
+- **Overrides documented in place** (engine-plugin branch pins, removal condition stated). G10 ratchets the dep count.
+- **Android signing:** release config reads gitignored `key.properties`; CI uses a throwaway keystore and documents that the permanent upload key must never enter the repo. No secrets in tree (swept manifests, workflows, configs).
+- **Android manifest otherwise:** INTERNET-only permission, scoped PGN intent filters, deliberate absence of `autoVerify` (documented in-file), OAuth receiver, R8 minify/shrink, SBOM-ish `dependenciesInfo` in the bundle. Gradle repos are google()/mavenCentral()/gradlePluginPortal only; Gradle 9.5.1.
+- **iOS remainder:** custom-scheme + PGN document types (live features), `ITSAppUsesNonExemptEncryption:false` (no custom crypto — correct), no associated-domains claim (documented in-file), backup rules exclude secure storage (Round 1).
+- **Release workflow:** tag-gated, throwaway-signed testing artifacts honestly labelled, permanent file guide in notes, pre-release flag, lessons from past failures encoded as comments. No Podfile/fastlane dir to review (both correctly absent/generated).
+- **Deep-link resolver:** study/editor/user/game paths live; unresolvable links log-and-drop without loops; open-web scheme allowlist intact.
+
+### Left open deliberately
+
+- **Action SHA-pinning + artifact attestations/checksums (release.yml):** `.github/` is a protected path — recorded as owner decisions, not implemented here. All release actions are first-party tags; no dependabot config exists, so SHA pins would rot without one. Recommend: add Sigstore attestations + sha256sums in the same PR that wires dependabot, with the owner's approval.
+- **multistockfish +4 behind main:** engine team's upgrade, not a review-round bump.
+- **xml2js 0.6.2 duplicate `defineProperty` semantics:** identical for plain data objects (verified by byte-identical regen); exotic XML would have failed loudly in the same run.
+- **R1-F4/F5, R2-F2/F4, review-4 C2/C3, review-1 C4/C6/D4/D5, R6-F3, time-i18n, srs-settings copy:** other rounds' scope; untouched.
+
+### Verification status of this round's PR
+
+- `npm audit --prefix scripts`: 2 findings → 0 after the fix.
+- `gen-arb.mjs` with the upgraded tree: byte-identical output (also re-proves Round 7's ARB state matches sources).
+- Plists + manifest parsed as XML; `fvm flutter analyze` on touched Dart files is a no-op (none touched — config/XML/docs only).
+- Full suite NOT run locally (no product code changed; CI's job). `./scripts/gates.sh t1` run pre-push.
+- Release-artifact validation (archive/sign) was not run: release builds never run on dev machines per AGENTS.md §4, and the changes are key/pattern removals. If the owner wants proof beyond CI, dispatch `release-proof` (it exists for exactly this).

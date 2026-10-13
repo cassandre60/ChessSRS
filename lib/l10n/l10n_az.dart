@@ -2841,6 +2841,11 @@ class AppLocalizationsAz extends AppLocalizations {
   String get toggleLocalEvaluation => 'Yerli qiymətləndirməni aç/bağla';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Variasiyanı irəli çək';
 
   @override

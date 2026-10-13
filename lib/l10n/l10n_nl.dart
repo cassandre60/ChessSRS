@@ -2860,6 +2860,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get toggleLocalEvaluation => 'Lokale evaluatie aan-/uitzetten';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promoveer variant';
 
   @override
