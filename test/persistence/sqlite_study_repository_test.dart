@@ -707,6 +707,52 @@ void main() {
       }
     });
 
+    test('the in-flight dedupe does not collapse the two sides of one tree', () async {
+      // The same PGN imported as White and as Black is two studies on purpose: different
+      // questions, different SRS memory, and two separate repertoire buttons in the library. They
+      // share a pgnHash, so a dedupe check matching on the hash alone drops the second one and the
+      // user gets a colour switch that does nothing.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const hash = 'one-tree-both-sides';
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+
+        ImportResult build(String studyId, Side side) => ImportResult(
+          study: Study(
+            id: studyId,
+            title: 'Italian',
+            pgnHash: hash,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          chapters: [
+            Chapter.create(studyId: studyId, sourceOrder: 0, title: 'Main', orientation: side),
+          ],
+          decisions: [
+            RepertoireDecision(
+              id: 'dec-$studyId',
+              studyId: studyId,
+              chapterId: 'ch-$studyId',
+              nodeId: 'node-$studyId',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          ],
+          errors: const [],
+        );
+
+        await repo.saveImportResult(build('study-white', Side.white));
+        await repo.saveImportResult(build('study-black', Side.black));
+
+        expect(await repo.getAllStudies(), hasLength(2), reason: 'both sides must be stored');
+        expect(await repo.getDecisionsByStudy('study-white'), hasLength(1));
+        expect(await repo.getDecisionsByStudy('study-black'), hasLength(1));
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'a failed mirror write rolls back the canonical state instead of leaving it torn',
       () async {

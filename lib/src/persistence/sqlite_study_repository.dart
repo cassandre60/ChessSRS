@@ -46,15 +46,31 @@ class SqliteStudyRepository implements StudyRepository {
       // Two imports of one file carry different study ids and fresh chapter/decision ids, so
       // nothing in the write itself matches: they accumulate into one study, and the duplicate is
       // invisible because there is only ever one study row.
+      //
+      // The orientation check is not optional. The same tree imported as White and as Black is two
+      // studies that share a pgnHash on purpose — different questions, different SRS memory — so
+      // matching on the hash alone would silently drop the second repertoire. This mirrors
+      // getStudyByPgnHash's forSide filter.
       final hash = result.study.pgnHash;
       if (hash != null) {
-        final existing = await _db.query(
-          kTableSrsStudy,
-          columns: ['id'],
-          where: 'pgnHash = ?',
-          whereArgs: [hash],
-          limit: 1,
-        );
+        final orientation = result.chapters.isEmpty ? null : result.chapters.first.orientation;
+        final existing = orientation == null
+            ? await _db.query(
+                kTableSrsStudy,
+                columns: ['id'],
+                where: 'pgnHash = ?',
+                whereArgs: [hash],
+                limit: 1,
+              )
+            : await _db.query(
+                kTableSrsStudy,
+                columns: ['id'],
+                where:
+                    'pgnHash = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsChapter c '
+                    'WHERE c.studyId = $kTableSrsStudy.id AND c.orientation != ?)',
+                whereArgs: [hash, orientation.name],
+                limit: 1,
+              );
         if (existing.isNotEmpty) {
           _logger.info(
             'Skipping import of "${result.study.title}": already stored as '
