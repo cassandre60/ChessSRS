@@ -6,6 +6,7 @@ import 'package:chess_srs/src/import/lichess_study_importer.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/import/pgn_offload.dart';
+import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/move_feedback.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
@@ -1190,6 +1191,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final isRetrying = currentState.feedback == ReviewFeedback.incorrect;
     _logger.fine('onUserMove: ${move.uci} (retrying=$isRetrying)');
 
+    // The piece is about to move, so it gets the sound it gets everywhere else in the app.
+    // Review played one for the opponent's auto-reply and for an animated pre-move, and nothing
+    // for the user's own move — every position the user actually played was silent. Fired before
+    // the service call so it lands with the animation rather than after the database work.
+    _playMoveFeedback(currentState.boardPosition, move);
+
     _isProcessingMove = true;
     try {
       if (isRetrying) {
@@ -1248,6 +1255,37 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     } finally {
       _isProcessingMove = false;
     }
+  }
+
+  /// Plays the sound and haptic for a move the user made, in the same shape `StudyController`
+  /// uses: a capture gets the capture sound, everything else the plain move, and a check adds
+  /// the heavier impact.
+  ///
+  /// [position] is the board as it stands before the move. A missing position or an unplayable
+  /// move falls back to the plain sound rather than to nothing, so the user never loses their
+  /// feedback over a detail. Feedback is best-effort throughout: a sound that fails must not
+  /// fail the move.
+  void _playMoveFeedback(Position? position, Move move) {
+    try {
+      var isCapture = false;
+      var isCheck = false;
+      if (position != null) {
+        final target = position.board.pieceAt(move.to);
+        isCapture = target != null && target.color != position.turn;
+        try {
+          isCheck = position.play(move).isCheck;
+        } catch (_) {
+          // Not a legal move from here, so there is no check to report; the plain sound stands.
+        }
+      }
+      final service = ref.read(moveFeedbackServiceProvider);
+      // Review studies have no variant of their own, so this is always standard chess.
+      if (isCapture) {
+        service.captureFeedback(Variant.standard, check: isCheck);
+      } else {
+        service.moveFeedback(check: isCheck);
+      }
+    } catch (_) {}
   }
 
   /// Acknowledges a lapse, clearing the expected move arrow and advancing.
