@@ -2,8 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>aps-environment</key>
-	<string>development</string>
+	<!--
+	  aps-environment is deliberately absent: no push notification code exists
+	  anywhere in the app (no messaging plugin, no APNs registration), so the
+	  fetch/remote-notification background modes went with it. Re-add both if
+	  push ever returns.
+	-->
 	<!--
 	  com.apple.developer.associated-domains is deliberately absent.
 

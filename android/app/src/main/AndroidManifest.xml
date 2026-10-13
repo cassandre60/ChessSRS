@@ -88,10 +88,13 @@
 
                 <data android:scheme="https" android:host="lichess.org" />
 
-                <data android:pathPattern="/training/....." />
                 <data android:pathPattern="/study/........" />
                 <data android:pathPattern="/study/......../........" />
-                <data android:pathPattern="/tournament/........" />
+                <!--
+                  No /training, /tv, /broadcast or /tournament patterns: the Puzzles and Watch
+                  tabs that served them were cut, and the link resolver has no case for them —
+                  claiming them only produced silent dead ends (round-8 R8-F2).
+                -->
 
                 <!--
                   User profile links: /@/<username> where usernames are 2–30 chars.
@@ -129,10 +132,6 @@
                 <data android:pathPattern="/@/............................" />
                 <data android:pathPattern="/@/............................." />
                 <data android:pathPattern="/@/.............................." />
-                <data android:pathPattern="/tv/.*" />
-
-                <data android:pathPattern="/broadcast/.*/.*/........" />
-                <data android:pathPattern="/broadcast/.*/.*/......../........" />
 
                 <!-- Board editor: bare /editor and /editor/<fen> (FEN ranks contain '/'). -->
                 <data android:pathPattern="/editor" />
