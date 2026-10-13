@@ -188,6 +188,11 @@ void main() {
         await repo.saveStudy(activeStudy);
         await repo.saveStudy(inactiveStudy);
 
+        // The decisions below point at c1/c2, so those chapters have to exist. Nothing enforced
+        // the foreign key until now, which is how decisions could sit here pointing at nothing.
+        await repo.saveChapter(const Chapter(id: 'c1', studyId: 'active_s', sourceOrder: 0));
+        await repo.saveChapter(const Chapter(id: 'c2', studyId: 'inactive_s', sourceOrder: 0));
+
         final d1 = RepertoireDecision.create(
           studyId: 'active_s',
           chapterId: 'c1',
