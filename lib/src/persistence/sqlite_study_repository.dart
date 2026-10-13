@@ -27,19 +27,28 @@ class SqliteStudyRepository implements StudyRepository {
 
   final Database _db;
 
-  /// Tail of the FIFO chain that serialises imports. Each import waits for the one before it.
-  Future<void> _importLock = Future<void>.value();
+  /// The import currently running, or null when none is. A second import waits on it and takes
+  /// its place; see [saveImportResult] for why the uncontended path deliberately does not await
+  /// anything.
+  Completer<void>? _importInFlight;
 
   @override
   Future<void> saveImportResult(ImportResult result) async {
-    // Imports are serialised FIFO. The duplicate check that decides whether an import happens at
+    // Imports are serialised. The duplicate check that decides whether an import happens at
     // all lives in the controller, above this layer, so two imports that start together both ask
     // "already imported?" before either writes and both see no match. Serialising the writes lets
     // the second one re-check now that the first has committed.
-    final previous = _importLock;
-    final completer = Completer<void>();
-    _importLock = completer.future;
-    await previous;
+    //
+    // The uncontended path must not await at all. An unconditional `await previous` adds a
+    // microtask hop before any I/O, and under a widget test's fake clock that hop needs a pump to
+    // drain — which hangs export_pgn_dialog_test.dart outright. Waiting only when something is
+    // genuinely in front keeps the single-import path byte-for-byte as asynchronous as it was.
+    final ahead = _importInFlight;
+    final mine = Completer<void>();
+    _importInFlight = mine;
+    if (ahead != null) {
+      await ahead.future;
+    }
 
     final sw = Stopwatch()..start();
     try {
@@ -116,7 +125,10 @@ class SqliteStudyRepository implements StudyRepository {
     } finally {
       // Released whether the import succeeded, was skipped as a duplicate, or threw — otherwise
       // one failed import would wedge every later one behind a future that never completes.
-      completer.complete();
+      mine.complete();
+      if (identical(_importInFlight, mine)) {
+        _importInFlight = null;
+      }
     }
   }
 
