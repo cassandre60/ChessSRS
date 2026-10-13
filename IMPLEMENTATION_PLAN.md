@@ -351,7 +351,7 @@ Status:
   - 25 (#64, import 10 MB size guard)
   - 29 (#66, route swallowed catches to Logger)
   - 31 (#65, prefs corruption backup & log)
-  - 32 (#67/#68, session constructor cost pinning)
+  - 32 (#67/#68, session constructor cost pinning). Phase 2 (chunked async factory) was **declined on measurement**, not forgotten: ~41 ms at 10k decisions, ~3.7 ms at 2k, and QUALITY §4.1 covers the move path, not session start. Do not reopen Phase 2 without a real library above ~5k positions. Recorded in `test/review/session_constructor_cost_test.dart`.
   - 35 (#85, linux sound process leak)
   - 37 (#90, review keyboard shortcuts / Enter, NumpadEnter, ArrowRight)
   - PERF-FIX-21 (#84, targeted review-state load in getDueSummary)
