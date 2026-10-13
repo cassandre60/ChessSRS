@@ -643,6 +643,70 @@ void main() {
       }
     });
 
+    test('concurrent imports of the same PGN do not both land', () async {
+      // The duplicate check (getStudyByPgnHash) and the write live in different places: the
+      // controller asks "already imported?" and then calls saveImportResult. Two imports that
+      // start together both ask before either writes, both see no match, and both write.
+      //
+      // They do not overwrite each other — chapters and decisions get fresh ids on every import,
+      // so ConflictAlgorithm.replace has nothing to match on. They ACCUMULATE: the user ends up
+      // with the same repertoire stored twice, under one study, and the duplicate is invisible
+      // because there is only one study row.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const hash = 'same-file-twice';
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+
+        ImportResult build(String studyId) => ImportResult(
+          study: Study(
+            id: studyId,
+            title: 'Italian',
+            pgnHash: hash,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          chapters: [Chapter.create(studyId: studyId, sourceOrder: 0, title: 'Main')],
+          decisions: [
+            RepertoireDecision(
+              id: 'dec-$studyId-1',
+              studyId: studyId,
+              chapterId: 'chapter',
+              nodeId: 'node-1',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          ],
+          errors: const [],
+        );
+
+        await Future.wait([
+          repo.saveImportResult(build('import-a')),
+          repo.saveImportResult(build('import-b')),
+        ]);
+
+        final stored = await repo.getAllStudies();
+        final withHash = stored.where((s) => s.pgnHash == hash).toList();
+        expect(
+          withHash,
+          hasLength(1),
+          reason: 'the same file must end up in the library once, not twice',
+        );
+
+        // Whichever import won, its content is intact and the loser's is gone entirely. A torn
+        // or half-written copy would show up as one study with the other's decisions inside it.
+        final decisions = await repo.getDecisionsByStudy(withHash.single.id);
+        expect(
+          decisions,
+          hasLength(1),
+          reason: 'the stored copy must be a whole import, not a mixture of the two',
+        );
+        expect(decisions.single.id, endsWith('-1'));
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'a failed mirror write rolls back the canonical state instead of leaving it torn',
       () async {

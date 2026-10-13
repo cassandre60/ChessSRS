@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_srs/src/domain/domain.dart';
@@ -20,46 +21,87 @@ final Logger _logger = Logger('StudyRepository');
 /// decision's [ReviewState] and append one [ReviewEvent] without touching
 /// study or chapter trees (QUALITY.md §1.5).
 class SqliteStudyRepository implements StudyRepository {
-  const SqliteStudyRepository(this._db);
+  // Not const: the import FIFO below is per-instance mutable state. No call site used `const`,
+  // so dropping it is invisible to callers.
+  SqliteStudyRepository(this._db);
 
   final Database _db;
 
+  /// Tail of the FIFO chain that serialises imports. Each import waits for the one before it.
+  Future<void> _importLock = Future<void>.value();
+
   @override
   Future<void> saveImportResult(ImportResult result) async {
+    // Imports are serialised FIFO. The duplicate check that decides whether an import happens at
+    // all lives in the controller, above this layer, so two imports that start together both ask
+    // "already imported?" before either writes and both see no match. Serialising the writes lets
+    // the second one re-check now that the first has committed.
+    final previous = _importLock;
+    final completer = Completer<void>();
+    _importLock = completer.future;
+    await previous;
+
     final sw = Stopwatch()..start();
-    await _db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
-      await txn.insert(
-        kTableSrsStudy,
-        _studyRow(result.study, nowIso: now),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+    try {
+      // Two imports of one file carry different study ids and fresh chapter/decision ids, so
+      // nothing in the write itself matches: they accumulate into one study, and the duplicate is
+      // invisible because there is only ever one study row.
+      final hash = result.study.pgnHash;
+      if (hash != null) {
+        final existing = await _db.query(
+          kTableSrsStudy,
+          columns: ['id'],
+          where: 'pgnHash = ?',
+          whereArgs: [hash],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          _logger.info(
+            'Skipping import of "${result.study.title}": already stored as '
+            '${existing.first['id']} while this one was in flight.',
+          );
+          return;
+        }
+      }
+
+      await _db.transaction((txn) async {
+        final now = DateTime.now().toIso8601String();
+        await txn.insert(
+          kTableSrsStudy,
+          _studyRow(result.study, nowIso: now),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        final chapterBatch = txn.batch();
+        for (final chapter in result.chapters) {
+          chapterBatch.insert(
+            kTableSrsChapter,
+            _chapterRow(chapter),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await chapterBatch.commit(noResult: true);
+
+        final decisionBatch = txn.batch();
+        for (final d in result.decisions) {
+          decisionBatch.insert(
+            kTableSrsDecision,
+            _decisionRow(d),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await decisionBatch.commit(noResult: true);
+      });
+      sw.stop();
+      _logger.info(
+        'Saved import result for study ${result.study.id} ("${result.study.title}"): '
+        '${result.chapters.length} chapters, ${result.decisions.length} decisions in ${sw.elapsedMilliseconds}ms',
       );
-
-      final chapterBatch = txn.batch();
-      for (final chapter in result.chapters) {
-        chapterBatch.insert(
-          kTableSrsChapter,
-          _chapterRow(chapter),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await chapterBatch.commit(noResult: true);
-
-      final decisionBatch = txn.batch();
-      for (final d in result.decisions) {
-        decisionBatch.insert(
-          kTableSrsDecision,
-          _decisionRow(d),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await decisionBatch.commit(noResult: true);
-    });
-    sw.stop();
-    _logger.info(
-      'Saved import result for study ${result.study.id} ("${result.study.title}"): '
-      '${result.chapters.length} chapters, ${result.decisions.length} decisions in ${sw.elapsedMilliseconds}ms',
-    );
+    } finally {
+      // Released whether the import succeeded, was skipped as a duplicate, or threw — otherwise
+      // one failed import would wedge every later one behind a future that never completes.
+      completer.complete();
+    }
   }
 
   // ---------------------------------------------------------------------------
