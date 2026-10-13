@@ -1,12 +1,11 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'dart:io' show Platform;
-
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/lichess_study_importer.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/import/pgn_offload.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/move_feedback.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
@@ -1428,9 +1427,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       );
     }
 
-    // Offload large PGN parsing (>=64KB) to background worker isolate to keep UI thread 60/120fps.
+    // One threshold for all PGN work (see pgn_offload.dart): a file whose hash is
+    // computed off-thread also has its parse off-thread. Previously this branch used 64 KB
+    // while the helpers used 8 KB, so a 20 KB file hashed on a worker while its parse — the
+    // expensive part — blocked the UI isolate.
     final ImportResult result;
-    if (!Platform.environment.containsKey('FLUTTER_TEST') && pgnText.length >= 65536) {
+    if (shouldOffloadPgnWork(textLength: pgnText.length)) {
       result = await importPgnAsync(
         pgnText,
         studyTitle: title ?? 'Imported Study',
