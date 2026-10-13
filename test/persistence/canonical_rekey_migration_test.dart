@@ -326,6 +326,14 @@ void main() {
         'updatedAt': '2026-09-16T12:00:00.000Z',
         'isActive': 1,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      // The decision below points at chapter-1, so the chapter has to exist. It did not until
+      // foreign keys were enforced, which is how the row could sit there referencing nothing.
+      await db.insert(kTableSrsChapter, {
+        'id': 'chapter-1',
+        'studyId': 'study-1',
+        'sourceOrder': 0,
+        'createdAt': '2026-09-16T12:00:00.000Z',
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       await db.insert(kTableSrsDecision, {
         'id': decisionId,
         'studyId': 'study-1',

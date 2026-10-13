@@ -98,6 +98,16 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           _logger.info('Enabling WAL journal mode');
           await db.rawQuery('PRAGMA journal_mode=WAL');
         }
+        // SQLite ignores declared foreign keys unless the connection asks for them, and the
+        // setting is per-connection rather than persisted. srs_chapter and srs_decision declare
+        // ON DELETE CASCADE against srs_study; without this those clauses are decorative, and an
+        // orphan survives any path that does not cascade by hand. deleteStudy and deleteChapter do
+        // cascade in Dart, which is why nothing had gone wrong yet — the database was simply not
+        // holding up its end for anything else.
+        //
+        // Set unconditionally: older SQLite ignores it rather than failing, and foreign-key
+        // support predates every version this app opens a database on.
+        await db.rawQuery('PRAGMA foreign_keys = ON');
       },
       onOpen: (db) async {
         await _ensureLateSrsColumns(db);
