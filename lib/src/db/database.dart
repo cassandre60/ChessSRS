@@ -399,7 +399,8 @@ Future<void> _deleteOldEntries(DatabaseExecutor db, String table, Duration ttl) 
 
 Future<bool> _doesTableExist(DatabaseExecutor db, String table) async {
   final tableExists = await db.rawQuery(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='$table'",
+    "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+    [table],
   );
 
   return tableExists.isNotEmpty;

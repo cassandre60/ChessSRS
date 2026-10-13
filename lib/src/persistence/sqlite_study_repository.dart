@@ -313,9 +313,13 @@ class SqliteStudyRepository implements StudyRepository {
             i + chunkSize > canonicalList.length ? canonicalList.length : i + chunkSize,
           );
           final cPlaceholders = List.filled(chunk.length, '?').join(',');
+          // NOT EXISTS (not NOT IN): the correlated form uses the
+          // idx_srs_decision_canonicalStateId index instead of forcing a scan, and it is
+          // NULL-safe where NOT IN needs the IS NOT NULL guard to mean anything.
           final sharedGuard =
-              'canonicalId IN ($cPlaceholders) AND canonicalId NOT IN ( '
-              'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)';
+              'canonicalId IN ($cPlaceholders) AND NOT EXISTS ( '
+              'SELECT 1 FROM $kTableSrsDecision d2 WHERE d2.canonicalStateId = '
+              '$kTablePositionKnowledgeState.canonicalId AND d2.studyId != ?)';
           await txn.delete(
             kTablePositionKnowledgeState,
             where: sharedGuard,
@@ -324,15 +328,17 @@ class SqliteStudyRepository implements StudyRepository {
           await txn.delete(
             kTableSrsReviewState,
             where:
-                'decisionId IN ($cPlaceholders) AND decisionId NOT IN ( '
-                'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)',
+                'decisionId IN ($cPlaceholders) AND NOT EXISTS ( '
+                'SELECT 1 FROM $kTableSrsDecision d2 WHERE d2.canonicalStateId = '
+                '$kTableSrsReviewState.decisionId AND d2.studyId != ?)',
             whereArgs: [...chunk, id],
           );
           await txn.delete(
             kTableSrsReviewEvent,
             where:
-                'decisionId IN ($cPlaceholders) AND decisionId NOT IN ( '
-                'SELECT canonicalStateId FROM $kTableSrsDecision WHERE studyId != ? AND canonicalStateId IS NOT NULL)',
+                'decisionId IN ($cPlaceholders) AND NOT EXISTS ( '
+                'SELECT 1 FROM $kTableSrsDecision d2 WHERE d2.canonicalStateId = '
+                '$kTableSrsReviewEvent.decisionId AND d2.studyId != ?)',
             whereArgs: [...chunk, id],
           );
         }
@@ -446,22 +452,27 @@ class SqliteStudyRepository implements StudyRepository {
         // last decision referring to it.
         for (final canonicalId in canonicalIds) {
           // Still referenced by some other decision, so this position outlives the chapter.
-          const ownedElsewhere =
-              'SELECT canonicalStateId FROM $kTableSrsDecision '
-              'WHERE canonicalStateId IS NOT NULL';
+          // NOT EXISTS (not NOT IN): index-using and NULL-safe without an IS NOT NULL
+          // guard. Each guard correlates to its own target table.
           await txn.delete(
             kTablePositionKnowledgeState,
-            where: 'canonicalId = ? AND canonicalId NOT IN ($ownedElsewhere)',
+            where:
+                'canonicalId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'WHERE canonicalStateId = $kTablePositionKnowledgeState.canonicalId)',
             whereArgs: [canonicalId],
           );
           await txn.delete(
             kTableSrsReviewState,
-            where: 'decisionId = ? AND decisionId NOT IN ($ownedElsewhere)',
+            where:
+                'decisionId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'WHERE canonicalStateId = $kTableSrsReviewState.decisionId)',
             whereArgs: [canonicalId],
           );
           await txn.delete(
             kTableSrsReviewEvent,
-            where: 'decisionId = ? AND decisionId NOT IN ($ownedElsewhere)',
+            where:
+                'decisionId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'WHERE canonicalStateId = $kTableSrsReviewEvent.decisionId)',
             whereArgs: [canonicalId],
           );
         }
