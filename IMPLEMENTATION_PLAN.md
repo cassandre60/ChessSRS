@@ -362,6 +362,8 @@ Status:
   - 17 (chapters diagram reskin — screen deleted in #61)
   - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
   - DOMAIN-FIX-36 (contagion tau guard and sub-ms stability floor already on main; probe showed no collapse — brief should be withdrawn)
+  - ERROR-FIX-29 (account prefs and share catches already log with stack; the cited importer catch is gone; the one remaining catch records its message and was probed as reachable — nothing to add)
+  - SAFETY-FIX-25 (10 MB guard `kMaxPgnInputBytes` already checked at file pick, paste and `importPgn`, with tests on the rejection and the limit boundary)
 - **In flight / Finishing CI**:
   - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
   - 30 (A11Y-FIX-30: analysis screen semantics)
