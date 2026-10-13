@@ -410,8 +410,15 @@ class ReviewService {
     final chapterSides = await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
     final allDecisions = await repository.getAllDecisions();
-    final reviewStatesList = await repository.getAllReviewStates();
+    final decisionIds = allDecisions.map((d) => d.id).toList();
+    final canonicalIds = allDecisions.map((d) => d.canonicalId).toSet().toList();
+    final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
+    final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
+    final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
+    for (final k in kStates) {
+      reviewStates[k.canonicalId] = k.toReviewState();
+    }
     final now = clock.now();
 
     final studyDueCounts = <String, int>{for (final s in studies) s.id: 0};

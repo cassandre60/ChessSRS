@@ -1097,7 +1097,9 @@ void main() {
       await tester.tap(find.widgetWithText(SrsPillButton, 'Delete'));
       await pumpAsync(tester);
 
-      // Study is deleted -> empty state
+      // Study is deleted -> empty state. The delete reloads the summary off the DB, so wait
+      // on the state rather than a fixed delay.
+      await pumpUntilFound(tester, find.text('Bring your study.'));
       expect(find.text('Bring your study.'), findsOneWidget);
     });
 
