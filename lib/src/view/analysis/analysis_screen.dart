@@ -108,11 +108,16 @@ class _AnalysisScreenState extends ConsumerState<_AnalysisScreen> {
         // standalone board is just the screen's own name, and on a phone it costs a line of
         // vertical space the moves tree and the charts need.
         final Widget? titleLine = displayTitle != null
-            ? Text(
-                displayTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: SrsText.meta(c.ink2),
+            ? Semantics(
+                // The study/chapter context as a heading landmark: without this a screen
+                // reader finds the board with no announcement tying it to its study.
+                header: true,
+                child: Text(
+                  displayTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SrsText.meta(c.ink2),
+                ),
               )
             : (value.archivedGame != null ? appBarTitle : null);
 

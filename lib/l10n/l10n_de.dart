@@ -2870,6 +2870,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get toggleLocalEvaluation => 'Lokale Auswertung an-/ausschalten';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Variante aufwerten';
 
   @override

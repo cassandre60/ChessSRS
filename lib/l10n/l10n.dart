@@ -4979,6 +4979,11 @@ abstract class AppLocalizations {
   /// **'Toggle local evaluation'**
   String get toggleLocalEvaluation;
 
+  /// Screen-reader label for one tappable engine principal-variation line.
+  ///
+  /// In en, this message translates to:
+  /// **'Engine line, evaluation {eval}: {line}'**
+  String engineLineSemantics(String eval, String line);
   /// No description provided for @promoteVariation.
   ///
   /// In en, this message translates to:

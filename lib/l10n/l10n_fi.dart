@@ -2865,6 +2865,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get toggleLocalEvaluation => 'Paikallinen analyysi päälle/pois';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Nosta muunnelmaa';
 
   @override

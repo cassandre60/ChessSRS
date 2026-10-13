@@ -2870,6 +2870,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get toggleLocalEvaluation => 'Attiva/disattiva analisi locale';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promuovi la variante';
 
   @override

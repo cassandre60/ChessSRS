@@ -2817,6 +2817,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get toggleLocalEvaluation => 'Ganti evaluasi lokal';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Variasi promosi';
 
   @override

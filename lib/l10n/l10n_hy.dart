@@ -2856,6 +2856,11 @@ class AppLocalizationsHy extends AppLocalizations {
   String get toggleLocalEvaluation => 'Միացնել լոկալ գնահատականը';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Փոխել տարբերակը';
 
   @override

@@ -1629,6 +1629,14 @@
   "showThreat": "Show threat",
   "inLocalBrowser": "in local browser",
   "toggleLocalEvaluation": "Toggle local evaluation",
+  "engineLineSemantics": "Engine line, evaluation {eval}: {line}",
+  "@engineLineSemantics": {
+    "description": "Screen-reader label for one tappable engine principal-variation line.",
+    "placeholders": {
+      "eval": {"type": "String"},
+      "line": {"type": "String"}
+    }
+  },
   "promoteVariation": "Promote variation",
   "makeMainLine": "Make main line",
   "deleteFromHere": "Delete from here",

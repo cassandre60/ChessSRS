@@ -2884,6 +2884,11 @@ class AppLocalizationsHr extends AppLocalizations {
   String get toggleLocalEvaluation => 'Prekidač za lokalnu evaluaciju';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promakni varijaciju';
 
   @override

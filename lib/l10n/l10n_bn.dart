@@ -2845,6 +2845,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get toggleLocalEvaluation => 'স্থানীয় টগ্ল মূল্যায়ন';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'বিজ্ঞাপন';
 
   @override
