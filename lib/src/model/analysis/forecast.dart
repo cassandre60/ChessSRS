@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:math';
 
-import 'package:chess_srs/src/model/common/node.dart';
 import 'package:chess_srs/src/model/common/uci.dart';
 import 'package:collection/collection.dart';
 import 'package:dartchess/dartchess.dart';
@@ -95,22 +93,4 @@ sealed class Forecast with _$Forecast {
       onMyTurn: !onMyTurn,
     );
   }
-
-  String toApiForecast(ViewNode currentNode) => jsonEncode(
-    lines
-        .map(
-          (line) => currentNode
-              .branchesOn(line)
-              .map(
-                (branch) => {
-                  'ply': branch.position.ply,
-                  'uci': branch.sanMove.move.uci,
-                  'san': branch.sanMove.san,
-                  'fen': branch.position.fen,
-                },
-              )
-              .toList(growable: false),
-        )
-        .toList(growable: false),
-  );
 }

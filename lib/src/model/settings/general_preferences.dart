@@ -43,10 +43,6 @@ class GeneralPreferencesNotifier extends Notifier<GeneralPrefs>
     return save(state.copyWith(isSoundEnabled: !state.isSoundEnabled));
   }
 
-  Future<void> setLocale(Locale? locale) {
-    return save(state.copyWith(locale: locale));
-  }
-
   Future<void> setSoundTheme(SoundTheme soundTheme) {
     return save(state.copyWith(soundTheme: soundTheme));
   }
