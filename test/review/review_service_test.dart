@@ -188,6 +188,11 @@ void main() {
         await repo.saveStudy(activeStudy);
         await repo.saveStudy(inactiveStudy);
 
+        // The decisions below point at c1/c2, so those chapters have to exist. Nothing enforced
+        // the foreign key until now, which is how decisions could sit here pointing at nothing.
+        await repo.saveChapter(const Chapter(id: 'c1', studyId: 'active_s', sourceOrder: 0));
+        await repo.saveChapter(const Chapter(id: 'c2', studyId: 'inactive_s', sourceOrder: 0));
+
         final d1 = RepertoireDecision.create(
           studyId: 'active_s',
           chapterId: 'c1',
@@ -302,6 +307,34 @@ void main() {
         }
       },
     );
+
+    // SPEC INV-051: summaries load review state for the decisions they count, not the whole table.
+    test('getDueSummary reads review state by the ids it counts, not the whole table', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = _FullTableReadRepository(db);
+      final service = ReviewService(repository: repo, clock: clock);
+
+      try {
+        const study = Study(id: 's_scoped', title: 'Scoped Study');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_scoped', sourceOrder: 0, title: 'Chapter 1');
+        await repo.saveChapter(ch);
+        final d = RepertoireDecision.create(
+          studyId: 's_scoped',
+          chapterId: ch.id,
+          nodeId: 'n1',
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        );
+        await repo.saveDecisions([d]);
+
+        final summary = await service.getDueSummary(studies: [study]);
+
+        expect(repo.fullTableReads, 0);
+        expect(summary.totalDueCount, 1);
+      } finally {
+        await db.close();
+      }
+    });
 
     test('getDueSummary computes accurate study and chapter progress metrics', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
@@ -928,6 +961,20 @@ void main() {
       });
     });
   });
+}
+
+/// A [SqliteStudyRepository] that records whether the full-table review-state read was used,
+/// so a test can pin that a summary is scoped to the decisions it counts (PERF-FIX-21).
+class _FullTableReadRepository extends SqliteStudyRepository {
+  _FullTableReadRepository(super.db);
+
+  int fullTableReads = 0;
+
+  @override
+  Future<List<ReviewState>> getAllReviewStates() {
+    fullTableReads++;
+    return super.getAllReviewStates();
+  }
 }
 
 /// A [SqliteStudyRepository] whose [saveAnswerBatch] can be made to fail, to

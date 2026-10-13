@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
 
-import 'dart:typed_data';
-
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
@@ -24,6 +22,7 @@ import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -116,7 +115,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester, 500);
+      await pumpUntilFound(tester, find.text('Bring your study.'));
 
       expect(find.text('Bring your study.'), findsOneWidget);
       expect(find.text('Choose file'), findsWidgets);
@@ -310,7 +309,10 @@ void main() {
 
       // Play incorrect move: e2 -> e4 instead of d2 -> d4
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(
+        tester,
+        find.text('Play this move to continue. The position will come back soon.'),
+      );
 
       // Shows lapse feedback banner
       expect(
@@ -371,7 +373,7 @@ void main() {
 
       // Play incorrect move: e2 -> e4 instead of d2 -> d4
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.text('Open in analysis'));
 
       // Lapse state shows the bridge under the answer.
       expect(find.text('Open in analysis'), findsOneWidget);
@@ -425,7 +427,7 @@ void main() {
 
       // Play incorrect move: e2 -> e4 instead of d2 -> d4
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.text('Reveal answer'));
 
       await tester.tap(find.text('Reveal answer'));
       await pumpAsync(tester, 700);
@@ -484,7 +486,7 @@ void main() {
       // transposition can make an alternative equally correct, in which case the study move is
       // not what the player actually played.
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.bySemanticsLabel('Correct. e4.'));
       expect(find.bySemanticsLabel('Correct. e4.'), findsOneWidget);
 
       // Past it, the next question is open and the verdict is gone rather than lingering.
@@ -576,7 +578,7 @@ void main() {
 
       // Play the correct move; the note pauses advancement and the overlay goes up.
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.text('Important center move'));
       expect(find.text('Important center move'), findsOneWidget);
 
       final overlay = find.bySemanticsLabel('Continue to next position');
@@ -625,7 +627,7 @@ void main() {
       // A wrong move puts the study move in the answer slot. The notation line carries the same
       // SAN through the same widget, so one node is the minimum, not exactly one.
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.bySemanticsLabel('Nf3'));
       expect(find.bySemanticsLabel('Nf3'), findsWidgets);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
@@ -758,7 +760,7 @@ void main() {
 
         // Play incorrect move: d2 -> d4 instead of e2 -> e4
         await playMove(tester, 'd2', 'd4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.text('Best by test'));
 
         // Now the comment is revealed as explanation
         expect(find.text('Best by test'), findsOneWidget);
@@ -799,7 +801,7 @@ void main() {
 
         // Play incorrect move: d2 -> d4 instead of e2 -> e4
         await playMove(tester, 'd2', 'd4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.byType(SrsMoveArrow));
 
         // After lapse: displays SrsMoveArrow PLUS the comment shapes (arrow and circle) on BoardWidget
         expect(find.byType(SrsMoveArrow), findsOneWidget);
@@ -852,7 +854,7 @@ void main() {
 
         // Play incorrect move: d2 -> d4 instead of e2 -> e4
         await playMove(tester, 'd2', 'd4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.byType(SrsMoveArrow));
 
         // After lapse: SrsMoveArrow is present, but commentary shapes (Gf3e5, Re5) are NOT added to BoardWidget
         expect(find.byType(SrsMoveArrow), findsOneWidget);
@@ -1097,7 +1099,9 @@ void main() {
       await tester.tap(find.widgetWithText(SrsPillButton, 'Delete'));
       await pumpAsync(tester);
 
-      // Study is deleted -> empty state
+      // Study is deleted -> empty state. The delete reloads the summary off the DB, so wait
+      // on the state rather than a fixed delay.
+      await pumpUntilFound(tester, find.text('Bring your study.'));
       expect(find.text('Bring your study.'), findsOneWidget);
     });
 
@@ -1181,7 +1185,7 @@ void main() {
 
         // Play correct move: e2 -> e4
         await playMove(tester, 'e2', 'e4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.text('From your study'));
 
         // Auto-advancement paused: shows Note and Continue button
         expect(find.text('From your study'), findsOneWidget);
@@ -1234,7 +1238,7 @@ void main() {
 
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.text('Important center move'));
 
       // Paused awaiting continue (comment note is visible)
       expect(find.text('Important center move'), findsOneWidget);
@@ -1246,6 +1250,49 @@ void main() {
       // Successfully advanced to completion
       expect(find.text('Nothing due.'), findsOneWidget);
     });
+
+    for (final (key, physical) in [
+      (LogicalKeyboardKey.enter, PhysicalKeyboardKey.enter),
+      (LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight),
+    ]) {
+      testWidgets('pressing ${key.keyLabel} continues advancement while awaiting advance', (
+        tester,
+      ) async {
+        final importResult = importPgn(
+          '1. e4 {Keyboard advance} *',
+          studyTitle: 'Keyboard Advance',
+          repertoireSide: Side.white,
+        );
+        await tester.runAsync(() async {
+          await repo.saveImportResult(importResult);
+        });
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
+
+        await tester.pumpWidget(app);
+        await pumpAsync(tester);
+
+        await playMove(tester, 'e2', 'e4');
+        await pumpAsync(tester, 100);
+
+        expect(find.text('Keyboard advance'), findsOneWidget);
+
+        await tester.sendKeyEvent(key, physicalKey: physical);
+        await pumpAsync(tester, 700);
+
+        expect(find.text('Nothing due.'), findsOneWidget);
+      });
+    }
 
     testWidgets(
       'quick toggle action in overflow sheet toggles annotations and updates shapes/comments in real time',
@@ -1276,7 +1323,7 @@ void main() {
 
         // Play correct move: e2 -> e4
         await playMove(tester, 'e2', 'e4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.text('Attacks the center'));
 
         // Shapes and commentary are visible
         var board = tester.widget<BoardWidget>(find.byType(BoardWidget));

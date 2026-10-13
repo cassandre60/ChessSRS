@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_srs/src/domain/domain.dart';
@@ -20,46 +21,115 @@ final Logger _logger = Logger('StudyRepository');
 /// decision's [ReviewState] and append one [ReviewEvent] without touching
 /// study or chapter trees (QUALITY.md §1.5).
 class SqliteStudyRepository implements StudyRepository {
-  const SqliteStudyRepository(this._db);
+  // Not const: the import FIFO below is per-instance mutable state. No call site used `const`,
+  // so dropping it is invisible to callers.
+  SqliteStudyRepository(this._db);
 
   final Database _db;
 
+  /// The import currently running, or null when none is. A second import waits on it and takes
+  /// its place; see [saveImportResult] for why the uncontended path deliberately does not await
+  /// anything.
+  Completer<void>? _importInFlight;
+
   @override
   Future<void> saveImportResult(ImportResult result) async {
+    // Imports are serialised. The duplicate check that decides whether an import happens at
+    // all lives in the controller, above this layer, so two imports that start together both ask
+    // "already imported?" before either writes and both see no match. Serialising the writes lets
+    // the second one re-check now that the first has committed.
+    //
+    // The uncontended path must not await at all. An unconditional `await previous` adds a
+    // microtask hop before any I/O, and under a widget test's fake clock that hop needs a pump to
+    // drain — which hangs export_pgn_dialog_test.dart outright. Waiting only when something is
+    // genuinely in front keeps the single-import path byte-for-byte as asynchronous as it was.
+    final ahead = _importInFlight;
+    final mine = Completer<void>();
+    _importInFlight = mine;
+    if (ahead != null) {
+      await ahead.future;
+    }
+
     final sw = Stopwatch()..start();
-    await _db.transaction((txn) async {
-      final now = DateTime.now().toIso8601String();
-      await txn.insert(
-        kTableSrsStudy,
-        _studyRow(result.study, nowIso: now),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+    try {
+      // Two imports of one file carry different study ids and fresh chapter/decision ids, so
+      // nothing in the write itself matches: they accumulate into one study, and the duplicate is
+      // invisible because there is only ever one study row.
+      //
+      // The orientation check is not optional. The same tree imported as White and as Black is two
+      // studies that share a pgnHash on purpose — different questions, different SRS memory — so
+      // matching on the hash alone would silently drop the second repertoire. This mirrors
+      // getStudyByPgnHash's forSide filter.
+      final hash = result.study.pgnHash;
+      if (hash != null) {
+        final orientation = result.chapters.isEmpty ? null : result.chapters.first.orientation;
+        final existing = orientation == null
+            ? await _db.query(
+                kTableSrsStudy,
+                columns: ['id'],
+                where: 'pgnHash = ?',
+                whereArgs: [hash],
+                limit: 1,
+              )
+            : await _db.query(
+                kTableSrsStudy,
+                columns: ['id'],
+                where:
+                    'pgnHash = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsChapter c '
+                    'WHERE c.studyId = $kTableSrsStudy.id AND c.orientation != ?)',
+                whereArgs: [hash, orientation.name],
+                limit: 1,
+              );
+        if (existing.isNotEmpty) {
+          _logger.info(
+            'Skipping import of "${result.study.title}": already stored as '
+            '${existing.first['id']} while this one was in flight.',
+          );
+          return;
+        }
+      }
+
+      await _db.transaction((txn) async {
+        final now = DateTime.now().toIso8601String();
+        await txn.insert(
+          kTableSrsStudy,
+          _studyRow(result.study, nowIso: now),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        final chapterBatch = txn.batch();
+        for (final chapter in result.chapters) {
+          chapterBatch.insert(
+            kTableSrsChapter,
+            _chapterRow(chapter),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await chapterBatch.commit(noResult: true);
+
+        final decisionBatch = txn.batch();
+        for (final d in result.decisions) {
+          decisionBatch.insert(
+            kTableSrsDecision,
+            _decisionRow(d),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await decisionBatch.commit(noResult: true);
+      });
+      sw.stop();
+      _logger.info(
+        'Saved import result for study ${result.study.id} ("${result.study.title}"): '
+        '${result.chapters.length} chapters, ${result.decisions.length} decisions in ${sw.elapsedMilliseconds}ms',
       );
-
-      final chapterBatch = txn.batch();
-      for (final chapter in result.chapters) {
-        chapterBatch.insert(
-          kTableSrsChapter,
-          _chapterRow(chapter),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+    } finally {
+      // Released whether the import succeeded, was skipped as a duplicate, or threw — otherwise
+      // one failed import would wedge every later one behind a future that never completes.
+      mine.complete();
+      if (identical(_importInFlight, mine)) {
+        _importInFlight = null;
       }
-      await chapterBatch.commit(noResult: true);
-
-      final decisionBatch = txn.batch();
-      for (final d in result.decisions) {
-        decisionBatch.insert(
-          kTableSrsDecision,
-          _decisionRow(d),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await decisionBatch.commit(noResult: true);
-    });
-    sw.stop();
-    _logger.info(
-      'Saved import result for study ${result.study.id} ("${result.study.title}"): '
-      '${result.chapters.length} chapters, ${result.decisions.length} decisions in ${sw.elapsedMilliseconds}ms',
-    );
+    }
   }
 
   // ---------------------------------------------------------------------------

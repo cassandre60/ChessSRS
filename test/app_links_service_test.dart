@@ -14,7 +14,6 @@ import 'package:chess_srs/src/model/game/game_status.dart';
 import 'package:chess_srs/src/model/game/player.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/model/user/user_repository.dart';
-import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
@@ -26,15 +25,10 @@ import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'example_data.dart';
-import 'model/game/game_socket_example_data.dart';
-import 'network/fake_http_client_factory.dart';
-import 'network/fake_websocket_channel.dart';
 import 'test_provider_scope.dart';
 
 class MockAppLinks extends Mock implements AppLinks {}
@@ -453,45 +447,20 @@ void main() {
       expect(find.text('Cannot find user hikaru'), findsOneWidget);
     });
 
-    testWidgets('Shows tv screen for /tv/<channel> link', (WidgetTester tester) async {
+    testWidgets('unsupported /tv/<channel> link does not navigate and resolves to null', (
+      WidgetTester tester,
+    ) async {
+      // The Watch tab (TV/broadcasts) was cut in C7, so TV links have no in-app route. The
+      // test previously had zero assertions and simulated a socket for a screen that never
+      // opened; this asserts the link resolves to null and leaves the screen unchanged.
       final uri = Uri.parse('https://lichess.org/tv/blitz');
-      await triggerAppLink(
-        tester,
-        uri,
-        overrides: {
-          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
-            return FakeHttpClientFactory(
-              () => MockClient((request) async {
-                if (request.url.path == '/api/tv/channels') {
-                  const body = '''
-                  {
-                    "blitz": {"color": "white", "gameId": "v3pIFdTz", "rating": 2615, "user": {"id": "whitePlayer", "name": "whitePlayer"}}
-                  }''';
-                  return http.Response(body, 200, headers: {'content-type': 'application/json'});
-                }
-                return http.Response('', 404);
-              }),
-            );
-          }),
-        },
-      );
+      await triggerAppLink(tester, uri);
+      await tester.pumpAndSettle();
 
-      // First frame resolves the channel and mounts the game controller, which
-      // opens the game socket; the lag pump lets it connect before the server
-      // sends the full event.
-      await tester.pump();
-      await tester.pump(kFakeWebSocketConnectionLag);
-      sendServerSocketMessages(Uri(path: '/watch/v3pIFdTz/white/v6'), [
-        makeFullEvent(
-          const GameId('gameid11'),
-          '',
-          whiteUserName: 'whitePlayer',
-          blackUserName: 'blackPlayer',
-        ),
-      ]);
-      await tester.pump(); // Process socket message
-
-      await tester.pumpAndSettle(); // Wait for TV screen to load
+      final context = tester.element(find.text('test link'));
+      final service = ProviderScope.containerOf(context).read(appLinksServiceProvider);
+      expect(await service.resolveAppLinkUri(context, uri), isNull);
+      expect(find.text('test link'), findsOneWidget, reason: 'cut TV route must not navigate');
     });
   });
 
