@@ -347,10 +347,14 @@ Status:
   - 29 (#66, route swallowed catches to Logger)
   - 31 (#65, prefs corruption backup & log)
   - 32 (#67/#68, session constructor cost pinning)
+  - PERF-FIX-21 (#84, targeted review-state load in getDueSummary; brief names a removed helper — see pitfalls)
+  - DESKTOP-FIX-37 (#90, Enter/NumpadEnter/ArrowRight advance; NumpadEnter untested — see pitfalls)
+  - REFACTOR-FIX-20 partial (#94, only SrsMovePair removed; rest blocked on test-caller and settings checks)
 - **Withdrawn / Obviated**:
   - 02 (transposition FEN — audit proved non-bug)
   - 17 (chapters diagram reskin — screen deleted in #61)
   - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
+  - DOMAIN-FIX-36 (contagion tau guard and sub-ms stability floor already on main; probe showed no collapse — brief should be withdrawn)
 - **In flight / Finishing CI**:
   - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
   - 30 (A11Y-FIX-30: analysis screen semantics)
@@ -362,6 +366,13 @@ Status:
   - 37 (DESKTOP-FIX-37: Enter / ArrowRight keyboard shortcuts for review advance)
 - **Parallel-safe ready lanes**:
   06, 11, 20, 21, 23, 27, 33, 34, 35, 36, 37.
+- **Pitfalls for queue work** (each verified on `origin/main`; read before picking a brief):
+  - Re-check every brief claim with `git grep` on `origin/main` before editing. PERF-FIX-21 named a helper that had been renamed; DOMAIN-FIX-36 described fixes already present.
+  - Before removing a "dead" symbol, grep `lib/` **and** `test/`. Several dead-code rows have live test callers, and removing them means deleting tests the gates forbid (G08). REFACTOR-FIX-20 was cut to the one safe symbol for this reason.
+  - `CallbackShortcuts` fires only for a focused descendant. A binding on the widget that holds focus is skipped silently (DESKTOP-FIX-37, PR #90).
+  - `sendKeyEvent(numpadEnter)` does not reach a numpad binding in widget tests. Numpad shortcuts need a manual check on a device.
+  - A PR goes `BEHIND` whenever `main` moves; merge `main` in, re-verify, wait for CI on the new head, then merge. `mergeStateStatus` reads `UNKNOWN` for a few seconds after a push.
+  - Protected referee files (`AGENTS.md`, `GATES.md`, `.gates/`, CI config) fail G07 in any non-gate-change PR. Lessons that belong in `AGENTS.md` need a separate, human-approved gate-change PR.
 - **Persistence lane tail** (blocked until #46 merges, then serialized):
   07 → 08 → 26 → 28.
 
