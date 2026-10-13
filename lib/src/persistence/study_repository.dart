@@ -62,10 +62,22 @@ abstract class StudyRepository {
 
   // Position Trees
   Future<RepertoireNode?> getPositionTree(String chapterId);
+
+  /// Saves the move tree of a chapter directly.
+  ///
+  /// In normal application workflows, [saveImportResult] atomically writes studies,
+  /// chapters, and decision trees within a single transaction. This method exists for
+  /// independent tree updates or test fixtures.
   Future<void> savePositionTree(String chapterId, RepertoireNode root);
 
   // Decisions
   Future<void> saveDecision(RepertoireDecision decision);
+
+  /// Persists a batch of decisions directly.
+  ///
+  /// In production, [saveImportResult] atomically persists decisions alongside their
+  /// studies and chapters. This method is used primarily by test fixtures and
+  /// isolated decision seeding.
   Future<void> saveDecisions(List<RepertoireDecision> decisions);
   Future<RepertoireDecision?> getDecision(String id);
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId);
