@@ -5,12 +5,19 @@ agent can pick up and execute top-to-bottom.
 
 ## Current state
 
-Two briefs remain, both with work in flight:
-
 | Brief | Status |
 |---|---|
 | `A11Y-FIX-27-review-screen-semantics.md` | In progress |
 | `POLISH-FIX-11-pgn-shape-extension-and-board-notify.md` | In progress |
+| `REFACTOR-FIX-21-pick-helpers-no-callers.md` | Ready |
+| `REFACTOR-FIX-22-dead-predicates-and-providers.md` | Ready |
+| `REFACTOR-FIX-23-enum-values-not-dead.md` | Ready — investigation, **read before deleting** |
+
+21–23 came from a tree-wide sweep for declarations with exactly one occurrence
+across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:
+27 hand-written and removable, ~30 enum values that must **not** be deleted
+blind (23 is about those), and the rest in files the reachability ratchet already
+pins as dead. The sweep is reproducible — see the command in each brief.
 
 **The queue was pruned on 2026-10-13.** It held 36 briefs; 34 were removed after
 each was verified against `origin/main`. They fall into three groups:
