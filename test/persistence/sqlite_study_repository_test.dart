@@ -977,7 +977,7 @@ void main() {
       }
     });
 
-    test('getReviewStatesByDecisions retrieves only review states for specified IDs', () async {
+    test('getReviewStatesByIds retrieves only review states for specified IDs', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);
 
@@ -987,11 +987,11 @@ void main() {
         const s3 = ReviewState(decisionId: 'dec-3', repetitionCount: 3);
         await repo.saveReviewStates([s1, s2, s3]);
 
-        final queried = await repo.getReviewStatesByDecisions(['dec-1', 'dec-3']);
+        final queried = await repo.getReviewStatesByIds(['dec-1', 'dec-3']);
         expect(queried.length, 2);
         expect(queried.map((s) => s.decisionId).toSet(), equals({'dec-1', 'dec-3'}));
 
-        final emptyQuery = await repo.getReviewStatesByDecisions([]);
+        final emptyQuery = await repo.getReviewStatesByIds([]);
         expect(emptyQuery, isEmpty);
       } finally {
         await db.close();
@@ -1516,7 +1516,7 @@ void main() {
           difficulty: 7.2,
         ),
       );
-      final states = await repo.getReviewStatesByDecisions(['migrated-dec-1']);
+      final states = await repo.getReviewStatesByIds(['migrated-dec-1']);
       expect(states.first.difficulty, equals(7.2));
 
       await upgradedDb.close();
