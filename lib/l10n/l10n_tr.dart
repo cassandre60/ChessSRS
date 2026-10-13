@@ -2858,6 +2858,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get toggleLocalEvaluation => 'Yerel analizi aç/kapat';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Bu varyanttan devam et';
 
   @override

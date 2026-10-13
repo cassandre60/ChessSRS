@@ -2875,6 +2875,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get toggleLocalEvaluation => 'Εναλλαγή τοπικής αξιολόγησης';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Προώθηση βαριάντας';
 
   @override

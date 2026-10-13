@@ -2626,6 +2626,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toggleLocalEvaluation => '切换到本地分析';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => '提升变着';
 
   @override

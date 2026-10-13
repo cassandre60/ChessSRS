@@ -2847,6 +2847,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get toggleLocalEvaluation => 'स्थानीय मूल्यांकन को टॉगल करें';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'विविधता को बढ़ावा दें';
 
   @override

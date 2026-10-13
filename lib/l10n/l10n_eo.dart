@@ -2852,6 +2852,11 @@ class AppLocalizationsEo extends AppLocalizations {
   String get toggleLocalEvaluation => 'Baskuligi lokan gaŭĝon';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Plivalorigi variaĵon';
 
   @override

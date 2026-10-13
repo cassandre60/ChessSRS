@@ -2919,6 +2919,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get toggleLocalEvaluation => 'Включить локальный анализ';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Повысить приоритет варианта';
 
   @override

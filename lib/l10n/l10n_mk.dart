@@ -2852,6 +2852,11 @@ class AppLocalizationsMk extends AppLocalizations {
   String get toggleLocalEvaluation => 'Вклчи локална еваулација';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Варијација на промовирање';
 
   @override

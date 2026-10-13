@@ -2908,6 +2908,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get toggleLocalEvaluation => 'Prepnúť na analýzu vo Vašom prehliadači';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Povýšiť variant';
 
   @override
