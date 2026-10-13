@@ -353,7 +353,7 @@ Status:
   - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
 - **In flight / Finishing CI**:
   - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
-  - 30 (PR #60, analysis screen semantics)
+  - 30 (A11Y-FIX-30: analysis screen semantics)
 - **New Batch 9 (Ready)**:
   - 33 (DOMAIN-FIX-33: retryMove duplicate ghost prompt in due queue)
   - 34 (AUDIO-FIX-34: review mode move feedback & error sound/haptics)
