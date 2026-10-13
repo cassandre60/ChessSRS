@@ -727,23 +727,32 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           );
     }
 
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.space): () {
-            if (state.isAwaitingAdvance) onContinue();
-          },
-          const SingleActivator(LogicalKeyboardKey.keyS): () {
-            if (state.isAwaitingAdvance) return;
-            if (isLapse && state.expectedMove != null) {
-              onRevealAnswer();
-            } else {
-              onSkip();
-            }
-          },
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.space): () {
+          if (state.isAwaitingAdvance) onContinue();
         },
+        const SingleActivator(LogicalKeyboardKey.enter): () {
+          if (state.isAwaitingAdvance) onContinue();
+        },
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): () {
+          if (state.isAwaitingAdvance) onContinue();
+        },
+        const SingleActivator(LogicalKeyboardKey.arrowRight): () {
+          if (state.isAwaitingAdvance) onContinue();
+        },
+        const SingleActivator(LogicalKeyboardKey.keyS): () {
+          if (state.isAwaitingAdvance) return;
+          if (isLapse && state.expectedMove != null) {
+            onRevealAnswer();
+          } else {
+            onSkip();
+          }
+        },
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
         child: SrsReviewLayout(
           whiteAtBottom: state.boardOrientation == Side.white,
           topBar: SrsTopBar(

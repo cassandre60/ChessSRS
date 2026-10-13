@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
 
-import 'dart:typed_data';
-
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
@@ -24,6 +22,7 @@ import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -1248,6 +1247,49 @@ void main() {
       // Successfully advanced to completion
       expect(find.text('Nothing due.'), findsOneWidget);
     });
+
+    for (final (key, physical) in [
+      (LogicalKeyboardKey.enter, PhysicalKeyboardKey.enter),
+      (LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight),
+    ]) {
+      testWidgets('pressing ${key.keyLabel} continues advancement while awaiting advance', (
+        tester,
+      ) async {
+        final importResult = importPgn(
+          '1. e4 {Keyboard advance} *',
+          studyTitle: 'Keyboard Advance',
+          repertoireSide: Side.white,
+        );
+        await tester.runAsync(() async {
+          await repo.saveImportResult(importResult);
+        });
+
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
+
+        await tester.pumpWidget(app);
+        await pumpAsync(tester);
+
+        await playMove(tester, 'e2', 'e4');
+        await pumpAsync(tester, 100);
+
+        expect(find.text('Keyboard advance'), findsOneWidget);
+
+        await tester.sendKeyEvent(key, physicalKey: physical);
+        await pumpAsync(tester, 700);
+
+        expect(find.text('Nothing due.'), findsOneWidget);
+      });
+    }
 
     testWidgets(
       'quick toggle action in overflow sheet toggles annotations and updates shapes/comments in real time',

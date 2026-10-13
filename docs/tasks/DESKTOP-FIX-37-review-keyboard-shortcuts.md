@@ -98,3 +98,23 @@ gh pr create -R cassandre60/ChessSRS --title "fix(desktop): bind Enter and Arrow
 * [ ] `fvm flutter analyze` 0 issues
 * [ ] `./scripts/gates.sh t1` green
 * [ ] PR open against `cassandre60/ChessSRS`
+
+## 6. Pitfalls found while implementing (read before retrying)
+
+* **The brief's sketch fails silently.** Adding the bindings inside the existing
+  `Focus` does nothing. `CallbackShortcuts` only fires when a *descendant* of it
+  holds focus (SDK doc, `widgets/shortcuts.dart`). The screen's `Focus` was its
+  *parent*, so the focused node sat outside the shortcut scope and no binding ran,
+  not even Space. The fix is structural: `CallbackShortcuts` wraps the `Focus`.
+  Verified by: with the three bindings added but the old nesting kept, the new
+  tests fail; with the nesting fixed, they pass.
+* **Space and S had no test before this change**, so the bug was invisible. Any
+  new keyboard binding needs a widget test that sends the key, not only a read of
+  the code.
+* **`sendKeyEvent` with `numpadEnter` does not reach the binding in widget tests**,
+  even with `physicalKey` and `character` set (`handled=false`). The Numpad case is
+  therefore **untested** and was left out of the test loop. It is in the code
+  because Flutter's key table defines it. Verify it on a real Linux numpad before
+  relying on it.
+* **Build_runner churn**: 53 `lib/l10n/*` files change in every fresh worktree.
+  Do not stage them; stage the two source files by name.
