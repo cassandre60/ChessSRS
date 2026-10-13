@@ -4,6 +4,7 @@
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,14 +22,15 @@ class SrsLibrarySheet extends ConsumerWidget {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return const SrsLibrarySheet();
       },
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -45,7 +47,7 @@ class SrsLibrarySheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
 
     final content = isWide
         ? Align(
@@ -136,11 +138,11 @@ class SrsLibrarySheet extends ConsumerWidget {
             const SizedBox(height: 8),
 
           // Preferences & Settings
-          _buildGroupHeader('Preferences', c),
+          _buildGroupHeader(context.l10n.mobileReviewPreferencesGroup, c),
           _buildRow(
             c: c,
-            title: 'Settings',
-            subtitle: 'Review, board, engine, and sound',
+            title: context.l10n.settings,
+            subtitle: context.l10n.mobileReviewLibrarySubtitle,
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -151,7 +153,7 @@ class SrsLibrarySheet extends ConsumerWidget {
           ),
           _buildRow(
             c: c,
-            title: 'About and licences',
+            title: context.l10n.mobileReviewLibraryAbout,
             onTap: () {
               Navigator.pop(context);
               // AboutPage, not showLicensePage: the stock page lists package licences and

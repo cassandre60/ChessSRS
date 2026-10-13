@@ -10,7 +10,10 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('GameBookmarksScreen');
 
 class GameBookmarksScreen extends ConsumerWidget {
   const GameBookmarksScreen({required this.nbBookmarks, super.key});
@@ -172,7 +175,7 @@ class _BodyState extends ConsumerState<_Body> {
               );
       },
       error: (e, s) {
-        debugPrint('SEVERE: [GameBookmarksScreen] could not load bookmarks');
+        _logger.severe('Could not load bookmarks.', e, s);
         return const Center(child: Text('Could not load bookmarks.'));
       },
       loading: () => const CenterLoadingIndicator(),

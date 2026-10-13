@@ -41,7 +41,11 @@ class _BoardSettingsScreenState extends ConsumerState<BoardSettingsScreen> {
       final authUser = ref.read(authControllerProvider);
       await save(ref.read(accountPreferencesProvider.notifier));
       if (authUser != null && mounted) {
-        showSnackBar(context, context.l10n.settingsAccountPrefsSaved, type: SnackBarType.success);
+        showSnackBar(
+          context,
+          context.l10n.mobileSettingsAccountPrefsSaved,
+          type: SnackBarType.success,
+        );
       }
     } finally {
       if (mounted) {
@@ -287,7 +291,7 @@ class _BoardSettingsScreenState extends ConsumerState<BoardSettingsScreen> {
                   ),
                   if (isTabletOrLarger(context))
                     SrsSettingsRow(
-                      label: context.l10n.settingsBoardLandscapePosition,
+                      label: context.l10n.mobileSettingsBoardLandscapePosition,
                       value: boardPrefs.landscapeBoardPosition.label(context.l10n),
                       onTap: () {
                         showChoicePicker(
@@ -436,11 +440,11 @@ class _BoardSettingsScreenState extends ConsumerState<BoardSettingsScreen> {
                     },
                   ),
                   SrsSettingsRow(
-                    label: context.l10n.settingsBoardMoveOnRelease,
-                    help: context.l10n.settingsBoardMoveOnReleaseHelp,
+                    label: context.l10n.mobileSettingsBoardMoveOnRelease,
+                    help: context.l10n.mobileSettingsBoardMoveOnReleaseHelp,
                     control: SrsSwitch(
                       value: boardPrefs.moveOnRelease,
-                      semanticLabel: context.l10n.settingsBoardMoveOnRelease,
+                      semanticLabel: context.l10n.mobileSettingsBoardMoveOnRelease,
                       onChanged: (value) {
                         ref.read(boardPreferencesProvider.notifier).toggleMoveOnRelease();
                       },

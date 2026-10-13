@@ -10,7 +10,10 @@ import 'package:chess_srs/src/widgets/rating.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('UserActivity');
 
 final _dateFormatter = DateFormat.yMMMd();
 
@@ -38,7 +41,7 @@ class UserActivityWidget extends ConsumerWidget {
         );
       },
       error: (error, stackTrace) {
-        debugPrint('SEVERE: [UserScreen] could not load user activity; $error\n$stackTrace');
+        _logger.severe('Could not load user activity.', error, stackTrace);
         return const Text('Could not load user activity');
       },
       loading: () => Column(

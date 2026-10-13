@@ -71,7 +71,6 @@ abstract class StudyRepository {
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId);
   Future<List<RepertoireDecision>> getDecisionsByStudy(String studyId);
   Future<List<RepertoireDecision>> getAllDecisions();
-  Future<void> deleteDecisionsByStudy(String studyId);
 
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);

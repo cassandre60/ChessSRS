@@ -76,6 +76,43 @@ void main() {
     });
   });
 
+  group('mobile review keys fall back to English until translated', () {
+    // Round 7 moved the review surfaces onto pipeline-owned mobile* keys so a
+    // template regen can no longer drop them. Until Crowdin translates them, every
+    // locale must render the English text — including through parameters.
+    final locales = [
+      lookupAppLocalizations(const Locale('de')),
+      lookupAppLocalizations(const Locale('fr')),
+      lookupAppLocalizations(const Locale('ja')),
+      lookupAppLocalizations(const Locale('ar')),
+    ];
+    for (final strings in locales) {
+      test('${strings.localeName} renders the English fallback', () {
+        expect(strings.mobileReviewContinue, 'Continue');
+        expect(strings.mobileReviewSkip, 'Skip');
+        expect(strings.mobileReviewNothingDueTitle, 'Nothing due.');
+        expect(strings.mobileReviewDueWord, 'due');
+        expect(
+          strings.mobileReviewDuplicateStudy('Sicilian'),
+          'Study "Sicilian" is already imported and up to date',
+        );
+        expect(
+          strings.mobileReviewDailyProgress('6', '100'),
+          'You reviewed 6 of 100 positions today. White and Black combined.',
+        );
+        expect(strings.mobileReviewCrossSideButton('White', '5'), 'Review White — 5 due');
+        expect(strings.mobileReviewPositionsCount('3'), '3 positions');
+        expect(
+          strings.mobileReviewDeleteStudyConfirm('T', '9'),
+          'Delete “T” and its 9 positions? This cannot be undone.',
+        );
+        expect(strings.mobileReviewNothingMatches('q'), 'Nothing matches “q”.');
+        expect(strings.mobileReviewVerdictCorrectMove('Nf3'), 'Correct. Nf3.');
+        expect(strings.mobileReviewVerdictWrongMove('e4'), 'Not this move. The study move is e4.');
+      });
+    }
+  });
+
   group('localesSortedByLocalizedName', () {
     test('sorts by native name, grouping scripts together', () {
       const locales = [

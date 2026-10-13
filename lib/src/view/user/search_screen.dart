@@ -10,7 +10,10 @@ import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:chess_srs/src/widgets/list.dart';
 import 'package:chess_srs/src/widgets/user_list_tile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
+
+final _logger = Logger('SearchScreen');
 
 const _kSaveHistoryDebouncTimer = Duration(seconds: 2);
 
@@ -186,7 +189,7 @@ class _UserList extends ConsumerWidget {
               child: Text(context.l10n.mobileNoSearchResults, style: Styles.noResultTextStyle),
             ),
       error: (e, _) {
-        debugPrint('Error loading search results: $e');
+        _logger.warning('Error loading search results.', e);
         return const Center(child: Text('Could not load search results.'));
       },
       loading: () => const Center(child: CenterLoadingIndicator()),

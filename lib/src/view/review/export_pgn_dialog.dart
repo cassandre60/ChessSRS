@@ -4,14 +4,18 @@
 import 'dart:convert';
 
 import 'package:chess_srs/src/styles/styles.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/utils/share.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
+
+final _logger = Logger('ExportPgnDialog');
 
 /// Modal dialog displaying generated PGN text with options to copy, save to file, or share.
 class ExportPgnDialog extends StatelessWidget {
@@ -57,7 +61,7 @@ class ExportPgnDialog extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        debugPrint('SEVERE: [ExportPgnDialog] could not save file: $e');
+        _logger.severe('Could not save file.', e);
         showSnackBar(context, 'Could not save file', type: SnackBarType.error);
       }
     }
@@ -79,7 +83,7 @@ class ExportPgnDialog extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        debugPrint('SEVERE: [ExportPgnDialog] sharing failed: $e');
+        _logger.severe('Sharing failed.', e);
         showSnackBar(context, 'Sharing failed', type: SnackBarType.error);
       }
     }
@@ -163,33 +167,33 @@ class ExportPgnDialog extends StatelessWidget {
       actions: [
         TextButton.icon(
           icon: const Icon(Symbols.content_copy_rounded, size: 18),
-          label: const Text('Copy'),
+          label: Text(context.l10n.mobileReviewCopyAction),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: pgnText));
             try {
-              showSnackBar(context, 'PGN copied to clipboard');
+              showSnackBar(context, context.l10n.mobileReviewPgnCopiedClipboard);
             } catch (_) {}
             Navigator.of(context).pop();
           },
         ),
         FilledButton.tonalIcon(
           icon: const Icon(Symbols.save_alt_rounded, size: 18),
-          label: const Text('Save File'),
+          label: Text(context.l10n.mobileReviewSaveFileAction),
           onPressed: () => _saveToFile(context),
         ),
         if (isMobile)
           FilledButton.icon(
             icon: const Icon(Symbols.share_rounded, size: 18),
-            label: const Text('Share'),
+            label: Text(context.l10n.mobileReviewShareAction),
             onPressed: () => _share(context),
           )
         else
           TextButton.icon(
             icon: const Icon(Symbols.share_rounded, size: 18),
-            label: const Text('Share'),
+            label: Text(context.l10n.mobileReviewShareAction),
             onPressed: () => _share(context),
           ),
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.close)),
       ],
     );
   }

@@ -1982,6 +1982,274 @@ void main() {
     });
 
     // SPEC INV-015: side to move parsed robustly from FEN using dartchess Setup.
+    group('memoised due counts during auto-traversal', () {
+      // QUALITY §4.1 (bulk latency): memoised due counts keep auto-traversal
+      // linear in tree size, not quadratic in depth. This is not the
+      // single-frame graded-move bound (that invariant is covered by
+      // test/review/move_latency_test.dart): the bound here is linearity of
+      // bulk traversal work, asserted as a median over fresh traversals.
+      test('deep auto-traversal still follows the due-dense branch at every junction', () {
+        final study = Study(
+          id: 'study-memo-semantics',
+          title: 'Openings',
+          createdAt: baseTime,
+          updatedAt: baseTime,
+        );
+
+        // Root -> 1. e4 (dec-1, due) -> {1... c5 (dec-c5, due), 1... e5 (not due)}.
+        // Below the c5 line, 2. Nf3 (dec-c5) reaches a second opponent junction
+        // {2... a6 (due below), 2... e6 (nothing due below)}. Every junction has
+        // exactly one due-bearing child, so selection is deterministic and any
+        // change the memo introduces to the chosen branch is visible here.
+        const nodeRoot = RepertoireNode(
+          id: 'root',
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          children: [
+            RepertoireNode(
+              id: 'node-e4',
+              fen: 'fen-after-e4',
+              fenKey: 'key-after-e4',
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'node-e5',
+                  fen: 'fen-after-e5',
+                  fenKey: 'key-after-e5',
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'node-nf3-e5',
+                      fen: 'fen-after-nf3-e5',
+                      fenKey: 'key-after-nf3-e5',
+                      incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                    ),
+                  ],
+                ),
+                RepertoireNode(
+                  id: 'node-c5',
+                  fen: 'fen-after-c5',
+                  fenKey: 'key-after-c5',
+                  incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'node-nf3-c5',
+                      fen: 'fen-after-nf3-c5',
+                      fenKey: 'key-after-nf3-c5',
+                      incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                      children: [
+                        RepertoireNode(
+                          id: 'node-a6',
+                          fen: 'fen-after-a6',
+                          fenKey: 'key-after-a6',
+                          incomingMove: RepertoireMove(from: 'a7', to: 'a6', san: 'a6'),
+                          children: [
+                            RepertoireNode(
+                              id: 'node-d4',
+                              fen: 'fen-after-d4',
+                              fenKey: 'key-after-d4',
+                              incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+                            ),
+                          ],
+                        ),
+                        RepertoireNode(
+                          id: 'node-e6',
+                          fen: 'fen-after-e6',
+                          fenKey: 'key-after-e6',
+                          incomingMove: RepertoireMove(from: 'e7', to: 'e6', san: 'e6'),
+                          children: [
+                            RepertoireNode(
+                              id: 'node-f4',
+                              fen: 'fen-after-f4',
+                              fenKey: 'key-after-f4',
+                              incomingMove: RepertoireMove(from: 'f2', to: 'f4', san: 'f4'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+
+        final chapter = Chapter(
+          id: 'ch-1',
+          studyId: study.id,
+          sourceOrder: 0,
+          title: 'Main',
+          startingFen: nodeRoot.fen,
+          root: nodeRoot,
+        );
+
+        RepertoireDecision dec(String id, String nodeId, RepertoireMove move) => RepertoireDecision(
+          id: id,
+          studyId: study.id,
+          chapterId: chapter.id,
+          nodeId: nodeId,
+          expectedMoves: [move],
+        );
+
+        final dec1 = dec('dec-1', 'root', const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'));
+        final decE5 = dec(
+          'dec-e5',
+          'node-e5',
+          const RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+        );
+        final decC5 = dec(
+          'dec-c5',
+          'node-c5',
+          const RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+        );
+        final decD4 = dec(
+          'dec-d4',
+          'node-d4',
+          const RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        );
+        final decF4 = dec(
+          'dec-f4',
+          'node-f4',
+          const RepertoireMove(from: 'f2', to: 'f4', san: 'f4'),
+        );
+
+        ReviewState future(String id) => ReviewState(
+          decisionId: id,
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+          repetitionCount: 2,
+        );
+        ReviewState overdue(String id) => ReviewState(
+          decisionId: id,
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        );
+
+        final engine = ReviewEngine(clock: clock);
+        final session = engine.createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: [dec1, decE5, decC5, decD4, decF4],
+          reviewStates: {
+            'dec-1': ReviewState.initial(decisionId: 'dec-1'),
+            'dec-e5': future('dec-e5'),
+            'dec-c5': overdue('dec-c5'),
+            'dec-d4': overdue('dec-d4'),
+            'dec-f4': future('dec-f4'),
+          },
+        );
+
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+
+        final first = session.submitMove(from: 'e2', to: 'e4');
+        expect(first.isCorrect, isTrue);
+        expect(first.autoPlayedMoves.map((m) => m.move.san), ['c5']);
+        expect(first.nextPrompt?.decision.id, 'dec-c5');
+
+        // The second junction must also follow the due-dense branch: ...a6
+        // (due below) over ...e6 (nothing due below), then prompt 3. d4.
+        final second = session.submitMove(from: 'g1', to: 'f3');
+        expect(second.isCorrect, isTrue);
+        expect(second.autoPlayedMoves.map((m) => m.move.san), ['a6', 'd4']);
+        expect(second.nextPrompt?.decision.id, 'dec-d4');
+      });
+
+      test('memoised due counts keep deep auto-traversal linear', () {
+        // A 20000-node line with a single due decision at its head: answering
+        // it auto-traverses the whole line. Without the memo every level
+        // re-walks its subtree (quadratic: ~4s of real counting work here,
+        // validated against the N-squared curve, and any machine contention
+        // only pushes it higher); with it each node is visited once
+        // (tens of milliseconds).
+        //
+        // The bound is asserted against the median of three fresh traversals,
+        // following test/review/move_latency_test.dart: a single wall-clock
+        // sample on a shared machine measures the machine, not the code. The
+        // fixed code sits two orders of magnitude under the bound, so only a
+        // multi-second stall landing inside two of three millisecond windows
+        // could flake it; the unfixed code exceeds the bound several times
+        // over on counting work alone.
+        const chainLength = 20000;
+        const timedRounds = 3;
+
+        RepertoireNode buildChain() {
+          var tail = const RepertoireNode(
+            id: 'chain-${chainLength - 1}',
+            fen: 'fen-chain-end',
+            fenKey: 'key-chain-end',
+            incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+          );
+          for (var i = chainLength - 2; i >= 0; i--) {
+            tail = RepertoireNode(
+              id: 'chain-$i',
+              fen: 'fen-chain-$i',
+              fenKey: 'key-chain-$i',
+              incomingMove: const RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+              children: [tail],
+            );
+          }
+          return tail;
+        }
+
+        Duration traverseFreshChain(int round) {
+          final study = Study(
+            id: 'study-memo-perf-$round',
+            title: 'Long line',
+            createdAt: baseTime,
+            updatedAt: baseTime,
+          );
+          final chapter = Chapter(
+            id: 'ch-chain-$round',
+            studyId: study.id,
+            sourceOrder: 0,
+            title: 'Chain',
+            root: buildChain(),
+          );
+          const expected = RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3');
+          final dec = RepertoireDecision(
+            id: 'dec-chain-$round',
+            studyId: study.id,
+            chapterId: chapter.id,
+            nodeId: 'chain-0',
+            expectedMoves: const [expected],
+          );
+
+          final engine = ReviewEngine(clock: clock);
+          final session = engine.createSession(
+            studies: [study],
+            chapters: [chapter],
+            decisions: [dec],
+            reviewStates: const {},
+          );
+          expect(session.currentPrompt?.decision.id, 'dec-chain-$round');
+
+          final stopwatch = Stopwatch()..start();
+          final result = session.submitMove(from: 'g1', to: 'f3');
+          stopwatch.stop();
+
+          expect(result.isCorrect, isTrue);
+          expect(result.sessionComplete, isTrue);
+          return stopwatch.elapsed;
+        }
+
+        final samples = <Duration>[
+          for (var round = 0; round < timedRounds; round++) traverseFreshChain(round),
+        ]..sort();
+        final median = samples[samples.length ~/ 2];
+
+        expect(
+          median,
+          lessThan(const Duration(seconds: 1)),
+          reason:
+              'auto-traversal must be linear in tree size; without memoised due '
+              'counts this line takes several seconds of counting work. Median '
+              'was ${median.inMilliseconds}ms over $timedRounds rounds '
+              '(${samples.map((s) => s.inMilliseconds).join(', ')}ms)',
+        );
+      });
+    });
+
+    // SPEC INV-015: side to move parsed robustly from FEN using dartchess Setup.
     group('ReviewSession.sideFromFen', () {
       test('identifies White to move from standard start FEN', () {
         expect(
