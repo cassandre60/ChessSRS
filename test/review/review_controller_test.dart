@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/model/common/chess.dart' as chess;
 import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart' as lichess_study;
@@ -24,6 +25,21 @@ import '../binding.dart';
 import '../model/common/service/fake_sound_service.dart';
 import '../test_helpers.dart';
 import 'gated_study_repository.dart';
+
+/// A sound service that remembers what it was asked to play.
+///
+/// [FakeSoundService] swallows every call, which is right for the tests that only care that
+/// nothing crashes and wrong for the ones that care whether a move was audible at all.
+class _RecordingSoundService extends FakeSoundService {
+  final List<Sound> recorded = [];
+
+  @override
+  Future<void> play(Sound sound, {double? volume}) async => recorded.add(sound);
+
+  @override
+  Future<void> playCaptureSound(chess.Variant variant, {double? volume}) async =>
+      recorded.add(Sound.capture);
+}
 
 void main() {
   setUpAll(() {
@@ -54,6 +70,7 @@ void main() {
     ProviderContainer createContainer({
       List<Override> extraOverrides = const [],
       StudyRepository? repository,
+      SoundService? soundService,
     }) {
       // The service and the repository provider must be handed the same instance: the service
       // reads through whatever repository it was built with, and a test that gates one but not
@@ -63,7 +80,7 @@ void main() {
         overrides: [
           srsStudyRepositoryProvider.overrideWith((ref) => store),
           clockProvider.overrideWithValue(clock),
-          soundServiceProvider.overrideWithValue(FakeSoundService()),
+          soundServiceProvider.overrideWithValue(soundService ?? FakeSoundService()),
           reviewServiceProvider.overrideWith(
             (ref) => ReviewService(
               repository: store,
@@ -465,6 +482,53 @@ void main() {
         orientations[prompt!.chapterId],
         state.scope.side,
         reason: 'queued prompt is from the other drawer',
+      );
+    });
+
+    test('a move the user plays makes the sound it made everywhere else in the app', () async {
+      // Study and analysis both play a sound when the player moves a piece. Review training —
+      // the screen this app spends most of its time on — played one for the opponent's reply and
+      // for an animated pre-move, and nothing at all for the user's own move. Every position the
+      // user recalls was silent, with no haptics either.
+      final sounds = _RecordingSoundService();
+      final container = createContainer(soundService: sounds);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Italian"]
+1. e4 e5 *
+''';
+      await controller.importPgnText(pgnText: pgn, title: 'Italian', repertoireSide: Side.white);
+      sounds.recorded.clear();
+
+      // A wrong move, on purpose: it still moves a piece on the board, and unlike a correct move
+      // it triggers no auto-reply, so nothing else can be playing a sound and passing this test
+      // on the user's behalf.
+      await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+
+      expect(sounds.recorded, contains(Sound.move), reason: "the user's own move was silent");
+    });
+
+    test('a capture the user plays gets the capture sound, not the plain move sound', () async {
+      final sounds = _RecordingSoundService();
+      final container = createContainer(soundService: sounds);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      const pgn = '''
+[Event "Exchange"]
+1. e4 d5 2. exd5 *
+''';
+      await controller.importPgnText(pgnText: pgn, title: 'Exchange', repertoireSide: Side.white);
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      sounds.recorded.clear();
+
+      // exd5 takes the pawn, and taking a piece is audibly different from moving one.
+      await controller.onUserMove(const NormalMove(from: Square.e4, to: Square.d5));
+
+      expect(
+        sounds.recorded,
+        contains(Sound.capture),
+        reason: 'the capture was played with the plain move sound',
       );
     });
 
