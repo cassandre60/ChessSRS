@@ -27,14 +27,13 @@ const _clockRuledFiles = <String>{
 
 /// Import prefixes that must never appear in the pure domain.
 final _bannedImports = <RegExp>[
-  RegExp(r'''import\s+'package:flutter/'''),
-  RegExp(r'''import\s+'dart:io' '''),
-  RegExp(r'''import\s+'dart:io';'''),
-  RegExp(r'''import\s+'dart:html'''),
-  RegExp(r'''import\s+'dart:js'''),
-  RegExp(r'''import\s+'package:sqflite'''),
-  RegExp(r'''import\s+'package:chessground'''),
-  RegExp(r'''import\s+'sqflite'''),
+  RegExp(r'''import\s+['"]package:flutter/'''),
+  RegExp(r'''import\s+['"]dart:io['" ;]'''),
+  RegExp(r'''import\s+['"]dart:html['"]'''),
+  RegExp(r'''import\s+['"]dart:js['"]'''),
+  RegExp(r'''import\s+['"]package:sqflite'''),
+  RegExp(r'''import\s+['"]package:chessground'''),
+  RegExp(r'''import\s+['"]sqflite'''),
 ];
 
 /// A wall-clock read outside a doc reference.
@@ -97,6 +96,28 @@ void main() {
         }
       }
       expect(violations, isEmpty, reason: 'domain computes; adapters persist and fetch');
+    });
+
+    test('banned import patterns catch both single and double quotes', () {
+      // Blindspot regression: regexes once matched single quotes only, letting
+      // import "package:flutter/widgets.dart" or import "dart:io"; through unseen.
+      for (final q in ["'", '"']) {
+        expect(
+          _bannedImports.any((r) => r.hasMatch('import ${q}package:flutter/widgets.dart$q;')),
+          isTrue,
+        );
+        expect(_bannedImports.any((r) => r.hasMatch('import ${q}dart:io$q;')), isTrue);
+        expect(
+          _bannedImports.any((r) => r.hasMatch('import ${q}package:sqflite/sqflite.dart$q;')),
+          isTrue,
+        );
+        expect(
+          _bannedImports.any(
+            (r) => r.hasMatch('import ${q}package:chessground/chessground.dart$q;'),
+          ),
+          isTrue,
+        );
+      }
     });
   });
 }
