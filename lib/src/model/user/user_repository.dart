@@ -88,15 +88,6 @@ class UserRepository {
     );
   }
 
-  /// Get the currently playing game of a user.
-  Future<ExportedGame> getCurrentGame(UserId id) {
-    return client.readJson(
-      Uri(path: '/api/user/$id/current-game'),
-      headers: {'Accept': 'application/json'},
-      mapper: ExportedGame.fromServerJson,
-    );
-  }
-
   Future<IList<UserStatus>> getUsersStatuses(ISet<UserId> ids) {
     return client.readJsonList(
       Uri(path: '/api/users/status', queryParameters: {'ids': ids.join(',')}),
