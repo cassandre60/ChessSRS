@@ -516,12 +516,6 @@ class AnalysisController extends AsyncNotifier<AnalysisState>
     return _root.makePgn(curState.pgnHeaders, curState.pgnRootComments);
   }
 
-  /// Makes a PGN string up to the current node only.
-  String makeCurrentNodePgn() {
-    final nodes = _root.branchesOn(state.requireValue.currentPath);
-    return nodes.map((node) => node.sanMove.san).join(' ');
-  }
-
   Future<void> toggleBookmark() async {
     if (state.hasValue) {
       final game = state.requireValue.archivedGame;

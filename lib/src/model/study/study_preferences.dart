@@ -102,10 +102,6 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     return save(state.copyWith(smallBoard: !state.smallBoard));
   }
 
-  Future<void> toggleAnimateOpponentPreMove() {
-    return save(state.copyWith(animateOpponentPreMove: !state.animateOpponentPreMove));
-  }
-
   Future<void> setSchedulerType(SchedulerType type) {
     return save(state.copyWith(schedulerType: type));
   }
