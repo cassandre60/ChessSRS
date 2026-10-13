@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -94,14 +95,16 @@ class _LinuxSoundPlayer {
     if (filePath == null || _playerCmd == null) return;
 
     final vol = volume.clamp(0.0, 1.0);
-    if (_playerCmd == 'pw-play') {
-      Process.start('pw-play', ['--volume=$vol', filePath]);
-    } else if (_playerCmd == 'paplay') {
-      final paVol = (vol * 65536).toInt();
-      Process.start('paplay', ['--volume=$paVol', filePath]);
-    } else {
-      Process.start(_playerCmd!, [filePath]);
-    }
+    // Fail-soft: an audio glitch must never crash the application. Process.run (unlike a
+    // detached spawn) drains and closes the child pipes and waits for termination, so no
+    // zombies accumulate in the process table; the catchError swallows spawn failures
+    // (missing binary, permissions) instead of letting them escape into the zone.
+    final args = _playerCmd == 'pw-play'
+        ? ['--volume=$vol', filePath]
+        : _playerCmd == 'paplay'
+        ? ['--volume=${(vol * 65536).toInt()}', filePath]
+        : [filePath];
+    unawaited(Process.run(_playerCmd!, args).then((_) {}, onError: (_) {}));
   }
 
   void release() {
