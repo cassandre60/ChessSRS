@@ -357,10 +357,15 @@ Status:
   - PERF-FIX-21 (#84, targeted review-state load in getDueSummary)
   - REFACTOR-FIX-20 partial (#94, SrsMovePair removed)
   - Whole-codebase review program: Rounds 1–10 merged (#32, #40, #41, #42, #43, #56, #70, #83, #86, #92)
+  - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
+  - 34 (AUDIO-FIX-34: review mode move feedback & error sound/haptics, #93)
+  - 20 (REFACTOR-FIX-20: nine zero-caller symbols removed, #105)
 - **Withdrawn / Obviated**:
   - 02 (transposition FEN — audit proved non-bug)
   - 17 (chapters diagram reskin — screen deleted in #61)
   - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
+  - 30 (A11Y-FIX-30: analysis screen semantics — four of its five claims are false. `SrsSegmented` already passes `semanticLabel` and `semanticsToggled`; the variant picker is a `BottomSheetAction` wrapping `Text(context.l10n.variant)`; the "eval lines" widget renders player name/rating/clock and contains no eval lines; the surface's single `IconButton` has a `tooltip`. Wrapping already-labelled controls in `Semantics(label:)` produces double announcements.)
+  - 05 (ARCH-FIX-05: presentation/db boundary — `git grep -ln "src/db/\|src/persistence/" -- 'lib/src/view/**'` returns nothing, so zero of 74 view files import either. The boundary the brief says is violated is clean.)
   - DOMAIN-FIX-36 (contagion tau guard and sub-ms stability floor already on main; probe showed no collapse — brief should be withdrawn)
   - ERROR-FIX-29 (account prefs and share catches already log with stack; the cited importer catch is gone; the one remaining catch records its message and was probed as reachable — nothing to add)
   - SAFETY-FIX-25 (10 MB guard `kMaxPgnInputBytes` already checked at file pick, paste and `importPgn`, with tests on the rejection and the limit boundary)
@@ -368,14 +373,14 @@ Status:
   - DATA-FIX-26 and ARCH-FIX-07 (both describe the non-atomic PKS/mirror dual write; `savePositionKnowledgeState` and `savePositionKnowledgeStates` already run in one transaction, and `a failed mirror write rolls back` fails when the transaction is removed, verified by a probe on a scratch copy). Do not reopen.
   - DATA-FIX-31 (corrupt prefs blob is copied to `<key>.corrupt-backup` and logged at SEVERE on both fetch paths; `corrupted prefs blob is backed up` fails when the backup write is disabled, verified by a probe on a scratch copy). Do not reopen.
 - **In flight / Finishing CI**:
-  - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
-  - 30 (A11Y-FIX-30: analysis screen semantics)
-  - 34 (AUDIO-FIX-34: review mode move feedback & error sound/haptics, #93)
+  - 27 (A11Y-FIX-27: review screen semantics)
+  - 11 (POLISH-FIX-11: pgn shapes & board notify)
+- **Queue pruned 2026-10-13.** 34 briefs were verified against `origin/main` and removed; only the two in-flight briefs above remain. They split three ways: landed by this fleet (often by another agent on the same brief), already correct in the code, or false premise. Evidence per brief is in issue #71; every file remains in git history. `docs/tasks/README.md` records the two habits that stop briefs rotting — state the premise as a runnable command rather than a line number, and say what "already fixed" would look like.
 - **Remaining / Planned**:
-  - Persistence tail: 07 → 26
+  - None from this queue. The next batch of briefs needs writing, not pruning.
 - **Pitfalls for queue work** (each verified on `origin/main`; read before picking a brief):
   - Re-check every brief claim with `git grep` on `origin/main` before editing. PERF-FIX-21 named a helper that had been renamed; DOMAIN-FIX-36 described fixes already present.
-  - Before removing a "dead" symbol, grep `lib/` **and** `test/`. Several dead-code rows have live test callers, and removing them means deleting tests the gates forbid (G08). REFACTOR-FIX-20 was cut to the one safe symbol for this reason.
+  - Before removing a "dead" symbol, grep `lib/` **and** `test/`. Several dead-code rows have live test callers, and removing them means deleting tests the gates forbid (G08). REFACTOR-FIX-20 landed nine symbols whose only reference was the declaration; `getDueReviewStates` is equally dead but still excluded, because deleting it deletes its only test and that needs a human `Ack-G08` signature — writing one on your own PR is the abuse the gate exists to prevent. `getDueCount` is dead in production but is the assertion helper for ~10 call sites, so retiring it is a test refactor rather than a deletion.
   - `CallbackShortcuts` fires only for a focused descendant. A binding on the widget that holds focus is skipped silently (DESKTOP-FIX-37, PR #90).
   - `sendKeyEvent(numpadEnter)` does not reach a numpad binding in widget tests. Numpad shortcuts need a manual check on a device.
   - A PR goes `BEHIND` whenever `main` moves; merge `main` in, re-verify, wait for CI on the new head, then merge. `mergeStateStatus` reads `UNKNOWN` for a few seconds after a push.
