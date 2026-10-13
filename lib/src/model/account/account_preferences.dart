@@ -82,8 +82,6 @@ class AccountPreferences extends AsyncNotifier<AccountPrefState> {
   Future<void> setShowRatings(ShowRatings value) =>
       _setPref('ratings', value, (prefs) => prefs.copyWith(showRatings: value));
 
-  Future<void> setPremove(BooleanPref value) =>
-      _setPref('premove', value, (prefs) => prefs.copyWith(premove: value));
   Future<void> setTakeback(Takeback value) =>
       _setPref('takeback', value, (prefs) => prefs.copyWith(takeback: value));
   Future<void> setAutoQueen(AutoQueen value) =>

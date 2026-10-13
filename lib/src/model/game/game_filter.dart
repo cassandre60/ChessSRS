@@ -1,4 +1,3 @@
-import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:dartchess/dartchess.dart';
@@ -38,24 +37,6 @@ sealed class GameFilterState with _$GameFilterState {
     Side? side,
     User? opponent,
   }) = _GameFilterState;
-
-  /// Returns a translated label of the selected filters.
-  String selectionLabel(AppLocalizations l10n) {
-    final fields = [side, perfs];
-    final labels = fields
-        .map(
-          (field) => field is ISet<Perf>
-              ? field.map((e) => e.shortLabel(l10n)).join(', ')
-              : (field as Side?) != null
-              ? field == Side.white
-                    ? l10n.white
-                    : l10n.black
-              : null,
-        )
-        .where((label) => label != null && label.isNotEmpty)
-        .toList();
-    return labels.isEmpty ? l10n.mobileAllGames : labels.join(', ');
-  }
 
   int get count {
     final fields = [perfs, side];
