@@ -659,26 +659,31 @@ void main() {
         const hash = 'same-file-twice';
         final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
 
-        ImportResult build(String studyId) => ImportResult(
-          study: Study(
-            id: studyId,
-            title: 'Italian',
-            pgnHash: hash,
-            createdAt: now,
-            updatedAt: now,
-          ),
-          chapters: [Chapter.create(studyId: studyId, sourceOrder: 0, title: 'Main')],
-          decisions: [
-            RepertoireDecision(
-              id: 'dec-$studyId-1',
-              studyId: studyId,
-              chapterId: 'chapter',
-              nodeId: 'node-1',
-              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        ImportResult build(String studyId) {
+          // The decision points at the chapter in this import, not a literal id that nothing
+          // ever stored — the row was an orphan from the moment it was written.
+          final chapter = Chapter.create(studyId: studyId, sourceOrder: 0, title: 'Main');
+          return ImportResult(
+            study: Study(
+              id: studyId,
+              title: 'Italian',
+              pgnHash: hash,
+              createdAt: now,
+              updatedAt: now,
             ),
-          ],
-          errors: const [],
-        );
+            chapters: [chapter],
+            decisions: [
+              RepertoireDecision(
+                id: 'dec-$studyId-1',
+                studyId: studyId,
+                chapterId: chapter.id,
+                nodeId: 'node-1',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+            ],
+            errors: const [],
+          );
+        }
 
         await Future.wait([
           repo.saveImportResult(build('import-a')),
@@ -719,28 +724,34 @@ void main() {
         const hash = 'one-tree-both-sides';
         final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
 
-        ImportResult build(String studyId, Side side) => ImportResult(
-          study: Study(
-            id: studyId,
-            title: 'Italian',
-            pgnHash: hash,
-            createdAt: now,
-            updatedAt: now,
-          ),
-          chapters: [
-            Chapter.create(studyId: studyId, sourceOrder: 0, title: 'Main', orientation: side),
-          ],
-          decisions: [
-            RepertoireDecision(
-              id: 'dec-$studyId',
-              studyId: studyId,
-              chapterId: 'ch-$studyId',
-              nodeId: 'node-$studyId',
-              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        ImportResult build(String studyId, Side side) {
+          final chapter = Chapter.create(
+            studyId: studyId,
+            sourceOrder: 0,
+            title: 'Main',
+            orientation: side,
+          );
+          return ImportResult(
+            study: Study(
+              id: studyId,
+              title: 'Italian',
+              pgnHash: hash,
+              createdAt: now,
+              updatedAt: now,
             ),
-          ],
-          errors: const [],
-        );
+            chapters: [chapter],
+            decisions: [
+              RepertoireDecision(
+                id: 'dec-$studyId',
+                studyId: studyId,
+                chapterId: chapter.id,
+                nodeId: 'node-$studyId',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+            ],
+            errors: const [],
+          );
+        }
 
         await repo.saveImportResult(build('study-white', Side.white));
         await repo.saveImportResult(build('study-black', Side.black));
@@ -1308,12 +1319,15 @@ void main() {
         final ch = Chapter.create(studyId: 's_canon', sourceOrder: 0);
         await repo.saveChapter(ch);
 
-        const dec = RepertoireDecision(
+        // Points at the chapter that was actually stored. The id used to be a literal that no
+        // chapter ever carried, which only went unnoticed because nothing enforced the foreign
+        // key; the decision was an orphan row from the moment it was written.
+        final dec = RepertoireDecision(
           id: 'dec_canon_1',
           studyId: 's_canon',
-          chapterId: 'ch_canon_1',
+          chapterId: ch.id,
           nodeId: 'n1',
-          expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
           canonicalStateId: 'sha1_canon_hash_123',
         );
         await repo.saveDecision(dec);
@@ -1444,6 +1458,56 @@ void main() {
         // UTC-midnight bound (with a 'Z' suffix) excluded the midnight row
         // via string comparison against offset-less local timestamps.
         expect(count, 1);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('foreign keys are enforced, so a raw delete cannot leave orphans behind', () async {
+      // srs_chapter and srs_decision declare ON DELETE CASCADE, but SQLite ignores foreign
+      // keys unless every connection turns them on. deleteStudy cascades by hand, so the gap
+      // only shows on paths that do not: a raw DELETE, a future repository method, or a bug that
+      // forgets a table. Orphans then accumulate silently and the counts stop agreeing.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final enabled = await db.rawQuery('PRAGMA foreign_keys');
+        expect(
+          enabled.first.values.first,
+          equals(1),
+          reason: 'SQLite ignores declared foreign keys unless the connection enables them',
+        );
+
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+        final study = Study(id: 's-fk', title: 'Cascade', createdAt: now, updatedAt: now);
+        final chapter = Chapter(id: 'c-fk', studyId: study.id, sourceOrder: 0);
+        await repo.saveStudy(study);
+        await repo.saveChapter(chapter);
+        await repo.saveDecision(
+          RepertoireDecision(
+            id: 'dec-fk',
+            studyId: study.id,
+            chapterId: chapter.id,
+            nodeId: 'node-fk',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4')],
+          ),
+        );
+
+        // Deliberately not deleteStudy: the point is that the database itself refuses to
+        // leave orphans for a caller who forgets to cascade.
+        await db.delete(kTableSrsStudy, where: 'id = ?', whereArgs: ['s-fk']);
+
+        expect(
+          await repo.getChaptersByStudy('s-fk'),
+          isEmpty,
+          reason: 'the chapter outlived its study',
+        );
+        expect(
+          await repo.getDecisionsByStudy('s-fk'),
+          isEmpty,
+          reason: 'the decision outlived its study',
+        );
       } finally {
         await db.close();
       }
