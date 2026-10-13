@@ -158,14 +158,6 @@ class _FillInState extends State<_FillIn> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Completed pair before the decision.
-class SrsMovePair {
-  const SrsMovePair(this.number, this.white, [this.black]);
-  final int number;
-  final String white;
-  final String? black;
-}
-
 /// Builds a notation line from a list of moves leading to the current position.
 class SrsNotationLine extends StatelessWidget {
   const SrsNotationLine({
