@@ -34,6 +34,11 @@ done
 *every* line does, this brief is done — delete it and say so in the PR. That is
 a correct outcome, not a failure.
 
+**Two names in that list are already live and must stay** — the command above is
+how they were caught: `asGameFullIdOrNull` reports 2 and `asUserIdOrNull` reports
+3. They appeared in an earlier draft of this brief because the sweep that
+produced it counted only exact-name hits. Do not remove them.
+
 Files: `lib/src/model/common/id.dart`, `lib/src/model/common/chess.dart`
 (`asSquareOrNull`), `lib/src/model/common/speed.dart` (`asSpeedOrNull`),
 `lib/src/model/game/game_status.dart` (`asGameStatusOrNull`).
