@@ -643,6 +643,69 @@ void main() {
       }
     });
 
+    test('deleteStudy keeps canonical rows another study still owns', () async {
+      // SPEC INV-031. The shared-canonical guard (studyId != ?) is what keeps a position
+      // alive when one of its studies goes away. Deleting study A must not take the
+      // canonical row, its mirror, or study B's decision with it.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final now = DateTime.utc(2026, 9, 16, 12);
+        final studyA = Study(id: 's-a', title: 'A', createdAt: now, updatedAt: now);
+        final studyB = Study(id: 's-b', title: 'B', createdAt: now, updatedAt: now);
+        const chapterA = Chapter(id: 'ch-x', studyId: 's-a', sourceOrder: 0);
+        const chapterB = Chapter(id: 'ch-y', studyId: 's-b', sourceOrder: 0);
+
+        // The same position learned in two studies: a transposition across libraries.
+        const decisionA = RepertoireDecision(
+          id: 'occ-x',
+          studyId: 's-a',
+          chapterId: 'ch-x',
+          nodeId: 'n1',
+          expectedMoves: [],
+          canonicalStateId: 'canon-xshared',
+        );
+        const decisionB = RepertoireDecision(
+          id: 'occ-y',
+          studyId: 's-b',
+          chapterId: 'ch-y',
+          nodeId: 'n9',
+          expectedMoves: [],
+          canonicalStateId: 'canon-xshared',
+        );
+        const state = ReviewState(decisionId: 'canon-xshared', repetitionCount: 5);
+
+        await repo.saveStudy(studyA);
+        await repo.saveStudy(studyB);
+        await repo.saveChapter(chapterA);
+        await repo.saveChapter(chapterB);
+        await repo.saveDecision(decisionA);
+        await repo.saveDecision(decisionB);
+        await repo.saveReviewState(state);
+        await repo.savePositionKnowledgeState(
+          const PositionKnowledgeState(canonicalId: 'canon-xshared', stability: 3.0),
+        );
+
+        await repo.deleteStudy(studyA.id);
+
+        expect(
+          await repo.getPositionKnowledgeState('canon-xshared'),
+          isNotNull,
+          reason: 'study B still reaches this position, so the canonical row must survive',
+        );
+        expect(
+          await repo.getReviewState('canon-xshared'),
+          isNotNull,
+          reason: 'study B still asks this question, so its memory must survive',
+        );
+        expect(await repo.getDecision('occ-y'), isNotNull);
+        expect(await repo.getDecision('occ-x'), isNull);
+      } finally {
+        await db.close();
+      }
+    });
+
     test('concurrent imports of the same PGN do not both land', () async {
       // The duplicate check (getStudyByPgnHash) and the write live in different places: the
       // controller asks "already imported?" and then calls saveImportResult. Two imports that
