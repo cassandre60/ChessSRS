@@ -350,6 +350,7 @@ Status:
 - **Withdrawn / Obviated**:
   - 02 (transposition FEN — audit proved non-bug)
   - 17 (chapters diagram reskin — screen deleted in #61)
+  - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
 - **In flight / Finishing CI**:
   - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
   - 30 (PR #60, analysis screen semantics)
