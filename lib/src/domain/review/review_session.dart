@@ -530,6 +530,12 @@ class ReviewSession {
       // marker set by the lapse (review-3 C2).
       _completedDecisionIds.add(prompt.decision.canonicalId);
       _pendingRetest.remove(prompt.decision.canonicalId);
+      // ...and the re-test it was queued for has now been delivered, so the queued copy goes too.
+      // Clearing only the marker left the decision sitting in a queue: the session kept it, and
+      // served the same position again later as though nothing had been answered. Both queues,
+      // because a lapse appends to whichever one is in use and either may hold it.
+      _dueQueue.removeWhere((d) => d.id == prompt.decision.id);
+      _unbufferedQueue.removeWhere((d) => d.id == prompt.decision.id);
       return _continueWithCorrectMove(
         prompt: prompt,
         expectedMatch: expectedMatch,

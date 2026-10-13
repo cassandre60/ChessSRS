@@ -1118,6 +1118,41 @@ void main() {
       expect(stateAfterRetry.lapseCount, 1);
     });
 
+    test('a position resolved by retry is not queued again as a ghost prompt', () {
+      // A lapse re-queues the failed position so it is re-tested before the session ends. When the
+      // user retries it immediately and gets it right, that re-test has already happened — the
+      // pending marker is cleared at that point, but the queued copy was left behind, so the same
+      // position was served again later in the session for no reason. The user reviews it twice.
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+
+      final session = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        mode: ReviewMode.srs,
+      );
+
+      final lapsed = decisions[0];
+      expect(session.submitMove(from: 'd2', to: 'd4').isCorrect, isFalse);
+      expect(session.retryMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+
+      final after = session.checkpoint();
+      final stillQueued = [
+        ...after.dueQueue,
+        ...after.unbufferedQueue,
+      ].where((d) => d.id == lapsed.id).toList();
+
+      expect(
+        stillQueued,
+        isEmpty,
+        reason:
+            'the position was answered correctly on the retry, so the re-test it was queued for '
+            'has happened; leaving it queued serves the same position twice',
+      );
+    });
+
     test('a position answered correctly only on retry still counts toward the daily quota', () {
       final (study, chapter, decisions) = buildTestRepertoire();
       final engine = ReviewEngine(clock: clock);
