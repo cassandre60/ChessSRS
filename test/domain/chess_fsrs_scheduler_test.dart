@@ -285,5 +285,43 @@ void main() {
       expect(a == b, isTrue);
       expect(a.hashCode, b.hashCode);
     });
+
+    // A stability that has decayed to a sub-millisecond positive value — reachable through
+    // repeated lapse contagion, which multiplies stability by a factor clamped to [0, 1] but
+    // never reaching exactly zero — must still schedule as a reviewable interval rather than
+    // collapsing to nothing and re-presenting the position indefinitely. The input is deliberately
+    // *not* floored (it is only used for the retrievability curve, which is smooth there); the
+    // guarantee is on the output, which is clamped unconditionally in schedule(). Pinning it
+    // because that clamp is the only thing standing between a retune and a collapsed interval.
+    test('a sub-millisecond stability still schedules a real interval', () {
+      const params = ChessFsrsParams.chessDefaults();
+      const scheduler = ChessFsrsScheduler(params: params, targetRetention: 0.90);
+
+      for (final stability in [1e-4, 0.01, 0.5, 1.0]) {
+        final scheduled = scheduler.schedule(
+          previous: ReviewState(
+            decisionId: 'd',
+            stability: stability,
+            difficulty: 5.0,
+            repetitionCount: 3,
+            lastReviewedAt: t0.subtract(const Duration(days: 10)),
+            nextDueAt: t0,
+          ),
+          result: ReviewResult.correct,
+          now: t0,
+        );
+
+        expect(
+          scheduled.stability,
+          closeTo(params.minStabilityDays * 86400000.0, 1.0),
+          reason: 'stability $stability must floor to minStabilityDays, not collapse',
+        );
+        expect(
+          scheduled.nextDueAt!.isAfter(t0),
+          isTrue,
+          reason: 'stability $stability must still come back later, not immediately',
+        );
+      }
+    });
   });
 }

@@ -759,17 +759,21 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           board: (context, size, wide) => Stack(
             clipBehavior: Clip.none,
             children: [
-              BoardWidget(
-                size: size,
-                orientation: state.boardOrientation,
-                settings: boardPrefs
-                    .toBoardSettings(Variant.standard, srsColors: srsColors)
-                    .copyWith(enableCoordinates: false),
-                controller: _controller!,
-                onMove: (move, {viaDragAndDrop}) {
-                  ref.read(reviewControllerProvider.notifier).onUserMove(move);
-                },
-                shapes: shapes,
+              Semantics(
+                container: true,
+                label: _boardSemanticsLabel(prompt, state.boardOrientation),
+                child: BoardWidget(
+                  size: size,
+                  orientation: state.boardOrientation,
+                  settings: boardPrefs
+                      .toBoardSettings(Variant.standard, srsColors: srsColors)
+                      .copyWith(enableCoordinates: false),
+                  controller: _controller!,
+                  onMove: (move, {viaDragAndDrop}) {
+                    ref.read(reviewControllerProvider.notifier).onUserMove(move);
+                  },
+                  shapes: shapes,
+                ),
               ),
               if (isLapse && state.expectedMove != null)
                 Positioned.fill(
@@ -781,7 +785,16 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
                 ),
               if (state.isAwaitingAdvance)
                 Positioned.fill(
-                  child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: onContinue),
+                  child: Semantics(
+                    container: true,
+                    button: true,
+                    label: 'Continue to next position',
+                    onTap: onContinue,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: onContinue,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -882,6 +895,22 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     }
 
     return content;
+  }
+
+  /// The name a screen reader gives the board region.
+  ///
+  /// The board is a custom-rendered widget with no text alternative, and
+  /// design/docs/04-screens-and-flows.md §6 asks it to expose the current
+  /// position. The facts available at this level are the chapter the position
+  /// belongs to and the side to move — the same two the meta view prints above
+  /// it, so a user who lands on the board directly hears where they are.
+  String _boardSemanticsLabel(ReviewPrompt prompt, Side orientation) {
+    final context = (prompt.chapterTitle ?? prompt.studyTitle)?.trim();
+    return [
+      if (context != null && context.isNotEmpty) context,
+      if (orientation == Side.white) 'White to play' else 'Black to play',
+      'Chessboard',
+    ].join('. ');
   }
 
   /// The sentence a screen reader hears after an answer, or null while the question is still open.

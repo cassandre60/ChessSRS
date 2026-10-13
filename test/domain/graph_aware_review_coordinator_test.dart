@@ -24,6 +24,65 @@ void main() {
       coordinator = GraphAwareReviewCoordinator(scheduler: scheduler, repo: repo);
     });
 
+    test('lapse contagion survives a degenerate tau instead of crashing the session', () {
+      // A tau of 0 makes `-(depth - 1) / tau` 0/0 at depth 1, so exp() is NaN and the
+      // (NaN).round() in _pullDueForward throws UnsupportedError. That takes down the review
+      // session mid-answer rather than degrading the contagion, and nothing about a wrong answer
+      // should be able to end the session that way. The shipped default is 1.5, so this is the
+      // guard rail for a parameter that is public and const-constructible, not a live path.
+      final degenerate = GraphAwareReviewCoordinator(
+        scheduler: scheduler,
+        repo: repo,
+        params: const GraphAwareParams(contagionTau: 0),
+      );
+
+      repo.setChildren('root_dec', ['child_1']);
+      repo.put(
+        'root_dec',
+        ReviewState(
+          decisionId: 'root_dec',
+          stability: 2.0 * 86400000,
+          difficulty: 5.0,
+          repetitionCount: 1,
+          lastReviewedAt: now.subtract(const Duration(days: 2)),
+          nextDueAt: now,
+        ),
+      );
+      repo.put(
+        'child_1',
+        ReviewState(
+          decisionId: 'child_1',
+          stability: 2.0 * 86400000,
+          difficulty: 5.0,
+          repetitionCount: 1,
+          lastReviewedAt: now.subtract(const Duration(days: 2)),
+          nextDueAt: now.add(const Duration(days: 10)),
+        ),
+      );
+
+      final result = degenerate.recordActiveReview(
+        node: const GraphNode(
+          decisionId: 'root_dec',
+          fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          expectedMoveUci: 'e2e4',
+        ),
+        result: ReviewResult.incorrect,
+        now: now,
+      );
+
+      // What matters is that the answer was graded at all: no throw, and the child it reached
+      // came back with a finite schedule rather than a NaN one.
+      expect(result.primaryState.lapseCount, 1);
+      expect(result.sideEffectStates, hasLength(1));
+      final child = result.sideEffectStates.single;
+      expect(child.decisionId, 'child_1');
+      // A NaN-derived date would come back null or wildly out of range; a pulled-forward
+      // schedule is still in the future and no later than it started.
+      expect(child.nextDueAt, isNotNull);
+      expect(child.nextDueAt!.isAfter(now), isTrue);
+      expect(child.nextDueAt!.isAfter(now.add(const Duration(days: 10))), isFalse);
+    });
+
     test('recordActiveReview on correct move updates primary state without side effects', () {
       const node = GraphNode(
         decisionId: 'root_dec',
