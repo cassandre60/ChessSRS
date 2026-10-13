@@ -351,7 +351,7 @@ Status:
   - 25 (#64, import 10 MB size guard)
   - 29 (#66, route swallowed catches to Logger)
   - 31 (#65, prefs corruption backup & log)
-  - 32 (#67/#68, session constructor cost pinning)
+  - 32 (#67/#68, session constructor cost pinning). Phase 2 (chunked async factory) was **declined on measurement**, not forgotten: ~41 ms at 10k decisions, ~3.7 ms at 2k, and QUALITY §4.1 covers the move path, not session start. Do not reopen Phase 2 without a real library above ~5k positions. Recorded in `test/review/session_constructor_cost_test.dart`.
   - 35 (#85, linux sound process leak)
   - 37 (#90, review keyboard shortcuts / Enter, NumpadEnter, ArrowRight)
   - PERF-FIX-21 (#84, targeted review-state load in getDueSummary)
@@ -362,6 +362,9 @@ Status:
   - 17 (chapters diagram reskin — screen deleted in #61)
   - 33 (retryMove ghost queue — re-test on lapse is intended spaced-repetition contract)
   - DOMAIN-FIX-36 (contagion tau guard and sub-ms stability floor already on main; probe showed no collapse — brief should be withdrawn)
+  - ERROR-FIX-29 (account prefs and share catches already log with stack; the cited importer catch is gone; the one remaining catch records its message and was probed as reachable — nothing to add)
+  - SAFETY-FIX-25 (10 MB guard `kMaxPgnInputBytes` already checked at file pick, paste and `importPgn`, with tests on the rejection and the limit boundary)
+  - SYSTEM-FIX-35 (Linux player already uses `unawaited(Process.run(...))` with an `onError` swallow, landed in #85). Known gap: no test covers `_LinuxSoundPlayer`; the class is private and only observable through a real process, so a test would mock the subject. Do not reopen unless the player is refactored to expose its argument builder.
 - **In flight / Finishing CI**:
   - 16 (#46, review state mirroring docs & rename getReviewStatesByIds)
   - 30 (A11Y-FIX-30: analysis screen semantics)
