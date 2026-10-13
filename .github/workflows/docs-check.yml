@@ -4,8 +4,24 @@ name: Docs Check
 # "If a docs change ever does need a check, add a small dedicated workflow triggered on **.md;
 # do not widen the test job's filter just to make a doc edit look verified."
 #
-# Emits the required "Unit tests on ubuntu-latest" status check for docs-only changes that
-# do not touch code or configuration tracked by test.yml.
+# This job used to be *named* "Unit tests on ubuntu-latest" so that a docs-only PR would satisfy
+# the required check of that name. That backfired. Any PR touching both code and Markdown fires
+# this workflow and test.yml, so two unrelated checks reported the same name — as seen on PR #93,
+# where `gh pr checks` listed "Unit tests on ubuntu-latest" twice: this job's 3-second echo and
+# the real ~6-minute suite, still queued. Branch protection matches required checks by name, so
+# the 3-second echo can satisfy the requirement on its own: a code change could merge having run
+# no tests at all. Observed on #93 on 2026-10-13.
+#
+# The name is now distinct. What that does and does not buy:
+#   - It closes the hole. A code+docs PR can no longer be satisfied by this job.
+#   - It does NOT make docs-only PRs mergeable, and that is not a regression. gates.yml's paths
+#     exclude docs/**, so a docs-only PR still has no "T1 fast gates" report and is still blocked.
+#     It was already blocked, because test.yml excludes docs/** too and this job was only ever
+#     satisfying half of the two required checks. test.yml's header says as much: "a docs-only
+#     PR still gets no CI and cannot merge on its own".
+#
+# No branch-protection change is needed. The required check "Unit tests on ubuntu-latest" is
+# emitted by test.yml, whose paths include '.github/**' and therefore include this file.
 
 on:
   push:
@@ -26,8 +42,8 @@ on:
 permissions: read-all
 
 jobs:
-  unit-test:
-    name: Unit tests on ubuntu-latest
+  docs-check:
+    name: Docs check
     runs-on: ubuntu-latest
     steps:
       - name: Acknowledge docs-only change
