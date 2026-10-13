@@ -67,13 +67,4 @@ extension SpeedExtension on Pick {
     }
     throw PickException("value $value at $debugParsingExit can't be casted to Speed");
   }
-
-  Speed? asSpeedOrNull() {
-    if (value == null) return null;
-    try {
-      return asSpeedOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
 }

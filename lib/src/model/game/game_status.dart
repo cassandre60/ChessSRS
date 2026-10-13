@@ -65,13 +65,4 @@ extension GameExtension on Pick {
     }
     throw PickException("value $value at $debugParsingExit can't be casted to GameStatus");
   }
-
-  GameStatus? asGameStatusOrNull() {
-    if (value == null) return null;
-    try {
-      return asGameStatusOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
 }
