@@ -542,7 +542,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   /// to re-read that drawer's contents must not also throw away a narrower
   /// scope the user had reached inside it.
   Future<void> selectSide(Side side) async {
-    if (state.value?.scope.side == side) return;
+    if (state.value?.activeSide == side) return;
     await changeScope(_sideScope(side));
   }
 
