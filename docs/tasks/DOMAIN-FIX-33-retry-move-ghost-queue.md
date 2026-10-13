@@ -1,10 +1,47 @@
-# DOMAIN-FIX-33 — retryMove leaves duplicate decision in queue (ghost due prompt)
+# DOMAIN-FIX-33 — WITHDRAWN — retryMove ghost queue (intended retest contract)
 
-> **For a dumb agent**: follow this file top-to-bottom. Do exactly what it says,
-> nothing more. Each section tells you where to look, what to change, and how to
-> prove it — no guessing.
+> **Status 2026-10-13: withdrawn after verification against domain contract. Do not implement.**
+> The premise of DOMAIN-FIX-33 contradicts the intentional spaced-repetition design.
+> A lapsed item is intentionally re-tested at the end of the session, even if immediately
+> reguessed/retried. Removing it broke 3 existing tests.
+> This file is kept as an audit trail — read §1 before doing anything.
 
-## 1. What is broken
+## 1. Withdrawal notice (read first)
+
+In spaced repetition (Listudy, Anki, chessrs), an immediate reguess after a lapse only proves
+working memory (the move was just shown or guessed 5 seconds ago). The item is intentionally
+kept in the re-test queue so it is tested again at the end of the session to ensure actual
+retention.
+
+See `test/review/review_controller_test.dart:525-535`:
+```dart
+// Reguess correctly: proves the move was seen, but the re-test is still
+// pending, so dues must NOT drop yet (the screen still shows a prompt).
+final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+expect(retry, isNotNull);
+expect(retry!.isCorrect, isTrue);
+state = container.read(reviewControllerProvider).requireValue;
+expect(state.currentPrompt, isNotNull);
+expect(state.totalDueCount, 1);
+
+// Answer the re-test correctly first-try: now the item resolves.
+final retest = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+expect(retest, isNotNull);
+expect(retest!.isCorrect, isTrue);
+state = container.read(reviewControllerProvider).requireValue;
+expect(state.totalDueCount, 0);
+```
+
+Removing the decision from the queue on `retryMove` broke 3 existing tests:
+- `test/review/review_controller_test.dart:531` (`ReviewController lapsed item is re-tested: dues drop when the re-test is answered`)
+- `test/view/review/review_screen_test.dart:330` (`displays lapse feedback and allows user to reguess on the board`)
+- `test/view/review/review_screen_test.dart:439` (`Reveal answer plays the study move and continues the session`)
+
+The brief is withdrawn.
+
+---
+
+## 2. Original flawed proposal (archived)
 
 In `lib/src/domain/review/review_session.dart:480-488` and `526-539`:
 
