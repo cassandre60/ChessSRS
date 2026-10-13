@@ -3,7 +3,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:logging/logging.dart';
 import 'package:share_plus/share_plus.dart';
+
+/// See [launchShareDialog]; a share sheet that never opens needs to leave a trace.
+final _logger = Logger('Share');
 
 /// Shares the given [uri], [files], or [text].
 ///
@@ -37,12 +41,20 @@ Future<ShareResult> launchShareDialog(BuildContext context, ShareParams params) 
         sharePositionOrigin: origin,
       ),
     );
-  } catch (e) {
-    debugPrint('launchShareDialog fallback: $e');
+  } catch (e, st) {
+    // The share sheet is unavailable, which on Linux desktop is the normal case and not worth
+    // alarming anyone about — but the copy is a substitute for what they asked for, and saying
+    // "Copied to clipboard" left the impression they had shared it. Callers already surface
+    // [ShareResult.raw] in a toast, so the honest text goes there rather than into a second,
+    // competing notification.
+    _logger.warning('Share unavailable, falling back to the clipboard.', e, st);
     final fallbackText = params.text ?? params.uri?.toString();
     if (fallbackText != null && fallbackText.isNotEmpty) {
-      Clipboard.setData(ClipboardData(text: fallbackText));
-      return const ShareResult('Copied to clipboard', ShareResultStatus.success);
+      await Clipboard.setData(ClipboardData(text: fallbackText));
+      return const ShareResult(
+        'Sharing unavailable — copied to the clipboard instead',
+        ShareResultStatus.success,
+      );
     }
     return ShareResult.unavailable;
   }

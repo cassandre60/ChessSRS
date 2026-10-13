@@ -326,6 +326,58 @@ void main() {
       }
     });
 
+    test('timestamps are stored as UTC so a timezone change cannot shift due dates', () async {
+      // SPEC INV-002. review-4 C2 / QUALITY §3.2: due instants survive a
+      // timezone change — stored form is an absolute instant (UTC), not a
+      // wall time.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        // Local wall time, no UTC flag — what SystemClock produces.
+        final localDue = DateTime(2026, 10, 8, 10);
+        final kState = PositionKnowledgeState(
+          canonicalId: 'k-utc',
+          nextDueAt: localDue,
+          stability: 3.0,
+        );
+
+        await repo.savePositionKnowledgeState(kState);
+        final read = await repo.getPositionKnowledgeState('k-utc');
+
+        // The instant is preserved and the read side is marked UTC.
+        expect(read, isNotNull);
+        expect(read!.nextDueAt, isNotNull);
+        expect(read.nextDueAt!.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(read.nextDueAt!.isUtc, isTrue);
+
+        // Review state path round-trips UTC too.
+        const rState = ReviewState(decisionId: 'r-utc', nextDueAt: null, repetitionCount: 2);
+        await repo.saveReviewState(rState.copyWith(nextDueAt: localDue));
+        final rRead = await repo.getReviewState('r-utc');
+        expect(rRead!.nextDueAt!.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(rRead.nextDueAt!.isUtc, isTrue);
+
+        // Review event path round-trips UTC.
+        final baseState = ReviewState(decisionId: 'e-utc', nextDueAt: localDue);
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'e-utc',
+            when: localDue,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'e-utc'),
+            newState: baseState,
+          ),
+        );
+        final events = await repo.getReviewEvents('e-utc');
+        expect(events, hasLength(1));
+        expect(events.first.when.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(events.first.when.isUtc, isTrue);
+      } finally {
+        await db.close();
+      }
+    });
+
     test('latency survives answer persistence (upsert must not REPLACE columns)', () async {
       // SPEC INV-002. review-4 C1: every persisted answer must preserve latency
       // telemetry — INSERT OR REPLACE must not erase columns the caller did not
@@ -925,7 +977,7 @@ void main() {
       }
     });
 
-    test('getReviewStatesByDecisions retrieves only review states for specified IDs', () async {
+    test('getReviewStatesByIds retrieves only review states for specified IDs', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);
 
@@ -935,11 +987,11 @@ void main() {
         const s3 = ReviewState(decisionId: 'dec-3', repetitionCount: 3);
         await repo.saveReviewStates([s1, s2, s3]);
 
-        final queried = await repo.getReviewStatesByDecisions(['dec-1', 'dec-3']);
+        final queried = await repo.getReviewStatesByIds(['dec-1', 'dec-3']);
         expect(queried.length, 2);
         expect(queried.map((s) => s.decisionId).toSet(), equals({'dec-1', 'dec-3'}));
 
-        final emptyQuery = await repo.getReviewStatesByDecisions([]);
+        final emptyQuery = await repo.getReviewStatesByIds([]);
         expect(emptyQuery, isEmpty);
       } finally {
         await db.close();
@@ -1464,7 +1516,7 @@ void main() {
           difficulty: 7.2,
         ),
       );
-      final states = await repo.getReviewStatesByDecisions(['migrated-dec-1']);
+      final states = await repo.getReviewStatesByIds(['migrated-dec-1']);
       expect(states.first.difficulty, equals(7.2));
 
       await upgradedDb.close();

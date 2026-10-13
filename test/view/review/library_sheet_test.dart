@@ -1,7 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
+import 'dart:io';
+
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -49,12 +50,33 @@ void main() {
     }
   });
 
-  testWidgets('the hub offers each destination the sheet used to', (tester) async {
-    final hub = await rowLabels(tester, const AnalysisHubScreen());
+  // Rewritten when the Explore hub was deleted for having no caller in lib/. This used to assert
+  // that the hub offered the three destinations the sheet had given up. The hub is gone, but the
+  // property it guarded is not: each destination must still be reachable from a live surface.
+  // Asserted against the source, because the routing lives in the openers rather than in a
+  // screen we can mount — and a mount-based version would pass even if every opener were deleted.
+  test('the destinations the sheet gave up are still reachable from live surfaces', () {
+    final actions = File('lib/src/view/analysis/analysis_actions.dart').readAsStringSync();
+    expect(
+      actions,
+      contains('BoardEditorScreen.buildRoute'),
+      reason: 'the board editor must stay reachable without the hub',
+    );
 
-    for (final destination in destinations) {
-      expect(hub, contains(destination), reason: 'the hub must reach $destination');
-    }
+    // The board editor's opener is imported by StudyScreen's bottom bar, which the scope drawer
+    // pushes, so the destination is reachable and not merely defined.
+    final bottomBar = File('lib/src/view/study/study_bottom_bar.dart').readAsStringSync();
+    expect(bottomBar, contains('analysis_actions.dart'));
+    expect(
+      bottomBar,
+      contains('AnalysisScreen.buildRoute'),
+      reason: 'the analysis board must stay reachable without the hub',
+    );
+
+    // The opening explorer survives as the inline panel inside the analysis board, which is why
+    // the standalone explorer screen could go without taking the feature with it.
+    final analysisScreen = File('lib/src/view/analysis/analysis_screen.dart').readAsStringSync();
+    expect(analysisScreen, contains('ExplorerView('));
   });
 
   testWidgets('study management lives in the scope drawer, not the Library sheet', (tester) async {

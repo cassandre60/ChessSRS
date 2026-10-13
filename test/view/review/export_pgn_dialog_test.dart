@@ -4,11 +4,14 @@
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -193,89 +196,58 @@ void main() {
       expect(find.byType(ExportPgnDialog), findsNothing);
     });
 
-    testWidgets('StudyChaptersScreen exports full study and individual chapter PGNs', (
-      tester,
-    ) async {
-      const pgn = '''
+    // Re-homed from the StudyChaptersScreen export test when that unreachable screen was
+    // deleted. The screen was the only caller of exportStudyPgn/exportChapterPgn, but both
+    // are live through the study actions sheet, so the behaviour is pinned here at the level
+    // it actually lives: whole-study PGN carries every chapter, chapter PGN carries only its
+    // own line. Asserting through the controller rather than through a deleted widget keeps the
+    // coverage attached to the code that survives.
+    test(
+      'exportStudyPgn carries every chapter and exportChapterPgn carries only its own',
+      () async {
+        const pgn = '''
 [Event "Najdorf Variation"]
 1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6 *
 
 [Event "Classical Variation"]
 1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 Nc6 *
 ''';
-      final importResult = importPgn(
-        pgn,
-        studyTitle: 'Sicilian Repertoire',
-        repertoireSide: Side.black,
-      );
-      await repo.saveImportResult(importResult);
+        final importResult = importPgn(
+          pgn,
+          studyTitle: 'Sicilian Repertoire',
+          repertoireSide: Side.black,
+        );
 
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: StudyChaptersScreen(study: importResult.study, chapters: importResult.chapters),
-        overrides: {
-          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
-          databaseProvider: databaseProvider.overrideWith((ref) => db),
-        },
-      );
+        final db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+        addTearDown(db.close);
+        final tables = db.batch();
+        createSrsTables(tables);
+        await tables.commit();
+        final repo = SqliteStudyRepository(db);
+        await repo.saveImportResult(importResult);
 
-      await tester.pumpWidget(app);
-      await tester.pumpAndSettle();
+        // The service and the repository provider must be handed the same instance, or the
+        // controller would read through a different store than the one seeded above.
+        final container = ProviderContainer(
+          overrides: [
+            srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            reviewServiceProvider.overrideWith((ref) => ReviewService(repository: repo)),
+          ],
+        );
+        addTearDown(container.dispose);
+        final controller = container.read(reviewControllerProvider.notifier);
 
-      expect(find.text('Sicilian Repertoire'), findsOneWidget);
-      expect(find.text('2 chapters'), findsOneWidget);
-      expect(find.text('Najdorf Variation'), findsOneWidget);
-      expect(find.text('Classical Variation'), findsOneWidget);
+        final wholeStudy = await controller.exportStudyPgn(importResult.study.id);
+        expect(wholeStudy, contains('Najdorf Variation'));
+        expect(wholeStudy, contains('Classical Variation'));
 
-      // 1. Export entire study via AppBar action
-      expect(find.byTooltip('Export study PGN'), findsOneWidget);
-      await tester.tap(find.byTooltip('Export study PGN'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ExportPgnDialog), findsOneWidget);
-      expect(find.text('2 chapters'), findsNWidgets(2));
-      expect(
-        find.descendant(
-          of: find.byType(ExportPgnDialog),
-          matching: find.textContaining('Najdorf Variation'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(ExportPgnDialog),
-          matching: find.textContaining('Classical Variation'),
-        ),
-        findsOneWidget,
-      );
-
-      // Dismiss dialog
-      await tester.tap(find.text('Close'));
-      await tester.pumpAndSettle();
-
-      // 2. Export individual chapter via list tile action
-      final chapterExportButtons = find.byTooltip('Export chapter PGN');
-      expect(chapterExportButtons, findsNWidgets(2));
-
-      await tester.tap(chapterExportButtons.first);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ExportPgnDialog), findsOneWidget);
-      expect(find.text('Najdorf Variation'), findsWidgets);
-      expect(
-        find.descendant(of: find.byType(ExportPgnDialog), matching: find.textContaining('a6 *')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(ExportPgnDialog),
-          matching: find.textContaining('Classical Variation'),
-        ),
-        findsNothing,
-      );
-
-      await tester.tap(find.text('Close'));
-      await tester.pumpAndSettle();
-    });
+        final najdorf = importResult.chapters.firstWhere(
+          (c) => c.title?.contains('Najdorf') ?? false,
+        );
+        final chapterOnly = await controller.exportChapterPgn(najdorf.id);
+        expect(chapterOnly, contains('a6 *'));
+        expect(chapterOnly, isNot(contains('Classical Variation')));
+      },
+    );
   });
 }

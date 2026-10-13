@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
 
+import 'dart:typed_data';
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
@@ -12,6 +14,7 @@ import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
@@ -20,6 +23,7 @@ import 'package:chess_srs/src/view/study/study_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -30,6 +34,47 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../binding.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
+
+/// A picked file reporting its size the way a native picker does.
+///
+/// [sizeBytes] is what the guard reads, and [readAttempts] counts what it should
+/// never do with an oversized file: read it.
+final class _FakePlatformFile extends PlatformFile {
+  _FakePlatformFile({required this.name, required this.sizeBytes});
+
+  @override
+  final String name;
+
+  final int sizeBytes;
+
+  /// Incremented by every read path, so a test can assert the file was refused
+  /// *before* its contents were pulled into memory.
+  int readAttempts = 0;
+
+  @override
+  Uri get uri => Uri.file('/tmp/$name');
+
+  @override
+  Never get xFile => throw UnimplementedError('the dialog reads by path, not through xFile');
+
+  @override
+  int? lengthSync() => sizeBytes;
+
+  @override
+  Future<int?> length() => Future.value(sizeBytes);
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    readAttempts++;
+    throw StateError('an oversized file must never be read');
+  }
+
+  @override
+  Stream<Uint8List> readAsByteStream() {
+    readAttempts++;
+    throw StateError('an oversized file must never be read');
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -77,6 +122,46 @@ void main() {
       expect(find.text('Choose file'), findsWidgets);
     });
 
+    testWidgets('first launch at a medium window lays out without overflow', (tester) async {
+      // The welcome view goes side-by-side at 900px: 500px of copy plus the ambient board.
+      // At exactly 900 that row needed ~980px and overflowed on resizable desktop windows,
+      // while the captures only ever checked 390 and 1440 (round-6 R6-F6). The harness swallows
+      // RenderFlex errors suite-wide, so this asserts geometry, not the absence of errors.
+      Future<void> pumpNoStudies(Size size) async {
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          surfaceSize: size,
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
+        await tester.pumpWidget(app);
+        await pumpAsync(tester, 500);
+      }
+
+      await pumpNoStudies(const Size(900, 800));
+      expect(find.text('Bring your study.'), findsOneWidget);
+      expect(
+        find.byType(SrsBoardBackground),
+        findsNothing,
+        reason: 'at 900px the copy and the 380px board cannot sit side by side; single column',
+      );
+
+      await pumpNoStudies(const Size(1280, 800));
+      expect(find.text('Bring your study.'), findsOneWidget);
+      expect(find.byType(SrsBoardBackground), findsOneWidget);
+      expect(
+        tester.getRect(find.byType(SrsBoardBackground)).right,
+        lessThanOrEqualTo(1280),
+        reason: 'the side-by-side row must fit the window it asked for',
+      );
+    });
+
     testWidgets('tapping import button opens RepertoireImportDialog', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
@@ -98,6 +183,59 @@ void main() {
       await pumpAsync(tester);
 
       expect(find.byType(RepertoireImportDialog), findsOneWidget);
+    });
+
+    testWidgets('an oversized PGN file is refused instead of read into memory', (tester) async {
+      // A repertoire PGN is kilobytes. A master-games dump is hundreds of megabytes, and the
+      // dialog used to read the whole file into a String before deciding anything — the largest
+      // allocation in the import path, on a phone with 4 GB to spare in total. Asking the file
+      // system for the length first costs one stat call and refuses the file before any of it
+      // is read.
+      //
+      // The file is a real one, made sparse with setLength, because the dialog reads through
+      // dart:io and a stubbed PlatformFile would prove nothing about that path.
+      // The picker reports the size; nothing is read.
+      final oversized = _FakePlatformFile(
+        name: 'master-games.pgn',
+        sizeBytes: kMaxPgnInputBytes + 1,
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+          pickPgnFileProvider: pickPgnFileProvider.overrideWithValue(() async => oversized),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // First tap opens the dialog from the empty state.
+      await tester.tap(find.text('Choose file').first);
+      await tester.pump();
+      await pumpAsync(tester);
+
+      // The dialog's own file button is the code path that reads a picked file.
+      await tester.tap(find.text('Pick .pgn file from disk'));
+      await tester.pump();
+      await pumpAsync(tester);
+
+      expect(
+        find.textContaining('too large'),
+        findsOneWidget,
+        reason: 'the user must be told the file was refused, not left with an empty field',
+      );
+      expect(
+        oversized.readAttempts,
+        0,
+        reason: 'the oversized file was read despite being refused',
+      );
     });
 
     testWidgets('renders active board and handles moves when studies exist', (tester) async {
@@ -359,6 +497,136 @@ void main() {
       await playMove(tester, 'd2', 'd4');
       await pumpAsync(tester, 100);
       expect(find.bySemanticsLabel('Not this move. The study move is Nf3.'), findsOneWidget);
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    testWidgets('screen reader can identify the board and the side to move', (tester) async {
+      // design/docs/04-screens-and-flows.md §6: "The board itself should expose the current
+      // position in a way the platform's chess/board semantics conventions support." The board is
+      // a custom-rendered widget with no text alternative; the facts a screen reader can be given
+      // at this level are which chapter the position belongs to and whose move it is.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '[Event "Queen Pawn"]\n\n1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // The board's own semantics node, not the meta text above it: both speak of the same
+      // chapter, so this must be read off the Chessboard's node specifically.
+      final boardSemantics = tester.getSemantics(find.byType(Chessboard));
+      expect(boardSemantics.label, contains('Queen Pawn'));
+      expect(boardSemantics.label, contains('White to play'));
+      expect(boardSemantics.label, contains('Chessboard'));
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    testWidgets('screen reader can identify the continue overlay as a button', (tester) async {
+      // The full-board overlay that advances the session is the largest tap target on the screen,
+      // but it was a bare GestureDetector: invisible to a screen reader, which had to find the
+      // small pill at the bottom instead. It is a button and must announce itself as one.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '1. e4 {Important center move} *',
+        studyTitle: 'King Pawn Tap Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Play the correct move; the note pauses advancement and the overlay goes up.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.text('Important center move'), findsOneWidget);
+
+      final overlay = find.bySemanticsLabel('Continue to next position');
+      expect(overlay, findsOneWidget);
+      expect(tester.getSemantics(overlay).flagsCollection.isButton, isTrue);
+
+      // The announced control really does continue the session.
+      await tester.tap(overlay);
+      await pumpAsync(tester, 700);
+      expect(find.text('Nothing due.'), findsOneWidget);
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    testWidgets('screen reader can identify the study move by its piece letter', (tester) async {
+      // The answer is printed with a figurine: the piece is an SVG and the rest is text, so a
+      // screen reader heard "f3" for a move that is Nf3 — a wrong move name. The full SAN must be
+      // the accessible name.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '1. Nf3 Nc6 *',
+        studyTitle: 'Zukertort',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // A wrong move puts the study move in the answer slot. The notation line carries the same
+      // SAN through the same widget, so one node is the minimum, not exactly one.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.bySemanticsLabel('Nf3'), findsWidgets);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
       // addTearDown.
@@ -1338,8 +1606,8 @@ void main() {
       expect(find.text('Nothing matches \u201cNonexistent\u201d.'), findsOneWidget);
       expect(find.text('French Defense Repertoire'), findsNothing);
 
-      // Tap clear search button
-      await tester.tap(find.byTooltip('Clear search'));
+      // Tap clear search button (an SrsIconButton: name exposed as semantics, not a Tooltip)
+      await tester.tap(find.bySemanticsLabel('Clear search'));
       await tester.pumpAndSettle();
 
       expect(inDrawer('French Defense Repertoire'), findsOneWidget);
@@ -1449,6 +1717,62 @@ void main() {
 
       expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       expect(inDrawer('King Pawn Lines'), findsNothing);
+    });
+
+    testWidgets('the selected scope row steps quiet labels up to ink2 for the tint', (
+      tester,
+    ) async {
+      // The current-scope row sits on the accentSoft tint, where ink3 falls below AA. Only the
+      // selected row may use ink2 for its quiet labels; every other row stays ink3 (round-6 R6-F2).
+      // Driven entirely through the UI — tapping a row pops the drawer and scopes to it — then
+      // the drawer is reopened onto the settled scope.
+      final open = importPgn('1. e4 e5 *', studyTitle: 'Open', repertoireSide: Side.white);
+      final closed = importPgn('1. d4 d5 *', studyTitle: 'Closed', repertoireSide: Side.white);
+      await tester.runAsync(() async {
+        await repo.saveImportResult(open);
+        await repo.saveImportResult(closed);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      Future<void> openWhiteDrawer() async {
+        await tester.tap(find.byTooltip('White repertoire'));
+        await pumpAsync(tester);
+        expect(find.byType(ReviewScopeDrawer), findsOneWidget);
+      }
+
+      await openWhiteDrawer();
+      final drawer = find.byType(ReviewScopeDrawer);
+      Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
+      // Tapping scopes and pops; reopen directly (no scope reset), the way the Nothing-due
+      // screen's button does, so the drawer opens onto the settled study scope.
+      await tester.tap(inDrawer('Open'));
+      await pumpAsync(tester);
+      ReviewScopeDrawer.show(tester.element(find.byType(ReviewScreen)), Side.white);
+      await pumpAsync(tester);
+
+      final light = SrsColors.light(SrsAccent.ultramarine);
+      final dueColors = tester
+          .widgetList<Text>(find.descendant(of: drawer, matching: find.text('due')))
+          .map((t) => t.style?.color)
+          .toSet();
+      expect(dueColors, {
+        light.ink2,
+        light.ink3,
+      }, reason: 'exactly the selected row renders its quiet labels in ink2');
     });
 
     testWidgets('ReviewScopeDrawer search shows matches from collapsed groups', (tester) async {

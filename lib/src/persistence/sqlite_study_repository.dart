@@ -482,11 +482,6 @@ class SqliteStudyRepository implements StudyRepository {
     return rows.map(_decisionFromRow).toList(growable: false);
   }
 
-  @override
-  Future<void> deleteDecisionsByStudy(String studyId) async {
-    await _db.delete(kTableSrsDecision, where: 'studyId = ?', whereArgs: [studyId]);
-  }
-
   // ---------------------------------------------------------------------------
   // Position Knowledge States (canonical SRS layer)
   // ---------------------------------------------------------------------------
@@ -519,6 +514,19 @@ class SqliteStudyRepository implements StudyRepository {
     await saveReviewStates(states.map((s) => s.toReviewState()).toList());
   }
 
+  /// Persists an answer's canonical state **and** its per-occurrence mirrors.
+  ///
+  /// `srs_review_state` is written **twice per state** on purpose:
+  ///
+  /// 1. Once keyed by the canonical id (shared position knowledge — one row
+  ///    per unique position).
+  /// 2. Once per occurrence via `SELECT id FROM srs_decision WHERE canonicalStateId = ?`
+  ///    (one row per `srs_decision.id` that reaches the same position via a
+  ///    transposition). Reads query both key kinds
+  ///    (`review_service.dart: getReviewStatesByIds({…decisionIds, …canonicalIds})`
+  ///    plus `getKnowledgeStatesByCanonicalIds`) and the session looks up
+  ///    `reviewStates[canonicalId] ?? reviewStates[decisionId]`. Doubling the
+  ///    row volume is deliberate and what keeps transposition reads coherent.
   @override
   Future<void> saveAnswerBatch({
     required List<PositionKnowledgeState> knowledgeStates,
@@ -531,12 +539,14 @@ class SqliteStudyRepository implements StudyRepository {
       for (final s in knowledgeStates) {
         batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
 
+        // canonical mirror
         batch.insert(
           kTableSrsReviewState,
           _reviewStateRow(s.toReviewState(s.canonicalId)),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
 
+        // per-occurrence mirrors (transpositions)
         batch.rawInsert(
           '''
           INSERT OR REPLACE INTO $kTableSrsReviewState(
@@ -548,9 +558,9 @@ class SqliteStudyRepository implements StudyRepository {
           WHERE canonicalStateId = ?
         ''',
           [
-            s.firstReviewedAt?.toIso8601String(),
-            s.lastReviewedAt?.toIso8601String(),
-            s.nextDueAt?.toIso8601String(),
+            s.firstReviewedAt?.toUtc().toIso8601String(),
+            s.lastReviewedAt?.toUtc().toIso8601String(),
+            s.nextDueAt?.toUtc().toIso8601String(),
             s.repetitionCount,
             s.lapseCount,
             s.stability,
@@ -639,16 +649,16 @@ class SqliteStudyRepository implements StudyRepository {
 
     return PositionKnowledgeState(
       canonicalId: row['canonicalId']! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first) : null,
-      lastReviewedAt: last != null ? DateTime.parse(last) : null,
-      nextDueAt: next != null ? DateTime.parse(next) : null,
+      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
+      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
+      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
       difficulty: (row['difficulty'] as num?)?.toDouble() ?? 5.0,
       latencyEmaMs: (row['latencyEmaMs'] as num?)?.toDouble(),
       latencySampleCount: (row['latencySampleCount'] as num?)?.toInt() ?? 0,
-      lastExposedAt: exposed != null ? DateTime.parse(exposed) : null,
+      lastExposedAt: exposed != null ? DateTime.parse(exposed).toUtc() : null,
     );
   }
 
@@ -682,18 +692,20 @@ class SqliteStudyRepository implements StudyRepository {
 
   /// Bindings for [_knowledgeStateUpsertSql]: all eleven columns. On conflict
   /// the latency values are ignored — the update set does not mention them.
+  /// Timestamps are normalised to UTC on write (review-4 C2) so a timezone
+  /// change between write and read cannot shift due dates.
   static List<Object?> _knowledgeStateUpsertArgs(PositionKnowledgeState state) => [
     state.canonicalId,
-    state.firstReviewedAt?.toIso8601String(),
-    state.lastReviewedAt?.toIso8601String(),
-    state.nextDueAt?.toIso8601String(),
+    state.firstReviewedAt?.toUtc().toIso8601String(),
+    state.lastReviewedAt?.toUtc().toIso8601String(),
+    state.nextDueAt?.toUtc().toIso8601String(),
     state.repetitionCount,
     state.lapseCount,
     state.stability,
     state.difficulty,
     state.latencyEmaMs,
     state.latencySampleCount,
-    state.lastExposedAt?.toIso8601String(),
+    state.lastExposedAt?.toUtc().toIso8601String(),
   ];
 
   // ---------------------------------------------------------------------------
@@ -791,22 +803,19 @@ class SqliteStudyRepository implements StudyRepository {
     final rows = await _db.query(
       kTableSrsReviewState,
       where: 'nextDueAt IS NULL OR nextDueAt <= ?',
-      whereArgs: [now.toIso8601String()],
+      whereArgs: [now.toUtc().toIso8601String()],
       orderBy: 'nextDueAt ASC',
     );
     return rows.map(_reviewStateFromRow).toList(growable: false);
   }
 
   @override
-  Future<List<ReviewState>> getReviewStatesByDecisions(List<String> decisionIds) async {
-    if (decisionIds.isEmpty) return const [];
+  Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
     const chunkSize = 400;
     final results = <ReviewState>[];
-    for (var i = 0; i < decisionIds.length; i += chunkSize) {
-      final chunk = decisionIds.sublist(
-        i,
-        i + chunkSize > decisionIds.length ? decisionIds.length : i + chunkSize,
-      );
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(i, i + chunkSize > ids.length ? ids.length : i + chunkSize);
       final placeholders = List.filled(chunk.length, '?').join(',');
       final rows = await _db.query(
         kTableSrsReviewState,
@@ -858,10 +867,11 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<int> getTodayReviewedPositionsCount(DateTime now) async {
-    // Local midnight: event timestamps are local `toIso8601String()` values
-    // (no offset suffix), and `now` comes from `SystemClock` (local wall time).
-    // Using UTC midnight here shifted the day boundary by the device offset.
-    final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+    // Local calendar day boundary, expressed as the UTC form of that instant:
+    // event timestamps are stored as UTC `toIso8601String()` values (review-4
+    // C2), so the comparison arg must be UTC too or the device offset would
+    // leak into the string comparison.
+    final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
     final result = await _db.rawQuery(
       '''
       SELECT COUNT(DISTINCT decisionId) as count
@@ -979,9 +989,9 @@ class SqliteStudyRepository implements StudyRepository {
 
     return ReviewState(
       decisionId: (row['canonicalId'] ?? row['decisionId'])! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first) : null,
-      lastReviewedAt: last != null ? DateTime.parse(last) : null,
-      nextDueAt: next != null ? DateTime.parse(next) : null,
+      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
+      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
+      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
@@ -996,9 +1006,9 @@ class SqliteStudyRepository implements StudyRepository {
   /// copy and missed in another loses a field silently.
   static Map<String, Object?> _reviewStateRow(ReviewState state) => {
     'decisionId': state.decisionId,
-    'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-    'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-    'nextDueAt': state.nextDueAt?.toIso8601String(),
+    'firstReviewedAt': state.firstReviewedAt?.toUtc().toIso8601String(),
+    'lastReviewedAt': state.lastReviewedAt?.toUtc().toIso8601String(),
+    'nextDueAt': state.nextDueAt?.toUtc().toIso8601String(),
     'repetitionCount': state.repetitionCount,
     'lapseCount': state.lapseCount,
     'stability': state.stability,
@@ -1008,7 +1018,7 @@ class SqliteStudyRepository implements StudyRepository {
   static ReviewEvent _reviewEventFromRow(Map<String, Object?> row) {
     return ReviewEvent(
       decisionId: row['decisionId']! as String,
-      when: DateTime.parse(row['whenTimestamp']! as String),
+      when: DateTime.parse(row['whenTimestamp']! as String).toUtc(),
       result: ReviewResult.values.byName(row['result']! as String),
       oldState: reviewStateFromJson(
         jsonDecode(row['oldStateJson']! as String) as Map<String, dynamic>,
@@ -1026,7 +1036,7 @@ class SqliteStudyRepository implements StudyRepository {
   /// copy and missed in another loses a field silently.
   static Map<String, Object?> _reviewEventRow(ReviewEvent event) => {
     'decisionId': event.decisionId,
-    'whenTimestamp': event.when.toIso8601String(),
+    'whenTimestamp': event.when.toUtc().toIso8601String(),
     'result': event.result.name,
     'oldStateJson': jsonEncode(reviewStateToJson(event.oldState)),
     'newStateJson': jsonEncode(reviewStateToJson(event.newState)),

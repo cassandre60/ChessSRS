@@ -1,7 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-010, INV-012, INV-015, INV-016, INV-017, INV-020, INV-021, INV-022,
-//   INV-023, INV-027, INV-028, INV-029, INV-031, INV-033, INV-041, INV-050.
+//   INV-023, INV-027, INV-028, INV-029, INV-031, INV-033, INV-041.
 
 import 'dart:math';
 
@@ -1983,8 +1983,11 @@ void main() {
 
     // SPEC INV-015: side to move parsed robustly from FEN using dartchess Setup.
     group('memoised due counts during auto-traversal', () {
-      // SPEC INV-050 / QUALITY §4.1: move validation under 16ms; memoised due
-      // counts keep auto-traversal linear in tree size, not quadratic in depth.
+      // QUALITY §4.1 (bulk latency): memoised due counts keep auto-traversal
+      // linear in tree size, not quadratic in depth. This is not the
+      // single-frame graded-move bound (that invariant is covered by
+      // test/review/move_latency_test.dart): the bound here is linearity of
+      // bulk traversal work, asserted as a median over fresh traversals.
       test('deep auto-traversal still follows the due-dense branch at every junction', () {
         final study = Study(
           id: 'study-memo-semantics',

@@ -13,8 +13,9 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
-import 'package:chess_srs/src/view/analysis/analysis_hub_screen.dart';
+import 'package:chess_srs/src/view/analysis/analysis_options.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
+import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:chess_srs/src/view/engine/engine_lines.dart';
@@ -1420,7 +1421,7 @@ void main() {
       // reach the board analysis through the Explore hub
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const AnalysisHubScreen(),
+        home: const _TestExploreHarness(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1469,7 +1470,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.byType(AnalysisHubScreen), findsOneWidget);
+      expect(find.byType(_TestExploreHarness), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1489,7 +1490,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const AnalysisHubScreen(),
+        home: const _TestExploreHarness(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1536,7 +1537,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.byType(AnalysisHubScreen), findsOneWidget);
+      expect(find.byType(_TestExploreHarness), findsOneWidget);
 
       // Navigate to board analysis again
       await tester.tap(find.text('Analysis board'));
@@ -1553,7 +1554,7 @@ void main() {
       // Open from More tab and navigate to board analysis
       final app = await makeTestProviderScopeApp(
         tester,
-        home: const AnalysisHubScreen(),
+        home: const _TestExploreHarness(),
         defaultPreferences: {
           PrefCategory.engineEvaluation.storageKey: jsonEncode(
             EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
@@ -1583,7 +1584,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify we're back at the hub
-      expect(find.byType(AnalysisHubScreen), findsOneWidget);
+      expect(find.byType(_TestExploreHarness), findsOneWidget);
 
       // Navigate to board editor
       await tester.tap(find.text('Board editor'));
@@ -1625,4 +1626,48 @@ Offset editorSquareOffset(WidgetTester tester, Square square) {
         square.file.value * squareSize + squareSize / 2,
         (7 - square.rank.value) * squareSize + squareSize / 2,
       );
+}
+
+/// Stand-in for the Explore hub, which had no caller anywhere in `lib/` and was deleted.
+///
+/// Three tests used it as navigation scaffolding: to reach the analysis board, to reach the
+/// board editor, and to pop back to a previous route so the board's save/restore could be
+/// checked. The board and the editor are both live, so the behaviour under test was never the
+/// hub's — only the route to it was. This harness offers the same two destinations under the
+/// same labels, so those assertions keep exercising what they were written for.
+class _TestExploreHarness extends StatelessWidget {
+  const _TestExploreHarness();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: context.srs.ground,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SrsPageHead(label: 'Review', onBack: () => Navigator.of(context).maybePop()),
+            SrsSettingsRow(
+              label: 'Analysis board',
+              onTap: () => Navigator.of(context, rootNavigator: true).push(
+                AnalysisScreen.buildRoute(
+                  analysisOptionsForReviewPosition(fen: null, orientation: Side.white),
+                ),
+              ),
+            ),
+            SrsSettingsRow(
+              label: 'Board editor',
+              onTap: () => Navigator.of(context, rootNavigator: true).push(
+                BoardEditorScreen.buildRoute((
+                  initialVariant: Variant.standard,
+                  initialFen: null,
+                  initialOrientation: Side.white,
+                )),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

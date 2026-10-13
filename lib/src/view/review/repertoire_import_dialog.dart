@@ -6,8 +6,10 @@ import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/import/lichess_study_importer.dart';
+import 'package:chess_srs/src/import/pgn_importer.dart' show kMaxPgnInputBytes;
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/auth/sign_in_error.dart';
 import 'package:chess_srs/src/view/auth/sign_in_options.dart';
 import 'package:chess_srs/src/view/more/import_pgn_screen.dart';
@@ -43,13 +45,14 @@ class RepertoireImportDialog extends ConsumerStatefulWidget {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (dialogContext, animation, secondaryAnimation) =>
           RepertoireImportDialog(initialSource: initialSource, initialSide: initialSide),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -101,6 +104,28 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
     final picker = ref.read(pickPgnFileProvider);
     final file = await picker();
     if (file != null && file.path != null) {
+      // Ask how big it is before reading it. Reading first is what made this an
+      // OOM: the whole file lands in a String before anything decides whether
+      // it is a repertoire or a game dump. `lengthSync` is free when the native
+      // picker already reported the size, and the stat call behind `length` is
+      // only for the pickers that do not.
+      final bytes = file.lengthSync() ?? await io.File(file.path!).length();
+      if (bytes > kMaxPgnInputBytes) {
+        _logger.warning(
+          'Refusing PGN ${file.name}: ${bytes ~/ (1024 * 1024)} MB exceeds '
+          'the ${kMaxPgnInputBytes ~/ (1024 * 1024)} MB import limit.',
+        );
+        if (mounted) {
+          showSnackBar(
+            context,
+            'That PGN is too large: ${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB. '
+            'The maximum is ${kMaxPgnInputBytes ~/ (1024 * 1024)} MB — '
+            'this looks like a full game database rather than a repertoire.',
+            type: SnackBarType.error,
+          );
+        }
+        return;
+      }
       final content = await io.File(file.path!).readAsString();
       setState(() {
         _pgnController.text = content;
@@ -114,21 +139,13 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Future<void> _handleLichessImport() async {
     final input = _lichessUrlController.text.trim();
     if (input.isEmpty) {
-      showSnackBar(
-        context,
-        'Please enter a Lichess study URL or study ID',
-        type: SnackBarType.error,
-      );
+      showSnackBar(context, context.l10n.mobileReviewEnterLichessUrl, type: SnackBarType.error);
       return;
     }
 
     final studyId = extractLichessStudyId(input);
     if (studyId == null) {
-      showSnackBar(
-        context,
-        'Invalid Lichess study URL or ID. Example: https://lichess.org/study/xxxxxx',
-        type: SnackBarType.error,
-      );
+      showSnackBar(context, context.l10n.mobileReviewInvalidLichessUrl, type: SnackBarType.error);
       return;
     }
 
@@ -153,24 +170,30 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         if (result.isDuplicate) {
           showSnackBar(
             context,
-            'Study "${result.study.title}" is already imported and up to date',
+            context.l10n.mobileReviewDuplicateStudy(result.study.title),
             type: SnackBarType.info,
           );
         } else {
           showSnackBar(
             context,
-            'Imported "${result.study.title}" (${result.decisions.length} recall positions across ${result.chapters.length} chapters)',
+            context.l10n.mobileReviewImportedChapters(
+              result.study.title,
+              result.decisions.length.toString(),
+              result.chapters.length.toString(),
+            ),
             type: SnackBarType.success,
           );
         }
       }
-    } on StudyNotFoundException catch (e) {
+    } on StudyNotFoundException {
       // Before FormatException: this is a subclass, and the specific case is the one that
       // deserves different handling.
       if (!mounted) return;
       if (ref.read(isLoggedInProvider)) {
         // Signed in and still a 404, so it genuinely is not there. The toast's advice holds.
-        showSnackBar(context, e.message, type: SnackBarType.error);
+        // Shown translated: the exception itself stays English because the controller that
+        // throws it has no BuildContext to resolve l10n from.
+        showSnackBar(context, context.l10n.mobileReviewStudyNotFound, type: SnackBarType.error);
       } else {
         // Signed out, 404 cannot distinguish private from non-existent. Offering sign-in and a
         // retry costs nothing if the study really is missing, whereas the toast's "ensure it is
@@ -204,7 +227,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Future<void> _handleFileImport() async {
     final pgn = _pgnController.text.trim();
     if (pgn.isEmpty) {
-      showSnackBar(context, 'Please enter or select PGN content', type: SnackBarType.error);
+      showSnackBar(context, context.l10n.mobileReviewEnterPgn, type: SnackBarType.error);
       return;
     }
 
@@ -231,13 +254,16 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         if (result.isDuplicate) {
           showSnackBar(
             context,
-            'Study "${result.study.title}" is already imported and up to date',
+            context.l10n.mobileReviewDuplicateStudy(result.study.title),
             type: SnackBarType.info,
           );
         } else {
           showSnackBar(
             context,
-            'Imported "${result.study.title}" (${result.decisions.length} recall positions)',
+            context.l10n.mobileReviewImportedPlain(
+              result.study.title,
+              result.decisions.length.toString(),
+            ),
             type: SnackBarType.success,
           );
         }
@@ -258,7 +284,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
     final bottomInset = mediaQuery.viewInsets.bottom;
     final maxWidth = isWide ? math.min(520.0, mediaQuery.size.width - 48.0) : double.infinity;
     final isSignedIn = ref.watch(isLoggedInProvider);
@@ -325,7 +351,10 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Import Repertoire', style: SrsText.titleSmall(c.ink)),
+                          Text(
+                            context.l10n.mobileReviewImportTitle,
+                            style: SrsText.titleSmall(c.ink),
+                          ),
                           IconButton(
                             icon: Icon(Symbols.close_rounded, color: c.ink2),
                             onPressed: () => Navigator.of(context).pop(),
@@ -343,9 +372,9 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                       ],
                       const SizedBox(height: 14.0),
                       SrsSegmented<ImportSource>(
-                        options: const {
-                          ImportSource.lichess: 'Lichess Study',
-                          ImportSource.file: 'PGN Text / File',
+                        options: {
+                          ImportSource.lichess: context.l10n.mobileReviewImportSourceLichess,
+                          ImportSource.file: context.l10n.mobileReviewImportSourcePgn,
                         },
                         value: _importSource,
                         onChanged: (source) => setState(() => _importSource = source),
@@ -355,8 +384,8 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         TextField(
                           controller: _lichessUrlController,
                           decoration: InputDecoration(
-                            labelText: 'Lichess Study URL or ID',
-                            hintText: 'https://lichess.org/study/... or 8-char ID',
+                            labelText: context.l10n.mobileReviewLichessUrlLabel,
+                            hintText: context.l10n.mobileReviewLichessUrlHint,
                             prefixIcon: Icon(Symbols.link_rounded, color: c.ink2),
                             suffixIcon: IconButton(
                               icon: Icon(Symbols.content_paste_rounded, color: c.ink2),
@@ -374,7 +403,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         Row(
                           children: [
                             Text(
-                              'Train as:',
+                              context.l10n.mobileReviewTrainAsLabel,
                               style: TextStyle(
                                 fontFamily: SrsText.ui,
                                 fontWeight: FontWeight.w500,
@@ -383,10 +412,10 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                             ),
                             const Spacer(),
                             SrsSegmented<Side?>(
-                              options: const {
-                                null: 'Auto',
-                                Side.white: 'White',
-                                Side.black: 'Black',
+                              options: {
+                                null: context.l10n.mobileReviewNoStudiesAuto,
+                                Side.white: context.l10n.white,
+                                Side.black: context.l10n.black,
                               },
                               value: _repertoireSide,
                               onChanged: (side) => setState(() => _repertoireSide = side),
@@ -396,9 +425,9 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         const SizedBox(height: 14.0),
                         TextField(
                           controller: _titleController,
-                          decoration: const InputDecoration(
-                            labelText: 'Study Title (optional)',
-                            hintText: 'Derived from Lichess if left blank',
+                          decoration: InputDecoration(
+                            labelText: context.l10n.mobileReviewStudyTitleLabel,
+                            hintText: context.l10n.mobileReviewStudyTitleLichessHint,
                           ),
                         ),
                         const SizedBox(height: 18.0),
@@ -417,8 +446,8 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                 : const Icon(Symbols.download_rounded),
                             label: Text(
                               _isImporting
-                                  ? 'Fetching from Lichess...'
-                                  : 'Fetch & Import from Lichess',
+                                  ? context.l10n.mobileReviewFetching
+                                  : context.l10n.mobileReviewFetchImport,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
                             onPressed: _isImporting ? null : _handleLichessImport,
@@ -431,16 +460,16 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                       ] else ...[
                         TextField(
                           controller: _titleController,
-                          decoration: const InputDecoration(
-                            labelText: 'Study Title (optional)',
-                            hintText: 'e.g. French Defense / 1.d4 Repertoire',
+                          decoration: InputDecoration(
+                            labelText: context.l10n.mobileReviewStudyTitleLabel,
+                            hintText: context.l10n.mobileReviewStudyTitlePgnHint,
                           ),
                         ),
                         const SizedBox(height: 14.0),
                         Row(
                           children: [
                             Text(
-                              'Train as:',
+                              context.l10n.mobileReviewTrainAsLabel,
                               style: TextStyle(
                                 fontFamily: SrsText.ui,
                                 fontWeight: FontWeight.w500,
@@ -449,10 +478,10 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                             ),
                             const Spacer(),
                             SrsSegmented<Side?>(
-                              options: const {
-                                null: 'Auto',
-                                Side.white: 'White',
-                                Side.black: 'Black',
+                              options: {
+                                null: context.l10n.mobileReviewNoStudiesAuto,
+                                Side.white: context.l10n.white,
+                                Side.black: context.l10n.black,
                               },
                               value: _repertoireSide,
                               onChanged: (side) => setState(() => _repertoireSide = side),
@@ -463,16 +492,16 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         TextField(
                           controller: _pgnController,
                           maxLines: 6,
-                          decoration: const InputDecoration(
-                            labelText: 'PGN text',
-                            hintText: 'Paste PGN moves here...',
+                          decoration: InputDecoration(
+                            labelText: context.l10n.mobileReviewPgnTextLabel,
+                            hintText: context.l10n.mobileReviewPgnTextHint,
                             alignLabelWithHint: true,
                           ),
                         ),
                         const SizedBox(height: 14.0),
                         OutlinedButton.icon(
                           icon: const Icon(Symbols.upload_file_rounded),
-                          label: const Text('Pick .pgn file from disk'),
+                          label: Text(context.l10n.mobileReviewPickPgnFile),
                           onPressed: _isImporting ? null : _pickPgnFile,
                         ),
                         const SizedBox(height: 16.0),
@@ -490,7 +519,9 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                   )
                                 : const Icon(Symbols.download_done_rounded),
                             label: Text(
-                              _isImporting ? 'Importing...' : 'Import and Start Review',
+                              _isImporting
+                                  ? context.l10n.mobileReviewImporting
+                                  : context.l10n.mobileReviewImportStart,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
                             onPressed: _isImporting ? null : _handleFileImport,
@@ -538,7 +569,7 @@ class _SignInHint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.center,
-      child: SrsTextButton(label: 'Importing a private study? Sign in', onPressed: onSignIn),
+      child: SrsTextButton(label: context.l10n.mobileReviewPrivateHint, onPressed: onSignIn),
     );
   }
 }
@@ -571,7 +602,7 @@ class _PrivateStudyNotice extends StatelessWidget {
             style: SrsText.rowSub(c.ink2),
           ),
           const SizedBox(height: 2),
-          SrsTextButton(label: 'Sign in and retry', onPressed: onSignIn),
+          SrsTextButton(label: context.l10n.mobileReviewSignInRetry, onPressed: onSignIn),
         ],
       ),
     );
