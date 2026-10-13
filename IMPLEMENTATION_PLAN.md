@@ -388,6 +388,19 @@ Status:
 
 ---
 
+### Runtime validation log
+
+Per AGENTS.md §4, milestone runtime evidence. Only entries actually exercised are
+recorded; a code PR verified by tests and CI alone is not runtime-validated.
+
+| Date | Commit | What was exercised | Result |
+|---|---|---|---|
+| 2026-10-13 | `14f4bb3d0` | `fvm flutter run -d linux` against real data: launch, library load, review session start (11 studies, 452 due, quota-capped to 87), user move in review | Pass. Owner confirmed the #93 move sound is audible — the one thing the suite structurally could not check. Closed in `docs/manual-test-log.md`. |
+
+Not covered by that run: capture-sound distinctness, check haptics, and the
+`/api/token/test` connection failure logged at startup (single observation, not
+investigated — likely transient, unconfirmed).
+
 ## Recording rule
 
 Every completed task records: what shipped, verification evidence (verify +
