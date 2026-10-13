@@ -5,10 +5,13 @@ import 'package:chess_srs/src/model/account/account_pref_types.dart';
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 
 export 'account_pref_types.dart';
+
+/// See [AccountPreferences]; the records below have to be readable in the in-app log viewer.
+final _logger = Logger('AccountPreferences');
 
 /// Represents the account preferences for a user.
 ///
@@ -63,8 +66,11 @@ class AccountPreferences extends AsyncNotifier<AccountPrefState> {
 
     try {
       return await ref.read(accountRepositoryProvider).getPreferences();
-    } catch (e) {
-      debugPrint('[AccountPreferences] Error getting account preferences: $e');
+    } catch (e, st) {
+      // Falling back to defaults is right — an unreachable server must not break the settings
+      // screen — but it used to say so only through debugPrint, which never reaches the in-app
+      // log. A user whose customisations quietly reset has nothing to show when they ask why.
+      _logger.warning('Error getting account preferences, falling back to defaults', e, st);
       return defaultAccountPreferences;
     }
   }
@@ -138,9 +144,26 @@ class AccountPreferences extends AsyncNotifier<AccountPrefState> {
     }
     try {
       return AccountPrefState.fromJson(jsonDecode(stored) as Map<String, dynamic>);
-    } catch (e) {
-      debugPrint('[AccountPreferences] Error reading local account preferences: $e');
+    } catch (e, st) {
+      // SEVERE, not WARNING: this is local data that cannot be recovered from anywhere. The user
+      // is about to see every customisation they made replaced by defaults, and the payload is
+      // quoted (truncated) because a partially-written value is the usual cause and its shape is
+      // the only clue — usually a crash between the write and the flush.
+      _logger.severe(
+        'Stored account preferences are corrupt, resetting to defaults. '
+        'Stored value: ${_summarize(stored)}',
+        e,
+        st,
+      );
       return defaultAccountPreferences;
     }
   }
 }
+
+/// A short, safe rendering of a corrupt payload for the log.
+///
+/// A user's preference blob is small, but this is called on the failure path and the value is
+/// arbitrary: the shape of the damage is the diagnostic, so a prefix is enough and bounds what
+/// lands in the log file.
+String _summarize(String stored, {int max = 200}) =>
+    stored.length <= max ? stored : '${stored.substring(0, max)}… (${stored.length} chars)';

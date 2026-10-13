@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/import/lichess_study_importer.dart';
+import 'package:chess_srs/src/import/pgn_importer.dart' show kMaxPgnInputBytes;
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -50,7 +51,8 @@ class RepertoireImportDialog extends ConsumerStatefulWidget {
       pageBuilder: (dialogContext, animation, secondaryAnimation) =>
           RepertoireImportDialog(initialSource: initialSource, initialSide: initialSide),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
-        final isWide = MediaQuery.of(dialogContext).size.width >= 768;
+        // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
+        final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
@@ -102,6 +104,28 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
     final picker = ref.read(pickPgnFileProvider);
     final file = await picker();
     if (file != null && file.path != null) {
+      // Ask how big it is before reading it. Reading first is what made this an
+      // OOM: the whole file lands in a String before anything decides whether
+      // it is a repertoire or a game dump. `lengthSync` is free when the native
+      // picker already reported the size, and the stat call behind `length` is
+      // only for the pickers that do not.
+      final bytes = file.lengthSync() ?? await io.File(file.path!).length();
+      if (bytes > kMaxPgnInputBytes) {
+        _logger.warning(
+          'Refusing PGN ${file.name}: ${bytes ~/ (1024 * 1024)} MB exceeds '
+          'the ${kMaxPgnInputBytes ~/ (1024 * 1024)} MB import limit.',
+        );
+        if (mounted) {
+          showSnackBar(
+            context,
+            'That PGN is too large: ${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB. '
+            'The maximum is ${kMaxPgnInputBytes ~/ (1024 * 1024)} MB — '
+            'this looks like a full game database rather than a repertoire.',
+            type: SnackBarType.error,
+          );
+        }
+        return;
+      }
       final content = await io.File(file.path!).readAsString();
       setState(() {
         _pgnController.text = content;
@@ -260,7 +284,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Widget build(BuildContext context) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
-    final isWide = mediaQuery.size.width >= 768;
+    final isWide = SrsLayout.isWide(mediaQuery.size.width);
     final bottomInset = mediaQuery.viewInsets.bottom;
     final maxWidth = isWide ? math.min(520.0, mediaQuery.size.width - 48.0) : double.infinity;
     final isSignedIn = ref.watch(isLoggedInProvider);

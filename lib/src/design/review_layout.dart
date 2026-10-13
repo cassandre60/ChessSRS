@@ -152,22 +152,28 @@ class SrsReviewSide extends StatelessWidget {
             padding: EdgeInsets.only(top: wide ? 2 : 0),
             child: meta,
           ),
-          if (line != null) ...[
-            SizedBox(height: wide ? 22 : 10),
-            ConstrainedBox(
-              constraints: BoxConstraints(minHeight: lineH * 2),
-              child: line,
-            ),
-          ],
+          // The notation-line region is always reserved — gap plus a 2-line minimum — even
+          // when there is no line to show (history off). The child is an empty box in that
+          // case: the spec keeps the space, not the content. Without this the region
+          // collapses and everything below it jumps between turns.
+          SizedBox(height: wide ? 22 : 10),
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: lineH * 2),
+            child: line ?? const SizedBox.shrink(),
+          ),
           Expanded(
             child: wide
                 ? Padding(
-                    padding: EdgeInsets.only(top: line != null ? 26 : 14),
+                    // Unconditional: the line region above is always reserved now, so the slot
+                    // keeps the line-present offset in both states. Branching on `line` here
+                    // would reintroduce a 12 px jump exactly where the reserve was meant to
+                    // remove one.
+                    padding: const EdgeInsets.only(top: 26),
                     child: SingleChildScrollView(child: slot),
                   )
                 : _BottomFade(
                     child: Padding(
-                      padding: EdgeInsets.only(top: line != null ? 12 : 10, bottom: 22),
+                      padding: const EdgeInsets.only(top: 12, bottom: 22),
                       child: SingleChildScrollView(child: slot),
                     ),
                   ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_srs/src/binding.dart';
@@ -64,7 +65,24 @@ mixin PreferencesStorage<T extends Serializable> on Notifier<T> {
     try {
       return fromJson(jsonDecode(stored) as Map<String, dynamic>);
     } catch (e, st) {
-      _logger.warning('Failed to decode $prefCategory preferences:', e, st);
+      // Preserve the unparseable blob before it is lost: the next save overwrites the key,
+      // destroying the evidence. The backup is never read by the app; it exists so a support
+      // session can recover it via file access. Overwritten only if corruption recurs, which
+      // is correct — the newest corruption is the relevant one.
+      // Fire-and-forget: fetch is sync (called from build), and the app must still boot on
+      // corrupted prefs even if the backup write itself were to fail.
+      unawaited(
+        LichessBinding.instance.sharedPreferences.setString(
+          '${prefCategory.storageKey}.corrupt-backup',
+          stored,
+        ),
+      );
+      _logger.severe(
+        'Preferences "${prefCategory.storageKey}" failed to parse (${e.runtimeType}); '
+        'backed up to "${prefCategory.storageKey}.corrupt-backup" and reset to defaults',
+        e,
+        st,
+      );
       return defaults;
     }
   }
@@ -91,16 +109,25 @@ mixin SessionPreferencesStorage<T extends Serializable> on Notifier<T> {
 
   T fetch() {
     final authUser = ref.watch(authControllerProvider);
-    final stored = LichessBinding.instance.sharedPreferences.getString(
-      key(prefCategory.storageKey, authUser),
-    );
+    final resolvedKey = key(prefCategory.storageKey, authUser);
+    final stored = LichessBinding.instance.sharedPreferences.getString(resolvedKey);
     if (stored == null) {
       return defaults(user: authUser?.user);
     }
     try {
       return fromJson(jsonDecode(stored) as Map<String, dynamic>);
     } catch (e, st) {
-      _logger.warning('Failed to decode $prefCategory preferences:', e, st);
+      // Same backup contract as PreferencesStorage.fetch: preserve the blob under the resolved
+      // (per-user) key before it is lost, fire-and-forget because fetch is sync.
+      unawaited(
+        LichessBinding.instance.sharedPreferences.setString('$resolvedKey.corrupt-backup', stored),
+      );
+      _logger.severe(
+        'Preferences "$resolvedKey" failed to parse (${e.runtimeType}); '
+        'backed up to "$resolvedKey.corrupt-backup" and reset to defaults',
+        e,
+        st,
+      );
       return defaults(user: authUser?.user);
     }
   }
