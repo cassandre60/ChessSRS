@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:isolate';
 
 import 'package:chess_srs/src/domain/chapter.dart';
@@ -12,10 +11,10 @@ import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/study.dart';
 import 'package:chess_srs/src/import/opening_name.dart';
+import 'package:chess_srs/src/import/pgn_offload.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:logging/logging.dart';
 
 final Logger _logger = Logger('StudyImporter');
@@ -67,7 +66,7 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
 /// Asynchronously computes a canonical SHA-256 fingerprint for PGN content on a background isolate,
 /// avoiding UI thread hitching on large multi-megabyte PGN files.
 Future<String> computePgnHashAsync(String pgnText) {
-  if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST') || pgnText.length < 8192) {
+  if (!shouldOffloadPgnWork(textLength: pgnText.length)) {
     return Future.value(computePgnHash(pgnText));
   }
   return Isolate.run(() => computePgnHash(pgnText));
@@ -167,6 +166,21 @@ class ImportResult {
       'errors: ${errors.length}, duplicate: $isDuplicate)';
 }
 
+/// Largest PGN input accepted, in bytes.
+///
+/// A repertoire PGN is kilobytes: a book of a hundred lines. A master-games dump
+/// is hundreds of megabytes of every game ever played, and importing one costs
+/// several times its size in peak memory — the String itself, its SHA-256 pass,
+/// the copy handed to the parse isolate, dartchess's AST, and the node tree built
+/// from it. On a phone that is an OOM kill with no error the user can read, so
+/// input above this is refused before any of it happens rather than part-way
+/// through.
+///
+/// Checked on characters rather than encoded bytes because every entry point
+/// holds the text by the time it can be measured, and UTF-8 only makes the real
+/// file larger than this bound, never smaller.
+const int kMaxPgnInputBytes = 10 * 1024 * 1024;
+
 /// Derives a 4-field FEN position key from a full 6-field FEN.
 ///
 /// The key is: `<placement> <turn> <castling> <ep>`
@@ -200,6 +214,16 @@ ImportResult importPgn(
   String? pgnHash,
   List<PgnGame<PgnNodeData>>? parsedGames,
 }) {
+  // Before the hash, which walks the whole string, and before the parse, which
+  // materialises several structures from it. A caller that passes pre-parsed
+  // games has already paid that cost, so the text length is what this guards.
+  if (pgnText.length > kMaxPgnInputBytes) {
+    throw FormatException(
+      'PGN too large: ${pgnText.length} characters, maximum is $kMaxPgnInputBytes. '
+      'A repertoire is a few thousand lines; this looks like a full game database.',
+    );
+  }
+
   final sw = Stopwatch()..start();
   final hash =
       pgnHash ??
@@ -359,7 +383,7 @@ Future<ImportResult> importPgnAsync(
   Side? repertoireSide,
   String? pgnHash,
 }) {
-  if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST') || pgnText.length < 8192) {
+  if (!shouldOffloadPgnWork(textLength: pgnText.length)) {
     return Future.value(
       importPgn(pgnText, studyTitle: studyTitle, repertoireSide: repertoireSide, pgnHash: pgnHash),
     );
@@ -559,8 +583,12 @@ RepertoireNode _buildChildren(
     final Move? parsed;
     try {
       parsed = position.parseSan(san);
-    } catch (e) {
+    } catch (e, st) {
       final skipped = _countDescendantMoves(pgnChild);
+      // The stack is logged rather than appended to the message: the message is shown to the
+      // user, and a dartchess stack trace in it helps nobody decide what to fix. Without it the
+      // only record is "couldn't parse move X", which cannot tell a parser gap from a bug.
+      _logger.warning('Could not parse move "$san" in "$chapterTitle" at move $moveIndex.', e, st);
       errors.add(
         ImportError(
           chapterTitle: chapterTitle,

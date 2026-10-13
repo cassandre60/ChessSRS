@@ -52,6 +52,36 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  // Size guard
+  // ---------------------------------------------------------------------------
+  group('importPgn — size guard', () {
+    // A repertoire PGN is kilobytes; a Lichess master-games dump is hundreds of
+    // megabytes. Reading one into a String, hashing it, copying it to an isolate
+    // and materialising a node tree costs several times its size in peak RAM, so
+    // an unbounded file is an OOM kill on a phone with no error message. The
+    // limit is refused up front, before the hash or the parse.
+    test('rejects oversized PGN instead of parsing it', () {
+      // Whitespace beyond the limit is still input the caller handed us, and it
+      // is what a truncated or hostile file looks like.
+      final oversized = '\n' * (kMaxPgnInputBytes + 1);
+      expect(
+        () => importPgn(oversized),
+        throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('too large'))),
+      );
+    });
+
+    test('accepts a PGN at the limit', () {
+      // 10 MiB of header lines: one legal game padded with comment text, so the
+      // input is exactly the size the guard refuses above and parses normally.
+      final padding = ';' * (kMaxPgnInputBytes - '1. e4 e5 *'.length);
+      final atLimit = '1. e4 e5 *$padding';
+      expect(atLimit.length, kMaxPgnInputBytes);
+      final result = importPgn(atLimit);
+      expect(result.decisions, isNotEmpty, reason: 'a file exactly at the limit must still import');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Single-game PGN
   // ---------------------------------------------------------------------------
   group('importPgn — single game', () {

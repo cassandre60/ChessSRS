@@ -108,4 +108,113 @@
   <string name="perfShortRacingKings" comment="Short label for the Racing Kings performance. Used in compact UI such as perf cards and game filters, where visual width is limited. Use a short abbreviation rather than the full name. The max length is only a rough cross-language limit; for CJK languages, prefer 2-4 characters if possible." maxLength="10">Racing</string>
   <string name="perfShortCrazyhouse" comment="Short label for the Crazyhouse performance. Used in compact UI such as perf cards and game filters, where visual width is limited. Use a short abbreviation rather than the full name. The max length is only a rough cross-language limit; for CJK languages, prefer 2-4 characters if possible." maxLength="10">Crazy</string>
   <string name="perfShortPuzzle" comment="Short label for puzzle performance. Used in compact UI such as perf cards, where visual width is limited. Use a short abbreviation rather than the full name. The max length is only a rough cross-language limit; for CJK languages, prefer 2-4 characters if possible." maxLength="10">Puzzle</string>
+  <string name="reviewNoStudiesHeadline" comment="First-launch headline.">Bring your study.</string>
+  <string name="reviewNoStudiesSubtext" comment="First-launch subtext.">Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.</string>
+  <string name="reviewNoStudiesDropZone" comment="First-launch drop zone label.">Drop a PGN file here</string>
+  <string name="reviewNoStudiesChooseFile" comment="First-launch file picker button.">Choose file</string>
+  <string name="reviewNoStudiesPastePgn" comment="First-launch PGN paste button.">Paste PGN text</string>
+  <string name="reviewNoStudiesImportLichess" comment="First-launch Lichess import button.">Import a Lichess study</string>
+  <string name="reviewNoStudiesTrainAs" comment="Side selector label.">Train as</string>
+  <string name="reviewNoStudiesAuto" comment="Side selector: automatic.">Auto</string>
+  <string name="reviewNothingDueChooseRepertoire" comment="Nothing-due screen: open the scope chooser.">Choose a study</string>
+  <string name="reviewNothingDueChangeDailyLimit" comment="Nothing-due screen: open the daily limit setting.">Change daily limit</string>
+  <string name="reviewNothingDuePracticeDoesNotChangeSchedule" comment="Nothing-due footnote.">Practice never changes your schedule.</string>
+  <string name="reviewNothingDuePracticeStillAvailable" comment="Daily-limit footnote.">Practice is still available and does not change your schedule.</string>
+  <string name="settingsAccountPrefsSaved" comment="Toast after saving account preferences.">Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.</string>
+  <string name="settingsBoardLandscapePosition" comment="Board setting label.">Board position in landscape mode</string>
+  <string name="settingsBoardMoveOnRelease" comment="Board setting label.">Move on release</string>
+  <string name="settingsBoardMoveOnReleaseHelp" comment="Board setting help.">When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.</string>
+  <string name="pgnCopied" comment="Toast shown after copying the PGN of the current node to the clipboard from the game tree view.">PGN copied.</string>
+  <string name="reviewContinue" comment="Pill button advancing after the commentary pause.">Continue</string>
+  <string name="reviewSkip" comment="Text button skipping the current prompt.">Skip</string>
+  <string name="reviewRevealAnswer" comment="Text button playing the study move after a lapse.">Reveal answer</string>
+  <string name="reviewPlayThisMoveToContinue" comment="Help under the revealed answer.">Play this move to continue. The position will come back soon.</string>
+  <string name="reviewFromYourStudy" comment="Note attribution.">From your study</string>
+  <string name="reviewOpenInAnalysis" comment="Button opening the position in analysis.">Open in analysis</string>
+  <string name="reviewLegendRetained" comment="Memory bar legend, lowercase as shown.">retained</string>
+  <string name="reviewLegendLearning" comment="Memory bar legend, lowercase as shown.">learning</string>
+  <string name="reviewLegendNew" comment="Memory bar legend, lowercase as shown.">new</string>
+  <string name="reviewNothingDueTitle" comment="Empty-state headline.">Nothing due.</string>
+  <string name="reviewDailyLimitReached" comment="Empty-state headline when the daily quota is done.">Daily limit reached.</string>
+  <string name="reviewNextReviewAutomatic" comment="Empty-state note when no review is scheduled.">Next review will appear automatically.</string>
+  <string name="reviewDailyProgress" comment="Daily-limit note. %1$s is the reviewed count, %2$s the daily maximum.">You reviewed %1$s of %2$s positions today. White and Black combined.</string>
+  <string name="reviewCrossSideButton" comment="Cross-colour button. %1$s is the side name, %2$s the due count.">Review %1$s — %2$s due</string>
+  <string name="reviewDueWord" comment="Scope row due label, lowercase as shown.">due</string>
+  <string name="reviewPausedWord" comment="Scope row paused marker.">Paused</string>
+  <string name="reviewPositionsCount" comment="Scope row position count. %s is the count; English keeps the plural form for all counts on purpose.">%s positions</string>
+  <string name="reviewClearSearch" comment="Drawer search clear button accessibility label.">Clear search</string>
+  <string name="reviewStudiesGroup" comment="Drawer group title.">Studies</string>
+  <string name="reviewImportTitle" comment="Import dialog title.">Import Repertoire</string>
+  <string name="reviewImportSourceLichess" comment="Import source selector.">Lichess Study</string>
+  <string name="reviewImportSourcePgn" comment="Import source selector.">PGN Text / File</string>
+  <string name="reviewLichessUrlLabel" comment="Text field label.">Lichess Study URL or ID</string>
+  <string name="reviewLichessUrlHint" comment="Text field hint.">https://lichess.org/study/... or 8-char ID</string>
+  <string name="reviewPasteClipboard" comment="Paste button accessibility label.">Paste from clipboard</string>
+  <string name="reviewStudyTitleLabel" comment="Text field label.">Study Title (optional)</string>
+  <string name="reviewStudyTitleLichessHint" comment="Text field hint.">Derived from Lichess if left blank</string>
+  <string name="reviewStudyTitlePgnHint" comment="Text field hint.">e.g. French Defense / 1.d4 Repertoire</string>
+  <string name="reviewTrainAsLabel" comment="Side selector label, with trailing colon as shown.">Train as:</string>
+  <string name="reviewPgnTextLabel" comment="Text field label.">PGN text</string>
+  <string name="reviewPgnTextHint" comment="Text field hint.">Paste PGN moves here...</string>
+  <string name="reviewPickPgnFile" comment="File picker button.">Pick .pgn file from disk</string>
+  <string name="reviewFetchImport" comment="Import button.">Fetch &amp; Import from Lichess</string>
+  <string name="reviewFetching" comment="Import button busy state.">Fetching from Lichess...</string>
+  <string name="reviewImportStart" comment="Import button.">Import and Start Review</string>
+  <string name="reviewImporting" comment="Import button busy state.">Importing...</string>
+  <string name="reviewPrivateHint" comment="Inline sign-in hint.">Importing a private study? Sign in</string>
+  <string name="reviewSignInRetry" comment="Button.">Sign in and retry</string>
+  <string name="reviewPrivateNotice" comment="Inline notice explaining an anonymous 404.">Lichess answers the same for a private study as for one that does not exist. Sign in to tell the two apart.</string>
+  <string name="reviewEnterLichessUrl" comment="Validation prompt.">Please enter a Lichess study URL or study ID</string>
+  <string name="reviewInvalidLichessUrl" comment="Validation error.">Invalid Lichess study URL or ID. Example: https://lichess.org/study/xxxxxx</string>
+  <string name="reviewEnterPgn" comment="Validation prompt.">Please enter or select PGN content</string>
+  <string name="reviewDuplicateStudy" comment="Info toast. %1$s is the study title.">Study "%1$s" is already imported and up to date</string>
+  <string name="reviewImportedChapters" comment="Success toast. %1$s is the study title, %2$s the position count, %3$s the chapter count.">Imported "%1$s" (%2$s recall positions across %3$s chapters)</string>
+  <string name="reviewImportedPlain" comment="Success toast. %1$s is the study title, %2$s the position count.">Imported "%1$s" (%2$s recall positions)</string>
+  <string name="reviewRenamedTo" comment="Success toast. %s is the new title.">Renamed to “%s”.</string>
+  <string name="reviewDeletedStudy" comment="Success toast. %s is the deleted title.">Deleted “%s”.</string>
+  <string name="reviewCreatedOpposite" comment="Success toast. %s is the lowercased side repertoire name.">Created %s</string>
+  <string name="reviewAlreadyOpposite" comment="Info toast. %s is the lowercased side repertoire name.">Already in the %s</string>
+  <string name="reviewNoExportMoves" comment="Info notice.">No moves to export in this study</string>
+  <string name="reviewChapterNoMoves" comment="Info notice.">Chapter has no moves to export</string>
+  <string name="reviewWhiteToPlay" comment="Board side-to-move label.">White to play</string>
+  <string name="reviewBlackToPlay" comment="Board side-to-move label.">Black to play</string>
+  <string name="reviewVerdictCorrectMove" comment="Screen-reader verdict. %s is the played move SAN, which stays untranslated.">Correct. %s.</string>
+  <string name="reviewVerdictCorrectBare" comment="Screen-reader verdict.">Correct.</string>
+  <string name="reviewVerdictWrongBare" comment="Screen-reader verdict.">Not this move.</string>
+  <string name="reviewVerdictWrongMove" comment="Screen-reader verdict. %s is the study move SAN, which stays untranslated.">Not this move. The study move is %s.</string>
+  <string name="reviewLibraryAbout" comment="Library row.">About and licences</string>
+  <string name="reviewLibrarySubtitle" comment="Library row subtitle.">Review, board, engine, and sound</string>
+  <string name="reviewNothingMatches" comment="Search empty state. %s is the query.">Nothing matches “%s”.</string>
+  <string name="reviewWhiteRepertoire" comment="Repertoire colour name.">White repertoire</string>
+  <string name="reviewBlackRepertoire" comment="Repertoire colour name.">Black repertoire</string>
+  <string name="reviewTryAgain" comment="Error view retry button.">Try again</string>
+  <string name="reviewCopyDetails" comment="Error view details button.">Copy details</string>
+  <string name="reviewExpandSection" comment="Screen-reader label. %s is the group title.">Expand %s section</string>
+  <string name="reviewCollapseSection" comment="Screen-reader label. %s is the group title.">Collapse %s section</string>
+  <string name="reviewStudyOptions" comment="Row actions button accessibility label.">Study options</string>
+  <string name="reviewAnalyzeAction" comment="Study actions row.">Analyze</string>
+  <string name="reviewAnalyzeSubtitle" comment="Study actions row subtitle.">Browse moves and variations</string>
+  <string name="reviewPracticeSubtitle" comment="Study actions row subtitle.">Drill lines without changing your schedule</string>
+  <string name="reviewExportPgnAction" comment="Study actions row.">Export PGN</string>
+  <string name="reviewExportPgnSubtitle" comment="Study actions row subtitle.">Share or copy standard PGN notation</string>
+  <string name="reviewPauseAction" comment="Study actions row.">Pause</string>
+  <string name="reviewResumeAction" comment="Study actions row.">Resume</string>
+  <string name="reviewPauseSubtitle" comment="Study actions row subtitle.">Suspend from active review pool</string>
+  <string name="reviewResumeSubtitle" comment="Study actions row subtitle.">Activate in review pool</string>
+  <string name="reviewRenameAction" comment="Study actions row and dialog button.">Rename</string>
+  <string name="reviewDeleteStudyTitle" comment="Delete confirmation title.">Delete study?</string>
+  <string name="reviewDeleteStudyConfirm" comment="Delete confirmation. %1$s is the study title, %2$s the position count.">Delete “%1$s” and its %2$s positions? This cannot be undone.</string>
+  <string name="reviewRenameStudyTitle" comment="Rename dialog title.">Rename study</string>
+  <string name="reviewStudyNameLabel" comment="Rename text field accessibility label.">Study name</string>
+  <string name="reviewCopyAction" comment="Export dialog button.">Copy</string>
+  <string name="reviewShareAction" comment="Export dialog button.">Share</string>
+  <string name="reviewSaveFileAction" comment="Export dialog button.">Save File</string>
+  <string name="reviewCreateOpposite" comment="Study actions row. %s is the opposite repertoire name.">Create %s</string>
+  <string name="reviewOppositeSubtitle" comment="Study actions row subtitle.">Same positions, in the other drawer</string>
+  <string name="reviewNextReviewTime" comment="Empty-state note. %s is the relative time until the next review.">Next review %s.</string>
+  <string name="reviewStudyNotFound" comment="Import failure guidance.">Study not found on Lichess. Ensure the study is public or unlisted.</string>
+  <string name="reviewPgnCopiedClipboard" comment="Toast after copying PGN from the export dialog.">PGN copied to clipboard</string>
+  <string name="reviewDismissBarrier" comment="Screen-reader label for tapping outside a sheet to dismiss it.">Dismiss</string>
+  <string name="reviewPreferencesGroup" comment="Library sheet group header.">Preferences</string>
+  <string name="reviewExitPractice" comment="Top bar exit-practice button accessibility label.">Exit practice</string>
 </resources>

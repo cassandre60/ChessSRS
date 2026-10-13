@@ -2,6 +2,7 @@
 // Follows design/docs/03-components.md §2 and reference/index.html.
 import 'package:chess_srs/src/design/primitives.dart';
 import 'package:chess_srs/src/design/tokens.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
@@ -94,7 +95,7 @@ class SrsTopBar extends StatelessWidget {
             // `SrsPressable` enforces no minimum of its own, so the size is asked for here.
             SrsPressable(
               onPressed: onExitPractice,
-              semanticLabel: 'Exit practice',
+              semanticLabel: context.l10n.mobileReviewExitPractice,
               radius: 8,
               builder: (_, hover, _) => Container(
                 constraints: const BoxConstraints(minHeight: SrsLayout.minTouchTarget),
@@ -108,7 +109,7 @@ class SrsTopBar extends StatelessWidget {
                   // pressable already announces `Exit practice`, and without this the visible text
                   // merges with it and a screen reader says "Exit practice Practice".
                   child: Text(
-                    'Practice',
+                    context.l10n.practice,
                     style: SrsText.due(c.accent).copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -119,7 +120,10 @@ class SrsTopBar extends StatelessWidget {
               TextSpan(
                 children: [
                   TextSpan(text: '$dueCount', style: SrsText.dueNumber(c.ink)),
-                  TextSpan(text: ' due', style: SrsText.due(c.ink2)),
+                  TextSpan(
+                    text: ' ${context.l10n.mobileReviewDueWord}',
+                    style: SrsText.due(c.ink2),
+                  ),
                 ],
               ),
             ),
@@ -129,10 +133,10 @@ class SrsTopBar extends StatelessWidget {
 
         // 3. Overflow button (Settings)
         Tooltip(
-          message: 'Settings',
+          message: context.l10n.settings,
           child: SrsPressable(
             onPressed: onOverflowPressed,
-            semanticLabel: 'Settings',
+            semanticLabel: context.l10n.settings,
             radius: 999,
             builder: (context, hovered, pressed) => Container(
               // Was a hardcoded 44. The token it should have read went to 48, and this is the one
@@ -178,7 +182,9 @@ class _ColourSquare extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
-    final label = side == Side.white ? 'White repertoire' : 'Black repertoire';
+    final label = side == Side.white
+        ? context.l10n.mobileReviewWhiteRepertoire
+        : context.l10n.mobileReviewBlackRepertoire;
     final fillColor = side == Side.white
         ? (c.isDark ? const Color(0xFFECEEF1) : const Color(0xFFFFFFFF))
         : (c.isDark ? const Color(0xFF10141B) : const Color(0xFF151A22));

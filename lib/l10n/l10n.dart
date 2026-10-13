@@ -11633,125 +11633,552 @@ abstract class AppLocalizations {
   /// **'{param}\'s Blog'**
   String ublogXBlog(String param);
 
-  /// No description provided for @settingsBoardLandscapePosition.
+  /// No description provided for @mobilePgnCopied.
   ///
   /// In en, this message translates to:
-  /// **'Board position in landscape mode'**
-  String get settingsBoardLandscapePosition;
-
-  /// No description provided for @settingsBoardMoveOnRelease.
+  /// **'PGN copied.'**
+  String get mobilePgnCopied;
+  /// No description provided for @mobileReviewAlreadyOpposite.
   ///
   /// In en, this message translates to:
-  /// **'Move on release'**
-  String get settingsBoardMoveOnRelease;
-
-  /// No description provided for @settingsBoardMoveOnReleaseHelp.
+  /// **'Already in the {param}'**
+  String mobileReviewAlreadyOpposite(String param);
+  /// No description provided for @mobileReviewAnalyzeAction.
   ///
   /// In en, this message translates to:
-  /// **'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.'**
-  String get settingsBoardMoveOnReleaseHelp;
-
-  /// No description provided for @settingsAccountPrefsSaved.
+  /// **'Analyze'**
+  String get mobileReviewAnalyzeAction;
+  /// No description provided for @mobileReviewAnalyzeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.'**
-  String get settingsAccountPrefsSaved;
-
-  /// No description provided for @toggleSoundTooltip.
+  /// **'Browse moves and variations'**
+  String get mobileReviewAnalyzeSubtitle;
+  /// No description provided for @mobileReviewBlackRepertoire.
   ///
   /// In en, this message translates to:
-  /// **'Toggle sound'**
-  String get toggleSoundTooltip;
-
-  /// No description provided for @reviewNoStudiesHeadline.
+  /// **'Black repertoire'**
+  String get mobileReviewBlackRepertoire;
+  /// No description provided for @mobileReviewBlackToPlay.
   ///
   /// In en, this message translates to:
-  /// **'Bring your study.'**
-  String get reviewNoStudiesHeadline;
-
-  /// No description provided for @reviewNoStudiesSubtext.
+  /// **'Black to play'**
+  String get mobileReviewBlackToPlay;
+  /// No description provided for @mobileReviewChapterNoMoves.
   ///
   /// In en, this message translates to:
-  /// **'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.'**
-  String get reviewNoStudiesSubtext;
-
-  /// No description provided for @reviewNoStudiesDropZone.
+  /// **'Chapter has no moves to export'**
+  String get mobileReviewChapterNoMoves;
+  /// No description provided for @mobileReviewClearSearch.
   ///
   /// In en, this message translates to:
-  /// **'Drop a PGN file here'**
-  String get reviewNoStudiesDropZone;
-
-  /// No description provided for @reviewNoStudiesChooseFile.
+  /// **'Clear search'**
+  String get mobileReviewClearSearch;
+  /// No description provided for @mobileReviewCollapseSection.
   ///
   /// In en, this message translates to:
-  /// **'Choose file'**
-  String get reviewNoStudiesChooseFile;
-
-  /// No description provided for @reviewNoStudiesPastePgn.
+  /// **'Collapse {param} section'**
+  String mobileReviewCollapseSection(String param);
+  /// No description provided for @mobileReviewContinue.
   ///
   /// In en, this message translates to:
-  /// **'Paste PGN text'**
-  String get reviewNoStudiesPastePgn;
-
-  /// No description provided for @reviewNoStudiesImportLichess.
+  /// **'Continue'**
+  String get mobileReviewContinue;
+  /// No description provided for @mobileReviewCopyAction.
   ///
   /// In en, this message translates to:
-  /// **'Import a Lichess study'**
-  String get reviewNoStudiesImportLichess;
-
-  /// No description provided for @reviewNoStudiesTrainAs.
+  /// **'Copy'**
+  String get mobileReviewCopyAction;
+  /// No description provided for @mobileReviewCopyDetails.
   ///
   /// In en, this message translates to:
-  /// **'Train as'**
-  String get reviewNoStudiesTrainAs;
-
-  /// No description provided for @reviewNoStudiesAuto.
+  /// **'Copy details'**
+  String get mobileReviewCopyDetails;
+  /// No description provided for @mobileReviewCreatedOpposite.
+  ///
+  /// In en, this message translates to:
+  /// **'Created {param}'**
+  String mobileReviewCreatedOpposite(String param);
+  /// No description provided for @mobileReviewCrossSideButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Review {param1} — {param2} due'**
+  String mobileReviewCrossSideButton(String param1, String param2);
+  /// No description provided for @mobileReviewDailyLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily limit reached.'**
+  String get mobileReviewDailyLimitReached;
+  /// No description provided for @mobileReviewDailyProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'You reviewed {param1} of {param2} positions today. White and Black combined.'**
+  String mobileReviewDailyProgress(String param1, String param2);
+  /// No description provided for @mobileReviewDeleteStudyConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{param1}” and its {param2} positions? This cannot be undone.'**
+  String mobileReviewDeleteStudyConfirm(String param1, String param2);
+  /// No description provided for @mobileReviewDeleteStudyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete study?'**
+  String get mobileReviewDeleteStudyTitle;
+  /// No description provided for @mobileReviewDeletedStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted “{param}”.'**
+  String mobileReviewDeletedStudy(String param);
+  /// No description provided for @mobileReviewDueWord.
+  ///
+  /// In en, this message translates to:
+  /// **'due'**
+  String get mobileReviewDueWord;
+  /// No description provided for @mobileReviewDuplicateStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'Study \"{param1}\" is already imported and up to date'**
+  String mobileReviewDuplicateStudy(String param1);
+  /// No description provided for @mobileReviewEnterLichessUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a Lichess study URL or study ID'**
+  String get mobileReviewEnterLichessUrl;
+  /// No description provided for @mobileReviewEnterPgn.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter or select PGN content'**
+  String get mobileReviewEnterPgn;
+  /// No description provided for @mobileReviewExpandSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand {param} section'**
+  String mobileReviewExpandSection(String param);
+  /// No description provided for @mobileReviewExportPgnAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Export PGN'**
+  String get mobileReviewExportPgnAction;
+  /// No description provided for @mobileReviewExportPgnSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share or copy standard PGN notation'**
+  String get mobileReviewExportPgnSubtitle;
+  /// No description provided for @mobileReviewFetchImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch & Import from Lichess'**
+  String get mobileReviewFetchImport;
+  /// No description provided for @mobileReviewFetching.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching from Lichess...'**
+  String get mobileReviewFetching;
+  /// No description provided for @mobileReviewFromYourStudy.
+  ///
+  /// In en, this message translates to:
+  /// **'From your study'**
+  String get mobileReviewFromYourStudy;
+  /// No description provided for @mobileReviewImportSourceLichess.
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess Study'**
+  String get mobileReviewImportSourceLichess;
+  /// No description provided for @mobileReviewImportSourcePgn.
+  ///
+  /// In en, this message translates to:
+  /// **'PGN Text / File'**
+  String get mobileReviewImportSourcePgn;
+  /// No description provided for @mobileReviewImportStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Import and Start Review'**
+  String get mobileReviewImportStart;
+  /// No description provided for @mobileReviewImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import Repertoire'**
+  String get mobileReviewImportTitle;
+  /// No description provided for @mobileReviewImportedChapters.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported \"{param1}\" ({param2} recall positions across {param3} chapters)'**
+  String mobileReviewImportedChapters(String param1, String param2, String param3);
+  /// No description provided for @mobileReviewImportedPlain.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported \"{param1}\" ({param2} recall positions)'**
+  String mobileReviewImportedPlain(String param1, String param2);
+  /// No description provided for @mobileReviewImporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing...'**
+  String get mobileReviewImporting;
+  /// No description provided for @mobileReviewInvalidLichessUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid Lichess study URL or ID. Example: https://lichess.org/study/xxxxxx'**
+  String get mobileReviewInvalidLichessUrl;
+  /// No description provided for @mobileReviewLegendLearning.
+  ///
+  /// In en, this message translates to:
+  /// **'learning'**
+  String get mobileReviewLegendLearning;
+  /// No description provided for @mobileReviewLegendNew.
+  ///
+  /// In en, this message translates to:
+  /// **'new'**
+  String get mobileReviewLegendNew;
+  /// No description provided for @mobileReviewLegendRetained.
+  ///
+  /// In en, this message translates to:
+  /// **'retained'**
+  String get mobileReviewLegendRetained;
+  /// No description provided for @mobileReviewLibraryAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About and licences'**
+  String get mobileReviewLibraryAbout;
+  /// No description provided for @mobileReviewLibrarySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review, board, engine, and sound'**
+  String get mobileReviewLibrarySubtitle;
+  /// No description provided for @mobileReviewLichessUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://lichess.org/study/... or 8-char ID'**
+  String get mobileReviewLichessUrlHint;
+  /// No description provided for @mobileReviewLichessUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess Study URL or ID'**
+  String get mobileReviewLichessUrlLabel;
+  /// No description provided for @mobileReviewNextReviewAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Next review will appear automatically.'**
+  String get mobileReviewNextReviewAutomatic;
+  /// No description provided for @mobileReviewNoExportMoves.
+  ///
+  /// In en, this message translates to:
+  /// **'No moves to export in this study'**
+  String get mobileReviewNoExportMoves;
+  /// No description provided for @mobileReviewNoStudiesAuto.
   ///
   /// In en, this message translates to:
   /// **'Auto'**
-  String get reviewNoStudiesAuto;
-
-  /// No description provided for @reviewNoStudiesWhite.
+  String get mobileReviewNoStudiesAuto;
+  /// No description provided for @mobileReviewNoStudiesChooseFile.
   ///
   /// In en, this message translates to:
-  /// **'White'**
-  String get reviewNoStudiesWhite;
-
-  /// No description provided for @reviewNoStudiesBlack.
+  /// **'Choose file'**
+  String get mobileReviewNoStudiesChooseFile;
+  /// No description provided for @mobileReviewNoStudiesDropZone.
   ///
   /// In en, this message translates to:
-  /// **'Black'**
-  String get reviewNoStudiesBlack;
-
-  /// No description provided for @reviewNothingDuePractice.
+  /// **'Drop a PGN file here'**
+  String get mobileReviewNoStudiesDropZone;
+  /// No description provided for @mobileReviewNoStudiesHeadline.
   ///
   /// In en, this message translates to:
-  /// **'Practice'**
-  String get reviewNothingDuePractice;
-
-  /// No description provided for @reviewNothingDueChooseRepertoire.
+  /// **'Bring your study.'**
+  String get mobileReviewNoStudiesHeadline;
+  /// No description provided for @mobileReviewNoStudiesImportLichess.
   ///
   /// In en, this message translates to:
-  /// **'Choose a study'**
-  String get reviewNothingDueChooseRepertoire;
-
-  /// No description provided for @reviewNothingDueChangeDailyLimit.
+  /// **'Import a Lichess study'**
+  String get mobileReviewNoStudiesImportLichess;
+  /// No description provided for @mobileReviewNoStudiesPastePgn.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste PGN text'**
+  String get mobileReviewNoStudiesPastePgn;
+  /// No description provided for @mobileReviewNoStudiesSubtext.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.'**
+  String get mobileReviewNoStudiesSubtext;
+  /// No description provided for @mobileReviewNoStudiesTrainAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Train as'**
+  String get mobileReviewNoStudiesTrainAs;
+  /// No description provided for @mobileReviewNothingDueChangeDailyLimit.
   ///
   /// In en, this message translates to:
   /// **'Change daily limit'**
-  String get reviewNothingDueChangeDailyLimit;
-
-  /// No description provided for @reviewNothingDuePracticeDoesNotChangeSchedule.
+  String get mobileReviewNothingDueChangeDailyLimit;
+  /// No description provided for @mobileReviewNothingDueChooseRepertoire.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a study'**
+  String get mobileReviewNothingDueChooseRepertoire;
+  /// No description provided for @mobileReviewNothingDuePracticeDoesNotChangeSchedule.
   ///
   /// In en, this message translates to:
   /// **'Practice never changes your schedule.'**
-  String get reviewNothingDuePracticeDoesNotChangeSchedule;
-
-  /// No description provided for @reviewNothingDuePracticeStillAvailable.
+  String get mobileReviewNothingDuePracticeDoesNotChangeSchedule;
+  /// No description provided for @mobileReviewNothingDuePracticeStillAvailable.
   ///
   /// In en, this message translates to:
   /// **'Practice is still available and does not change your schedule.'**
-  String get reviewNothingDuePracticeStillAvailable;
+  String get mobileReviewNothingDuePracticeStillAvailable;
+  /// No description provided for @mobileReviewNothingDueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing due.'**
+  String get mobileReviewNothingDueTitle;
+  /// No description provided for @mobileReviewNothingMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing matches “{param}”.'**
+  String mobileReviewNothingMatches(String param);
+  /// No description provided for @mobileReviewOpenInAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in analysis'**
+  String get mobileReviewOpenInAnalysis;
+  /// No description provided for @mobileReviewPasteClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste from clipboard'**
+  String get mobileReviewPasteClipboard;
+  /// No description provided for @mobileReviewPauseAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get mobileReviewPauseAction;
+  /// No description provided for @mobileReviewPauseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspend from active review pool'**
+  String get mobileReviewPauseSubtitle;
+  /// No description provided for @mobileReviewPausedWord.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get mobileReviewPausedWord;
+  /// No description provided for @mobileReviewPgnTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste PGN moves here...'**
+  String get mobileReviewPgnTextHint;
+  /// No description provided for @mobileReviewPgnTextLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'PGN text'**
+  String get mobileReviewPgnTextLabel;
+  /// No description provided for @mobileReviewPickPgnFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick .pgn file from disk'**
+  String get mobileReviewPickPgnFile;
+  /// No description provided for @mobileReviewPlayThisMoveToContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Play this move to continue. The position will come back soon.'**
+  String get mobileReviewPlayThisMoveToContinue;
+  /// No description provided for @mobileReviewPositionsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{param} positions'**
+  String mobileReviewPositionsCount(String param);
+  /// No description provided for @mobileReviewPracticeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Drill lines without changing your schedule'**
+  String get mobileReviewPracticeSubtitle;
+  /// No description provided for @mobileReviewPrivateHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing a private study? Sign in'**
+  String get mobileReviewPrivateHint;
+  /// No description provided for @mobileReviewPrivateNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Lichess answers the same for a private study as for one that does not exist. Sign in to tell the two apart.'**
+  String get mobileReviewPrivateNotice;
+  /// No description provided for @mobileReviewRenameAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get mobileReviewRenameAction;
+  /// No description provided for @mobileReviewRenameStudyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename study'**
+  String get mobileReviewRenameStudyTitle;
+  /// No description provided for @mobileReviewRenamedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Renamed to “{param}”.'**
+  String mobileReviewRenamedTo(String param);
+  /// No description provided for @mobileReviewResumeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get mobileReviewResumeAction;
+  /// No description provided for @mobileReviewResumeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate in review pool'**
+  String get mobileReviewResumeSubtitle;
+  /// No description provided for @mobileReviewRevealAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Reveal answer'**
+  String get mobileReviewRevealAnswer;
+  /// No description provided for @mobileReviewSaveFileAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save File'**
+  String get mobileReviewSaveFileAction;
+  /// No description provided for @mobileReviewShareAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get mobileReviewShareAction;
+  /// No description provided for @mobileReviewSignInRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in and retry'**
+  String get mobileReviewSignInRetry;
+  /// No description provided for @mobileReviewSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get mobileReviewSkip;
+  /// No description provided for @mobileReviewStudiesGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Studies'**
+  String get mobileReviewStudiesGroup;
+  /// No description provided for @mobileReviewStudyNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Study name'**
+  String get mobileReviewStudyNameLabel;
+  /// No description provided for @mobileReviewStudyOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Study options'**
+  String get mobileReviewStudyOptions;
+  /// No description provided for @mobileReviewStudyTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Study Title (optional)'**
+  String get mobileReviewStudyTitleLabel;
+  /// No description provided for @mobileReviewStudyTitleLichessHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Derived from Lichess if left blank'**
+  String get mobileReviewStudyTitleLichessHint;
+  /// No description provided for @mobileReviewStudyTitlePgnHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. French Defense / 1.d4 Repertoire'**
+  String get mobileReviewStudyTitlePgnHint;
+  /// No description provided for @mobileReviewTrainAsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Train as:'**
+  String get mobileReviewTrainAsLabel;
+  /// No description provided for @mobileReviewTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get mobileReviewTryAgain;
+  /// No description provided for @mobileReviewVerdictCorrectBare.
+  ///
+  /// In en, this message translates to:
+  /// **'Correct.'**
+  String get mobileReviewVerdictCorrectBare;
+  /// No description provided for @mobileReviewVerdictCorrectMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Correct. {param}.'**
+  String mobileReviewVerdictCorrectMove(String param);
+  /// No description provided for @mobileReviewVerdictWrongBare.
+  ///
+  /// In en, this message translates to:
+  /// **'Not this move.'**
+  String get mobileReviewVerdictWrongBare;
+  /// No description provided for @mobileReviewVerdictWrongMove.
+  ///
+  /// In en, this message translates to:
+  /// **'Not this move. The study move is {param}.'**
+  String mobileReviewVerdictWrongMove(String param);
+  /// No description provided for @mobileReviewWhiteRepertoire.
+  ///
+  /// In en, this message translates to:
+  /// **'White repertoire'**
+  String get mobileReviewWhiteRepertoire;
+  /// No description provided for @mobileReviewWhiteToPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'White to play'**
+  String get mobileReviewWhiteToPlay;
+  /// No description provided for @mobileSettingsAccountPrefsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.'**
+  String get mobileSettingsAccountPrefsSaved;
+  /// No description provided for @mobileSettingsBoardLandscapePosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Board position in landscape mode'**
+  String get mobileSettingsBoardLandscapePosition;
+  /// No description provided for @mobileSettingsBoardMoveOnRelease.
+  ///
+  /// In en, this message translates to:
+  /// **'Move on release'**
+  String get mobileSettingsBoardMoveOnRelease;
+  /// No description provided for @mobileSettingsBoardMoveOnReleaseHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.'**
+  String get mobileSettingsBoardMoveOnReleaseHelp;
+  /// No description provided for @mobileReviewCreateOpposite.
+  ///
+  /// In en, this message translates to:
+  /// **'Create {param}'**
+  String mobileReviewCreateOpposite(String param);
+  /// No description provided for @mobileReviewOppositeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Same positions, in the other drawer'**
+  String get mobileReviewOppositeSubtitle;
+  /// No description provided for @mobileReviewNextReviewTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Next review {param}.'**
+  String mobileReviewNextReviewTime(String param);
+  /// No description provided for @mobileReviewStudyNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Study not found on Lichess. Ensure the study is public or unlisted.'**
+  String get mobileReviewStudyNotFound;
+  /// No description provided for @mobileReviewPgnCopiedClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'PGN copied to clipboard'**
+  String get mobileReviewPgnCopiedClipboard;
+  /// No description provided for @mobileReviewDismissBarrier.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get mobileReviewDismissBarrier;
+  /// No description provided for @mobileReviewPreferencesGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences'**
+  String get mobileReviewPreferencesGroup;
+  /// No description provided for @mobileReviewExitPractice.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit practice'**
+  String get mobileReviewExitPractice;
+
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
