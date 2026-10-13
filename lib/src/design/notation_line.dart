@@ -41,14 +41,24 @@ class SrsSan extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = style.color ?? const Color(0xFF000000);
     if (san.isNotEmpty && _pieces.contains(san[0])) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          SrsFigurine(san[0], color: color, fontSize: style.fontSize ?? 16),
-          Text(san.substring(1), style: style),
-        ],
+      // The figurine is an SVG and the remainder is the SAN minus its piece letter, so merged
+      // semantics would name a move like Nf3 "Nf3 f3" — and without the label at all a screen
+      // reader heard just "f3". The full SAN is the accessible name; the same
+      // label-plus-ExcludeSemantics shape as SrsTextButton/SrsPillButton.
+      return Semantics(
+        container: true,
+        label: san,
+        child: ExcludeSemantics(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              SrsFigurine(san[0], color: color, fontSize: style.fontSize ?? 16),
+              Text(san.substring(1), style: style),
+            ],
+          ),
+        ),
       );
     }
     return Text(san, style: style);
