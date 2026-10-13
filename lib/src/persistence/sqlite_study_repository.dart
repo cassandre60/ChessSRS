@@ -482,11 +482,6 @@ class SqliteStudyRepository implements StudyRepository {
     return rows.map(_decisionFromRow).toList(growable: false);
   }
 
-  @override
-  Future<void> deleteDecisionsByStudy(String studyId) async {
-    await _db.delete(kTableSrsDecision, where: 'studyId = ?', whereArgs: [studyId]);
-  }
-
   // ---------------------------------------------------------------------------
   // Position Knowledge States (canonical SRS layer)
   // ---------------------------------------------------------------------------
