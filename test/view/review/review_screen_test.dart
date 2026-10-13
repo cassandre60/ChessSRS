@@ -503,6 +503,136 @@ void main() {
       sem.dispose();
     });
 
+    testWidgets('screen reader can identify the board and the side to move', (tester) async {
+      // design/docs/04-screens-and-flows.md §6: "The board itself should expose the current
+      // position in a way the platform's chess/board semantics conventions support." The board is
+      // a custom-rendered widget with no text alternative; the facts a screen reader can be given
+      // at this level are which chapter the position belongs to and whose move it is.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '[Event "Queen Pawn"]\n\n1. d4 d5 *',
+        studyTitle: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // The board's own semantics node, not the meta text above it: both speak of the same
+      // chapter, so this must be read off the Chessboard's node specifically.
+      final boardSemantics = tester.getSemantics(find.byType(Chessboard));
+      expect(boardSemantics.label, contains('Queen Pawn'));
+      expect(boardSemantics.label, contains('White to play'));
+      expect(boardSemantics.label, contains('Chessboard'));
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    testWidgets('screen reader can identify the continue overlay as a button', (tester) async {
+      // The full-board overlay that advances the session is the largest tap target on the screen,
+      // but it was a bare GestureDetector: invisible to a screen reader, which had to find the
+      // small pill at the bottom instead. It is a button and must announce itself as one.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '1. e4 {Important center move} *',
+        studyTitle: 'King Pawn Tap Test',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // Play the correct move; the note pauses advancement and the overlay goes up.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.text('Important center move'), findsOneWidget);
+
+      final overlay = find.bySemanticsLabel('Continue to next position');
+      expect(overlay, findsOneWidget);
+      expect(tester.getSemantics(overlay).flagsCollection.isButton, isTrue);
+
+      // The announced control really does continue the session.
+      await tester.tap(overlay);
+      await pumpAsync(tester, 700);
+      expect(find.text('Nothing due.'), findsOneWidget);
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    testWidgets('screen reader can identify the study move by its piece letter', (tester) async {
+      // The answer is printed with a figurine: the piece is an SVG and the rest is text, so a
+      // screen reader heard "f3" for a move that is Nf3 — a wrong move name. The full SAN must be
+      // the accessible name.
+      final sem = tester.ensureSemantics();
+      final importResult = importPgn(
+        '1. Nf3 Nc6 *',
+        studyTitle: 'Zukertort',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      // A wrong move puts the study move in the answer slot. The notation line carries the same
+      // SAN through the same widget, so one node is the minimum, not exactly one.
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsync(tester, 100);
+      expect(find.bySemanticsLabel('Nf3'), findsWidgets);
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
     testWidgets('study actions sheet opens StudyScreen via Analyze', (tester) async {
       final importResult = importPgn(
         '1. e4 e5 2. Nf3 Nc6 *',
