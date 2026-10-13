@@ -644,6 +644,84 @@ void main() {
     });
 
     test(
+      'a failed mirror write rolls back the canonical state instead of leaving it torn',
+      () async {
+        // savePositionKnowledgeState writes the canonical row and then one mirror per decision
+        // sharing that canonical id. If those writes are not in a transaction, a failure partway
+        // through leaves the canonical row claiming the position was reviewed while some mirrors
+        // still say otherwise — which is exactly the mismatch that re-presents or skips positions
+        // on the next session.
+        //
+        // The failure is forced with a trigger on the mirror row rather than by killing the
+        // process, so the test is deterministic and asserts the rollback rather than the
+        // interruption that would cause it.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final study = Study(id: 'study-torn', title: 'Torn', createdAt: now, updatedAt: now);
+          final chapter = Chapter(id: 'ch-torn', studyId: study.id, sourceOrder: 0);
+
+          const canonicalId = 'torn-pos-canonical';
+          const firstDecision = RepertoireDecision(
+            id: 'dec-torn-1',
+            studyId: 'study-torn',
+            chapterId: 'ch-torn',
+            nodeId: 'n1',
+            expectedMoves: [],
+            canonicalStateId: canonicalId,
+          );
+          const secondDecision = RepertoireDecision(
+            id: 'dec-torn-2',
+            studyId: 'study-torn',
+            chapterId: 'ch-torn',
+            nodeId: 'n2',
+            expectedMoves: [],
+            canonicalStateId: canonicalId,
+          );
+
+          await repo.saveStudy(study);
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(firstDecision);
+          await repo.saveDecision(secondDecision);
+
+          // Fail on the second mirror only: the canonical row and the first mirror have
+          // already been written by the time this fires.
+          await db.execute('''
+            CREATE TRIGGER fail_second_mirror BEFORE INSERT ON $kTableSrsReviewState
+            WHEN NEW.decisionId = 'dec-torn-2'
+            BEGIN SELECT RAISE(ABORT, 'forced mirror failure'); END
+          ''');
+
+          await expectLater(
+            repo.savePositionKnowledgeState(
+              const PositionKnowledgeState(
+                canonicalId: canonicalId,
+                repetitionCount: 5,
+                stability: 100.0,
+              ),
+            ),
+            throwsA(isA<DatabaseException>()),
+            reason: 'the forced failure is the point; the write must not silently succeed',
+          );
+
+          expect(
+            await repo.getPositionKnowledgeState(canonicalId),
+            isNull,
+            reason:
+                'the canonical row survived a write whose mirror failed, so the next session '
+                'reads a position as reviewed while its mirrors disagree',
+          );
+          expect(await repo.getReviewState(canonicalId), isNull);
+          expect(await repo.getReviewState(firstDecision.id), isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
       'deleteStudy preserves shared canonical knowledge states referenced by another study',
       () async {
         final db = await openAppDatabase(databaseFactoryFfi, dbPath);

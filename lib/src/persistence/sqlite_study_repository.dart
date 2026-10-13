@@ -488,30 +488,59 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state) async {
-    await _db.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(state));
+    // One transaction for the canonical row and every mirror it implies. They are a single fact
+    // about one position, and reading them apart is the failure mode: a canonical row that says
+    // "reviewed" next to mirrors that disagree re-presents or skips the position on the next
+    // session. Crashing between the two halves is not hypothetical either — an OOM kill or a
+    // force-stop mid-answer is exactly where this runs.
+    //
+    // Every write goes through `txn` rather than `saveReviewState`, which would reach for `_db`
+    // and land outside the transaction.
+    await _db.transaction((txn) async {
+      await txn.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(state));
 
-    await saveReviewState(state.toReviewState(state.canonicalId));
+      await txn.insert(
+        kTableSrsReviewState,
+        _reviewStateRow(state.toReviewState(state.canonicalId)),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
-    final matchingDecisions = await _db.query(
-      kTableSrsDecision,
-      columns: ['id'],
-      where: 'canonicalStateId = ?',
-      whereArgs: [state.canonicalId],
-    );
-    for (final dec in matchingDecisions) {
-      final decId = dec['id']! as String;
-      await saveReviewState(state.toReviewState(decId));
-    }
+      final matchingDecisions = await txn.query(
+        kTableSrsDecision,
+        columns: ['id'],
+        where: 'canonicalStateId = ?',
+        whereArgs: [state.canonicalId],
+      );
+      for (final dec in matchingDecisions) {
+        final decId = dec['id']! as String;
+        await txn.insert(
+          kTableSrsReviewState,
+          _reviewStateRow(state.toReviewState(decId)),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 
   @override
   Future<void> savePositionKnowledgeStates(List<PositionKnowledgeState> states) async {
-    final batch = _db.batch();
-    for (final s in states) {
-      batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
-    }
-    await batch.commit(noResult: true);
-    await saveReviewStates(states.map((s) => s.toReviewState()).toList());
+    // Same reasoning as the single-state form: the canonical rows and the review-state rows are
+    // one fact each, and they were two commits, so a failure between them left the two halves
+    // disagreeing. One transaction, one commit, or neither.
+    await _db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final s in states) {
+        batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
+      }
+      for (final s in states) {
+        batch.insert(
+          kTableSrsReviewState,
+          _reviewStateRow(s.toReviewState(s.canonicalId)),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   /// Persists an answer's canonical state **and** its per-occurrence mirrors.
