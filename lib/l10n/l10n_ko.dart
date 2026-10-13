@@ -2670,6 +2670,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get toggleLocalEvaluation => '로컬 분석 전환';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => '라인 승격하기';
 
   @override

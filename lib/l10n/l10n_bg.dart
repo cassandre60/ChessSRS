@@ -2862,6 +2862,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get toggleLocalEvaluation => 'Превключи локалната оценка';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Повиши вариацията';
 
   @override

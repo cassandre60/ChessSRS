@@ -228,7 +228,18 @@ class GraphAwareReviewCoordinator {
     // Depth counts from 1 at the immediate child, which takes the full λ0:
     // exp(-(1 - 1)/τ) = 1. Entering at depth 1 with exp(-depth/τ) delivered
     // only 51.3% of the documented haircut at every depth (review-2 C2).
-    final decay = params.contagionBase * math.exp(-(depth - 1) / params.contagionTau);
+    // Depth counts from 1 at the immediate child, which takes the full λ0:
+    // exp(-(1 - 1)/τ) = 1. Entering at depth 1 with exp(-depth/τ) delivered
+    // only 51.3% of the documented haircut at every depth (review-2 C2).
+    //
+    // A tau of 0 makes this 0/0 at depth 1, and a negative tau makes it explode past 1. Either
+    // way the result is a decay outside [0, 1], and _pullDueForward rounds it into a Duration —
+    // where NaN throws `Unsupported operation: Infinity or NaN toInt` and takes the review
+    // session down mid-answer. A wrong move should degrade the contagion, never end the session.
+    // The shipped tau is 1.5, so this guards a public const parameter rather than a live path.
+    final tau = params.contagionTau;
+    final rawDecay = tau > 0 ? math.exp(-(depth - 1) / tau) : 1.0;
+    final decay = (params.contagionBase * rawDecay).clamp(0.0, 1.0);
 
     for (final childId in repo.childrenOf(parentId)) {
       final childState = repo.get(childId);

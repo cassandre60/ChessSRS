@@ -2880,6 +2880,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get toggleLocalEvaluation => 'הפעלת ניתוח מקומי';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'קידום נגזרת השחמט';
 
   @override

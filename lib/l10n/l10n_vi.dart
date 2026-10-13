@@ -2811,6 +2811,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get toggleLocalEvaluation => 'Bật/Tắt đánh giá cục bộ';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Về biến chính';
 
   @override

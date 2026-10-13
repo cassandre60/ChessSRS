@@ -2853,6 +2853,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get toggleLocalEvaluation => 'Lokal analys av/på';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Höj upp variant';
 
   @override

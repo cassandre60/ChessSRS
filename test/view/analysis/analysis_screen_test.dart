@@ -72,6 +72,41 @@ void main() {
       );
     });
 
+    testWidgets('study title line is a heading landmark', (tester) async {
+      // A11Y-FIX-30: the study/chapter context line must carry the header flag so a screen
+      // reader announces the board's context as a heading. Without the Semantics wrapper
+      // the text renders but has no heading role.
+      final sem = tester.ensureSemantics();
+
+      const pgn = '''
+[Event "Chapter One"]
+[Study "Sicilian Repertoire"]
+[Chapter "Najdorf"]
+
+1. e4 c5 *''';
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('headings'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.text('Sicilian Repertoire • Najdorf'), findsOneWidget);
+      final node = tester.getSemantics(find.text('Sicilian Repertoire • Najdorf'));
+      expect(node.flagsCollection.isHeader, isTrue);
+
+      sem.dispose();
+    });
+
     testWidgets('move backwards and forward', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,

@@ -2833,6 +2833,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toggleLocalEvaluation => 'Toggle local evaluation';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promote variation';
 
   @override

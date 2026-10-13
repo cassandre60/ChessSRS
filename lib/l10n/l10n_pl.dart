@@ -2906,6 +2906,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get toggleLocalEvaluation => 'Włącz/wyłącz ocenę lokalną';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promuj ten wariant';
 
   @override

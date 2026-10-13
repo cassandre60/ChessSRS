@@ -2900,6 +2900,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get toggleLocalEvaluation => 'Preklopi lokalno analizo';
 
   @override
+  String engineLineSemantics(String eval, String line) {
+    return 'Engine line, evaluation $eval: $line';
+  }
+
+  @override
   String get promoteVariation => 'Promoviraj variacijo';
 
   @override

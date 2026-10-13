@@ -326,6 +326,58 @@ void main() {
       }
     });
 
+    test('timestamps are stored as UTC so a timezone change cannot shift due dates', () async {
+      // SPEC INV-002. review-4 C2 / QUALITY §3.2: due instants survive a
+      // timezone change — stored form is an absolute instant (UTC), not a
+      // wall time.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        // Local wall time, no UTC flag — what SystemClock produces.
+        final localDue = DateTime(2026, 10, 8, 10);
+        final kState = PositionKnowledgeState(
+          canonicalId: 'k-utc',
+          nextDueAt: localDue,
+          stability: 3.0,
+        );
+
+        await repo.savePositionKnowledgeState(kState);
+        final read = await repo.getPositionKnowledgeState('k-utc');
+
+        // The instant is preserved and the read side is marked UTC.
+        expect(read, isNotNull);
+        expect(read!.nextDueAt, isNotNull);
+        expect(read.nextDueAt!.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(read.nextDueAt!.isUtc, isTrue);
+
+        // Review state path round-trips UTC too.
+        const rState = ReviewState(decisionId: 'r-utc', nextDueAt: null, repetitionCount: 2);
+        await repo.saveReviewState(rState.copyWith(nextDueAt: localDue));
+        final rRead = await repo.getReviewState('r-utc');
+        expect(rRead!.nextDueAt!.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(rRead.nextDueAt!.isUtc, isTrue);
+
+        // Review event path round-trips UTC.
+        final baseState = ReviewState(decisionId: 'e-utc', nextDueAt: localDue);
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'e-utc',
+            when: localDue,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'e-utc'),
+            newState: baseState,
+          ),
+        );
+        final events = await repo.getReviewEvents('e-utc');
+        expect(events, hasLength(1));
+        expect(events.first.when.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
+        expect(events.first.when.isUtc, isTrue);
+      } finally {
+        await db.close();
+      }
+    });
+
     test('latency survives answer persistence (upsert must not REPLACE columns)', () async {
       // SPEC INV-002. review-4 C1: every persisted answer must preserve latency
       // telemetry — INSERT OR REPLACE must not erase columns the caller did not
@@ -590,6 +642,84 @@ void main() {
         await db.close();
       }
     });
+
+    test(
+      'a failed mirror write rolls back the canonical state instead of leaving it torn',
+      () async {
+        // savePositionKnowledgeState writes the canonical row and then one mirror per decision
+        // sharing that canonical id. If those writes are not in a transaction, a failure partway
+        // through leaves the canonical row claiming the position was reviewed while some mirrors
+        // still say otherwise — which is exactly the mismatch that re-presents or skips positions
+        // on the next session.
+        //
+        // The failure is forced with a trigger on the mirror row rather than by killing the
+        // process, so the test is deterministic and asserts the rollback rather than the
+        // interruption that would cause it.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final study = Study(id: 'study-torn', title: 'Torn', createdAt: now, updatedAt: now);
+          final chapter = Chapter(id: 'ch-torn', studyId: study.id, sourceOrder: 0);
+
+          const canonicalId = 'torn-pos-canonical';
+          const firstDecision = RepertoireDecision(
+            id: 'dec-torn-1',
+            studyId: 'study-torn',
+            chapterId: 'ch-torn',
+            nodeId: 'n1',
+            expectedMoves: [],
+            canonicalStateId: canonicalId,
+          );
+          const secondDecision = RepertoireDecision(
+            id: 'dec-torn-2',
+            studyId: 'study-torn',
+            chapterId: 'ch-torn',
+            nodeId: 'n2',
+            expectedMoves: [],
+            canonicalStateId: canonicalId,
+          );
+
+          await repo.saveStudy(study);
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(firstDecision);
+          await repo.saveDecision(secondDecision);
+
+          // Fail on the second mirror only: the canonical row and the first mirror have
+          // already been written by the time this fires.
+          await db.execute('''
+            CREATE TRIGGER fail_second_mirror BEFORE INSERT ON $kTableSrsReviewState
+            WHEN NEW.decisionId = 'dec-torn-2'
+            BEGIN SELECT RAISE(ABORT, 'forced mirror failure'); END
+          ''');
+
+          await expectLater(
+            repo.savePositionKnowledgeState(
+              const PositionKnowledgeState(
+                canonicalId: canonicalId,
+                repetitionCount: 5,
+                stability: 100.0,
+              ),
+            ),
+            throwsA(isA<DatabaseException>()),
+            reason: 'the forced failure is the point; the write must not silently succeed',
+          );
+
+          expect(
+            await repo.getPositionKnowledgeState(canonicalId),
+            isNull,
+            reason:
+                'the canonical row survived a write whose mirror failed, so the next session '
+                'reads a position as reviewed while its mirrors disagree',
+          );
+          expect(await repo.getReviewState(canonicalId), isNull);
+          expect(await repo.getReviewState(firstDecision.id), isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
 
     test(
       'deleteStudy preserves shared canonical knowledge states referenced by another study',
@@ -925,7 +1055,7 @@ void main() {
       }
     });
 
-    test('getReviewStatesByDecisions retrieves only review states for specified IDs', () async {
+    test('getReviewStatesByIds retrieves only review states for specified IDs', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);
 
@@ -935,11 +1065,11 @@ void main() {
         const s3 = ReviewState(decisionId: 'dec-3', repetitionCount: 3);
         await repo.saveReviewStates([s1, s2, s3]);
 
-        final queried = await repo.getReviewStatesByDecisions(['dec-1', 'dec-3']);
+        final queried = await repo.getReviewStatesByIds(['dec-1', 'dec-3']);
         expect(queried.length, 2);
         expect(queried.map((s) => s.decisionId).toSet(), equals({'dec-1', 'dec-3'}));
 
-        final emptyQuery = await repo.getReviewStatesByDecisions([]);
+        final emptyQuery = await repo.getReviewStatesByIds([]);
         expect(emptyQuery, isEmpty);
       } finally {
         await db.close();
@@ -1464,7 +1594,7 @@ void main() {
           difficulty: 7.2,
         ),
       );
-      final states = await repo.getReviewStatesByDecisions(['migrated-dec-1']);
+      final states = await repo.getReviewStatesByIds(['migrated-dec-1']);
       expect(states.first.difficulty, equals(7.2));
 
       await upgradedDb.close();
