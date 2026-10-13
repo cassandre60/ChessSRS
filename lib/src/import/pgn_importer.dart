@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:isolate';
 
 import 'package:chess_srs/src/domain/chapter.dart';
@@ -12,10 +11,10 @@ import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/study.dart';
 import 'package:chess_srs/src/import/opening_name.dart';
+import 'package:chess_srs/src/import/pgn_offload.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:logging/logging.dart';
 
 final Logger _logger = Logger('StudyImporter');
@@ -67,7 +66,7 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
 /// Asynchronously computes a canonical SHA-256 fingerprint for PGN content on a background isolate,
 /// avoiding UI thread hitching on large multi-megabyte PGN files.
 Future<String> computePgnHashAsync(String pgnText) {
-  if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST') || pgnText.length < 8192) {
+  if (!shouldOffloadPgnWork(textLength: pgnText.length)) {
     return Future.value(computePgnHash(pgnText));
   }
   return Isolate.run(() => computePgnHash(pgnText));
@@ -384,7 +383,7 @@ Future<ImportResult> importPgnAsync(
   Side? repertoireSide,
   String? pgnHash,
 }) {
-  if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST') || pgnText.length < 8192) {
+  if (!shouldOffloadPgnWork(textLength: pgnText.length)) {
     return Future.value(
       importPgn(pgnText, studyTitle: studyTitle, repertoireSide: repertoireSide, pgnHash: pgnHash),
     );
