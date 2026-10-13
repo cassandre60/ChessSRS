@@ -459,3 +459,68 @@ npm registry reachable, lila/GitHub APIs for pin checks.)
 - Plists + manifest parsed as XML; `fvm flutter analyze` on touched Dart files is a no-op (none touched — config/XML/docs only).
 - Full suite NOT run locally (no product code changed; CI's job). `./scripts/gates.sh t1` run pre-push.
 - Release-artifact validation (archive/sign) was not run: release builds never run on dev machines per AGENTS.md §4, and the changes are key/pattern removals. If the owner wants proof beyond CI, dispatch `release-proof` (it exists for exactly this).
+
+---
+
+## Carry-forward log (rounds 1–8, updated per round)
+
+Open review findings that no round owns, plus owner/product decisions the rounds surfaced but
+could not take. This is the durable list — round summaries in chat are not. An item leaves this
+table only by a fix PR, a product decision, or explicit retirement with a reason and date.
+
+| ID | Item | Needed next |
+|---|---|---|
+| review-4 C2 / review-1 D4 | Offset-less local timestamps: a timezone change shifts every due date, one direction manufacturing a backlog. Ranked first in `review-index.md`. | Migration PR of its own (reinterpret existing rows as UTC, then write UTC). Data risk — owner eyes before merge. |
+| review-1 C4 | Switching `schedulerType` reinterprets `stability` (30-day item disappears for 3 months). Three remedies in review-1 §6 (reset / convert / warn-and-confirm); option 1 ruled out technically. | Product decision, then migration. |
+| review-1 C6 | `isColdStart` never re-arms (6.8× gap after a failed first attempt). Arguably intended grading. | Product definition of "forgotten", then fix or retire. |
+| review-1 D5 | `repetitionCount` means different things per scheduler; `isLearned` reads it uniformly (live consumers in `review_service.dart`, `review_controller.dart`). | Scheduler-unification design; bigger than a review round. |
+| review-1 D4 | Same timestamps issue as review-4 C2 (duplicate entry point, kept for traceability). | Close with C2. |
+| R6-F3 | Segmented items at ~33px vs the 44px minimum; the constraint breaks analysis chart taps. | Analysis tab-strip/chart layout redesign with its own screenshots. |
+| time-i18n | Relative-time strings need ICU plurals with exact English edge semantics. | Small dedicated PR once the wording is frozen. |
+| srs-settings copy | ~40 labels/helps still hardcoded; settings mid-churn. | Move when stable. |
+| chapters copy | Legacy screen pending the cut decision; translating it may waste translator work. | Decide cut first. |
+| `%s positions` | Plural-blind form kept byte-identical on purpose. | Proper plurals follow-up. |
+| variant l10n duplication | New overrides live in base locale classes only; a future regen duplicates them into `en_US`/`pt_BR`/`zh_TW` per generator behavior. | Cosmetic; accept on next regen. |
+| workflow hardening | Action SHA-pinning, artifact attestations, checksums. | Owner-approved PR (protected path) with dependabot. |
+| multistockfish +4 | Pin 4 commits behind main, fast-forwardable. | Engine team's upgrade. |
+| ar placeholder | `mobilePlayersMatchingSearchTerm` dropped `{param}`. | Translators via Crowdin (dest files are pulled). |
+| domain_loc ratchet | 3326 of 3350 ceiling at Round 8 close — ~24 headroom left. | Expect a re-baseline proposal soon (gate-change, owner approval). |
+| R1-F4 / R1-F5 / R2-F2 / R2-F4 / review-4 C3 | Open, tracked issue-ready in `review-register.md`. | Claim per the register when scheduled. |
+| review-2 D1 / review-3 D1 / review-3 D4 / review-1 D7 | Working code or self-consistent; refactors not justified in-round. | Revisit only with a failing reason. |
+
+---
+
+## Round 9 — test suite and gates
+
+**Scope read:** all 174 test files scanned mechanically for vacuous tests (tests with zero
+`expect` calls), load-sensitive timing patterns (`pumpAsync`, `Future.delayed`), gate scripts
+(`scripts/gates/*.py`), `.gates/` configurations, and spec-trace mapping behavior.
+Per review-program rule ("Gates forbid editing the referee... Findings that need a referee
+change are recorded, not fixed"), referee files (`scripts/gates/*`, `.gates/*`) are inspected
+and findings recorded; fixes are applied to test suite and test-gate files in `test/`.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R9-F1 | `Shows tv screen for /tv/<channel> link` in `test/app_links_service_test.dart` had 0 assertions, simulated a socket for a screen that never opened, and passed vacuously. The Watch tab was cut in C7, so `/tv/` routes are unhandled. | Medium | **Fixed in this PR.** Replaced with an honest test asserting that `/tv/<channel>` resolves to null and does not navigate (`find.text('test link')` remains). Unused mock imports removed. |
+| R9-F2 | `_bannedImports` in `test/gates/domain_boundary_test.dart` (G02) matched only single-quoted import paths (`'package:flutter/...'`, `'dart:io'`), letting double-quoted imports (`"package:flutter/..."`, `"dart:io"`) through unseen. | Medium | **Fixed in this PR.** Regexes updated to match `['"]` quotes; regression test pins both quote styles across all banned import prefixes. |
+| R9-F3 | 13 `pumpAsync(tester, 100)` / `500` calls in `test/view/review/review_screen_test.dart` waited fixed real-time durations for async DB writes and controller reloads to complete before asserting, causing load-sensitive flakiness under CPU contention (TEST-FIX-19 / GATES.md flake disclosure). | Medium | **Fixed in this PR.** Replaced with condition-polling `pumpUntilFound` on the expected UI element (lapse banner, `SrsMoveArrow`, `Open in analysis`, 'Bring your study.'). 42/42 tests pass deterministically. |
+| R9-F4 | `SKIP = re.compile(r"[(,]\s*skip\s*:")` in `test_weakening_check.py` and `collect_metrics.py` requires a `(` or `,` on the same line, completely missing multiline test declarations where `skip:` sits on its own line (standard `dart format` output). | Medium (gate blind spot) | **Recorded (referee file).** In a multiline `test('name',\n  skip: true,\n)`, `skip:` is invisible to G08 and ratchet metrics. Recommended fix in a future gate-change PR: `re.compile(r"(^|[^\w\.])skip\s*:")`. |
+| R9-F5 | `.gates/banned-apis.json` matches single quotes only (`"import\\s+'package:flutter/"`), missing double-quoted imports in G03. | Low (gate blind spot) | **Recorded (referee file).** Complement to R9-F2. Recommended fix in a future gate-change PR: `import\\s+['"]...`. |
+| R9-F6 | `spec_trace_check.py` greps `\bINV-\d{3,}\b` anywhere in test files, treating comments or variable names as test coverage. This disarmed red-team case `rt-06` until #72 removed an accidental comment mention. | Low (gate blind spot) | **Recorded (referee file).** Recommended fix: match only canonical citation lines (`^\s*//\s*SPEC.*INV-\d+`). |
+
+### Checked and sound (do not re-raise)
+
+- **Coverage of `domain/` and `persistence/`:** all 7 persistence files have dedicated test suites in `test/persistence/`; all domain value types and state machines have tests in `test/domain/` and `test/review/`.
+- **Assertion presence:** remaining 31 `test(` occurrences without local `expect` calls in the body delegate to helper functions (`testTimeStr`, `expectSameLine`, `testEventEmitted`, `makeTestAltCastlingMove`) that contain the assertions.
+- **Fail-to-pass verification:** R9-F2 regression test fails on old single-quote-only regexes; R9-F1 fails if the link navigates away from 'test link'.
+- **G08 tripwire:** Ack-G08 trailer signed in commit history for replacing the vacuous TV test declaration.
+
+### Verification status of this round's PR
+
+- `test/gates/domain_boundary_test.dart` passes 4/4 (new test pins both single and double quotes).
+- `test/app_links_service_test.dart` passes 22/22 (honest null resolution and no-navigation).
+- `test/view/review/review_screen_test.dart` passes 42/42 with zero flakes.
+- `fvm flutter analyze` clean on all touched files; `dart format` stable.
+- `./scripts/gates.sh t1` clean.

@@ -143,6 +143,25 @@ class ReviewService {
   /// showing it — it just does not get to be the one that answers moves.
   int _activeGeneration = 0;
 
+  /// Loads every study once plus the chapters of the active ones, optionally filtered.
+  ///
+  /// The three multi-study scope branches of [startSession] each repeated this same
+  /// prologue (getAllStudies → filter isActive → loop getChaptersByStudy), which is
+  /// how the three copies drifted. One source of truth now. Returns [allStudies] as
+  /// well so the `all()` branch keeps reporting inactive studies in the session
+  /// header without issuing a second identical query.
+  Future<({List<Study> allStudies, List<Study> activeStudies, List<Chapter> chapters})>
+  _loadActiveStudiesAndChapters({bool Function(Chapter)? chapterWhere}) async {
+    final allStudies = await repository.getAllStudies();
+    final activeStudies = allStudies.where((s) => s.isActive).toList();
+    final chapters = <Chapter>[];
+    for (final s in activeStudies) {
+      final studyChapters = await repository.getChaptersByStudy(s.id);
+      chapters.addAll(chapterWhere == null ? studyChapters : studyChapters.where(chapterWhere));
+    }
+    return (allStudies: allStudies, activeStudies: activeStudies, chapters: chapters);
+  }
+
   /// Starts a new review session for the given [scope].
   ///
   /// Implements targeted scope prefetching (docs/INTEGRATION_MAP.md §From chessrs):
@@ -178,21 +197,18 @@ class ReviewService {
       targetChapters = await repository.getChaptersByStudy(scope.studyId!);
       decisions = await repository.getDecisionsByStudy(scope.studyId!);
     } else if (scope.openingFamily != null) {
-      final allStudies = await repository.getAllStudies();
-      final activeStudies = allStudies.where((s) => s.isActive).toList();
       final chapterOpenings = await repository.getChapterOpenings();
       final matchingChapterIds = chapterOpenings.entries
           .where((e) => e.value?.trim() == scope.openingFamily!.trim())
           .map((e) => e.key)
           .toSet();
 
-      final chapters = <Chapter>[];
-      for (final s in activeStudies) {
-        final studyChapters = await repository.getChaptersByStudy(s.id);
-        chapters.addAll(studyChapters.where((c) => matchingChapterIds.contains(c.id)));
-      }
+      final loaded = await _loadActiveStudiesAndChapters(
+        chapterWhere: (c) => matchingChapterIds.contains(c.id),
+      );
+      final activeStudies = loaded.activeStudies;
       targetStudies = activeStudies;
-      targetChapters = chapters;
+      targetChapters = loaded.chapters;
       decisions = await _getOpeningDecisions(targetChapters, scope.openingFamily!, activeStudies);
     } else if (scope.side != null) {
       // A side scope spans every active study but keeps only the chapters
@@ -200,27 +216,19 @@ class ReviewService {
       // whole decision list so the queue, its trees and its states are all
       // narrowed together — a decision whose chapter is excluded would
       // otherwise arrive with no tree to grade against (INV-030).
-      final allStudies = await repository.getAllStudies();
-      final activeStudies = allStudies.where((s) => s.isActive).toList();
-      final chapters = <Chapter>[];
-      for (final s in activeStudies) {
-        final studyChapters = await repository.getChaptersByStudy(s.id);
-        chapters.addAll(studyChapters.where((c) => c.orientation == scope.side));
-      }
-      targetStudies = activeStudies;
-      targetChapters = chapters;
-      decisions = await _getSideDecisions(chapters);
+      final loaded = await _loadActiveStudiesAndChapters(
+        chapterWhere: (c) => c.orientation == scope.side,
+      );
+      targetStudies = loaded.activeStudies;
+      targetChapters = loaded.chapters;
+      decisions = await _getSideDecisions(targetChapters);
     } else {
-      final allStudies = await repository.getAllStudies();
-      final activeStudies = allStudies.where((s) => s.isActive).toList();
-      final chapters = <Chapter>[];
-      for (final s in activeStudies) {
-        final studyChapters = await repository.getChaptersByStudy(s.id);
-        chapters.addAll(studyChapters);
-      }
-      targetStudies = allStudies;
-      targetChapters = chapters;
-      decisions = await _getActiveDecisions(allStudies);
+      final loaded = await _loadActiveStudiesAndChapters();
+      // The session header/progress counts see ALL studies including inactive ones;
+      // only the chapters (and hence the queue) are active-scoped.
+      targetStudies = loaded.allStudies;
+      targetChapters = loaded.chapters;
+      decisions = await _getActiveDecisions(loaded.allStudies);
     }
 
     // Both key kinds are queryable because saveAnswerBatch mirrors each
