@@ -135,6 +135,259 @@
   "mobilePerfShortRacingKings": "Racing",
   "mobilePerfShortCrazyhouse": "Crazy",
   "mobilePerfShortPuzzle": "Puzzle",
+  "mobileReviewNoStudiesHeadline": "Bring your study.",
+  "mobileReviewNoStudiesSubtext": "Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.",
+  "mobileReviewNoStudiesDropZone": "Drop a PGN file here",
+  "mobileReviewNoStudiesChooseFile": "Choose file",
+  "mobileReviewNoStudiesPastePgn": "Paste PGN text",
+  "mobileReviewNoStudiesImportLichess": "Import a Lichess study",
+  "mobileReviewNoStudiesTrainAs": "Train as",
+  "mobileReviewNoStudiesAuto": "Auto",
+  "mobileReviewNothingDueChooseRepertoire": "Choose a study",
+  "mobileReviewNothingDueChangeDailyLimit": "Change daily limit",
+  "mobileReviewNothingDuePracticeDoesNotChangeSchedule": "Practice never changes your schedule.",
+  "mobileReviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule.",
+  "mobileSettingsAccountPrefsSaved": "Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.",
+  "mobileSettingsBoardLandscapePosition": "Board position in landscape mode",
+  "mobileSettingsBoardMoveOnRelease": "Move on release",
+  "mobileSettingsBoardMoveOnReleaseHelp": "When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.",
+  "mobilePgnCopied": "PGN copied.",
+  "mobileReviewContinue": "Continue",
+  "mobileReviewSkip": "Skip",
+  "mobileReviewRevealAnswer": "Reveal answer",
+  "mobileReviewPlayThisMoveToContinue": "Play this move to continue. The position will come back soon.",
+  "mobileReviewFromYourStudy": "From your study",
+  "mobileReviewOpenInAnalysis": "Open in analysis",
+  "mobileReviewLegendRetained": "retained",
+  "mobileReviewLegendLearning": "learning",
+  "mobileReviewLegendNew": "new",
+  "mobileReviewNothingDueTitle": "Nothing due.",
+  "mobileReviewDailyLimitReached": "Daily limit reached.",
+  "mobileReviewNextReviewAutomatic": "Next review will appear automatically.",
+  "mobileReviewDailyProgress": "You reviewed {param1} of {param2} positions today. White and Black combined.",
+  "@mobileReviewDailyProgress": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      },
+      "param2": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewCrossSideButton": "Review {param1} — {param2} due",
+  "@mobileReviewCrossSideButton": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      },
+      "param2": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewDueWord": "due",
+  "mobileReviewPausedWord": "Paused",
+  "mobileReviewPositionsCount": "{param} positions",
+  "@mobileReviewPositionsCount": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewClearSearch": "Clear search",
+  "mobileReviewStudiesGroup": "Studies",
+  "mobileReviewImportTitle": "Import Repertoire",
+  "mobileReviewImportSourceLichess": "Lichess Study",
+  "mobileReviewImportSourcePgn": "PGN Text / File",
+  "mobileReviewLichessUrlLabel": "Lichess Study URL or ID",
+  "mobileReviewLichessUrlHint": "https://lichess.org/study/... or 8-char ID",
+  "mobileReviewPasteClipboard": "Paste from clipboard",
+  "mobileReviewStudyTitleLabel": "Study Title (optional)",
+  "mobileReviewStudyTitleLichessHint": "Derived from Lichess if left blank",
+  "mobileReviewStudyTitlePgnHint": "e.g. French Defense / 1.d4 Repertoire",
+  "mobileReviewTrainAsLabel": "Train as:",
+  "mobileReviewPgnTextLabel": "PGN text",
+  "mobileReviewPgnTextHint": "Paste PGN moves here...",
+  "mobileReviewPickPgnFile": "Pick .pgn file from disk",
+  "mobileReviewFetchImport": "Fetch & Import from Lichess",
+  "mobileReviewFetching": "Fetching from Lichess...",
+  "mobileReviewImportStart": "Import and Start Review",
+  "mobileReviewImporting": "Importing...",
+  "mobileReviewPrivateHint": "Importing a private study? Sign in",
+  "mobileReviewSignInRetry": "Sign in and retry",
+  "mobileReviewPrivateNotice": "Lichess answers the same for a private study as for one that does not exist. Sign in to tell the two apart.",
+  "mobileReviewEnterLichessUrl": "Please enter a Lichess study URL or study ID",
+  "mobileReviewInvalidLichessUrl": "Invalid Lichess study URL or ID. Example: https://lichess.org/study/xxxxxx",
+  "mobileReviewEnterPgn": "Please enter or select PGN content",
+  "mobileReviewDuplicateStudy": "Study \"{param1}\" is already imported and up to date",
+  "@mobileReviewDuplicateStudy": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewImportedChapters": "Imported \"{param1}\" ({param2} recall positions across {param3} chapters)",
+  "@mobileReviewImportedChapters": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      },
+      "param2": {
+        "type": "String"
+      },
+      "param3": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewImportedPlain": "Imported \"{param1}\" ({param2} recall positions)",
+  "@mobileReviewImportedPlain": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      },
+      "param2": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewRenamedTo": "Renamed to “{param}”.",
+  "@mobileReviewRenamedTo": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewDeletedStudy": "Deleted “{param}”.",
+  "@mobileReviewDeletedStudy": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewCreatedOpposite": "Created {param}",
+  "@mobileReviewCreatedOpposite": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewAlreadyOpposite": "Already in the {param}",
+  "@mobileReviewAlreadyOpposite": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewNoExportMoves": "No moves to export in this study",
+  "mobileReviewChapterNoMoves": "Chapter has no moves to export",
+  "mobileReviewWhiteToPlay": "White to play",
+  "mobileReviewBlackToPlay": "Black to play",
+  "mobileReviewVerdictCorrectMove": "Correct. {param}.",
+  "@mobileReviewVerdictCorrectMove": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewVerdictCorrectBare": "Correct.",
+  "mobileReviewVerdictWrongBare": "Not this move.",
+  "mobileReviewVerdictWrongMove": "Not this move. The study move is {param}.",
+  "@mobileReviewVerdictWrongMove": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewLibraryAbout": "About and licences",
+  "mobileReviewLibrarySubtitle": "Review, board, engine, and sound",
+  "mobileReviewNothingMatches": "Nothing matches “{param}”.",
+  "@mobileReviewNothingMatches": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewWhiteRepertoire": "White repertoire",
+  "mobileReviewBlackRepertoire": "Black repertoire",
+  "mobileReviewTryAgain": "Try again",
+  "mobileReviewCopyDetails": "Copy details",
+  "mobileReviewExpandSection": "Expand {param} section",
+  "@mobileReviewExpandSection": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewCollapseSection": "Collapse {param} section",
+  "@mobileReviewCollapseSection": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewStudyOptions": "Study options",
+  "mobileReviewAnalyzeAction": "Analyze",
+  "mobileReviewAnalyzeSubtitle": "Browse moves and variations",
+  "mobileReviewPracticeSubtitle": "Drill lines without changing your schedule",
+  "mobileReviewExportPgnAction": "Export PGN",
+  "mobileReviewExportPgnSubtitle": "Share or copy standard PGN notation",
+  "mobileReviewPauseAction": "Pause",
+  "mobileReviewResumeAction": "Resume",
+  "mobileReviewPauseSubtitle": "Suspend from active review pool",
+  "mobileReviewResumeSubtitle": "Activate in review pool",
+  "mobileReviewRenameAction": "Rename",
+  "mobileReviewDeleteStudyTitle": "Delete study?",
+  "mobileReviewDeleteStudyConfirm": "Delete “{param1}” and its {param2} positions? This cannot be undone.",
+  "@mobileReviewDeleteStudyConfirm": {
+    "placeholders": {
+      "param1": {
+        "type": "String"
+      },
+      "param2": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewRenameStudyTitle": "Rename study",
+  "mobileReviewStudyNameLabel": "Study name",
+  "mobileReviewCopyAction": "Copy",
+  "mobileReviewShareAction": "Share",
+  "mobileReviewSaveFileAction": "Save File",
+  "mobileReviewCreateOpposite": "Create {param}",
+  "@mobileReviewCreateOpposite": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewOppositeSubtitle": "Same positions, in the other drawer",
+  "mobileReviewNextReviewTime": "Next review {param}.",
+  "@mobileReviewNextReviewTime": {
+    "placeholders": {
+      "param": {
+        "type": "String"
+      }
+    }
+  },
+  "mobileReviewStudyNotFound": "Study not found on Lichess. Ensure the study is public or unlisted.",
+  "mobileReviewPgnCopiedClipboard": "PGN copied to clipboard",
+  "mobileReviewDismissBarrier": "Dismiss",
+  "mobileReviewPreferencesGroup": "Preferences",
+  "mobileReviewExitPractice": "Exit practice",
   "variantStandard": "Standard",
   "variantStandardTitle": "Standard rules of chess (FIDE)",
   "variantChess960": "Chess960",
@@ -3851,29 +4104,5 @@
         "type": "String"
       }
     }
-  },
-  "settingsBoardLandscapePosition": "Board position in landscape mode",
-  "settingsBoardMoveOnRelease": "Move on release",
-  "settingsBoardMoveOnReleaseHelp": "When moving a piece by tapping, the move is made when you lift your finger, letting you slide to change the destination square.",
-  "settingsAccountPrefsSaved": "Your preferences have been saved in your Lichess account. They will be synchronized across all your devices.",
-  "toggleSoundTooltip": "Toggle sound",
-  "reviewNoStudiesHeadline": "Bring your study.",
-  "reviewNoStudiesSubtext": "Import a PGN or a Lichess study. Everything stays on this device, and reviews work offline.",
-  "reviewNoStudiesDropZone": "Drop a PGN file here",
-  "reviewNoStudiesChooseFile": "Choose file",
-  "reviewNoStudiesPastePgn": "Paste PGN text",
-  "reviewNoStudiesImportLichess": "Import a Lichess study",
-  "reviewNoStudiesTrainAs": "Train as",
-  "reviewNoStudiesAuto": "Auto",
-  "reviewNoStudiesWhite": "White",
-  "reviewNoStudiesBlack": "Black",
-  "reviewNothingDuePractice": "Practice",
-  "reviewNothingDueChooseRepertoire": "Choose a study",
-  "reviewNothingDueChangeDailyLimit": "Change daily limit",
-  "reviewNothingDuePracticeDoesNotChangeSchedule": "Practice never changes your schedule.",
-  "reviewNothingDuePracticeStillAvailable": "Practice is still available and does not change your schedule.",
-  "pgnCopied": "PGN copied.",
-  "@pgnCopied": {
-    "description": "Toast shown after copying the PGN of the current node to the clipboard from the game tree view."
   }
 }
