@@ -1,6 +1,14 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-050.
+//
+// Deliberately cites no SPEC invariant, by ID or in prose — spec_trace_check.py greps file
+// contents, so even this comment naming one would count as a second reference and disarm the
+// red-team case below. Session *construction* cost is not the graded-move-per-frame invariant
+// that test/review/move_latency_test.dart owns, so there is nothing honest to cite.
+//
+// The case in question deletes move_latency's citation line and expects G05 to catch the
+// resulting orphan, which it cannot while a second citation survives. That is how T3 went red on
+// main in #68, and how it would go red again on the next file that names the invariant casually.
 //
 // Phase 1 of docs/tasks/PERF-FIX-32-session-constructor-yield.md: the pinned harness that
 // decides whether `ReviewSession`'s synchronous constructor is a real jank source.
