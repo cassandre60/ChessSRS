@@ -16,6 +16,13 @@ name: Tests
 # reads them, so triggering a full run for a pure-docs change would spend several minutes
 # to confirm what cannot fail. Consequence, stated plainly: a docs-only PR still gets no
 # CI and cannot merge on its own; it must ride along with a PR that triggers a lane.
+# IMPLEMENTATION_PLAN.md joins the referee docs above for the same reason and was
+# missed: gates.yml triggers on it, test.yml did not, so a PR touching it produced
+# "T1 fast gates" and no "Unit tests" report. Before #95 renamed Docs Check, the
+# docs-check job happened to emit the required check's name and covered for this by
+# accident — which is exactly the impersonation #95 removed. The gap was latent
+# until a real PR hit it. A redundant full run on a rare PR is the same trade as
+# the referee docs above; leaving the check permanently "expected" is not.
 # Keep the push and pull_request filters identical.
 on:
   push:
@@ -40,6 +47,7 @@ on:
       - 'PRODUCT.md'
       - 'MVP.md'
       - 'ARCHITECTURE.md'
+      - 'IMPLEMENTATION_PLAN.md'
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'CODEOWNERS'
@@ -68,6 +76,7 @@ on:
       - 'PRODUCT.md'
       - 'MVP.md'
       - 'ARCHITECTURE.md'
+      - 'IMPLEMENTATION_PLAN.md'
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - 'CODEOWNERS'
