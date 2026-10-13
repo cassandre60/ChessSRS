@@ -215,6 +215,13 @@ user-visible milestone:
 4. Only then declare the milestone complete and record it in
    `IMPLEMENTATION_PLAN.md`.
 
+Record what step 2 cannot cover in `docs/manual-test-log.md`, in the same PR
+that ships the change — not afterwards, when the context is gone. Sound and
+haptics are the standing case: `FakeSoundService` returns `Future.value()`, so
+every audio test in this repo passes identically whether the volume is at zero
+or the audio session is dead. A green suite is not evidence that a speaker
+produced anything.
+
 Commands (FVM-pinned toolchain):
 
 ```bash
