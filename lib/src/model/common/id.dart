@@ -16,7 +16,6 @@ extension type const GameAnyId._(String value) implements StringId {
   GameAnyId(this.value) : assert(value.length == 8 || value.length == 12);
   GameId get gameId => GameId(value.substring(0, 8));
   bool get isFullId => value.length == 12;
-  bool get isGameId => value.length == 8;
   GameFullId? get gameFullId => isFullId ? GameFullId(value) : null;
 
   GameAnyId.fromJson(dynamic json) : this(json as String);
@@ -84,15 +83,6 @@ extension IDPick on Pick {
     throw PickException("value $value at $debugParsingExit can't be casted to StringId");
   }
 
-  StringId? asStringIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asStringIdOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
-
   UserId asUserIdOrThrow() {
     final value = required().value;
     if (value is String) {
@@ -116,15 +106,6 @@ extension IDPick on Pick {
       return GameId(value);
     }
     throw PickException("value $value at $debugParsingExit can't be casted to GameId");
-  }
-
-  GameId? asGameIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asGameIdOrThrow();
-    } catch (_) {
-      return null;
-    }
   }
 
   GameFullId asGameFullIdOrThrow() {
@@ -152,30 +133,12 @@ extension IDPick on Pick {
     throw PickException("value $value at $debugParsingExit can't be casted to PuzzleId");
   }
 
-  PuzzleId? asPuzzleIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asPuzzleIdOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
-
   ChallengeId asChallengeIdOrThrow() {
     final value = required().value;
     if (value is String) {
       return ChallengeId(value);
     }
     throw PickException("value $value at $debugParsingExit can't be casted to ChallengeId");
-  }
-
-  ChallengeId? asChallengeIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asChallengeIdOrThrow();
-    } catch (_) {
-      return null;
-    }
   }
 
   BroadcastTournamentId asBroadcastTournamentIdOrThrow() {
@@ -188,15 +151,6 @@ extension IDPick on Pick {
     );
   }
 
-  BroadcastTournamentId? asBroadcastTournamentIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asBroadcastTournamentIdOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
-
   BroadcastRoundId asBroadcastRoundIdOrThrow() {
     final value = required().value;
     if (value is String) {
@@ -205,39 +159,12 @@ extension IDPick on Pick {
     throw PickException("value $value at $debugParsingExit can't be casted to BroadcastRoundId");
   }
 
-  BroadcastRoundId? asBroadcastRoundIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asBroadcastRoundIdOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
-
   BroadcastGameId asBroadcastGameIdOrThrow() {
     final value = required().value;
     if (value is String) {
       return BroadcastGameId(value);
     }
     throw PickException("value $value at $debugParsingExit can't be casted to BroadcastGameId");
-  }
-
-  BroadcastGameId? asBroadcastGameIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asBroadcastGameIdOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  TeamId? asTeamIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asTeamIdOrThrow();
-    } catch (_) {
-      return null;
-    }
   }
 
   TeamId asTeamIdOrThrow() {
@@ -262,15 +189,6 @@ extension IDPick on Pick {
       return FideId(value);
     }
     throw PickException("value $value at $debugParsingExit can't be casted to FideId");
-  }
-
-  FideId? asFideIdOrNull() {
-    if (value == null) return null;
-    try {
-      return asFideIdOrThrow();
-    } catch (_) {
-      return null;
-    }
   }
 
   TournamentId asTournamentIdOrThrow() {
