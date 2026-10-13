@@ -1,5 +1,9 @@
 # Product Scope
 
+> **Authoritative Specification:** See the repo root [PRODUCT.md](../PRODUCT.md).
+> Per `AGENTS.md` §1 (Authority Hierarchy), root `PRODUCT.md` is the authoritative product document;
+> this file is an early initial brief preserved for historical context.
+
 ## Product
 
 A minimal, local-first chess repertoire trainer for openings and middlegame lines. Users import their own PGNs and repeatedly recall repertoire decisions using spaced repetition.

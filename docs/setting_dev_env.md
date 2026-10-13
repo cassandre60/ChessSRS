@@ -1,5 +1,9 @@
 # Setting up the development environment
 
+> **ChessSRS Environment:** See the repo root [CLAUDE.md](../CLAUDE.md) and [AGENTS.md](../AGENTS.md)
+> for the active toolchain and operating instructions. This file contains inherited setup
+> instructions for mobile platforms.
+
 The following instructions outline how to set up your development environment for starting development on Lichess mobile.
 
 If you get stuck during the installation process the most suitable place to seek help is the `#lichess-dev-onboarding` channel on Discord (https://discord.gg/lichess).

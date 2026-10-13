@@ -62,8 +62,8 @@ issues belong upstream.
 | 7 | Localisation: ARB key parity, placeholder mismatches, hard-coded user-facing strings, generated-file drift | Silent, widespread, and cheap to fix once found |
 | 8 | Dependencies, build, and release: `pubspec` (git-pinned `lc0`), Gradle, fastlane, iOS plist, release workflow, licence notices | Supply-chain and licence obligations under GPL-3.0 (`AGENTS.md` §7) |
 | 9 | Test suite and gates: weak or load-sensitive tests, coverage gaps in `domain/` and `persistence/`, gate blind spots | A test that cannot fail gives false confidence in every later round |
-| 10 | Performance: large-PGN import, study load, review on large trees, asset sizes, startup | `docs/performance.md` exists; this checks it against the code |
-| 11 | Docs and spec drift: `SPEC.md` vs code, `IMPLEMENTATION_PLAN.md` status, dead code, duplicated guides | Last, because it depends on what the earlier rounds decided |
+| 10 | Performance: large-PGN import, study load, review on large trees, asset sizes, startup | Landed as #92 (42a7f0693) |
+| 11 | Docs and spec drift: `SPEC.md` vs code, `IMPLEMENTATION_PLAN.md` status, dead code, duplicated guides | Landed in this PR (program complete) |
 
 The open items from the four earlier reviews are assigned to rounds 2 and 3, and are not
 re-reported here.
@@ -556,4 +556,34 @@ and findings recorded; fixes are applied to test suite and test-gate files in `t
 - `test/review/session_constructor_cost_test.dart` passes 3/3.
 - `fvm flutter analyze test/persistence/srs_schema_indexes_test.dart` clean (0 warnings).
 - `dart format` clean.
+
+---
+
+## Round 11 — docs and spec drift (program completion)
+
+**Scope read:** `SPEC.md` invariants vs codebase, `IMPLEMENTATION_PLAN.md` task queue status vs git log, dead code analysis (`savePositionTree`, `saveDecisions`, unreachable files/symbols), inherited guides drift (`docs/product.md`, `docs/setting_dev_env.md`), and final reconciliation of the carry-forward register.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R11-F1 | `savePositionTree` and `saveDecisions` in `StudyRepository` and `SqliteStudyRepository` were flagged in Round 2 (§Dismissed) as potential dead code because production PGN imports always use atomic `saveImportResult`. | Low (hygiene / clarity) | **Clarified in this PR.** `saveDecisions` is an active and intentional test fixture seeding utility used across 9 tests in `test/review/review_service_test.dart` and `test/persistence/sqlite_study_repository_test.dart`. `savePositionTree` supports isolated chapter tree updates and is tested in `sqlite_study_repository_test.dart`. Added explicit doc-comments on `StudyRepository` explaining that `saveImportResult` owns atomic multi-entity persistence while these methods provide isolated tree/decision updates. |
+| R11-F2 | `SPEC.md` vs code verification. | Low | **Checked and sound.** All 43 invariants in `SPEC.md` (`INV-001` through `INV-067`) were audited against production code and verified mechanically by `spec_trace_check.py` (43/43 referenced). No orphaned invariants or stale citations. |
+| R11-F3 | `IMPLEMENTATION_PLAN.md` queue status drift. Multiple completed tasks (06 scope dedupe in #87, 08 FK enforcement in #88, 11/28 import lock in #82, 21 targeted summary in #84, 23 tally extraction in #91, 35 sound process leak in #85, 37 desktop shortcuts in #90, and review program rounds 1–10) were marked as in-flight or ready rather than merged. | Low (documentation drift) | **Fixed in this PR.** Reconciled `IMPLEMENTATION_PLAN.md` task queue status against merged commits on `main`. |
+| R11-F4 | Inherited guides drift in `docs/`: `docs/product.md` was an early truncated subset of root `PRODUCT.md`; `docs/setting_dev_env.md` contained upstream Lichess dev server references that drifted from ChessSRS workflow. | Low (documentation drift) | **Fixed in this PR.** Added header banners pointing to authoritative repository documents (`PRODUCT.md`, `CLAUDE.md`, `AGENTS.md`) per `AGENTS.md` §1 (Authority Hierarchy). |
+| R11-F5 | File-level reachability verification. | Low | **Checked and sound.** `test/reachability/reachability_test.dart` verified clean (4/4 passed). All non-generated source files in `lib/` are reachable from `lib/main.dart` except the 16 intentional, baseline-pinned cut surfaces. |
+
+### Checked and sound (do not re-raise)
+
+- **Authority Hierarchy intact:** `PRODUCT.md` → `MVP.md` → `ARCHITECTURE.md` → `QUALITY.md` → `TEST_STRATEGY.md` → `IMPLEMENTATION_PLAN.md` → `AGENTS.md`.
+- **Review Program Complete:** All 11 rounds are complete. Every finding has been either resolved via atomic PR, tested with permanent regression coverage, or recorded in `review-register.md`.
+
+### Verification status of this round's PR
+
+- `spec_trace_check.py` verifies 43/43 invariants in `SPEC.md` referenced by tests.
+- `test/reachability/reachability_test.dart` passes 4/4.
+- `fvm flutter analyze lib/src/persistence/study_repository.dart` clean (0 warnings).
+- `dart format` clean.
+- `./scripts/gates.sh t1` clean.
+
 
