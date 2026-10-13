@@ -7,11 +7,28 @@ import 'dart:io';
 
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Counts per-study chapter fetches so the backfill batching test can tell
+/// N sequential fetches apart from one batched fetch. The batched backfill
+/// reads chapters with a single `IN` query straight from the database, so it
+/// never calls this override; the old N+1 loop called it once per study.
+class _BackfillCountingRepository extends SqliteStudyRepository {
+  _BackfillCountingRepository(super.db);
+
+  int chapterFetches = 0;
+
+  @override
+  Future<List<Chapter>> getChaptersByStudy(String studyId) {
+    chapterFetches++;
+    return super.getChaptersByStudy(studyId);
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -356,6 +373,71 @@ void main() {
         expect(events, hasLength(1));
         expect(events.first.when.toUtc().toIso8601String(), localDue.toUtc().toIso8601String());
         expect(events.first.when.isUtc, isTrue);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('latency survives answer persistence (upsert must not REPLACE columns)', () async {
+      // SPEC INV-002. review-4 C1: every persisted answer must preserve latency
+      // telemetry — INSERT OR REPLACE must not erase columns the caller did not
+      // mention (upsert).
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+
+        // Seed two canonical rows carrying latency telemetry the answer path
+        // does not know about: the answered position and a side-effect
+        // position (auto-traversal contagion lands in the same batch).
+        Future<void> seedWithLatency(String canonicalId) async {
+          await db.insert(kTablePositionKnowledgeState, {
+            'canonicalId': canonicalId,
+            'firstReviewedAt': now.toIso8601String(),
+            'lastReviewedAt': now.toIso8601String(),
+            'nextDueAt': now.toIso8601String(),
+            'repetitionCount': 3,
+            'lapseCount': 1,
+            'stability': 10.0,
+            'difficulty': 5.0,
+            'latencyEmaMs': 1234.5,
+            'latencySampleCount': 7,
+            'lastExposedAt': now.toIso8601String(),
+          });
+        }
+
+        await seedWithLatency('k-answered');
+        await seedWithLatency('k-side-effect');
+
+        // A normal answer: ReviewState carries no latency fields, so the
+        // written rows cannot mention them.
+        const answered = ReviewState(decisionId: 'k-answered', repetitionCount: 9, stability: 42.0);
+        const sideEffect = ReviewState(decisionId: 'k-side-effect', repetitionCount: 4);
+
+        await repo.saveAnswerBatch(
+          knowledgeStates: [
+            PositionKnowledgeState.fromReviewState(answered, canonicalId: 'k-answered'),
+            PositionKnowledgeState.fromReviewState(
+              sideEffect,
+              canonicalId: 'k-side-effect',
+            ).copyWith(lastExposedAt: now),
+          ],
+        );
+
+        final readAnswered = await repo.getPositionKnowledgeState('k-answered');
+        final readSideEffect = await repo.getPositionKnowledgeState('k-side-effect');
+
+        // Latency columns the caller did not mention survive the write.
+        expect(readAnswered?.latencyEmaMs, 1234.5);
+        expect(readAnswered?.latencySampleCount, 7);
+        expect(readSideEffect?.latencyEmaMs, 1234.5);
+        expect(readSideEffect?.latencySampleCount, 7);
+
+        // The columns that were mentioned do update.
+        expect(readAnswered?.repetitionCount, 9);
+        expect(readAnswered?.stability, 42.0);
+        expect(readSideEffect?.lastExposedAt, now);
       } finally {
         await db.close();
       }
@@ -833,6 +915,63 @@ void main() {
 
         final notFound = await repo.getStudyByPgnHash('non_existent_hash');
         expect(notFound, isNull);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('pgnHash backfill is batched, not N+1', () async {
+      // SPEC INV-051: bulk lookups stay bounded. Backfilling N studies whose
+      // pgnHash predates the column must not issue N sequential chapter
+      // fetches plus N sequential updates.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = _BackfillCountingRepository(db);
+
+      const firstMoves = ['e4', 'd4', 'c4', 'Nf3', 'e3', 'd3', 'c3', 'g3', 'b3', 'a3', 'h3', 'f4'];
+      final studyIds = <String>[];
+      late final String targetHash;
+      late final String targetId;
+      try {
+        for (var i = 0; i < firstMoves.length; i++) {
+          final result = importPgn(
+            '[Orientation "white"]\n\n1. ${firstMoves[i]} *',
+            studyTitle: 'Book $i',
+            repertoireSide: Side.white,
+          );
+          expect(result.errors, isEmpty);
+          await repo.saveStudy(result.study);
+          for (final chapter in result.chapters) {
+            await repo.saveChapter(chapter);
+          }
+          studyIds.add(result.study.id);
+          if (i == firstMoves.length - 1) {
+            targetId = result.study.id;
+            targetHash = computeRepertoireTreeHash(result.chapters);
+          }
+        }
+
+        // Pretend every study was stored before the pgnHash column existed.
+        await db.update(kTableSrsStudy, {'pgnHash': null});
+
+        final found = await repo.getStudyByPgnHash(targetHash, forSide: Side.white);
+
+        expect(found?.id, targetId);
+        expect(
+          repo.chapterFetches,
+          0,
+          reason:
+              'the backfill fetched chapters per study instead of in one batch '
+              '(${repo.chapterFetches} fetches for ${firstMoves.length} studies)',
+        );
+        for (final id in studyIds) {
+          expect(
+            (await repo.getStudy(id))?.pgnHash,
+            isNotNull,
+            reason: 'study $id was not backfilled',
+          );
+        }
+        // The side filter survives batching: nothing here trains Black.
+        expect(await repo.getStudyByPgnHash(targetHash, forSide: Side.black), isNull);
       } finally {
         await db.close();
       }

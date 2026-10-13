@@ -103,27 +103,50 @@ class SqliteStudyRepository implements StudyRepository {
       return _studyFromRow(rows.first);
     }
 
-    // Auto-backfill: if any existing studies have null pgnHash, inspect their chapters
+    // Auto-backfill: if any existing studies have null pgnHash, inspect their chapters.
+    // Batched (INV-051): one IN query fetches every unhashed study's chapters
+    // and one batch writes the hashes back, instead of a SELECT plus an UPDATE
+    // per study on the import path.
     final unhashedRows = await _db.query(kTableSrsStudy, where: 'pgnHash IS NULL');
-    for (final row in unhashedRows) {
-      final study = _studyFromRow(row);
-      final chapters = await getChaptersByStudy(study.id);
-      if (chapters.isNotEmpty) {
-        final computedHash = computeRepertoireTreeHash(chapters);
-        await _db.update(
-          kTableSrsStudy,
-          {'pgnHash': computedHash},
-          where: 'id = ?',
-          whereArgs: [study.id],
-        );
-        if (computedHash == pgnHash &&
-            (forSide == null || chapters.every((c) => c.orientation == forSide))) {
-          return study.copyWith(pgnHash: computedHash);
-        }
-      }
+    if (unhashedRows.isEmpty) return null;
+
+    final unhashedIds = unhashedRows.map((r) => r['id']! as String).toList();
+    final placeholders = List.filled(unhashedIds.length, '?').join(',');
+    final chapterRows = await _db.query(
+      kTableSrsChapter,
+      where: 'studyId IN ($placeholders)',
+      whereArgs: unhashedIds,
+      orderBy: 'studyId ASC, sourceOrder ASC',
+    );
+
+    final chaptersByStudy = <String, List<Map<String, Object?>>>{};
+    for (final chapterRow in chapterRows) {
+      (chaptersByStudy[chapterRow['studyId']! as String] ??= []).add(chapterRow);
     }
 
-    return null;
+    final batch = _db.batch();
+    Study? match;
+    for (final row in unhashedRows) {
+      final study = _studyFromRow(row);
+      final chapters =
+          chaptersByStudy[study.id]?.map(_chapterFromRow).toList(growable: false) ??
+          const <Chapter>[];
+      if (chapters.isEmpty) continue;
+      final computedHash = computeRepertoireTreeHash(chapters);
+      batch.update(
+        kTableSrsStudy,
+        {'pgnHash': computedHash},
+        where: 'id = ?',
+        whereArgs: [study.id],
+      );
+      if (match == null &&
+          computedHash == pgnHash &&
+          (forSide == null || chapters.every((c) => c.orientation == forSide))) {
+        match = study.copyWith(pgnHash: computedHash);
+      }
+    }
+    await batch.commit(noResult: true);
+    return match;
   }
 
   @override
@@ -470,11 +493,7 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state) async {
-    await _db.insert(
-      kTablePositionKnowledgeState,
-      _knowledgeStateRow(state),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _db.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(state));
 
     await saveReviewState(state.toReviewState(state.canonicalId));
 
@@ -494,11 +513,7 @@ class SqliteStudyRepository implements StudyRepository {
   Future<void> savePositionKnowledgeStates(List<PositionKnowledgeState> states) async {
     final batch = _db.batch();
     for (final s in states) {
-      batch.insert(
-        kTablePositionKnowledgeState,
-        _knowledgeStateRow(s),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
     }
     await batch.commit(noResult: true);
     await saveReviewStates(states.map((s) => s.toReviewState()).toList());
@@ -514,11 +529,7 @@ class SqliteStudyRepository implements StudyRepository {
       final batch = txn.batch();
 
       for (final s in knowledgeStates) {
-        batch.insert(
-          kTablePositionKnowledgeState,
-          _knowledgeStateRow(s),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
 
         batch.insert(
           kTableSrsReviewState,
@@ -641,24 +652,51 @@ class SqliteStudyRepository implements StudyRepository {
     );
   }
 
-  /// The `position_knowledge_state` row for [state].
+  /// Upsert for `position_knowledge_state` that never erases latency telemetry.
   ///
-  /// One builder per table: each of these tables is written from the import
-  /// transaction, the single save and the batch save, and a column added to one
-  /// copy and missed in another loses a field silently.
-  static Map<String, Object?> _knowledgeStateRow(PositionKnowledgeState state) => {
-    'canonicalId': state.canonicalId,
-    'firstReviewedAt': state.firstReviewedAt?.toUtc().toIso8601String(),
-    'lastReviewedAt': state.lastReviewedAt?.toUtc().toIso8601String(),
-    'nextDueAt': state.nextDueAt?.toUtc().toIso8601String(),
-    'repetitionCount': state.repetitionCount,
-    'lapseCount': state.lapseCount,
-    'stability': state.stability,
-    'difficulty': state.difficulty,
-    'latencyEmaMs': state.latencyEmaMs,
-    'latencySampleCount': state.latencySampleCount,
-    'lastExposedAt': state.lastExposedAt?.toUtc().toIso8601String(),
-  };
+  /// `latencyEmaMs` / `latencySampleCount` are deliberately absent from the
+  /// conflict update: they are post-hoc telemetry the answer path does not
+  /// measure, and a REPLACE-style rewrite erased them on every answer
+  /// (review-4 C1). The insert branch (fresh row — nothing to preserve) still
+  /// writes them when the caller provides values, so a seed or import that
+  /// carries telemetry round-trips; on conflict only the nine SRS columns are
+  /// touched and existing telemetry survives untouched.
+  static const String _knowledgeStateUpsertSql =
+      '''
+    INSERT INTO $kTablePositionKnowledgeState(
+      canonicalId, firstReviewedAt, lastReviewedAt, nextDueAt,
+      repetitionCount, lapseCount, stability, difficulty,
+      latencyEmaMs, latencySampleCount, lastExposedAt
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(canonicalId) DO UPDATE SET
+      firstReviewedAt = excluded.firstReviewedAt,
+      lastReviewedAt  = excluded.lastReviewedAt,
+      nextDueAt       = excluded.nextDueAt,
+      repetitionCount = excluded.repetitionCount,
+      lapseCount      = excluded.lapseCount,
+      stability       = excluded.stability,
+      difficulty      = excluded.difficulty,
+      lastExposedAt   = excluded.lastExposedAt
+  ''';
+
+  /// Bindings for [_knowledgeStateUpsertSql]: all eleven columns. On conflict
+  /// the latency values are ignored — the update set does not mention them.
+  /// Timestamps are normalised to UTC on write (review-4 C2) so a timezone
+  /// change between write and read cannot shift due dates.
+  static List<Object?> _knowledgeStateUpsertArgs(PositionKnowledgeState state) => [
+    state.canonicalId,
+    state.firstReviewedAt?.toUtc().toIso8601String(),
+    state.lastReviewedAt?.toUtc().toIso8601String(),
+    state.nextDueAt?.toUtc().toIso8601String(),
+    state.repetitionCount,
+    state.lapseCount,
+    state.stability,
+    state.difficulty,
+    state.latencyEmaMs,
+    state.latencySampleCount,
+    state.lastExposedAt?.toUtc().toIso8601String(),
+  ];
 
   // ---------------------------------------------------------------------------
   // Review States (SRS)

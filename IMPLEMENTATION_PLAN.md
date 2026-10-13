@@ -322,6 +322,20 @@ Workflow polish, information architecture, performance, onboarding/import
 improvements, remaining Lichess code removal (per CUT_PROPOSALS §2), and only
 then differentiation features justified by specs or beta feedback.
 
+### Orchestrated review-fix task queue (docs/tasks/)
+
+A full-codebase review (2026-10-11/12) produced 29 self-contained task briefs
+in `docs/tasks/`, each one worktree + one PR, executable by an agent without
+further context. Status at merge:
+
+- **Done**: REVIEW-FIX-01 (scope mismatch, #45); PERSIST-FIX-13/14/15/16
+  in flight (#46–#49, all green, merging in lane order 14→13→15→16).
+- **Withdrawn**: REVIEW-FIX-02 (transposition FEN — audit proved non-bug).
+- **Ready, parallel-safe lanes**: 03, 04, 05, 06, 09, 10, 11, 12, 17, 18,
+  19, 20, 21, 22, 23, 24, 25, 27, 29.
+- **Blocked on persistence lane** (all touch `sqlite_study_repository.dart`):
+  07, 08, 26, 28 — pick up only after #46 merges, then serialize.
+
 ---
 
 ## Recording rule
