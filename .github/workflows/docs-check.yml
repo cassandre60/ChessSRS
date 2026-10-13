@@ -20,7 +20,7 @@ name: Docs Check
 #     satisfying half of the two required checks. test.yml's header says as much: "a docs-only
 #     PR still gets no CI and cannot merge on its own".
 #
-# The real suite's check is named "Tests" (#109), so this workflow no longer collides
+# The real suite's check is named "Tests" (#107), so this workflow no longer collides
 # with anything branch protection requires. Nothing here is required: a docs-only PR is
 # still blocked, because gates.yml excludes docs/** and therefore never reports
 # "T1 fast gates".

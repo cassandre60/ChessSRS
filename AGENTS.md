@@ -518,14 +518,14 @@ never move/delete a published tag.
   broke every PR touching `IMPLEMENTATION_PLAN.md`, a file gates.yml watches and
   test.yml did not, so those PRs stopped reporting any required check and blocked
   permanently. Fixes: #95 renamed the fake to "Docs check", #106 added
-  IMPLEMENTATION_PLAN.md to test.yml's paths, #109 renamed the real job. **Verify
+  IMPLEMENTATION_PLAN.md to test.yml's paths, #107 renamed the real job. **Verify
   with `git grep -n 'Unit tests on ubuntu-latest'` returning nothing** before
   renaming a check again, and update the required contexts in the repo settings in
   the same commit. Verified by: #106 being unmergeable with `Required status check`
   while its suite was green, and by diffing both workflows' `paths` lists, which
   showed IMPLEMENTATION_PLAN.md was the only file in the gap.
 - [2026-10-01, antigravity/gemini-3.8-flash-tiered] GitHub branch protection
-  requires both 'T1 fast gates' and (as of #109) 'Tests'. When a PR touches
+  requires both 'T1 fast gates' and (as of #107) 'Tests'. When a PR touches
   only files in docs/**, gates.yml does not trigger, leaving 'T1 fast gates'
   unreported and blocking merge even with --admin. Verified by: PR #119 failing
   merge with 'GraphQL: Required status check \"T1 fast gates\" is expected', while
