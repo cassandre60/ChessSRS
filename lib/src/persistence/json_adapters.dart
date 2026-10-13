@@ -61,9 +61,9 @@ List<RepertoireMove> decodeExpectedMoves(String raw) {
 
 Map<String, dynamic> reviewStateToJson(ReviewState state) => {
   'decisionId': state.decisionId,
-  'firstReviewedAt': state.firstReviewedAt?.toIso8601String(),
-  'lastReviewedAt': state.lastReviewedAt?.toIso8601String(),
-  'nextDueAt': state.nextDueAt?.toIso8601String(),
+  'firstReviewedAt': state.firstReviewedAt?.toUtc().toIso8601String(),
+  'lastReviewedAt': state.lastReviewedAt?.toUtc().toIso8601String(),
+  'nextDueAt': state.nextDueAt?.toUtc().toIso8601String(),
   'repetitionCount': state.repetitionCount,
   'lapseCount': state.lapseCount,
   'stability': state.stability,
@@ -73,12 +73,12 @@ Map<String, dynamic> reviewStateToJson(ReviewState state) => {
 ReviewState reviewStateFromJson(Map<String, dynamic> json) => ReviewState(
   decisionId: json['decisionId'] as String,
   firstReviewedAt: json['firstReviewedAt'] != null
-      ? DateTime.parse(json['firstReviewedAt'] as String)
+      ? DateTime.parse(json['firstReviewedAt'] as String).toUtc()
       : null,
   lastReviewedAt: json['lastReviewedAt'] != null
-      ? DateTime.parse(json['lastReviewedAt'] as String)
+      ? DateTime.parse(json['lastReviewedAt'] as String).toUtc()
       : null,
-  nextDueAt: json['nextDueAt'] != null ? DateTime.parse(json['nextDueAt'] as String) : null,
+  nextDueAt: json['nextDueAt'] != null ? DateTime.parse(json['nextDueAt'] as String).toUtc() : null,
   repetitionCount: (json['repetitionCount'] as num?)?.toInt() ?? 0,
   lapseCount: (json['lapseCount'] as num?)?.toInt() ?? 0,
   stability: (json['stability'] as num?)?.toDouble() ?? 0.0,
@@ -87,7 +87,7 @@ ReviewState reviewStateFromJson(Map<String, dynamic> json) => ReviewState(
 
 Map<String, dynamic> reviewEventToJson(ReviewEvent event) => {
   'decisionId': event.decisionId,
-  'when': event.when.toIso8601String(),
+  'when': event.when.toUtc().toIso8601String(),
   'result': event.result.name,
   'oldState': reviewStateToJson(event.oldState),
   'newState': reviewStateToJson(event.newState),
@@ -95,7 +95,7 @@ Map<String, dynamic> reviewEventToJson(ReviewEvent event) => {
 
 ReviewEvent reviewEventFromJson(Map<String, dynamic> json) => ReviewEvent(
   decisionId: json['decisionId'] as String,
-  when: DateTime.parse(json['when'] as String),
+  when: DateTime.parse(json['when'] as String).toUtc(),
   result: ReviewResult.values.byName(json['result'] as String),
   oldState: reviewStateFromJson(Map<String, dynamic>.from(json['oldState'] as Map)),
   newState: reviewStateFromJson(Map<String, dynamic>.from(json['newState'] as Map)),
