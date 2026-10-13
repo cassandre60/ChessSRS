@@ -1486,7 +1486,7 @@ class _MoveContextMenu extends ConsumerWidget {
             // Read the localized string before the await: `context` is a BuildContext and
             // the sheet can be disposed while the clipboard write is in flight, so the
             // messenger's `mounted` check does not guard this use of `context`.
-            final copiedMessage = context.l10n.pgnCopied;
+            final copiedMessage = context.l10n.mobilePgnCopied;
             // The bottom sheet can be disposed before the clipboard write completes.
             final messenger = ScaffoldMessenger.of(context);
             await Clipboard.setData(ClipboardData(text: line));

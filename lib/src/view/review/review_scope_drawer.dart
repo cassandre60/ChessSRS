@@ -3,11 +3,13 @@
 
 import 'dart:math' as math;
 
+import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
+import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/view/review/export_pgn_dialog.dart';
 import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
@@ -38,8 +40,9 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
   /// A colour's name. The top bar's squares use it as their tooltip and
   /// semantics label, and the study actions sheet uses it to name the drawer a
   /// study would be copied into, so the three can never disagree.
-  static String sideLabel(Side side) =>
-      side == Side.white ? 'White repertoire' : 'Black repertoire';
+  static String sideLabel(Side side, AppLocalizations strings) => side == Side.white
+      ? strings.mobileReviewWhiteRepertoire
+      : strings.mobileReviewBlackRepertoire;
 
   /// Displays the scope selector sheet for [side].
   static Future<void> show(BuildContext context, Side side) {
@@ -47,7 +50,7 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
     return showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
       transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
@@ -220,7 +223,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 // design/docs/01-identity.md: the scope search placeholder is
                                 // `Search`, and the demo's longer string is the field's accessible
                                 // name rather than its visible hint.
-                                hintText: 'Search',
+                                hintText: context.l10n.search,
                                 hintStyle: TextStyle(
                                   fontFamily: SrsText.ui,
                                   fontSize: 15.5,
@@ -255,7 +258,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 padding: const EdgeInsets.all(28.0),
                                 child: Text(
                                   // design/docs/01-identity.md: `Nothing matches "{query}".`
-                                  'Nothing matches \u201c$_searchQuery\u201d.',
+                                  context.l10n.mobileReviewNothingMatches(_searchQuery),
                                   style: TextStyle(
                                     fontFamily: SrsText.ui,
                                     fontSize: 15,
@@ -270,10 +273,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
                                   _buildGroupHeader(
+                                    context,
                                     ref,
                                     c,
                                     group: 'openings',
-                                    title: 'Openings',
+                                    title: context.l10n.openings,
                                     collapsed: collapsedGroups.contains('openings'),
                                     plain: !collapseEnabled,
                                   ),
@@ -306,10 +310,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 // Group: Studies
                                 if (filteredStudies.isNotEmpty) ...[
                                   _buildGroupHeader(
+                                    context,
                                     ref,
                                     c,
                                     group: 'studies',
-                                    title: 'Studies',
+                                    title: context.l10n.mobileReviewStudiesGroup,
                                     collapsed: collapsedGroups.contains('studies'),
                                     plain: !collapseEnabled,
                                   ),
@@ -358,7 +363,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                       child: SizedBox(
                         width: double.infinity,
                         child: SrsPillButton(
-                          label: 'Import PGN',
+                          label: context.l10n.importPgn,
                           expand: true,
                           onPressed: () {
                             Navigator.of(context).pop();
@@ -395,6 +400,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   /// Without collapsing (master switch off, or while searching), headers are
   /// plain titles and every match shows.
   Widget _buildGroupHeader(
+    BuildContext context,
     WidgetRef ref,
     SrsColors c, {
     required String group,
@@ -410,9 +416,14 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         child: label,
       );
     }
+    // The screen-reader labels resolve here rather than at the call site so the translated
+    // group title flows into them.
+    final semanticLabel = collapsed
+        ? context.l10n.mobileReviewExpandSection(title)
+        : context.l10n.mobileReviewCollapseSection(title);
     return SrsPressable(
       onPressed: () => ref.read(studyPreferencesProvider.notifier).toggleScopeGroupCollapsed(group),
-      semanticLabel: collapsed ? 'Expand $title section' : 'Collapse $title section',
+      semanticLabel: semanticLabel,
       semanticsToggled: !collapsed,
       radius: 10,
       builder: (_, hover, _) => Container(
@@ -459,7 +470,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     Future<void> show() => showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
       transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
       pageBuilder: (dialogContext, animation, secondaryAnimation) => StudyActionsSheet(
@@ -495,13 +506,17 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                 if (created == null) {
                   showSnackBar(
                     context,
-                    'Already in the ${ReviewScopeDrawer.sideLabel(other).toLowerCase()}',
+                    context.l10n.mobileReviewAlreadyOpposite(
+                      ReviewScopeDrawer.sideLabel(other, context.l10n).toLowerCase(),
+                    ),
                     type: SnackBarType.info,
                   );
                 } else {
                   showSnackBar(
                     context,
-                    'Created ${ReviewScopeDrawer.sideLabel(other).toLowerCase()}',
+                    context.l10n.mobileReviewCreatedOpposite(
+                      ReviewScopeDrawer.sideLabel(other, context.l10n).toLowerCase(),
+                    ),
                     type: SnackBarType.success,
                   );
                 }
@@ -518,7 +533,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           final pgn = await ref.read(reviewControllerProvider.notifier).exportStudyPgn(study.id);
           if (pgn == null || pgn.trim().isEmpty) {
             if (context.mounted) {
-              showSnackBar(context, 'No moves to export in this study', type: SnackBarType.info);
+              showSnackBar(
+                context,
+                context.l10n.mobileReviewNoExportMoves,
+                type: SnackBarType.info,
+              );
             }
             return;
           }
@@ -565,7 +584,11 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     if (newName == null || newName.isEmpty || newName == study.title) return;
     await ref.read(reviewControllerProvider.notifier).renameStudy(study.id, newName);
     if (context.mounted) {
-      showSnackBar(context, 'Renamed to \u201c$newName\u201d.', type: SnackBarType.success);
+      showSnackBar(
+        context,
+        context.l10n.mobileReviewRenamedTo(newName),
+        type: SnackBarType.success,
+      );
     }
   }
 
@@ -578,19 +601,22 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final confirmed = await SrsDialog.show<bool>(
       context: context,
       builder: (ctx) => SrsDialog(
-        title: 'Delete study?',
-        body:
-            'Delete \u201c${study.title}\u201d and its $positions positions? This cannot be undone.',
+        title: context.l10n.mobileReviewDeleteStudyTitle,
+        body: context.l10n.mobileReviewDeleteStudyConfirm(study.title, positions.toString()),
         actions: [
-          SrsTextButton(label: 'Cancel', onPressed: () => Navigator.of(ctx).pop(false)),
-          SrsPillButton(label: 'Delete', onPressed: () => Navigator.of(ctx).pop(true)),
+          SrsTextButton(label: context.l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
+          SrsPillButton(label: context.l10n.delete, onPressed: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );
     if (confirmed != true) return;
     await ref.read(reviewControllerProvider.notifier).deleteStudy(study.id);
     if (context.mounted) {
-      showSnackBar(context, 'Deleted \u201c${study.title}\u201d.', type: SnackBarType.success);
+      showSnackBar(
+        context,
+        context.l10n.mobileReviewDeletedStudy(study.title),
+        type: SnackBarType.success,
+      );
     }
   }
 }
@@ -682,7 +708,11 @@ class _ScopeRow extends StatelessWidget {
                     const SizedBox(width: 10),
                     Flexible(
                       child: Text(
-                        isPaused ? 'Paused' : '${progress.totalDecisions} positions',
+                        isPaused
+                            ? context.l10n.mobileReviewPausedWord
+                            : context.l10n.mobileReviewPositionsCount(
+                                progress.totalDecisions.toString(),
+                              ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         // Stepped up on the selected row: it sits on the accentSoft tint,
@@ -778,7 +808,10 @@ class _DueCell extends StatelessWidget {
         ),
         const SizedBox(width: 5),
         // The demo sets tabular figures on `.row-sub` for the figure, not on the word beside it.
-        Text('due', style: SrsText.rowSub(quiet).copyWith(fontFeatures: null)),
+        Text(
+          context.l10n.mobileReviewDueWord,
+          style: SrsText.rowSub(quiet).copyWith(fontFeatures: null),
+        ),
       ],
     );
   }
@@ -846,7 +879,10 @@ class StudyActionsSheet extends StatelessWidget {
     // the other until the user makes one. This is the row that does that, and it
     // is first: a repertoire in the wrong colour is the most common reason the
     // other drawer is empty, and it is a one-tap fix.
-    final otherLabel = ReviewScopeDrawer.sideLabel(side == Side.white ? Side.black : Side.white);
+    final otherLabel = ReviewScopeDrawer.sideLabel(
+      side == Side.white ? Side.black : Side.white,
+      context.l10n,
+    );
 
     final rows = Column(
       mainAxisSize: MainAxisSize.min,
@@ -854,44 +890,46 @@ class StudyActionsSheet extends StatelessWidget {
       children: [
         group([
           SrsSheetRow(
-            label: 'Create $otherLabel',
-            subtitle: 'Same positions, in the other drawer',
+            label: context.l10n.mobileReviewCreateOpposite(otherLabel),
+            subtitle: context.l10n.mobileReviewOppositeSubtitle,
             onPressed: onCreateOpposite,
           ),
         ]),
         Container(height: 1, color: c.hairline),
         group([
           SrsSheetRow(
-            label: 'Analyze',
-            subtitle: 'Browse moves and variations',
+            label: context.l10n.mobileReviewAnalyzeAction,
+            subtitle: context.l10n.mobileReviewAnalyzeSubtitle,
             onPressed: onAnalyze,
           ),
           SrsSheetRow(
-            label: 'Practice',
-            subtitle: 'Drill lines without changing your schedule',
+            label: context.l10n.practice,
+            subtitle: context.l10n.mobileReviewPracticeSubtitle,
             onPressed: onPractice,
           ),
         ]),
         Container(height: 1, color: c.hairline),
         group([
           SrsSheetRow(
-            label: 'Export PGN',
-            subtitle: 'Share or copy standard PGN notation',
+            label: context.l10n.mobileReviewExportPgnAction,
+            subtitle: context.l10n.mobileReviewExportPgnSubtitle,
             onPressed: onExport,
           ),
           SrsSheetRow(
-            label: study.isActive ? 'Pause' : 'Resume',
+            label: study.isActive
+                ? context.l10n.mobileReviewPauseAction
+                : context.l10n.mobileReviewResumeAction,
             subtitle: study.isActive
-                ? 'Suspend from active review pool'
-                : 'Activate in review pool',
+                ? context.l10n.mobileReviewPauseSubtitle
+                : context.l10n.mobileReviewResumeSubtitle,
             onPressed: onTogglePause,
           ),
         ]),
         Container(height: 1, color: c.hairline),
         group([
-          SrsSheetRow(label: 'Rename', onPressed: onRename),
+          SrsSheetRow(label: context.l10n.mobileReviewRenameAction, onPressed: onRename),
           // §12 is explicit that the dialogs carry no red, and this row only opens one.
-          SrsSheetRow(label: 'Delete', onPressed: onDelete),
+          SrsSheetRow(label: context.l10n.delete, onPressed: onDelete),
         ]),
       ],
     );
@@ -1016,16 +1054,16 @@ class _RenameDialogBodyState extends State<_RenameDialogBody> {
   @override
   Widget build(BuildContext context) {
     return SrsDialog(
-      title: 'Rename study',
+      title: context.l10n.mobileReviewRenameStudyTitle,
       content: SrsTextInput(
         controller: _controller,
         autofocus: true,
-        semanticLabel: 'Study name',
+        semanticLabel: context.l10n.mobileReviewStudyNameLabel,
         onSubmitted: (_) => _submit(),
       ),
       actions: [
-        SrsTextButton(label: 'Cancel', onPressed: () => Navigator.of(context).pop()),
-        SrsPillButton(label: 'Rename', onPressed: _submit),
+        SrsTextButton(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        SrsPillButton(label: context.l10n.mobileReviewRenameAction, onPressed: _submit),
       ],
     );
   }

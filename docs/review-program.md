@@ -370,3 +370,47 @@ files. A Dart toolchain was available; fixes were run locally, including widget 
 - On the fix: design primitives + contrast green, scope drawer file 8/8, export/import dialog files green, review screen file green with one pre-existing search test updated to the new finder's accessibility name (same control tapped, same assertions after), settings file green with the Accent assertion pinning the sanctioned stacked fallback.
 - Captures regenerated with `SRS_CAPTURE_SCREENSHOTS=1 --update-goldens` (120 files, CI skips them); scope captures eyeballed for layout and the darker quiet text in both themes.
 - `fvm flutter analyze` clean on all touched files; `dart format` stable; `./scripts/gates.sh t1` run pre-push.
+
+---
+
+## Round 7 — localisation
+
+**Scope read:** the l10n pipeline end to end (`translation/source/mobile.xml`, `scripts/gen-arb.mjs`,
+all 54 ARBs, `flutter gen-l10n` output), ARB key parity and placeholder consistency per locale,
+every hard-coded user-facing string in the review surfaces, and the generated-file drift. A Dart
+toolchain was available; fixes were run locally.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R7-F1 | 21 hand-added keys sat in `app_en.arb` with no source in any `translation/source` XML, so the next `gen-translations.sh` run deletes them and every `context.l10n.review*` reference stops compiling. Proven live: regenerating the template dropped all 21. | High (latent build-breaker) | **Fixed in this PR.** 20 moved into `translation/source/mobile.xml` with translator comments (becoming `mobile*` keys, which is what the pipeline generates); `toggleSoundTooltip` was unreferenced anywhere and deleted. All call sites renamed (compiler-checked). |
+| R7-F2 | ~90 review-surface strings hardcoded (buttons, labels, hints, tooltips, legends, empty states, dialogs, sheets, toasts, verdicts, meta labels). | Medium | **Fixed in this PR.** Moved into `mobile.xml` with usage/placeholder comments; existing identical keys reused (`cancel`, `delete`, `close`, `practice`, `white`, `black`, `search`, `settings`, `openings`, `importPgn`) instead of duplicated. Parameterized messages use `%s`/`%N$s` (verified through the generator into `{paramN}` + metadata). Rendered English is byte-identical — widget suites asserting exact strings all pass unchanged. |
+| R7-F3 | Regenerated `l10n/*.dart` output no longer matches the committed formatting (60k-line churn), so blind regen is unreviewable and unshippable. | Low | **Fixed in this PR** by matching the established pattern (#53): surgical old-style insertions only (+decls/overrides per key, English fallback in every locale), verified equal to generator output modulo line wrapping. Next regen stays minimal. |
+| R7-F4 | Arabic `mobilePlayersMatchingSearchTerm` dropped the `{param}` placeholder (renders 'لاعبين مع' with nowhere to put the query). | Low | **Recorded, not fixed here:** `translation/dest` files are pulled from Crowdin — a hand edit would be overwritten on the next pull. For the translators via Crowdin. |
+
+### Checked and sound (do not re-raise)
+
+- **Missing-key parity** (21–839 per locale) is normal Crowdin operation: `gen-l10n` falls back to the template value, so nothing is blank and everything compiles.
+- **Placeholder audit** beyond R7-F4: the remaining apparent mismatches are ICU plural keywords (`=1`, `other`) and literal words inside plural forms, not dropped parameters — verified by reading, not just regex.
+- **`gen-arb.mjs` transform rules** (`%s`→`{param}`, `%N$s`→`{paramN}`, mobile prefix, `%%` unescape) confirmed by probe (`r7probe`, since removed) and by byte-comparing regen output for untouched keys.
+- **Controller stays technical:** `importLichessStudy` throws English exceptions (no BuildContext exists there); translation happens at the dialog catch site, which has one. Type contracts and existing message assertions unchanged.
+- **Error/edge toasts stay hardcoded** per the pipeline doc's restraint policy (rare failures, dynamic technical detail).
+- **Side-label casing** (`toLowerCase` on the translated repertoire name in two toasts) preserves current English output exactly; noted as an English-morphology assumption for translators in code-adjacent comments.
+- **Rich-text emphasis dropped** where parameterized strings replaced styled spans (daily progress, next-review): one uniform style instead of bold fragments. Deliberate — word order differs per language, so fragments cannot be translated.
+- **Variant locale classes** (`en_US`, `pt_BR`, `zh_TW`) inherit everything from their base; new overrides live in the base only, matching #53. A future regen will duplicate them into the variants per generator behavior — cosmetic, not a defect.
+
+### Left open deliberately
+
+- **srs/board settings labels (~40 strings):** intentionally not moved — settings copy is mid-churn and translator burden is real; the pipeline doc's hardcoded-English-first policy covers it. Revisit once stable.
+- **Relative-time strings** (`in N minutes/hours/days`): need ICU plurals with exact English edge semantics (`minutes <= 1` renders 'in 1 minute', including 0). Deferred — small benefit, real mistranslation risk if rushed.
+- **Chapters screen copy:** legacy surface pending the cut decision; translating copy for a screen that may be cut wastes translator work.
+- **`%s positions` keeps the plural-blind form** (`1 positions`): byte-identical behavior chosen over grammatical English to avoid touching scheduling-adjacent display logic and its tests. Proper plurals are a follow-up.
+- **FCM redaction prefix, dead-code sweeps:** untouched.
+
+### Verification status of this round's PR
+
+- Template regen before the fix demonstrably dropped the 21 keys (the landmine, proven not theorized); after the fix the template contains all 109 new keys with correct placeholder metadata.
+- Hand-written getters verified two ways: `flutter analyze` clean across all 52 locale files, and a committed fallback test asserting English rendering (plain + parameterized) in de/fr/ja/ar.
+- Rendered-text suites green unchanged: review screen 38/38, drawer/sheets/actions/library, export/import dialogs, design incl. contrast, top bar, board settings, l10n utils 16/16 — English output is byte-identical, so no assertion needed updating.
+- `fvm flutter analyze` clean on all touched lib/test files; `dart format` stable (`lib/l10n` excluded from CI format checks, matching its frozen style); `./scripts/gates.sh t1` run pre-push.
