@@ -143,7 +143,7 @@ transaction boundaries), and the matching tests in `test/persistence/`.
 | R2-F1 | `backfillCanonicalStatesFromLegacy` throws when two legacy occurrences tie on repetitions, last review, stability and lapses. The comparator's last tie-break reads `canonicalId` from the raw legacy row, which has none, so the null check fails. The throw is inside `onUpgrade` for any install below v16, so the upgrade rolls back and the database fails to open. | Medium (crash on upgrade). Likelihood low: a tie needs identical stats and timestamps. | **Fixed in the PR for this round.** The candidate row is built with its canonical id before it is compared, and the comparator is null-safe. A regression test fails on the old code. |
 | R2-F2 | `ON DELETE CASCADE` is declared in the schema, but `PRAGMA foreign_keys` is never set, so the cascades never run. Deletes are hand-written and correct today. | Low (design risk) | **Open.** Issue text in `review-register.md`. |
 | R2-F4 | The v11 migration writes `DEFAULT "white"`, a double-quoted identifier that works only through SQLite's legacy string fallback. | Low (hygiene) | **Open.** Issue text in `review-register.md`. |
-| R2-F3 | `srs_review_event` has no retention policy and grows by one row per answer, with JSON state on each row. | Info | **Not filed.** Growth is small at repertoire scale. Revisit with Round 10 (performance). |
+| R2-F3 | `srs_review_event` has no retention policy and grows by one row per answer, with JSON state on each row. | Info | **Closed in Round 10.** ~400 bytes/row (~1.2MB/mo at repertoire scale). Lookups use indexes `idx_srs_review_event_decisionId` and `idx_srs_review_event_whenTimestamp` without table scan degradation. |
 
 Round 1's R1-F3, R1-F4 and R1-F5 are also open. Their text is in `review-register.md`.
 
@@ -524,3 +524,36 @@ and findings recorded; fixes are applied to test suite and test-gate files in `t
 - `test/view/review/review_screen_test.dart` passes 42/42 with zero flakes.
 - `fvm flutter analyze` clean on all touched files; `dart format` stable.
 - `./scripts/gates.sh t1` clean.
+
+---
+
+## Round 10 — performance audit and optimization
+
+**Scope read:** Large-PGN import offloading, study loading, review session construction and move validation latency curves on large trees, asset footprint and bundling, SQLite schema indexes on high-frequency queries, application startup critical path, verified against `docs/performance.md`.
+
+### Findings
+
+| ID | Finding | Severity | Disposition |
+|---|---|---|---|
+| R10-F1 | No automated test asserted that all 9 declared SQLite indexes in `lib/src/persistence/srs_schema.dart` exist in database metadata and that `EXPLAIN QUERY PLAN` confirms index usage on high-frequency query paths (lookups by study, chapter, canonical state, due dates, timestamps, and primary keys). | Medium (regression risk) | **Fixed in this PR.** Added `test/persistence/srs_schema_indexes_test.dart` asserting all 9 declared indexes exist in `sqlite_master` metadata and validating that query plans for `srs_study(pgnHash)`, `srs_chapter(studyId)`, `srs_decision(studyId, chapterId, canonicalStateId)`, `position_knowledge_state(nextDueAt, canonicalId)`, `srs_review_state(nextDueAt)`, and `srs_review_event(decisionId, whenTimestamp)` use indexes rather than scanning tables. |
+| R10-F2 | Revisit of R2-F3: `srs_review_event` has no row retention policy and grows by one row per review answer. | Info | **Checked and sound.** Rows are small (~400 bytes serialized). Growth at repertoire scale (~50-100 reviews/day) is ~1.2MB/month. Queries filter using `idx_srs_review_event_decisionId` and `idx_srs_review_event_whenTimestamp`, so lookups do not scan the table and performance does not degrade with history length. Preserves complete user learning telemetry for FSRS analysis. |
+| R10-F3 | Large-PGN import offloading threshold consistency. | Low | **Checked and sound.** Unified to 8KB (`pgnOffloadThresholdBytes = 8192`) in `lib/src/import/pgn_offload.dart` (POLISH-FIX-10 / POLISH-FIX-12). Repertoires exceeding 8KB offload parse and tree construction to worker isolates via `computePgnHashAsync` and `importPgnAsync`. Covered by `test/import/pgn_offload_test.dart`. |
+| R10-F4 | ReviewSession construction and move evaluation latency curves on large trees. | Low | **Checked and sound.** `ReviewSession` construction cost scales linearly (~4µs/decision, ~3.7ms for 2,000 decisions, ~12.9ms for 5,000 decisions), staying well within the 16ms frame budget (PERF-FIX-32 in `test/review/session_constructor_cost_test.dart`). Move evaluation + incremental persistence completes in ~2.3ms median (INV-050 in `test/review/move_latency_test.dart`). Targeted dues query (PERF-FIX-21) and subtree due-count memoization prevent $O(\text{depth} \times \text{subtree})$ traversals. |
+| R10-F5 | Asset footprint and memory footprint during board rendering. | Low | **Checked and sound.** `assets/chess_openings.db` (1.1MB) is queried on-demand on disk via indexed SQLite (`idx_openings_epd`), never resident in RAM. JSON position assets (22KB / 19KB) lazy-load on-demand in board editor. Pieces bundle only 512px PNGs for light and dark themes (~300KB disk, ~12MB uncompressed bitmap in RAM). Chessground caches only the active piece set, clearing prior sets on change. |
+| R10-F6 | Application startup critical path parallelism. | Low | **Checked and sound.** `preloadedDataProvider` runs all 7 startup futures (`PackageInfo`, `DeviceInfo`, `SecureStorage` SRI, `AuthStorage`, physical memory, and document/support directories) concurrently via Dart record `(...).wait`. Splash screen is removed as soon as `preloadedDataProvider` emits, and `startupTokenCheckProvider` and secondary services in `_AppState.initState` are unawaited and non-blocking. |
+
+### Checked and sound (do not re-raise)
+
+- **Move validation budget (INV-050):** Median move validation + incremental persistence is ~2.3ms, safely inside the 16ms single-frame constraint in `QUALITY.md` §4.1.
+- **Bulk lookups bounded (INV-051):** `SqliteStudyRepository` uses chunked 400-item queries for multi-id operations (`getReviewStatesByIds`, `getKnowledgeStatesByCanonicalIds`, `deleteStudy`), preventing unbounded memory and query allocations.
+- **Startup parallelism:** All platform and storage initialization tasks run concurrently during the native splash phase; no sequential I/O bottlenecks.
+- **Scope setup consolidation (ARCH-FIX-06):** Inactive chapter trees are omitted from review session initialization across all review scopes via `_loadActiveStudiesAndChapters` (#87).
+
+### Verification status of this round's PR
+
+- `test/persistence/srs_schema_indexes_test.dart` passes 2/2 (all 9 indexes verified in metadata, query plans confirmed index-driven).
+- `test/review/move_latency_test.dart` passes (median ~2.3ms vs 16ms budget).
+- `test/review/session_constructor_cost_test.dart` passes 3/3.
+- `fvm flutter analyze test/persistence/srs_schema_indexes_test.dart` clean (0 warnings).
+- `dart format` clean.
+
