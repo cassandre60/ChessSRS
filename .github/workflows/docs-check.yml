@@ -20,8 +20,10 @@ name: Docs Check
 #     satisfying half of the two required checks. test.yml's header says as much: "a docs-only
 #     PR still gets no CI and cannot merge on its own".
 #
-# No branch-protection change is needed. The required check "Unit tests on ubuntu-latest" is
-# emitted by test.yml, whose paths include '.github/**' and therefore include this file.
+# The real suite's check is named "Tests" (#109), so this workflow no longer collides
+# with anything branch protection requires. Nothing here is required: a docs-only PR is
+# still blocked, because gates.yml excludes docs/** and therefore never reports
+# "T1 fast gates".
 
 on:
   push:

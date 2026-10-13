@@ -94,9 +94,14 @@ concurrency:
 # Declare default permissions as read only.
 permissions: read-all
 
+# The job's reported name is plain "Tests". It was "Unit tests on ubuntu-latest",
+# which collided with the no-op docs-check job and left branch protection
+# satisfiable by a check that ran nothing. Renamed in #109; the required-check
+# list in the repo settings was updated to match. If you rename this again,
+# update the required contexts in the same breath or every PR will block.
 jobs:
   unit-test:
-    name: Unit tests on ${{ matrix.os }}
+    name: Tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
