@@ -514,6 +514,19 @@ class SqliteStudyRepository implements StudyRepository {
     await saveReviewStates(states.map((s) => s.toReviewState()).toList());
   }
 
+  /// Persists an answer's canonical state **and** its per-occurrence mirrors.
+  ///
+  /// `srs_review_state` is written **twice per state** on purpose:
+  ///
+  /// 1. Once keyed by the canonical id (shared position knowledge — one row
+  ///    per unique position).
+  /// 2. Once per occurrence via `SELECT id FROM srs_decision WHERE canonicalStateId = ?`
+  ///    (one row per `srs_decision.id` that reaches the same position via a
+  ///    transposition). Reads query both key kinds
+  ///    (`review_service.dart: getReviewStatesByIds({…decisionIds, …canonicalIds})`
+  ///    plus `getKnowledgeStatesByCanonicalIds`) and the session looks up
+  ///    `reviewStates[canonicalId] ?? reviewStates[decisionId]`. Doubling the
+  ///    row volume is deliberate and what keeps transposition reads coherent.
   @override
   Future<void> saveAnswerBatch({
     required List<PositionKnowledgeState> knowledgeStates,
@@ -526,12 +539,14 @@ class SqliteStudyRepository implements StudyRepository {
       for (final s in knowledgeStates) {
         batch.rawInsert(_knowledgeStateUpsertSql, _knowledgeStateUpsertArgs(s));
 
+        // canonical mirror
         batch.insert(
           kTableSrsReviewState,
           _reviewStateRow(s.toReviewState(s.canonicalId)),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
 
+        // per-occurrence mirrors (transpositions)
         batch.rawInsert(
           '''
           INSERT OR REPLACE INTO $kTableSrsReviewState(
@@ -795,15 +810,12 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<List<ReviewState>> getReviewStatesByDecisions(List<String> decisionIds) async {
-    if (decisionIds.isEmpty) return const [];
+  Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
     const chunkSize = 400;
     final results = <ReviewState>[];
-    for (var i = 0; i < decisionIds.length; i += chunkSize) {
-      final chunk = decisionIds.sublist(
-        i,
-        i + chunkSize > decisionIds.length ? decisionIds.length : i + chunkSize,
-      );
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(i, i + chunkSize > ids.length ? ids.length : i + chunkSize);
       final placeholders = List.filled(chunk.length, '?').join(',');
       final rows = await _db.query(
         kTableSrsReviewState,
