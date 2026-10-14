@@ -371,6 +371,7 @@ Status:
   - SAFETY-FIX-25 (10 MB guard `kMaxPgnInputBytes` already checked at file pick, paste and `importPgn`, with tests on the rejection and the limit boundary)
   - SYSTEM-FIX-35 (Linux player already uses `unawaited(Process.run(...))` with an `onError` swallow, landed in #85). Known gap: no test covers `_LinuxSoundPlayer`; the class is private and only observable through a real process, so a test would mock the subject. Do not reopen unless the player is refactored to expose its argument builder.
   - DATA-FIX-26 and ARCH-FIX-07 (both describe the non-atomic PKS/mirror dual write; `savePositionKnowledgeState` and `savePositionKnowledgeStates` already run in one transaction, and `a failed mirror write rolls back` fails when the transaction is removed, verified by a probe on a scratch copy). Do not reopen.
+  - DATA-FIX-31 (corrupt prefs blob is copied to `<key>.corrupt-backup` and logged at SEVERE on both fetch paths; `corrupted prefs blob is backed up` fails when the backup write is disabled, verified by a probe on a scratch copy). Do not reopen.
 - **In flight / Finishing CI**:
   - 27 (A11Y-FIX-27: review screen semantics)
   - 11 (POLISH-FIX-11: pgn shapes & board notify)
