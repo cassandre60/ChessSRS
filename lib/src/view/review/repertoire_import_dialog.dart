@@ -268,6 +268,14 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         'Bulk import: $summary',
         type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
       );
+    } on BulkImportListException catch (e) {
+      // The listing itself failed, so there is nothing partial to report:
+      // the reason IS the result. Shown in full, never a bare "failed".
+      if (mounted) {
+        _logger.severe('Bulk import failed.', e);
+        setState(() => _bulkSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
     } catch (e) {
       if (mounted) {
         _logger.severe('Bulk import failed.', e);
@@ -516,18 +524,25 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         if (isSignedIn) ...[
                           const SizedBox(height: 10.0),
                           OutlinedButton.icon(
-                            icon: const Icon(Symbols.download_rounded),
-                            label: const Text('Import all my studies'),
+                            icon: _isBulkImporting
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: c.ink2),
+                                  )
+                                : const Icon(Symbols.download_rounded),
+                            label: Text(
+                              _isBulkImporting
+                                  ? (_bulkTotal > 0
+                                        ? 'Importing $_bulkDone of $_bulkTotal…'
+                                        : 'Listing your studies…')
+                                  : 'Import all my studies',
+                            ),
                             onPressed: _isImporting || _isBulkImporting ? null : _handleBulkImport,
                           ),
-                          if (_isBulkImporting && _bulkTotal > 0) ...[
-                            const SizedBox(height: 10.0),
-                            LinearProgressIndicator(value: _bulkDone / _bulkTotal, minHeight: 6),
+                          if (_isBulkImporting && _bulkCurrentName.isNotEmpty) ...[
                             const SizedBox(height: 6.0),
-                            Text(
-                              '$_bulkDone of $_bulkTotal · $_bulkCurrentName',
-                              style: SrsText.rowSub(c.ink2),
-                            ),
+                            Text(_bulkCurrentName, style: SrsText.rowSub(c.ink2)),
                           ],
                           if (_bulkSummary != null) ...[
                             const SizedBox(height: 10.0),

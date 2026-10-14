@@ -143,6 +143,33 @@ void main() {
     });
   });
 
+  group('bulk import refusal', () {
+    testWidgets('a 401 on the study list shows the reason, not a bare failure', (tester) async {
+      final refusedClient = MockClient((_) async => http.Response('Unauthorized', 401));
+      await openImportDialog(
+        tester,
+        overrides: {
+          ...signedIn(),
+          lichess_study.studyRepositoryProvider: lichess_study.studyRepositoryProvider.overrideWith(
+            (ref) => lichess_study.StudyRepository(ref, refusedClient),
+          ),
+        },
+      );
+
+      expect(find.text('Import all my studies'), findsOneWidget);
+      await tester.ensureVisible(find.text('Import all my studies'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Import all my studies'));
+      await tester.pumpAndSettle();
+
+      // The 2026-10-14 production symptom was a bare "bulk import failed".
+      // The refusal reason must reach the screen instead (shown inline and
+      // in the snackbar, hence more than one match).
+      expect(find.text('Bulk import failed'), findsNothing);
+      expect(find.textContaining('no study permission'), findsWidgets);
+    });
+  });
+
   group('StudyNotFoundException', () {
     test('is still a FormatException, so existing callers keep catching it', () {
       expect(const StudyNotFoundException('nope'), isA<FormatException>());

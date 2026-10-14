@@ -1614,6 +1614,46 @@ void main() {
         final state = container.read(reviewControllerProvider).requireValue;
         expect(state.studies, isEmpty);
       });
+
+      test(
+        'a refused study list throws the reason instead of failing silently',
+        // SPEC INV-011. This is the production failure of 2026-10-14: the
+        // desktop token carried no study scope, so /study/mine/... answered
+        // 401 and the dialog could only say "bulk import failed". The reason
+        // must travel with the exception so the screen can show it.
+        () async {
+          final refusedClient = MockClient((_) async => http.Response('Unauthorized', 401));
+          final container = bulkContainer(refusedClient);
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await expectLater(
+            controller.importAllMyStudies(),
+            throwsA(
+              isA<BulkImportListException>().having(
+                (e) => e.message,
+                'message',
+                allOf(contains('401'), contains('sign out')),
+              ),
+            ),
+          );
+
+          final state = await container.read(reviewControllerProvider.future);
+          expect(state.studies, isEmpty);
+        },
+      );
+
+      test('a server error on the study list names its status', () async {
+        final brokenClient = MockClient((_) async => http.Response('Error', 500));
+        final container = bulkContainer(brokenClient);
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        await expectLater(
+          controller.importAllMyStudies(),
+          throwsA(
+            isA<BulkImportListException>().having((e) => e.message, 'message', contains('500')),
+          ),
+        );
+      });
     });
 
     test('maxDailyReviews limit caps session and marks isDailyLimitReached', () async {

@@ -133,6 +133,19 @@ void main() {
     expect(oauthScopes, containsAll(['study:read', 'study:write', 'preference:read']));
   });
 
+  test('the desktop OAuth URI asks for study:read, which bulk import needs', () {
+    // Production failure 2026-10-14: the desktop flow sent no scope, so its
+    // token could not list the account's own studies (/study/mine/... -> 401)
+    // and every bulk import failed. The scope below is what the server reads.
+    final uri = buildDesktopOAuthUri(
+      clientId: 'chesssrs.test',
+      redirectUri: 'http://127.0.0.1:1234/callback',
+      codeChallenge: 'challenge',
+    );
+
+    expect(uri.queryParameters['scope'], 'study:read');
+  });
+
   test('the desktop OAuth URI carries PKCE and the redirect', () {
     final uri = buildDesktopOAuthUri(
       clientId: 'chesssrs.test',
