@@ -6,12 +6,10 @@ import 'package:chess_srs/src/import/lichess_study_importer.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/import/pgn_offload.dart';
+import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/move_feedback.dart';
-import 'package:chess_srs/src/model/study/study.dart' show StudyPageItem;
-import 'package:chess_srs/src/model/study/study_filter.dart';
-import 'package:chess_srs/src/model/study/study_list_paginator.dart' show StudyList;
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart' show studyRepositoryProvider;
 import 'package:chess_srs/src/network/http.dart' show ServerException;
@@ -1618,37 +1616,32 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final studyRepo = ref.read(studyRepositoryProvider);
 
     // Phase 1: enumerate everything first, so progress reports a real total.
-    // Failures here abort the batch with the reason attached: without the
-    // listing there is nothing to import, and a bare rethrow would reach the
-    // dialog as a generic failure with the cause logged nowhere visible.
-    final items = <StudyPageItem>[];
-    var page = 1;
-    while (true) {
-      final StudyList list;
-      try {
-        list = await studyRepo.getStudies(
-          category: StudyCategory.mine,
-          order: StudyListOrder.updated,
-          page: page,
-        );
-      } on ServerException catch (e) {
-        if (e.statusCode == 401 || e.statusCode == 403) {
-          throw BulkImportListException(
-            'Lichess refused to list your studies (${e.statusCode}). This sign-in has no study '
-            'permission: sign out and sign back in, then retry. Still refused afterwards? Revoke '
-            'ChessSRS at lichess.org/account/oauth/token, then sign in again.',
-          );
-        }
+    // Listed through the Studies API (/api/study/by/:username), not the
+    // website list: the website route answers 403 to third-party OAuth tokens
+    // even with study:read (owner-verified 2026-10-14). Failures here abort
+    // the batch with the reason attached: without the listing there is
+    // nothing to import, and a bare rethrow would reach the dialog as a
+    // generic failure with the cause logged nowhere visible.
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const BulkImportListException('Sign in to import your Lichess studies.');
+    }
+    final List<({StudyId id, String name})> items;
+    try {
+      items = await studyRepo.getStudiesByUsername(username);
+    } on ServerException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
         throw BulkImportListException(
-          'Could not load your study list (status ${e.statusCode}). Check your connection and retry.',
+          'Lichess refused to list your studies (${e.statusCode}). This sign-in has no study '
+          'permission: sign out and sign back in, then retry. Still refused afterwards? Revoke '
+          'ChessSRS at lichess.org/account/oauth/token, then sign in again.',
         );
-      } on ClientException catch (e) {
-        throw BulkImportListException('Could not read your study list: ${e.message}');
       }
-      items.addAll(list.studies);
-      final next = list.nextPage;
-      if (next == null) break;
-      page = next;
+      throw BulkImportListException(
+        'Could not load your study list (status ${e.statusCode}). Check your connection and retry.',
+      );
+    } on ClientException catch (e) {
+      throw BulkImportListException('Could not read your study list: ${e.message}');
     }
     _logger.info('Bulk import: ${items.length} owned studies to import');
 

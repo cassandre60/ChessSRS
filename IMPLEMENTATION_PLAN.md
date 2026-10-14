@@ -277,6 +277,11 @@ remains a later option — never a redesign.
       1. Second sighting of the same scopeless-grant failure, now as 403 instead of 401 — and the generic branch answered with a bare status number. 401 and 403 now share the permission message, extended with the revoke fallback (`lichess.org/account/oauth/token`) for grants Lichess silently reuses.
       2. Regression test pins the 403 wording (status, sign-out, revoke link).
 
+- [x] **R17: Enumerate bulk import through the Studies API, not the website list** *(done: 2026-10-14, owner log)*
+      1. Decisive evidence: a fresh sign-in *with* `study:read` still got 403 on `/study/mine/updated`. That page rejects third-party OAuth tokens outright — no scope fixes it. Meanwhile `GET /api/study/by/:username` is a real API route (NDJSON, verified live anonymously: same ids/names as the site).
+      2. `StudyRepository.getStudiesByUsername` streams that endpoint; the controller lists by the signed-in account name and refuses while signed out without a call. Website-list error handling stays for the message paths.
+      3. Tests re-mocked to NDJSON + a seeded `tester` account, plus a signed-out no-call test. The mock shapes now match a live server response each.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.

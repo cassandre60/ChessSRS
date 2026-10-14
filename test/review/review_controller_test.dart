@@ -7,10 +7,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart' as chess;
+import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart' as lichess_study;
+import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
@@ -1442,23 +1445,18 @@ void main() {
     });
 
     group('importAllMyStudies', () {
-      Map<String, Object?> pageItemJson(String id, String name) => {
-        'id': id,
-        'name': name,
-        'liked': false,
-        'likes': 0,
-        'updatedAt': 1700000000000,
-        'owner': null,
-        'topics': <String>[],
-        'members': <Object?>[],
-        'chapters': <String>['Chapter 1'],
-        'flair': null,
-        'visibility': 'public',
-      };
-
-      String pageJson(List<Map<String, Object?>> items, int? nextPage) => jsonEncode({
-        'paginator': {'currentPageResults': items, 'nextPage': nextPage},
-      });
+      // The listing endpoint streams NDJSON, one object per study — the shape
+      // verified live against /api/study/by/:username on 2026-10-14.
+      String studiesNdJson(List<(String, String)> entries) => entries
+          .map(
+            (e) => jsonEncode({
+              'id': e.$1,
+              'name': e.$2,
+              'createdAt': 1700000000000,
+              'updatedAt': 1700000000000,
+            }),
+          )
+          .join('\n');
 
       const whitePgn = '''
 [Event "White Repertoire"]
@@ -1475,18 +1473,11 @@ void main() {
 
       MockClient bulkClient({bool blackGone = false}) {
         return MockClient((request) async {
-          if (request.url.path == '/study/mine/updated') {
-            if (request.url.queryParameters['page'] == '2') {
-              return http.Response(
-                pageJson([pageItemJson('bbbbbbbb', 'Black Repertoire')], null),
-                200,
-                headers: {'content-type': 'application/json'},
-              );
-            }
+          if (request.url.path == '/api/study/by/tester') {
             return http.Response(
-              pageJson([pageItemJson('aaaaaaaa', 'White Repertoire')], 2),
+              studiesNdJson([('aaaaaaaa', 'White Repertoire'), ('bbbbbbbb', 'Black Repertoire')]),
               200,
-              headers: {'content-type': 'application/json'},
+              headers: {'content-type': 'application/x-ndjson'},
             );
           }
           if (request.url.path == '/api/study/aaaaaaaa.pgn') {
@@ -1509,17 +1500,23 @@ void main() {
       }
 
       ProviderContainer bulkContainer(MockClient client) {
-        return createContainer(
+        final container = createContainer(
           extraOverrides: [
             lichess_study.studyRepositoryProvider.overrideWith(
               (ref) => lichess_study.StudyRepository(ref, client),
             ),
           ],
         );
+        // Bulk import lists /api/study/by/<signed-in username>.
+        container.read(authControllerProvider.notifier).state = const AuthUser(
+          token: 'test-token',
+          user: LightUser(id: UserId('tester'), name: 'tester'),
+        );
+        return container;
       }
 
       test(
-        'imports every owned study across pages, each on its own side',
+        'imports every owned study in one listing, each on its own side',
         // SPEC INV-013. Bulk import passes no side, so the White study trains
         // White and the Black study trains Black from their own headers.
         () async {
@@ -1593,12 +1590,8 @@ void main() {
 
       test('empty library returns zeros without failing', () async {
         final emptyClient = MockClient((request) async {
-          if (request.url.path == '/study/mine/updated') {
-            return http.Response(
-              pageJson([], null),
-              200,
-              headers: {'content-type': 'application/json'},
-            );
+          if (request.url.path == '/api/study/by/tester') {
+            return http.Response('', 200, headers: {'content-type': 'application/x-ndjson'});
           }
           return http.Response('Not Found', 404);
         });
@@ -1614,6 +1607,34 @@ void main() {
         final state = container.read(reviewControllerProvider).requireValue;
         expect(state.studies, isEmpty);
       });
+
+      test(
+        'signed out asks for sign-in without calling the server',
+        // SPEC INV-011. The button is hidden while signed out, but the
+        // controller must still refuse outright rather than list as nobody.
+        () async {
+          var called = false;
+          final guardClient = MockClient((_) async {
+            called = true;
+            return http.Response('', 200);
+          });
+          final container = bulkContainer(guardClient);
+          container.read(authControllerProvider.notifier).state = null;
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await expectLater(
+            controller.importAllMyStudies(),
+            throwsA(
+              isA<BulkImportListException>().having(
+                (e) => e.message,
+                'message',
+                contains('Sign in'),
+              ),
+            ),
+          );
+          expect(called, isFalse);
+        },
+      );
 
       test(
         'a refused study list throws the reason instead of failing silently',

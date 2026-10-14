@@ -157,6 +157,14 @@ void main() {
       );
 
       expect(find.text('Import all my studies'), findsOneWidget);
+      // Bulk import lists /api/study/by/<signed-in username>: the login flag
+      // alone is not enough, the account itself must be present.
+      ProviderScope.containerOf(
+        tester.element(find.byType(RepertoireImportDialog)),
+      ).read(authControllerProvider.notifier).state = const AuthUser(
+        token: 'test-token',
+        user: LightUser(id: UserId('tester'), name: 'tester'),
+      );
       await tester.ensureVisible(find.text('Import all my studies'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Import all my studies'));
