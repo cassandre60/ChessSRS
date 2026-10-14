@@ -77,6 +77,11 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   final _titleController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isImporting = false;
+  bool _isBulkImporting = false;
+  int _bulkDone = 0;
+  int _bulkTotal = 0;
+  String _bulkCurrentName = '';
+  String? _bulkSummary;
 
   /// Lichess 404'd a study id while signed out, so the study may be private rather than missing.
   ///
@@ -220,6 +225,57 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
     } finally {
       if (mounted) {
         setState(() => _isImporting = false);
+      }
+    }
+  }
+
+  Future<void> _handleBulkImport() async {
+    setState(() {
+      _isBulkImporting = true;
+      _bulkDone = 0;
+      _bulkTotal = 0;
+      _bulkCurrentName = '';
+      _bulkSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .importAllMyStudies(
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _bulkDone = progress.done;
+                  _bulkTotal = progress.total;
+                  _bulkCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      final parts = <String>['${result.imported} imported'];
+      if (result.duplicates > 0) parts.add('${result.duplicates} already here');
+      if (result.failed.isNotEmpty) {
+        final names = result.failed.take(3).map((f) => f.name).join(', ');
+        final more = result.failed.length > 3 ? ' and ${result.failed.length - 3} more' : '';
+        parts.add('${result.failed.length} failed ($names$more)');
+      }
+      final summary = result.imported + result.duplicates + result.failed.length == 0
+          ? 'No studies found on your Lichess account.'
+          : parts.join(' · ');
+      setState(() => _bulkSummary = summary);
+      showSnackBar(
+        context,
+        'Bulk import: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Bulk import failed.', e);
+        showSnackBar(context, 'Bulk import failed', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBulkImporting = false);
       }
     }
   }
@@ -456,6 +512,27 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         if (!isSignedIn && !_studyMayBePrivate) ...[
                           const SizedBox(height: 10.0),
                           _SignInHint(onSignIn: () => showSignInOptions(context, ref)),
+                        ],
+                        if (isSignedIn) ...[
+                          const SizedBox(height: 10.0),
+                          OutlinedButton.icon(
+                            icon: const Icon(Symbols.download_rounded),
+                            label: const Text('Import all my studies'),
+                            onPressed: _isImporting || _isBulkImporting ? null : _handleBulkImport,
+                          ),
+                          if (_isBulkImporting && _bulkTotal > 0) ...[
+                            const SizedBox(height: 10.0),
+                            LinearProgressIndicator(value: _bulkDone / _bulkTotal, minHeight: 6),
+                            const SizedBox(height: 6.0),
+                            Text(
+                              '$_bulkDone of $_bulkTotal · $_bulkCurrentName',
+                              style: SrsText.rowSub(c.ink2),
+                            ),
+                          ],
+                          if (_bulkSummary != null) ...[
+                            const SizedBox(height: 10.0),
+                            Text(_bulkSummary!, style: SrsText.rowSub(c.ink2)),
+                          ],
                         ],
                       ] else ...[
                         TextField(

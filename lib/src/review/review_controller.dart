@@ -9,6 +9,8 @@ import 'package:chess_srs/src/import/pgn_offload.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/move_feedback.dart';
+import 'package:chess_srs/src/model/study/study.dart' show StudyPageItem;
+import 'package:chess_srs/src/model/study/study_filter.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart' show studyRepositoryProvider;
 import 'package:chess_srs/src/network/http.dart' show ServerException;
@@ -46,6 +48,17 @@ const kIncomingPreMoveDelay = Duration(milliseconds: 350);
 class StudyNotFoundException extends FormatException {
   const StudyNotFoundException(super.message);
 }
+
+/// Progress of [ReviewController.importAllMyStudies]: [done] studies processed
+/// out of [total], currently (or last) working on [currentName].
+typedef BulkImportProgress = ({int done, int total, String currentName});
+
+/// A study [importAllMyStudies] could not import, with the [reason] it was skipped.
+typedef BulkImportFailure = ({String name, String reason});
+
+/// Outcome of [ReviewController.importAllMyStudies]: freshly [imported] studies,
+/// [duplicates] skipped as already here, and per-study [failed] reasons.
+typedef BulkImportResult = ({int imported, int duplicates, List<BulkImportFailure> failed});
 
 class ReviewScreenState {
   const ReviewScreenState({
@@ -1437,6 +1450,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     required String pgnText,
     String? title,
     Side? repertoireSide,
+    bool switchScope = true,
   }) async {
     // Hashed before anything else, because duplicate detection decides whether an import happens
     // at all — and computing it parses the whole file. Left synchronous, a multi-megabyte PGN
@@ -1466,7 +1480,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       _logger.info(
         'Duplicate study detected for hash ${hash.substring(0, 8)}, skipping re-import: ${existingStudy.id}',
       );
-      await changeScope(ReviewScope.study(existingStudy.id));
+      if (switchScope) {
+        await changeScope(ReviewScope.study(existingStudy.id));
+      }
       return ImportResult(
         study: existingStudy,
         chapters: const [],
@@ -1513,7 +1529,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     await _repository.saveImportResult(result);
-    await changeScope(ReviewScope.study(result.study.id));
+    if (switchScope) {
+      await changeScope(ReviewScope.study(result.study.id));
+    }
     return result;
   }
 
@@ -1570,6 +1588,78 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       title: effectiveTitle,
       repertoireSide: repertoireSide,
     );
+  }
+
+  /// Imports every study owned by the signed-in Lichess account.
+  ///
+  /// Studies are enumerated through the `mine` study list (which the signed-in
+  /// HTTP client authenticates, so private studies are included) and each one
+  /// is fetched and imported through the normal single-study pipeline with
+  /// `repertoireSide: null`, so every chapter trains from its own side
+  /// (SPEC INV-013) and already-imported material is skipped, not duplicated
+  /// (SPEC INV-003). A study that fails (gone, empty, oversize) is recorded
+  /// and the batch continues (SPEC INV-011).
+  ///
+  /// The scope is reloaded once at the end; unlike [importPgnText] the batch
+  /// never jumps the user between scopes per study.
+  Future<BulkImportResult> importAllMyStudies({
+    void Function(BulkImportProgress progress)? onProgress,
+  }) async {
+    final studyRepo = ref.read(studyRepositoryProvider);
+
+    // Phase 1: enumerate everything first, so progress reports a real total.
+    final items = <StudyPageItem>[];
+    var page = 1;
+    while (true) {
+      final list = await studyRepo.getStudies(
+        category: StudyCategory.mine,
+        order: StudyListOrder.updated,
+        page: page,
+      );
+      items.addAll(list.studies);
+      final next = list.nextPage;
+      if (next == null) break;
+      page = next;
+    }
+    _logger.info('Bulk import: ${items.length} owned studies to import');
+
+    // Phase 2: fetch and import sequentially — polite to the API and to the
+    // serialized import lock, one study at a time.
+    var imported = 0;
+    var duplicates = 0;
+    final failed = <BulkImportFailure>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      onProgress?.call((done: i, total: items.length, currentName: item.name));
+      try {
+        final pgnText = await studyRepo.getStudyPgn(item.id);
+        final headerTitle = extractStudyTitleFromPgn(pgnText)?.trim();
+        final result = await importPgnText(
+          pgnText: pgnText,
+          title: (headerTitle == null || headerTitle.isEmpty) ? item.name : headerTitle,
+          repertoireSide: null,
+          switchScope: false,
+        );
+        if (result.isDuplicate) {
+          duplicates++;
+        } else {
+          imported++;
+        }
+      } on FormatException catch (e) {
+        _logger.warning('Bulk import skipped "${item.name}": ${e.message}');
+        failed.add((name: item.name, reason: e.message));
+      } catch (e) {
+        _logger.warning('Bulk import failed for "${item.name}": $e');
+        failed.add((name: item.name, reason: e.toString()));
+      }
+      onProgress?.call((done: i + 1, total: items.length, currentName: item.name));
+    }
+
+    await reload();
+    _logger.info(
+      'Bulk import done: $imported imported, $duplicates already here, ${failed.length} failed',
+    );
+    return (imported: imported, duplicates: duplicates, failed: failed);
   }
 
   String? _resolveComment(ReviewPrompt? prompt, RepertoireMove? expectedMove) {

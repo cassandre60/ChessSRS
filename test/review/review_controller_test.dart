@@ -1,9 +1,10 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-003, INV-011, INV-020, INV-021, INV-023, INV-026, INV-030, INV-031, INV-032,
+// SPEC coverage: INV-003, INV-011, INV-013, INV-020, INV-021, INV-023, INV-026, INV-030, INV-031, INV-032,
 //   INV-033.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/common/chess.dart' as chess;
@@ -1437,6 +1438,181 @@ void main() {
             ),
           ),
         );
+      });
+    });
+
+    group('importAllMyStudies', () {
+      Map<String, Object?> pageItemJson(String id, String name) => {
+        'id': id,
+        'name': name,
+        'liked': false,
+        'likes': 0,
+        'updatedAt': 1700000000000,
+        'owner': null,
+        'topics': <String>[],
+        'members': <Object?>[],
+        'chapters': <String>['Chapter 1'],
+        'flair': null,
+        'visibility': 'public',
+      };
+
+      String pageJson(List<Map<String, Object?>> items, int? nextPage) => jsonEncode({
+        'paginator': {'currentPageResults': items, 'nextPage': nextPage},
+      });
+
+      const whitePgn = '''
+[Event "White Repertoire"]
+[Site "https://lichess.org/study/aaaaaaaa"]
+1. e4 e5 2. Nf3 *
+''';
+
+      const blackPgn = '''
+[Event "Black Repertoire"]
+[Site "https://lichess.org/study/bbbbbbbb"]
+[Orientation "black"]
+1. e4 e6 2. d4 d5 *
+''';
+
+      MockClient bulkClient({bool blackGone = false}) {
+        return MockClient((request) async {
+          if (request.url.path == '/study/mine/updated') {
+            if (request.url.queryParameters['page'] == '2') {
+              return http.Response(
+                pageJson([pageItemJson('bbbbbbbb', 'Black Repertoire')], null),
+                200,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            return http.Response(
+              pageJson([pageItemJson('aaaaaaaa', 'White Repertoire')], 2),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          if (request.url.path == '/api/study/aaaaaaaa.pgn') {
+            return http.Response(
+              whitePgn,
+              200,
+              headers: {'content-type': 'application/x-chess-pgn'},
+            );
+          }
+          if (request.url.path == '/api/study/bbbbbbbb.pgn') {
+            if (blackGone) return http.Response('Study not found', 404);
+            return http.Response(
+              blackPgn,
+              200,
+              headers: {'content-type': 'application/x-chess-pgn'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+      }
+
+      ProviderContainer bulkContainer(MockClient client) {
+        return createContainer(
+          extraOverrides: [
+            lichess_study.studyRepositoryProvider.overrideWith(
+              (ref) => lichess_study.StudyRepository(ref, client),
+            ),
+          ],
+        );
+      }
+
+      test(
+        'imports every owned study across pages, each on its own side',
+        // SPEC INV-013. Bulk import passes no side, so the White study trains
+        // White and the Black study trains Black from their own headers.
+        () async {
+          final container = bulkContainer(bulkClient());
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          final seen = <BulkImportProgress>[];
+          final result = await controller.importAllMyStudies(onProgress: seen.add);
+
+          expect(result.imported, 2);
+          expect(result.duplicates, 0);
+          expect(result.failed, isEmpty);
+          expect(seen.last, (done: 2, total: 2, currentName: 'Black Repertoire'));
+
+          final state = container.read(reviewControllerProvider).requireValue;
+          expect(state.studies.length, 2);
+          // The batch reloads once at the end instead of jumping per study.
+          expect(state.scope.studyId, isNull);
+
+          final chapters = <String, Side>{};
+          for (final study in state.studies) {
+            final stored = await repo.getChaptersByStudy(study.id);
+            expect(stored, isNotEmpty);
+            for (final chapter in stored) {
+              chapters[chapter.id] = chapter.orientation;
+            }
+          }
+          expect(chapters.values, containsAll([Side.white, Side.black]));
+        },
+      );
+
+      test(
+        'second run skips everything as duplicates without new studies',
+        // SPEC INV-003. Re-running bulk import over identical material
+        // creates nothing new.
+        () async {
+          final container = bulkContainer(bulkClient());
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await controller.importAllMyStudies();
+          final rerun = await controller.importAllMyStudies();
+
+          expect(rerun.imported, 0);
+          expect(rerun.duplicates, 2);
+          expect(rerun.failed, isEmpty);
+
+          final state = container.read(reviewControllerProvider).requireValue;
+          expect(state.studies.length, 2);
+        },
+      );
+
+      test(
+        'a failing study is recorded and the batch continues',
+        // SPEC INV-011. One gone study must not abort the rest of the batch.
+        () async {
+          final container = bulkContainer(bulkClient(blackGone: true));
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          final result = await controller.importAllMyStudies();
+
+          expect(result.imported, 1);
+          expect(result.duplicates, 0);
+          expect(result.failed.length, 1);
+          expect(result.failed.first.name, 'Black Repertoire');
+
+          final state = container.read(reviewControllerProvider).requireValue;
+          expect(state.studies.length, 1);
+          expect(state.studies.first.title, 'White Repertoire');
+        },
+      );
+
+      test('empty library returns zeros without failing', () async {
+        final emptyClient = MockClient((request) async {
+          if (request.url.path == '/study/mine/updated') {
+            return http.Response(
+              pageJson([], null),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+        final container = bulkContainer(emptyClient);
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        final result = await controller.importAllMyStudies();
+
+        expect(result.imported, 0);
+        expect(result.duplicates, 0);
+        expect(result.failed, isEmpty);
+
+        final state = container.read(reviewControllerProvider).requireValue;
+        expect(state.studies, isEmpty);
       });
     });
 
