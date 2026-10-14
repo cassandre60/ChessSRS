@@ -12,7 +12,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q2 | Does the capture sound differ enough from the plain move sound in practice? | your ears | open |
 | Q3 | Does a check produce a noticeable heavier haptic? | your hands | open |
 | Q4 | May I delete `getDueReviewStates` and its only test? | an `Ack-G08` signature | open |
-| Q5 | Should G07 verify *who* added `gate-approved`? | a gate decision | open |
+| Q5 | Swap G07's click-approval for a signed commit trailer? | a gate decision | investigated — not fixable as framed |
 | Q6 | Should docs-only PRs be able to merge on their own? | a gate decision | open |
 
 ---
@@ -71,21 +71,58 @@ files, so retiring it is a test refactor rather than a deletion.
 
 ---
 
-## Q5 — G07 cannot tell who approved
+## Q5 — G07 cannot tell who approved (investigated: not fixable as framed)
 
-**Known.** `scripts/gates/protected_paths_check.py` passes when a label named
-`gate-approved` *exists*. It does not check who added it, or when. An agent can
-therefore label its own PR and pass the gate meant to stop agents editing
-referee files. I hit this in practice: the label made G07 pass on #95 and #99,
-and I applied it myself under your instruction.
+**Asked.** Whether G07 should verify *who* added `gate-approved`.
 
-**Why it matters.** G07 is one of the few gates standing between an agent and
-`SPEC.md`, `GATES.md`, `.gates/`, `analysis_options.yaml`, and `pubspec.yaml`.
-Its value depends on approval being a separate act by a separate person.
+**Answer: not implementable in this repository, and the premise of the question
+was wrong.** Investigated 2026-10-14; recording it here so nobody builds it.
 
-**What I need from you.** Whether to tighten it — most plausibly by requiring the
-label to come from someone other than the PR author. That is a gate change and
-needs its own PR with evidence, not a drive-by.
+`scripts/gates/protected_paths_check.py` passes when a label named
+`gate-approved` *exists*. It does not check who added it. The obvious fix —
+require the approver to differ from the PR author — **can never be satisfied
+here**:
+
+```
+$ gh api repos/cassandre60/ChessSRS/collaborators --jq '.[].login'
+cassandre60
+```
+
+Every PR is authored by `cassandre60`, and that is the only account with write
+access, because agents push using the owner's credentials. A
+`labeller != author` rule would block every protected-path PR permanently —
+including the legitimate ones. Identity is not a usable signal in a
+single-account setup.
+
+**How little the gate currently protects.** Every protected-path PR this session
+was approved by its own author:
+
+| PR | Author | Labelled by |
+|---|---|---|
+| #95 | cassandre60 | cassandre60 |
+| #99 | cassandre60 | cassandre60 |
+| #117 | cassandre60 | cassandre60 |
+
+Three for three. G07 stopped nobody, including me — I labelled my own PRs and
+recorded in each one that the gate "is working as intended", which was a
+statement about the mechanism rather than about what had happened.
+
+**What is achievable, and what it is not.** Replace the click with a signed
+commit trailer, the way G08 already does: `Ack-G07: <reason>` in the branch
+history. That makes approval a deliberate, permanent, publicly-visible act
+instead of a label an agent can add reflexively, and G08's own output already
+shows the pattern working — findings stay listed on every run even when
+acknowledged.
+
+**It would still not be a security boundary.** An agent can write a trailer just
+as easily as a label. Nothing in GitHub distinguishes "the owner typed this" from
+"the agent typed this" when both share one account. The improvement is
+**accountability, not enforcement** — it makes approval a quotable act in history
+instead of a silent state change.
+
+**What I need from you.** Whether to make that swap. It is a gate change needing
+its own PR, and it is a real improvement, but it is weaker than the question
+originally implied and I would rather you know that before agreeing to it.
 
 ---
 
