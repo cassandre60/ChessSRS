@@ -131,6 +131,78 @@ this brief's deliverable was the measurement. Note that PERF-FIX-21 already
 landed a targeted query here (#84); whatever remains may already be near the
 floor for this schema.
 
+### Second pass — attribution (2026-10-14)
+
+The first pass said "the queries cost 26–30 ms". **That was wrong**, and it is worth
+recording how, because the wrongness was invisible without measuring.
+
+`getDueSummary()` makes six repository calls. Timed individually
+(`test/perf/due_summary_attribution_test.dart`, same database, median of 15):
+
+| Call | Result | Share |
+|---|---|---|
+| **`getAllReviewStates()`** | **16.7 ms** | **76%** |
+| `getAllDecisions()` | 2.3 ms | 11% |
+| `getKnowledgeStates()` | 1.9 ms | 9% |
+| `getChapterOpenings()` | 0.4 ms | 2% |
+| `getChapterOrientations()` | 0.4 ms | 2% |
+| `getChapterStudyIds()` | 0.4 ms | 2% |
+| sum of parts | 22.0 ms | |
+| `getDueSummary()` total | 20.8 ms | |
+
+One call dominates, and it is not the one the "queries are slow" reading points at.
+
+#### The queries are not the cost
+
+Timing the same SQL directly in sqlite3 against the same file:
+
+| statement | ms | rows |
+|---|---|---|
+| `SELECT * FROM srs_decision` | 0.45 | 528 |
+| `SELECT * FROM srs_review_state` | 0.44 | 425 |
+| `SELECT * FROM position_knowledge_state` | 0.43 | 347 |
+| three `srs_chapter` selects | 0.05 total | 25 |
+
+**~1.4 ms of SQL for everything.** An index would buy nothing here.
+
+#### Refuted hypothesis: `DateTime.parse`
+
+The obvious next suspect was the mapper's ISO-8601 parsing. `_reviewStateFromRow`
+calls `DateTime.parse(...).toUtc()` on three fields per row. Measured directly,
+with no database in the loop:
+
+```
+DateTime.parse x 1473   1.92 ms
+```
+
+**1.92 ms of the 16.7 ms.** Not the cost. The temptation would be to stop here and
+tell someone "don't optimise the date parsing" — which is the useful outcome, but
+only because it was measured rather than assumed.
+
+A note on how nearly this went the other way: `getKnowledgeStates()` looked like a
+control showing the same parsing costing 2 ms for 347 rows, which would have made
+`DateTime.parse` implausible. That control was invalid — it was called with 66
+canonical ids, so it fetched 66 rows, not 347. The comparison was between two calls
+doing different work.
+
+#### Still unattributed: ~13 ms
+
+SQL (~0.9 ms) and date parsing (~1.9 ms) account for under 3 ms of
+`getAllReviewStates`' 16.7 ms. The remainder is in Dart: constructing and merging
+**772** `ReviewState`/`PositionKnowledgeState` objects (491 returned after merge),
+plus `toReviewState()` per knowledge row.
+
+**Not guessed at.** Two plausible explanations were tested and refuted; a third
+guess would be indistinguishable from the two that were wrong. Closing this needs a
+profiler run (`--observe` / allocation tracking), not another inference.
+
+#### What this changes
+
+The first pass's "add an index" implication is dead — there is nothing to index.
+Any fix has to be on the Dart side: either stop materialising all 772 rows to
+count them, or find the ~13 ms above. **Neither is decided here**, because Q1 in
+`docs/open-questions.md` asks whether the pause matters to the owner at all.
+
 ### Reproducing
 
 ```bash
