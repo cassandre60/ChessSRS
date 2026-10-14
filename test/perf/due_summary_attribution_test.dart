@@ -128,7 +128,7 @@ void main() {
         }
         expect(sink, isNonZero);
       });
-      stdout.writeln('\n=== direct cost of the mapper\'s date parsing ===');
+      stdout.writeln("\n=== direct cost of the mapper's date parsing ===");
       stdout.writeln('rows returned       $rows');
       stdout.writeln(
         'DateTime.parse x${rows * fieldsPerRow}   '
