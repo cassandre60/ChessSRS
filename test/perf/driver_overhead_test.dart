@@ -82,7 +82,7 @@ void main() {
       final mapped = await medianOf(() => repo.getAllReviewStates());
 
       final rows = await db.rawQuery('SELECT COUNT(*) c FROM $kTableSrsReviewState');
-      final n = (rows.first['c'] as num).toInt();
+      final n = (rows.first['c'] as num? ?? 0).toInt();
 
       stdout.writeln('\n=== driver overhead vs mapping ===');
       stdout.writeln('srs_review_state rows: $n');
