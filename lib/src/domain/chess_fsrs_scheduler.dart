@@ -129,6 +129,15 @@ class ChessFsrsParams {
 const double kFsrsDecay = -0.5;
 final double kFsrsFactor = math.pow(0.9, 1 / kFsrsDecay).toDouble() - 1; // 19 / 81 ≈ 0.2345679
 
+/// Minimum target recall probability clamp (70%).
+const double kMinTargetRetention = 0.70;
+
+/// Maximum target recall probability clamp (99%).
+const double kMaxTargetRetention = 0.99;
+
+/// Default target recall probability (88%; 95% in Tournament Mode).
+const double kDefaultTargetRetention = 0.88;
+
 /// Calculates retrievability probability R(t, S) given elapsed time and stability in days.
 double fsrsRetrievability(double elapsedDays, double stabilityDays) {
   if (stabilityDays <= 0) return 0.0;
@@ -138,7 +147,7 @@ double fsrsRetrievability(double elapsedDays, double stabilityDays) {
 
 /// Solves for the optimal review interval in days to hit [targetRetention].
 double fsrsIntervalForTarget(double stabilityDays, double targetRetention) {
-  final r = targetRetention.clamp(0.70, 0.99);
+  final r = targetRetention.clamp(kMinTargetRetention, kMaxTargetRetention);
   final raw = stabilityDays / kFsrsFactor * (math.pow(r, 1 / kFsrsDecay) - 1);
   return raw.isFinite && raw > 0 ? raw : 0.0;
 }
@@ -192,7 +201,7 @@ double fsrsNextStabilityLapse(double d, double s, double r, ChessFsrsParams p) {
 class ChessFsrsScheduler implements Scheduler {
   const ChessFsrsScheduler({
     this.params = const ChessFsrsParams.chessDefaults(),
-    this.targetRetention = 0.88,
+    this.targetRetention = kDefaultTargetRetention,
     this.maxIntervalDays = 365 * 3, // 3 years
     this.minIntervalDays = 1 / 1440, // 1 minute
   });
@@ -265,7 +274,7 @@ class ChessFsrsScheduler implements Scheduler {
 
     newStabilityDays = newStabilityDays.clamp(params.minStabilityDays, params.maxStabilityDays);
 
-    final effectiveRetention = targetRetention.clamp(0.70, 0.99);
+    final effectiveRetention = targetRetention.clamp(kMinTargetRetention, kMaxTargetRetention);
     final intervalDays = fsrsIntervalForTarget(
       newStabilityDays,
       effectiveRetention,
@@ -322,7 +331,7 @@ List<double> fsrsIntervalProgressionPreview({
   final intervals = <double>[];
   var d = fsrsInitialDifficulty(FsrsRating.good, params);
   var s = params.w2; // Initial stability for Rating.good in days
-  final effectiveR = targetRetention.clamp(0.70, 0.99);
+  final effectiveR = targetRetention.clamp(kMinTargetRetention, kMaxTargetRetention);
 
   for (var i = 0; i < steps; i++) {
     intervals.add(fsrsIntervalForTarget(s, effectiveR).clamp(minIntervalDays, maxIntervalDays));

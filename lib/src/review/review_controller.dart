@@ -23,6 +23,18 @@ final Logger _logger = Logger('ReviewController');
 
 enum ReviewFeedback { none, correct, incorrect }
 
+/// Pause before playing opponent auto-reply move so the user sees their own move land.
+const kOpponentMoveDelay = Duration(milliseconds: 300);
+
+/// Pause after opponent move before advancing to the next prompt.
+const kOpponentPostMoveDelay = Duration(milliseconds: 300);
+
+/// Pause on the final move of a variation so user sees their piece land before transitioning.
+const kEndOfLinePause = Duration(milliseconds: 350);
+
+/// Pause before animating an incoming opponent pre-move on line transition.
+const kIncomingPreMoveDelay = Duration(milliseconds: 350);
+
 /// Lichess answered 404 for a study id.
 ///
 /// The cause is genuinely ambiguous: a private study and a study that does not exist are
@@ -975,7 +987,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // sees their move actualized on the board before the line transitions.
     final opponentMoves = result.autoPlayedMoves.where((m) => !m.isUserMove).toList();
     if (opponentMoves.isNotEmpty) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(kOpponentMoveDelay);
       if (!ref.mounted || generation != _generation) return;
 
       final oppMove = opponentMoves.first;
@@ -996,11 +1008,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       try {
         ref.read(moveFeedbackServiceProvider).moveFeedback();
       } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(kOpponentPostMoveDelay);
       if (!ref.mounted || generation != _generation) return;
     } else {
       // Final move of line: pause so user sees their move actualized on the board
-      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await Future<void>.delayed(kEndOfLinePause);
       if (!ref.mounted || generation != _generation) return;
     }
 
@@ -1377,7 +1389,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   }
 
   Future<void> _playIncomingPreMove(ReviewPrompt prompt) async {
-    await Future<void>.delayed(const Duration(milliseconds: 350));
+    await Future<void>.delayed(kIncomingPreMoveDelay);
     if (!ref.mounted) return;
     final currentState = state.value;
     if (currentState == null || currentState.currentPrompt?.decision.id != prompt.decision.id) {
