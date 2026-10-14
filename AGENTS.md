@@ -222,6 +222,11 @@ every audio test in this repo passes identically whether the volume is at zero
 or the audio session is dead. A green suite is not evidence that a speaker
 produced anything.
 
+Decisions engineering cannot make for the owner go in `docs/open-questions.md`
+with what is known, what is not, and what is needed to settle it — rather than in
+a PR comment or a chat that scrolls away. Measurement that needs no decision does
+not belong there.
+
 Commands (FVM-pinned toolchain):
 
 ```bash

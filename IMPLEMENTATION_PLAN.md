@@ -388,6 +388,33 @@ Status:
 
 ---
 
+### Measured 2026-10-14 — real-library session cost (PERF-FIX-24)
+
+Every prior number came from a synthetic fixture. Measured against a **copy** of
+the owner's database (10 active studies, 23 chapters, 519 decisions, 480 due,
+7 MiB, canonical sharing 1.17x), median of 15 after 3 warmups:
+
+| Measurement | Result |
+|---|---|
+| whole-library `startSession()` | **37–39 ms** |
+| `getDueSummary()` alone | **26–30 ms** |
+| largest single study `startSession()` | 15–16 ms |
+
+The synthetic harness measured only the constructor (~2 ms at this size) and was
+right about it; the path a user pays is **~18x** that, and ~75% of it is SQLite
+query time no benchmark had measured. PERF-FIX-32 Phase 2 proposed chunking the
+constructor, which would have targeted ~5% of the observed cost — declining it
+was correct for the constructor, but the decline should not be read as "no
+performance work needed".
+
+**Not a QUALITY.md §4.1 breach.** §4.1's 16 ms is Move Response Time (legality
++ repertoire lookup on a move); a session start is off that path.
+
+Follow-up worth a decision: `getDueSummary` at 26–30 ms. Read-only, and
+PERF-FIX-21 already landed a targeted query there (#84), so it may be near the
+floor for this schema.
+
+
 ### Dead-code audit 2026-10-13
 
 Tree-wide sweep for declarations with exactly one occurrence across `lib/` +
