@@ -8,7 +8,7 @@ import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
 import 'package:chess_srs/src/model/study/study_list_paginator.dart';
 import 'package:chess_srs/src/network/http.dart';
-import 'package:chess_srs/src/persistence/study_repository.dart';
+import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:collection/collection.dart';
 import 'package:deep_pick/deep_pick.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';

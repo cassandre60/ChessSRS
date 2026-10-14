@@ -1,4 +1,3 @@
-import 'package:chess_srs/src/model/common/speed.dart';
 import 'package:flutter/widgets.dart';
 
 /// A pair of time and increment in seconds used as game clock
@@ -28,8 +27,6 @@ class TimeIncrement implements Comparable<TimeIncrement> {
   /// Returns the estimated duration of the game, with increment * 40 added to
   /// the initial time.
   Duration get estimatedDuration => Duration(seconds: time + increment * 40);
-
-  Speed get speed => Speed.fromTimeIncrement(this);
 
   bool get isInfinite => time == 0 && increment == 0;
 

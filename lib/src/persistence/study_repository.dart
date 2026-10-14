@@ -1,18 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
-import 'package:chess_srs/src/persistence/sqlite_study_repository.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-/// Provider for the application's [StudyRepository].
-final srsStudyRepositoryProvider = FutureProvider<StudyRepository>((ref) async {
-  final db = await ref.watch(databaseProvider.future);
-  return SqliteStudyRepository(db);
-}, name: 'SrsStudyRepositoryProvider');
 
 /// Abstract interface for local persistence of studies, chapters, trees,
 /// decisions, and spaced repetition review states.

@@ -68,3 +68,7 @@ extension SpeedExtension on Pick {
     throw PickException("value $value at $debugParsingExit can't be casted to Speed");
   }
 }
+
+extension TimeIncrementSpeed on TimeIncrement {
+  Speed get speed => Speed.fromTimeIncrement(this);
+}
