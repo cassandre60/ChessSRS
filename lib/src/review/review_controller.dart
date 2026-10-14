@@ -65,8 +65,12 @@ typedef BulkImportProgress = ({int done, int total, String currentName});
 typedef BulkImportFailure = ({String name, String reason});
 
 /// Outcome of [ReviewController.importAllMyStudies]: freshly [imported] studies,
-/// [duplicates] skipped as already here, and per-study [failed] reasons.
-typedef BulkImportResult = ({int imported, int duplicates, List<BulkImportFailure> failed});
+/// titles skipped as [duplicates] already here, and per-study [failed] reasons.
+typedef BulkImportResult = ({
+  int imported,
+  List<String> duplicates,
+  List<BulkImportFailure> failed,
+});
 
 class ReviewScreenState {
   const ReviewScreenState({
@@ -1205,9 +1209,33 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
   }
 
+  /// Snaps a lagging board to the live prompt.
+  ///
+  /// After a line transition the board briefly shows the incoming opponent
+  /// move's parent position while the prompt already expects the reply. Input
+  /// in that window addresses pieces that cannot move there, so without this
+  /// the gesture dies silently (owner-reported 2026-10-14: correct moves
+  /// changing nothing). Called on every submitted move and on every board
+  /// tap (see the review screen), and a no-op once the board agrees — so the
+  /// pending animation, which lands on the same position, stays harmless.
+  void cancelPreMoveAnimation() {
+    final currentState = state.value;
+    final prompt = currentState?.currentPrompt;
+    if (currentState == null || prompt == null) return;
+    if (currentState.boardPosition?.fen != prompt.fen) {
+      state = AsyncData(currentState.copyWith(boardPosition: _parseFen(prompt.fen)));
+    }
+  }
+
   /// Submits a move played by the user.
   Future<ReviewStepResult?> onUserMove(Move move) async {
-    final currentState = state.asData?.value;
+    var currentState = state.asData?.value;
+    if (currentState == null || currentState.currentPrompt == null) return null;
+    // The board may still show the pre-move parent position (see above):
+    // grade and animate from the prompted position, never from the lag.
+    // Re-read afterwards: the snap above replaces the state object.
+    cancelPreMoveAnimation();
+    currentState = state.asData?.value;
     if (currentState == null || currentState.currentPrompt == null) return null;
     if (_isProcessingMove) return null;
     if (currentState.isAwaitingAdvance) {
@@ -1648,7 +1676,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // Phase 2: fetch and import sequentially — polite to the API and to the
     // serialized import lock, one study at a time.
     var imported = 0;
-    var duplicates = 0;
+    final duplicates = <String>[];
     final failed = <BulkImportFailure>[];
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
@@ -1663,7 +1691,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           switchScope: false,
         );
         if (result.isDuplicate) {
-          duplicates++;
+          duplicates.add(result.study.title);
         } else {
           imported++;
         }
@@ -1679,7 +1707,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
     await reload();
     _logger.info(
-      'Bulk import done: $imported imported, $duplicates already here, ${failed.length} failed',
+      'Bulk import done: $imported imported, ${duplicates.length} already here, ${failed.length} failed',
     );
     return (imported: imported, duplicates: duplicates, failed: failed);
   }

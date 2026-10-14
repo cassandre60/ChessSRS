@@ -253,13 +253,17 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
           );
       if (!mounted) return;
       final parts = <String>['${result.imported} imported'];
-      if (result.duplicates > 0) parts.add('${result.duplicates} already here');
+      if (result.duplicates.isNotEmpty) {
+        final names = result.duplicates.take(3).join(', ');
+        final more = result.duplicates.length > 3 ? ' and ${result.duplicates.length - 3} more' : '';
+        parts.add('${result.duplicates.length} already here ($names$more)');
+      }
       if (result.failed.isNotEmpty) {
         final names = result.failed.take(3).map((f) => f.name).join(', ');
         final more = result.failed.length > 3 ? ' and ${result.failed.length - 3} more' : '';
         parts.add('${result.failed.length} failed ($names$more)');
       }
-      final summary = result.imported + result.duplicates + result.failed.length == 0
+      final summary = result.imported + result.duplicates.length + result.failed.length == 0
           ? 'No studies found on your Lichess account.'
           : parts.join(' · ');
       setState(() => _bulkSummary = summary);
