@@ -24,8 +24,8 @@
 
 import 'dart:io';
 
-import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,7 +67,7 @@ void main() {
   test('session start against a real library', () async {
     if (dbPath == null || !File(dbPath).existsSync()) {
       markTestSkipped(
-        'CHESS_SRS_PERF_DB is unset or missing. This measures the owner\'s real library; '
+        "CHESS_SRS_PERF_DB is unset or missing. This measures the owner's real library; "
         'it does not fall back to a synthetic fixture, which is the gap it exists to close.',
       );
       return;
