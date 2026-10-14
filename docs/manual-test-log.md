@@ -39,8 +39,6 @@ comments, open it in analysis, start a review session on it, and open the study
 screen. All three should show a green arrow e2→e4 and a yellow circle on e4.
 
 ---
-=======
->>>>>>> origin/main
 
 ## Closed
 
