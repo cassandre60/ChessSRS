@@ -8,12 +8,12 @@ Each one states what is known, what is not, and what I would need from you.
 
 | # | Question | Needs | Status |
 |---|---|---|---|
-| Q1 | Does the ~37 ms review-open pause matter to you? | a product judgement | open |
-| Q2 | Does the capture sound differ enough from the plain move sound in practice? | your ears | open |
-| Q3 | Does a check produce a noticeable heavier haptic? | your hands | open |
-| Q4 | May I delete `getDueReviewStates` and its only test? | an `Ack-G08` signature | open |
-| Q5 | Swap G07's click-approval for a signed commit trailer? | a gate decision | investigated — not fixable as framed |
-| Q6 | Should docs-only PRs be able to merge on their own? | a gate decision | open |
+| Q1 | Speed | — | **answered 2026-10-14: as fast as possible, everything.** Handoff written |
+| Q2 | Capture-sound distinctness | — | closed 2026-10-14 — detail not wanted |
+| Q3 | Check haptic | — | closed 2026-10-14 — detail not wanted |
+| Q4 | `getDueReviewStates` | — | **answered 2026-10-14: delete.** Done |
+| Q5 | G07 approval attribution | — | **answered 2026-10-14: one account for both, accepted.** No action |
+| Q6 | Docs-only PRs merging alone | a gate decision | open |
 
 ---
 
@@ -38,10 +38,15 @@ Dart, constructing and merging 772 objects, and is not yet attributed further �
 two hypotheses were tested and refuted, and a third guess would be no more
 reliable than the two that were wrong.
 
-**What I need from you.** Whether a ~37 ms pause when opening review is
-noticeable in normal use. If yes, the next step is a profiler run on that ~13 ms,
-not an index and not date parsing. If no, this should stay recorded and closed
-rather than optimised speculatively.
+**Answered 2026-10-14:** *"it needs to be instant ie everything in the app need
+to be as fast as possible."* So: yes, and the scope is the whole app, not just
+this path.
+
+The work is handed off in `docs/performance-handoff.md`, which carries the
+measurements above, the two refuted hypotheses and their numbers, the ~13 ms that
+remains unattributed, and the discipline required to close it without breaking
+the app. The first instruction there is to profile, not to guess — the next move
+is finding those 13 ms, not an index and not date parsing.
 
 ---
 
@@ -56,9 +61,11 @@ plain move sound by ear, and whether the check haptic is noticeable without
 looking at the phone. `FakeSoundService` returns `Future.value()`, so the tests
 pass identically with the volume at zero.
 
-**What I need from you.** One minute in review mode: play a capture, then play a
-check, and tell me if you can tell them apart. Then close the item in
-`docs/manual-test-log.md`.
+**Closed 2026-10-14** — the owner's answer was to leave this detail alone. The
+unit tests still assert the correct sound is selected per move type at the
+service boundary, which is the most that can be checked without a human ear.
+`docs/manual-test-log.md` keeps the entry marked unconfirmed rather than
+restating it as verified.
 
 ---
 
@@ -73,10 +80,15 @@ requires a human `Ack-G08: <reason>` commit-message trailer. Writing that traile
 on my own PR is precisely the abuse the gate exists to catch, so I removed the
 other eight dead symbols in #105 and left this one.
 
-**What I need from you.** Either the `Ack-G08` signature on a branch deleting it,
-or a decision to leave it. `getDueCount` is a related case I also left: dead in
-production but used as the assertion helper by ~10 call sites across three test
-files, so retiring it is a test refactor rather than a deletion.
+**Answered 2026-10-14: delete.** Removed, with the `Ack-G08` trailer in the
+committing branch recording that the owner authorised it — which is the thing
+that was missing before. The gate exists to stop an agent deciding this alone;
+the owner deciding it is what makes the signature legitimate rather than
+self-serving.
+
+`getDueCount` remains, and is a different case: dead in production but the
+assertion helper for ~10 call sites across three test files, so retiring it is a
+test refactor rather than a deletion. Not asked about, not touched.
 
 ---
 
@@ -129,9 +141,11 @@ as easily as a label. Nothing in GitHub distinguishes "the owner typed this" fro
 **accountability, not enforcement** — it makes approval a quotable act in history
 instead of a silent state change.
 
-**What I need from you.** Whether to make that swap. It is a gate change needing
-its own PR, and it is a real improvement, but it is weaker than the question
-originally implied and I would rather you know that before agreeing to it.
+**Answered 2026-10-14:** *"for now im using only 1 account for both."* Accepted,
+and it is the reason this is not fixable rather than merely unfixed. No action
+taken. The finding stays recorded so a future multi-account setup does not
+rediscover it, and so nobody reads G07 as deterring self-approval — it does
+not.
 
 ---
 
