@@ -766,47 +766,56 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
                 ? () => ref.read(reviewControllerProvider.notifier).exitPracticeMode()
                 : null,
           ),
-          board: (context, size, wide) => Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Semantics(
-                container: true,
-                label: _boardSemanticsLabel(prompt, state.boardOrientation),
-                child: BoardWidget(
-                  size: size,
-                  orientation: state.boardOrientation,
-                  settings: boardPrefs
-                      .toBoardSettings(Variant.standard, srsColors: srsColors)
-                      .copyWith(enableCoordinates: false),
-                  controller: _controller!,
-                  onMove: (move, {viaDragAndDrop}) {
-                    ref.read(reviewControllerProvider.notifier).onUserMove(move);
-                  },
-                  shapes: shapes,
-                ),
-              ),
-              if (isLapse && state.expectedMove != null)
-                Positioned.fill(
-                  child: SrsMoveArrow(
-                    from: state.expectedMove!.from,
-                    to: state.expectedMove!.to,
-                    whiteAtBottom: state.boardOrientation == Side.white,
+          board: (context, size, wide) => GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            // A tap landing inside the opponent pre-move animation window
+            // addresses undraggable pieces and would die silently: snap the
+            // board to the live prompt first so the gesture that follows
+            // reaches a position the user can actually move on. No-op once
+            // the board agrees (see cancelPreMoveAnimation).
+            onTapDown: (_) => ref.read(reviewControllerProvider.notifier).cancelPreMoveAnimation(),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Semantics(
+                  container: true,
+                  label: _boardSemanticsLabel(prompt, state.boardOrientation),
+                  child: BoardWidget(
+                    size: size,
+                    orientation: state.boardOrientation,
+                    settings: boardPrefs
+                        .toBoardSettings(Variant.standard, srsColors: srsColors)
+                        .copyWith(enableCoordinates: false),
+                    controller: _controller!,
+                    onMove: (move, {viaDragAndDrop}) {
+                      ref.read(reviewControllerProvider.notifier).onUserMove(move);
+                    },
+                    shapes: shapes,
                   ),
                 ),
-              if (state.isAwaitingAdvance)
-                Positioned.fill(
-                  child: Semantics(
-                    container: true,
-                    button: true,
-                    label: 'Continue to next position',
-                    onTap: onContinue,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: onContinue,
+                if (isLapse && state.expectedMove != null)
+                  Positioned.fill(
+                    child: SrsMoveArrow(
+                      from: state.expectedMove!.from,
+                      to: state.expectedMove!.to,
+                      whiteAtBottom: state.boardOrientation == Side.white,
                     ),
                   ),
-                ),
-            ],
+                if (state.isAwaitingAdvance)
+                  Positioned.fill(
+                    child: Semantics(
+                      container: true,
+                      button: true,
+                      label: 'Continue to next position',
+                      onTap: onContinue,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: onContinue,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           side: (context, wide, appWidth) => SrsReviewSide(
             wide: wide,

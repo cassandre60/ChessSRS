@@ -1561,6 +1561,7 @@ void main() {
 
           expect(rerun.imported, 0);
           expect(rerun.duplicates, 2);
+          expect(rerun.duplicateTitles, containsAll(['White Repertoire', 'Black Repertoire']));
           expect(rerun.failed, isEmpty);
 
           final state = container.read(reviewControllerProvider).requireValue;
@@ -1700,6 +1701,90 @@ void main() {
               ),
             ),
           );
+        },
+      );
+
+      test(
+        'answering mid-session still advances after a bulk import',
+        // SPEC INV-020. Same as above but in an all-studies scope with an
+        // answer already given before the batch: the owner's frozen board
+        // happened while reviewing across studies, not inside one. Taps
+        // landing in the pre-move animation window died silently because the
+        // board showed the parent position; every tap now snaps to the live
+        // prompt first (see cancelPreMoveAnimation).
+        () async {
+          final container = bulkContainer(bulkClient());
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await controller.importPgnText(
+            pgnText: '1. e4 e5 2. Bc4 *',
+            title: 'First',
+            repertoireSide: Side.white,
+          );
+          await controller.importPgnText(
+            pgnText: '1. d4 d5 *',
+            title: 'Second',
+            repertoireSide: Side.white,
+          );
+          await controller.changeScope(const ReviewScope.all());
+
+          // Answer once before the batch so the session is mid-flight.
+          var step = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+          expect(step?.isCorrect, isTrue);
+
+          final bulk = await controller.importAllMyStudies();
+          expect(bulk.imported, 2);
+
+          var state = container.read(reviewControllerProvider).requireValue;
+          final promptAfterBulk = state.currentPrompt;
+          expect(promptAfterBulk, isNotNull);
+
+          // Play whatever the reloaded session serves — the point is that the
+          // screen and the grader agree after the batch, not which line wins.
+          final expected = promptAfterBulk!.expectedMoves.first;
+          step = await controller.onUserMove(
+            NormalMove(
+              from: Square.fromName(expected.from),
+              to: Square.fromName(expected.to),
+              promotion: expected.promotion != null ? Role.fromChar(expected.promotion!) : null,
+            ),
+          );
+          expect(step?.isCorrect, isTrue);
+
+          state = container.read(reviewControllerProvider).requireValue;
+          expect(state.boardPosition?.fen, isNot(equals(promptAfterBulk.fen)));
+        },
+      );
+
+      test(
+        'answering the live prompt still advances after a bulk import',
+        // SPEC INV-020. Owner-reported 2026-10-14: right after a bulk import,
+        // correct moves changed nothing on the board until the scope was
+        // changed. The reload at the end of the batch must leave the screen
+        // and the grader on the same session.
+        () async {
+          final container = bulkContainer(bulkClient());
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await controller.importPgnText(
+            pgnText: '1. e4 e5 *',
+            title: 'First',
+            repertoireSide: Side.white,
+          );
+          var state = container.read(reviewControllerProvider).requireValue;
+          expect(state.currentPrompt, isNotNull);
+
+          final bulk = await controller.importAllMyStudies();
+          expect(bulk.imported, 2);
+
+          final step = await controller.onUserMove(
+            const NormalMove(from: Square.e2, to: Square.e4),
+          );
+          expect(step?.isCorrect, isTrue);
+
+          state = container.read(reviewControllerProvider).requireValue;
+          expect(state.currentPrompt, isNull);
+          expect(state.totalDueCount, 0);
         },
       );
     });

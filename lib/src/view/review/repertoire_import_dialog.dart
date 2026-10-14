@@ -253,7 +253,13 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
           );
       if (!mounted) return;
       final parts = <String>['${result.imported} imported'];
-      if (result.duplicates > 0) parts.add('${result.duplicates} already here');
+      if (result.duplicates > 0) {
+        final names = result.duplicateTitles.take(3).join(', ');
+        final more = result.duplicateTitles.length > 3
+            ? ' and ${result.duplicateTitles.length - 3} more'
+            : '';
+        parts.add('${result.duplicates} already here ($names$more)');
+      }
       if (result.failed.isNotEmpty) {
         final names = result.failed.take(3).map((f) => f.name).join(', ');
         final more = result.failed.length > 3 ? ' and ${result.failed.length - 3} more' : '';

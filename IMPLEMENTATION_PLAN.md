@@ -282,6 +282,11 @@ remains a later option — never a redesign.
       2. `StudyRepository.getStudiesByUsername` streams that endpoint; the controller lists by the signed-in account name and refuses while signed out without a call. Website-list error handling stays for the message paths.
       3. Tests re-mocked to NDJSON + a seeded `tester` account, plus a signed-out no-call test. The mock shapes now match a live server response each.
 
+- [x] **R18: Taps in the pre-move animation window no longer die + duplicate names in bulk summary** *(done: 2026-10-14, owner-reported)*
+      1. Frozen board: after a line transition the board shows the incoming move's parent position for 350ms while the prompt already expects the reply — own pieces undraggable, taps silent. Bulk's end-of-batch reload re-armed exactly that state. Fix: `cancelPreMoveAnimation` snaps a lagging board to the live prompt; called on every submitted move and on every board tap-down (no-op in sync, pending animation lands identically).
+      2. The same window crashed the controller (`PlayException`) when a move reached grading against the lagged board — proven by the new mid-session test failing pre-fix, passing post-fix (INV-020).
+      3. Bulk summary now names skipped duplicates (`N already here (a, b, …)`) so "left out" studies are identified instead of counted.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.
