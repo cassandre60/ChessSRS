@@ -15,9 +15,30 @@ tried is not verified, however green its CI was.
 
 ## Open
 
-_Nothing outstanding. The first entry has been verified; add the next one here as
-it ships._
+### 1. PGN comment shapes moved to one shared file (refactor, `pgn_shapes.dart`)
 
+**What changed.** Nothing visible on purpose: the 15-line `PgnCommentShape → Shape`
+conversion was copy-pasted in three files (analysis board, review screen, study
+screen) and now lives once in `lib/src/widgets/pgn_shapes.dart`. Same mapping,
+same chessground/dartchess entry points, same call sites.
+
+**What the tests prove.** That the mapping is correct (new unit test: green arrow,
+yellow circle, orig/dest), and that all three screens still build and behave
+(14 study + 44 review widget tests green, unchanged). What they do not prove is
+pixel identity — no test screenshots an arrow.
+
+**What only you can check.** Open a study whose PGN has comment shapes (`[%cal]`
+/ `[%csl]` tags — e.g. import any Lichess study with arrows), and confirm on
+each of the three surfaces that arrows and circles render exactly as before:
+analysis board, review screen mid-session, study screen. Pay attention to color
+(the app maps through its own `ShapeColor`, not chessground's) and to circles
+(`from == to`), which take a different constructor.
+
+**How to test it.** Import a PGN containing `[%cal Ge2e4]` and `[%csl Ye4]`
+comments, open it in analysis, start a review session on it, and open the study
+screen. All three should show a green arrow e2→e4 and a yellow circle on e4.
+
+---
 
 ## Closed
 
