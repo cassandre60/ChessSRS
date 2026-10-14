@@ -76,3 +76,67 @@ Every other brief in `docs/tasks/` asks for a deletion. This one asks for a
 finding, because the highest-value outcome of a dead-code sweep is knowing which
 of its candidates must survive. The queue README recommends stating a premise as
 a runnable command; this is that idea applied to the dangerous half.
+
+## 6. Findings (Investigated 2026-10-14)
+
+None of the audited enum values are dead. Every single group is live via
+persistence, dynamic byName/nameMap lookups, file asset mapping, or ordinal
+slider lookups. **Do not delete any of them.**
+
+### Group 1: `SoundTheme` (`lib/src/model/settings/general_preferences.dart`)
+- **Values:** `futuristic`, `piano`, `sfx`, `lisp` (alongside `standard`, `nes`).
+- **Status:** **LIVE**. User-selectable settings with corresponding disk assets.
+- **Evidence:**
+  1. UI iteration: `lib/src/view/settings/sound_settings_screen.dart:73-75`:
+     ```dart
+     for (final theme in SoundTheme.values) theme.name: soundThemeL10n(context, theme),
+     onChanged: (name) => onChanged(SoundTheme.values.byName(name)),
+     ```
+     The settings picker populates choices dynamically by mapping over `SoundTheme.values` and looks up selections via `.byName(name)`.
+  2. Asset files: `assets/sounds/` contains directories for every theme:
+     `futuristic/`, `piano/`, `sfx/`, `lisp/`, `nes/`, `standard/`.
+     `SoundService.load` (`lib/src/model/common/service/sound_service.dart:76`) loads audio files dynamically via path string: `assets/sounds/${theme.name}`.
+  3. Persistence: `GeneralPrefs.soundTheme` is persisted to `SharedPreferences` as JSON (`@Default(SoundTheme.standard) SoundTheme soundTheme`). Deleting an enum value causes deserialization failure for users with that theme saved.
+
+### Group 2: `StockfishLevel` & `MaiaRating` (`lib/src/model/engine/opponent_level.dart`)
+- **Values:** `level2`, `level5`, `level8`, `level9`, `level10`, `level11`, `level12`, `maia1200`, `maia1800` (and all intermediate levels).
+- **Status:** **LIVE**. Ordinal slider addressing and JSON persistence.
+- **Evidence:**
+  1. Slider addressing: `lib/src/view/offline_computer/opponent_picker.dart:263-264`:
+     ```dart
+     values: StockfishLevel.values.map((l) => l.level).toList(),
+     onChange: (value) => onChanged(StockfishLevel.values[value.toInt() - 1]),
+     ```
+     Users choose levels on a 1-12 slider that indexes directly into `StockfishLevel.values[level - 1]`.
+  2. Maia slider addressing: `lib/src/view/offline_computer/opponent_picker.dart:323-328`:
+     ```dart
+     values: MaiaRating.values.map((r) => r.rating).toList(),
+     widget.onChanged(MaiaRating.fromRating(value.toInt())!);
+     ```
+     `fromRating` queries `values.where((r) => r.rating == rating).firstOrNull`.
+  3. Serialization: `StockfishOpponentSpec.toJson` and `MaiaOpponentSpec.toJson` write `{'level': level.name}` and `{'rating': rating.name}`. Deserialization in `OpponentSpec.fromJson` reads them back via `values.asNameMap()[json['level']]` and `values.asNameMap()[json['rating']]`.
+
+### Group 3: `LinkSite` (`lib/src/model/user/profile.dart`)
+- **Values:** `bluesky`, `vkontakte`, `chessCom`, `chessMonitor`, `chessTempo`.
+- **Status:** **LIVE**. API data parsing via domain matching.
+- **Evidence:**
+  1. Dynamic lookup: `lib/src/model/user/profile.dart:79`:
+     ```dart
+     final site = LinkSite.values.firstWhereOrNull((e) => e.domains.contains(host));
+     ```
+     Lichess user profile social links from `/api/user/{username}` are parsed by matching URI hostnames against `LinkSite.values` domains (e.g. `bsky.app`, `vk.com`, `chess.com`).
+     Deleting any value breaks social link categorization for users with those profile links.
+
+### Group 4: `GameSource` & `GameRule` (`lib/src/model/game/game.dart`)
+- **Values:** `pool`, `relay`, `unknown`, `noAbort`, `noClaimWin`.
+- **Status:** **LIVE**. API payload string parsing.
+- **Evidence:**
+  1. Dynamic name lookup: `lib/src/model/game/game.dart:326, 338`:
+     ```dart
+     static final nameMap = IMap(GameSource.values.asNameMap());
+     static final nameMap = IMap(GameRule.values.asNameMap());
+     ```
+     Game data from Lichess JSON responses is parsed via `nameMap[string]`.
+
+### Conclusion
+Zero enum values are safe to delete. All audited candidates are actively utilized through reflection-equivalent patterns (`.values.byName`, `.values[index]`, `.values.asNameMap()`, or `.values.firstWhereOrNull`).
