@@ -266,6 +266,13 @@ remains a later option — never a redesign.
       3. UI: "Import all my studies" action in the import dialog's Lichess tab, signed-in only, with determinate progress and an imported/already-here/failed summary.
       4. Tests cite INV-003/INV-011/INV-013; no SPEC change needed.
 
+- [x] **R15: Bulk import refusal says why + desktop OAuth asks study:read** *(done: 2026-10-14, owner-reported failure)*
+      1. Production failure: desktop sign-in granted no OAuth scope, so `/study/mine/...` answered 401 and the dialog said only "bulk import failed". Verified live: anonymous listing gets 401, public listing parses to the assumed shape.
+      2. `buildDesktopOAuthUri` now sends `scope=study:read`. Existing desktop grants stay scopeless until sign-out + sign-in.
+      3. Listing failures throw `BulkImportListException` carrying the reason (401 names the missing permission + the fix); the dialog shows it inline and in the snackbar, never a bare failure.
+      4. Progress moved inside the button (spinner + `Importing n of N…` / `Listing your studies…`).
+      5. Regression tests: 401/500 listing errors, widget test that the reason reaches the screen, desktop scope URI test.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.

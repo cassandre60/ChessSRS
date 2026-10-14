@@ -48,11 +48,14 @@ const oauthScopes = ['study:read', 'study:write', 'preference:read'];
 /// an async method that also binds a socket and exchanges a code, which is why a wrong scope went
 /// unnoticed until the owner signed in on a device and Lichess answered *Invalid scopes*.
 ///
-/// **No `scope` parameter is sent, deliberately.** The desktop flow therefore grants the token no
-/// study or preference capabilities, and the mobile flow must not copy that choice: it needs
-/// [oauthScopes] to read a private study or an account's preferences. Lichess validates the
-/// parameter against its own scope set — any name outside it is answered with *bad scope* — and
-/// the `web:*` names it owns are refused outright (see [oauthScopes]).
+/// **The desktop flow asks for `study:read`.** Without it the granted token
+/// cannot list the account's own studies (`GET /study/mine/...` answers 401),
+/// which is exactly what bulk import enumerates — and a scopeless token makes
+/// every bulk import fail with no further detail. Lichess validates the
+/// parameter against its own scope set — any name outside it is answered with
+/// *bad scope* — and the `web:*` names it owns are refused outright (see
+/// [oauthScopes]). Existing desktop grants stay scopeless until the owner
+/// signs out and back in.
 Uri buildDesktopOAuthUri({
   required String clientId,
   required String redirectUri,
@@ -64,6 +67,7 @@ Uri buildDesktopOAuthUri({
   'redirect_uri': redirectUri,
   'code_challenge': codeChallenge,
   'code_challenge_method': 'S256',
+  'scope': 'study:read',
   'state': ?state,
 });
 
