@@ -1632,10 +1632,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           page: page,
         );
       } on ServerException catch (e) {
-        if (e.statusCode == 401) {
-          throw const BulkImportListException(
-            'Lichess refused to list your studies (401). This sign-in has no study '
-            'permission: sign out and sign back in, then retry.',
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw BulkImportListException(
+            'Lichess refused to list your studies (${e.statusCode}). This sign-in has no study '
+            'permission: sign out and sign back in, then retry. Still refused afterwards? Revoke '
+            'ChessSRS at lichess.org/account/oauth/token, then sign in again.',
           );
         }
         throw BulkImportListException(
