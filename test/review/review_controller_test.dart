@@ -641,6 +641,46 @@ void main() {
       expect(state.currentPrompt!.studyId, importB.study.id);
     });
 
+    // SPEC INV-030: opening the active colour drawer preserves narrower scope (issue #59).
+    test('selectSide on active colour preserves study and opening scope without reload', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final importA = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      // Narrow scope to study A
+      await controller.changeScope(ReviewScope.study(importA.study.id));
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, ReviewScope.study(importA.study.id));
+      expect(state.activeSide, Side.white);
+      final originalPosition = state.boardPosition;
+      final originalPromptId = state.currentPrompt?.decision.id;
+
+      // Tap the white square (open White drawer)
+      await controller.selectSide(Side.white);
+
+      // Must remain scoped to study A without reloading or moving the board
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, ReviewScope.study(importA.study.id));
+      expect(state.boardPosition, originalPosition);
+      expect(state.currentPrompt?.decision.id, originalPromptId);
+
+      // Selecting the OTHER side switches to that side
+      await controller.selectSide(Side.black);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, const ReviewScope.black());
+      expect(state.activeSide, Side.black);
+    });
+
     test(
       'handles incorrect move (lapse), shows expected move, and continues on acknowledge',
       () async {

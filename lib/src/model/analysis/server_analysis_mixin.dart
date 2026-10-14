@@ -27,9 +27,6 @@ mixin ServerAnalysisMixin<T extends ServerAnalysisMixinState> on AnyNotifier<Asy
 
   Root get positionTree;
 
-  ValueListenable<ServerAnalysisSource?> get currentServerAnalysis =>
-      _serverAnalysisService.currentAnalysis;
-
   @override
   WhenComplete runBuild() {
     _serverAnalysisService = ref.watch(serverAnalysisServiceProvider);

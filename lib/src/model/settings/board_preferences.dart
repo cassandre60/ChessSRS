@@ -213,9 +213,6 @@ sealed class BoardPrefs with _$BoardPrefs implements Serializable {
     hue: kBoardDefaultHueFilter,
   );
 
-  bool get hasColorAdjustments =>
-      brightness != kBoardDefaultBrightnessFilter || hue != kBoardDefaultHueFilter;
-
   ChessboardSettings toBoardSettings(Variant variant, {SrsColors? srsColors}) {
     final pieceAssets = pieceSet.assets;
 

@@ -851,9 +851,6 @@ sealed class AnalysisState
       ? liveMoveNode!.childById(currentPath.stripPrefix(pathToLiveMove!).head!)?.sanMove
       : null;
 
-  IList<UciPath>? get linesForPendingMove =>
-      pendingMove != null ? forecast?.linesStartingWith(pendingMove!.move) : null;
-
   @override
   bool isEngineAvailable(EngineEvaluationPrefState prefs) => isLocalEngineOffered(
     allowed: isEngineAllowed,

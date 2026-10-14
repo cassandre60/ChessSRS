@@ -387,6 +387,25 @@ Status:
 
 ---
 
+### Dead-code audit 2026-10-13
+
+Tree-wide sweep for declarations with exactly one occurrence across `lib/` +
+`test/` + `scripts/`: 72 candidates in `lib/src/model/`. Triaged into
+REFACTOR-FIX-21 (hand-written `deep_pick` `OrNull` helpers) and
+REFACTOR-FIX-22 (14 dead predicates and providers), both verified
+declaration-only and free of `@override`. The ~30 enum values that also matched
+went to REFACTOR-FIX-23 as an investigation rather than a deletion: a sound
+theme persisted as `sfx` must still parse after an upgrade, and deleting the
+value silently resets it. The investigation concluded 2026-10-14: all four
+groups (SoundTheme, StockfishLevel, MaiaRating, LinkSite, GameSource/GameRule)
+are live via settings pickers, disk audio assets, opponent sliders, or API parsing;
+zero enum values were deleted.
+
+The sweep command is recorded in each brief so a stale brief is detectable in
+seconds. Two symbols in the first draft (`asGameFullIdOrNull`, `asUserIdOrNull`)
+were live and are marked "must stay" — caught by running the brief's own command
+before shipping it.
+
 ### Runtime validation log
 
 Per AGENTS.md §4, milestone runtime evidence. Only entries actually exercised are

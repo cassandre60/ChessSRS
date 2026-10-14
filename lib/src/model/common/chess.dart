@@ -215,10 +215,6 @@ enum Variant {
 
   bool get isReadSupported => readSupportedVariants.contains(this);
 
-  bool get isPlaySupported => playSupportedVariants.contains(this);
-
-  bool get hasDropMoves => this == Variant.crazyhouse;
-
   static final IMap<String, Variant> nameMap = IMap(values.asNameMap());
 
   static Variant fromRule(Rule rule) {
@@ -393,15 +389,6 @@ extension ChessExtension on Pick {
 
   Square asSquareOrThrow() {
     return Square.parse(this.required().value as String)!;
-  }
-
-  Square? asSquareOrNull() {
-    if (value == null) return null;
-    try {
-      return asSquareOrThrow();
-    } catch (_) {
-      return null;
-    }
   }
 
   Variant asVariantOrThrow() {

@@ -41,14 +41,3 @@ final userRatingHistoryProvider = FutureProvider.autoDispose
         const Duration(minutes: 1),
       );
     }, name: 'UserRatingHistoryProvider');
-
-typedef CrosstableProviderParams = ({UserId userId1, UserId userId2, bool matchup});
-
-final crosstableProvider = FutureProvider.autoDispose.family<Crosstable, CrosstableProviderParams>((
-  Ref ref,
-  CrosstableProviderParams params,
-) {
-  return ref
-      .read(userRepositoryProvider)
-      .getCrosstable(params.userId1, params.userId2, matchup: params.matchup);
-}, name: 'CrosstableProvider');
