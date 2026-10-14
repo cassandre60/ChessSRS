@@ -56,6 +56,17 @@ on:
       - 'build.yaml'
       - '.github/**'
       - 'verify'
+      # Docs and Markdown, added 2026-10-14. A PR touching only these used to run no
+      # workflow at all, so the required "T1 fast gates" never reported and the merge
+      # was blocked permanently — not failed, blocked, waiting on something that could
+      # never arrive. GitHub refuses that override for admins too. The failure mode is
+      # the real argument: it looks like a failing test, so the instinct is to go fix
+      # tests that never ran, and the only clue is this file's trigger list.
+      #
+      # Cost is ~30s of gates on a docs PR. Paying it is cheaper than the alternative,
+      # which was editing a file one had no reason to edit so this workflow would fire.
+      - '**.md'
+      - 'docs/**'
     branches:
       - main
   schedule:

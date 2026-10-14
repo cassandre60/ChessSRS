@@ -13,7 +13,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q3 | Check haptic | — | closed 2026-10-14 — detail not wanted |
 | Q4 | `getDueReviewStates` | — | **answered 2026-10-14: delete.** Done |
 | Q5 | G07 approval attribution | — | **answered 2026-10-14: one account for both, accepted.** No action |
-| Q6 | Docs-only PRs merging alone | a gate decision | open |
+| Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 
 ---
 
@@ -149,21 +149,39 @@ not.
 
 ---
 
-## Q6 — Docs-only PRs cannot merge alone
+## Q6 — Docs-only PRs cannot merge alone (FIXED 2026-10-14)
 
-**Known.** `gates.yml` deliberately has no Markdown trigger, but branch protection
-requires `T1 fast gates` to be *reported*. A PR touching only `.md` never
-triggers it, so the check stays "expected" and the merge is blocked — including
-for admins. This is not new; it is the trap recorded in the 2026-10-01 lesson.
+**The problem.** `gates.yml` had no Markdown trigger, but branch protection
+requires both `T1 fast gates` and `Tests` to *report*. A PR touching only `.md`
+triggered neither, so both checks stayed permanently "expected" and the merge was
+blocked — not failed, blocked, waiting on something that could never arrive.
+GitHub refuses that override for admins too.
 
-**Why it still bites.** The workaround is to touch something `gates.yml` reads.
-`IMPLEMENTATION_PLAN.md` is the usual choice, which is why several of this
-project's docs PRs carry a one-line plan update they would not otherwise need.
-`test.yml` gained `IMPLEMENTATION_PLAN.md` in #106 as a second patch; `AGENTS.md`
-and `CODEOWNERS` are still gated this way.
+**A correction worth keeping.** This was first written up as "only `T1 fast
+gates` goes missing". That was wrong. Verifying it showed `test.yml` excludes
+`docs/**` as well, so **both** required checks are absent on a docs-only PR. Any
+fix addressing only `gates.yml` would have looked correct, half-fixed the problem,
+and left docs PRs just as stuck.
 
-**What I need from you.** Whether to fix the cause. Options I can see: add a
-Markdown trigger to `gates.yml` (costs ~30 s of gates on docs PRs), or give the
-Docs Check workflow a real job that emits `T1 fast gates` as well as its own
-check. Both are gate changes needing their own PR. The status quo is stable, just
-annoying — so this is a "worth doing or leave alone" call, not a fire.
+**The fix.** Added `**.md` and `docs/**` to the trigger lists of both `gates.yml`
+and `test.yml`.
+
+**Why the expensive option was the right one.** The original omission was
+defensible — no CI step reads a Markdown file, so a full run confirms what cannot
+fail. It stopped being the right trade once the two required checks diverged, since
+a required check that never fires blocks regardless of whether it would have found
+anything. The honest alternative was paying for the run. The dishonest ones were
+worse: editing a file with no reason to edit it so a workflow would fire, or
+having the no-op Docs Check job impersonate the suite's check name. The second is
+precisely the collision closed in #95 and #107, and reintroducing it would let a
+**code** PR merge on a check that ran nothing.
+
+**Cost, stated plainly.** A docs-only PR now runs the full suite, about 6
+minutes. Real, and accepted. It is cheaper than the bug it removes, where the
+failure mode was misleading rather than merely annoying: it looks like a failing
+test, so the instinct is to fix tests that never ran.
+
+**Verified.** `gates.yml`'s `pull_request` filter now carries `**.md` and
+`docs/**`; `test.yml`'s `push` and `pull_request` filters are identical and both
+carry them — the divergence between those two filters is a documented trap in
+`gates.yml`, so it was checked explicitly rather than assumed.
