@@ -16,6 +16,7 @@ import 'package:chess_srs/src/view/review/repertoire_import_dialog.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:chess_srs/src/widgets/board.dart';
+import 'package:chess_srs/src/widgets/pgn_shapes.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
@@ -1312,19 +1313,5 @@ class _SrsDiagnosticsOverlay extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-extension on PgnCommentShape {
-  Shape get chessground {
-    final shapeColor = switch (color) {
-      CommentShapeColor.green => ShapeColor.green,
-      CommentShapeColor.red => ShapeColor.red,
-      CommentShapeColor.blue => ShapeColor.blue,
-      CommentShapeColor.yellow => ShapeColor.yellow,
-    };
-    return from != to
-        ? Arrow(color: shapeColor.color, orig: from, dest: to)
-        : Circle(color: shapeColor.color, orig: from);
   }
 }

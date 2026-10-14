@@ -1,8 +1,8 @@
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/analysis/analysis_preferences.dart';
 import 'package:chess_srs/src/model/engine/position_evaluator.dart';
-import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/view/analysis/analysis_board.dart';
+import 'package:chess_srs/src/widgets/pgn_shapes.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
@@ -66,19 +66,5 @@ class _GameAnalysisBoardState
     final analysisState = ref.watch(analysisControllerProvider(widget.options)).requireValue;
     final pgnShapes = ISet(analysisState.pgnShapes.map((shape) => shape.chessground));
     return pgnShapes;
-  }
-}
-
-extension on PgnCommentShape {
-  Shape get chessground {
-    final shapeColor = switch (color) {
-      CommentShapeColor.green => ShapeColor.green,
-      CommentShapeColor.red => ShapeColor.red,
-      CommentShapeColor.blue => ShapeColor.blue,
-      CommentShapeColor.yellow => ShapeColor.yellow,
-    };
-    return from != to
-        ? Arrow(color: shapeColor.color, orig: from, dest: to)
-        : Circle(color: shapeColor.color, orig: from);
   }
 }

@@ -5,12 +5,6 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'game_preferences.freezed.dart';
 part 'game_preferences.g.dart';
 
-/// Provider for [GamePreferences].
-final gamePreferencesProvider = NotifierProvider<GamePreferences, GamePrefs>(
-  GamePreferences.new,
-  name: 'GamePreferencesProvider',
-);
-
 /// Local game preferences, defined client-side only.
 class GamePreferences extends Notifier<GamePrefs> with PreferencesStorage<GamePrefs> {
   @override
