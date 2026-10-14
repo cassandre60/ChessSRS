@@ -68,7 +68,7 @@ jobs:
           retention-days: 14
 
   android:
-    name: Android release artifacts (throwaway-signed, testing only)
+    name: Android release artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -92,14 +92,28 @@ jobs:
       - name: Code generation
         run: dart run build_runner build
 
-      - name: Throwaway signing key (NOT the upload key)
+      - name: Configure Android signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          keytool -genkeypair -keystore /tmp/throwaway.keystore \
-            -alias upload -keyalg RSA -keysize 2048 -validity 30 \
-            -storepass throwaway -keypass throwaway \
-            -dname "CN=Throwaway, OU=CI, O=CI, L=CI, ST=CI, C=DE"
-          printf 'storePassword=throwaway\nkeyPassword=throwaway\nkeyAlias=upload\nstoreFile=/tmp/throwaway.keystore\n' \
-            > android/key.properties
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Restoring permanent release keystore from secrets."
+            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
+            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=/tmp/release.keystore\n' \
+              "${KEYSTORE_PASSWORD}" "${KEY_PASSWORD}" "${KEY_ALIAS}" \
+              > android/key.properties
+          else
+            echo "No permanent key configured; generating throwaway key."
+            keytool -genkeypair -keystore /tmp/throwaway.keystore \
+              -alias upload -keyalg RSA -keysize 2048 -validity 30 \
+              -storepass throwaway -keypass throwaway \
+              -dname "CN=Throwaway, OU=CI, O=CI, L=CI, ST=CI, C=DE"
+            printf 'storePassword=throwaway\nkeyPassword=throwaway\nkeyAlias=upload\nstoreFile=/tmp/throwaway.keystore\n' \
+              > android/key.properties
+          fi
 
       - name: Build release app bundle
         run: flutter build appbundle --release
@@ -145,8 +159,8 @@ jobs:
           TGZ=$(find dist -name 'chesssrs-*.tar.gz' | head -1)
           test -n "$AAB" && test -n "$APK" && test -n "$TGZ" || { echo "missing artifacts:"; find dist -type f; exit 1; }
           mkdir -p release
-          mv "$AAB" "release/chesssrs-${TAG}-android-testing.aab"
-          mv "$APK" "release/chesssrs-${TAG}-android-testing.apk"
+          mv "$AAB" "release/chesssrs-${TAG}-android.aab"
+          mv "$APK" "release/chesssrs-${TAG}-android.apk"
           mv "$TGZ" "release/chesssrs-${TAG}-linux-x64.tar.gz"
 
       - name: Compose release notes
@@ -164,8 +178,8 @@ jobs:
           ## Which file do I download?
 
           - **Linux** (\`chesssrs-${GITHUB_REF_NAME}-linux-x64.tar.gz\`) — the desktop app. Unpack and run; needs system GTK/SQLite libraries (standard Flutter Linux prerequisites).
-          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.apk\`) — installs directly on a phone for trying the app. Test-signed: it can never upgrade into a future store version, so expect to uninstall before switching to a store build.
-          - **Android AAB** (\`chesssrs-${GITHUB_REF_NAME}-android-testing.aab\`) — not installable. This is Google's store-upload format, published here only to prove that pipeline works; ignore it unless you publish to Play.
+          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android.apk\`) — installs directly on your Android phone. Signed with the permanent developer release key.
+          - **Android AAB** (\`chesssrs-${GITHUB_REF_NAME}-android.aab\`) — Google Play Store-upload format.
           EOF
 
       - name: Create release
