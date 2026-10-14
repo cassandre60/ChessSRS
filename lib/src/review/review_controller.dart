@@ -926,7 +926,19 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   Future<void> continueAdvancement() async {
     if (_isProcessingMove) return;
     final pending = _pendingAdvancement;
-    if (pending == null) return;
+    if (pending == null) {
+      // Waiting for an advance with nothing to advance to is a dead screen:
+      // every tap funnels back here and changes nothing. No path sets the
+      // flag without the pending step, so reaching this means something
+      // cleared one without the other — release the board rather than keep it.
+      if (state.value != null && state.value!.isAwaitingAdvance) {
+        _logger.warning(
+          'continueAdvancement with no pending step while awaiting advance; releasing.',
+        );
+        state = AsyncData(state.value!.copyWith(isAwaitingAdvance: false));
+      }
+      return;
+    }
     _pendingAdvancement = null;
 
     _isProcessingMove = true;
@@ -1656,7 +1668,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     if (username == null || username.isEmpty) {
       throw const BulkImportListException('Sign in to import your Lichess studies.');
     }
-    final List<({StudyId id, String name})> items;
+    final List<({StudyId id, String name, DateTime updatedAt})> items;
     try {
       items = await studyRepo.getStudiesByUsername(username);
     } on ServerException catch (e) {
@@ -1676,7 +1688,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     _logger.info('Bulk import: ${items.length} owned studies to import');
 
     // Phase 2: fetch and import sequentially — polite to the API and to the
-    // serialized import lock, one study at a time.
+    // serialized import lock, one study at a time. Studies whose remote copy
+    // is no newer than the last import skip the download entirely.
     var imported = 0;
     var duplicates = 0;
     final duplicateTitles = <String>[];
@@ -1685,6 +1698,16 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       final item = items[i];
       onProgress?.call((done: i, total: items.length, currentName: item.name));
       try {
+        final linked = await _repository.getStudyByRemoteId(item.id.value);
+        if (linked != null &&
+            linked.remoteUpdatedAt != null &&
+            !item.updatedAt.isAfter(linked.remoteUpdatedAt!)) {
+          _logger.info('Bulk import skips unchanged "${item.name}" (${item.id.value})');
+          duplicates++;
+          duplicateTitles.add(linked.study.title);
+          onProgress?.call((done: i + 1, total: items.length, currentName: item.name));
+          continue;
+        }
         final pgnText = await studyRepo.getStudyPgn(item.id);
         final headerTitle = extractStudyTitleFromPgn(pgnText)?.trim();
         final result = await importPgnText(
@@ -1692,6 +1715,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           title: (headerTitle == null || headerTitle.isEmpty) ? item.name : headerTitle,
           repertoireSide: null,
           switchScope: false,
+        );
+        // Record the linkage either way: a duplicate hit backfills studies
+        // imported before linkage existed, so the next run skips the fetch.
+        await _repository.updateStudyRemoteRef(
+          studyId: result.study.id,
+          remoteStudyId: item.id.value,
+          remoteUpdatedAt: item.updatedAt,
         );
         if (result.isDuplicate) {
           duplicates++;

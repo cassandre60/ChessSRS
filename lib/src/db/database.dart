@@ -90,7 +90,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 16,
+      version: 17,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -202,6 +202,22 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           if (oldVersion < 13) {
             batch.execute(
               'ALTER TABLE $kTableSrsReviewState ADD COLUMN difficulty REAL NOT NULL DEFAULT 5.0',
+            );
+          }
+          if (oldVersion < 17) {
+            // CREATE IF NOT EXISTS: idempotent by construction, so a resumed
+            // upgrade or a fixture built from the current schema cannot fail
+            // the open with "already exists".
+            batch.execute('''
+              CREATE TABLE IF NOT EXISTS $kTableSrsStudyRemote (
+                studyId TEXT PRIMARY KEY,
+                remoteStudyId TEXT NOT NULL,
+                remoteUpdatedAt TEXT NOT NULL,
+                FOREIGN KEY (studyId) REFERENCES $kTableSrsStudy(id) ON DELETE CASCADE
+              );
+            ''');
+            batch.execute(
+              'CREATE INDEX IF NOT EXISTS idx_srs_study_remote_remoteStudyId ON $kTableSrsStudyRemote(remoteStudyId)',
             );
           }
         }

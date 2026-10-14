@@ -175,7 +175,9 @@ class StudyRepository {
   /// The body is read whole and split into lines rather than streamed:
   /// chunks do not align with lines, so decoding chunk-by-chunk breaks on
   /// any multi-study body.
-  Future<List<({StudyId id, String name})>> getStudiesByUsername(String username) async {
+  Future<List<({StudyId id, String name, DateTime updatedAt})>> getStudiesByUsername(
+    String username,
+  ) async {
     final url = Uri(path: '/api/study/by/$username');
     // Read with `get` and check the status here rather than through
     // `readBytes`: the app client and the base client report failures with
@@ -189,14 +191,21 @@ class StudyRepository {
         null,
       );
     }
-    final refs = <({StudyId id, String name})>[];
+    final refs = <({StudyId id, String name, DateTime updatedAt})>[];
     try {
       for (final line in const LineSplitter().convert(response.body)) {
         if (line.trim().isEmpty) continue;
         final json = jsonDecode(line) as Map<String, dynamic>;
         final name = pick(json, 'name').asStringOrNull()?.trim() ?? '';
         if (name.isEmpty) continue;
-        refs.add((id: StudyId(pick(json, 'id').asStringOrThrow()), name: name));
+        refs.add((
+          id: StudyId(pick(json, 'id').asStringOrThrow()),
+          name: name,
+          updatedAt: DateTime.fromMillisecondsSinceEpoch(
+            pick(json, 'updatedAt').asIntOrThrow(),
+            isUtc: true,
+          ),
+        ));
       }
     } on FormatException catch (e) {
       throw ClientException('Could not read study list as NDJSON: $e', url);

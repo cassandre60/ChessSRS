@@ -262,6 +262,39 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<({Study study, DateTime? remoteUpdatedAt})?> getStudyByRemoteId(
+    String remoteStudyId,
+  ) async {
+    final rows = await _db.rawQuery(
+      '''
+      SELECT s.*, r.remoteUpdatedAt AS linkedUpdatedAt
+      FROM $kTableSrsStudy s JOIN $kTableSrsStudyRemote r ON r.studyId = s.id
+      WHERE r.remoteStudyId = ? LIMIT 1
+      ''',
+      [remoteStudyId],
+    );
+    if (rows.isEmpty) return null;
+    final raw = rows.first['linkedUpdatedAt'] as String?;
+    return (
+      study: _studyFromRow(rows.first),
+      remoteUpdatedAt: raw != null ? DateTime.parse(raw) : null,
+    );
+  }
+
+  @override
+  Future<void> updateStudyRemoteRef({
+    required String studyId,
+    required String remoteStudyId,
+    required DateTime remoteUpdatedAt,
+  }) async {
+    await _db.insert(kTableSrsStudyRemote, {
+      'studyId': studyId,
+      'remoteStudyId': remoteStudyId,
+      'remoteUpdatedAt': remoteUpdatedAt.toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  @override
   Future<void> deleteStudy(String id) async {
     await _db.transaction((txn) async {
       // Find all decisions belonging to this study
