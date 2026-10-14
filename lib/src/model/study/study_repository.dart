@@ -164,6 +164,46 @@ class StudyRepository {
     return utf8.decode(pgnBytes);
   }
 
+  /// Lists the studies of [username] through `GET /api/study/by/:username`.
+  ///
+  /// This is a real API route, so it accepts the app's OAuth bearer token.
+  /// The website study list (`/study/mine/...`) answers 403 to the same
+  /// token even with `study:read` (owner-verified 2026-10-14), so bulk import
+  /// must not enumerate through it. Reads NDJSON, one `{"id","name",...}`
+  /// object per study, in listing order.
+  ///
+  /// The body is read whole and split into lines rather than streamed:
+  /// chunks do not align with lines, so decoding chunk-by-chunk breaks on
+  /// any multi-study body.
+  Future<List<({StudyId id, String name})>> getStudiesByUsername(String username) async {
+    final url = Uri(path: '/api/study/by/$username');
+    // Read with `get` and check the status here rather than through
+    // `readBytes`: the app client and the base client report failures with
+    // different exception types, and the controller maps on ServerException.
+    final response = await client.get(url, headers: {'Accept': 'application/x-ndjson'});
+    if (response.statusCode >= 400) {
+      throw ServerException(
+        response.statusCode,
+        'Request to $url failed with status ${response.statusCode}.',
+        url,
+        null,
+      );
+    }
+    final refs = <({StudyId id, String name})>[];
+    try {
+      for (final line in const LineSplitter().convert(response.body)) {
+        if (line.trim().isEmpty) continue;
+        final json = jsonDecode(line) as Map<String, dynamic>;
+        final name = pick(json, 'name').asStringOrNull()?.trim() ?? '';
+        if (name.isEmpty) continue;
+        refs.add((id: StudyId(pick(json, 'id').asStringOrThrow()), name: name));
+      }
+    } on FormatException catch (e) {
+      throw ClientException('Could not read study list as NDJSON: $e', url);
+    }
+    return refs;
+  }
+
   /// Creates one or more (if the PGN contains multiple games) chapters in the study with the given [studyId].
   Future<IList<StudyChapterId>> createChapter(
     StudyId studyId,
