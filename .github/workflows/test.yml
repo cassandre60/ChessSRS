@@ -12,10 +12,19 @@ name: Tests
 # that check permanently "expected", which blocks the merge for everyone including admins
 # (G-CIREPORT: this froze PRs #133-#135 despite green gates). A redundant run on these rare
 # PRs is the price of a mergeable repo.
-# 'docs/**' (except the referee docs named explicitly above) stays absent: no step below
-# reads them, so triggering a full run for a pure-docs change would spend several minutes
-# to confirm what cannot fail. Consequence, stated plainly: a docs-only PR still gets no
-# CI and cannot merge on its own; it must ride along with a PR that triggers a lane.
+# 'docs/**' and '**.md' were added 2026-10-14, reversing the decision recorded above.
+# That decision was defensible when it was made — no step below reads a Markdown file, so
+# a full run would spend minutes confirming what cannot fail. It stopped being the right
+# trade as soon as the two required checks diverged: branch protection requires BOTH
+# "T1 fast gates" and "Tests", so a docs-only PR that triggers neither is blocked
+# permanently. Adding the trigger to gates.yml alone does not fix it, because "Tests" is
+# then just as missing as "T1 fast gates" was.
+#
+# So the price is a ~6-minute suite run on a docs-only PR. That is real and is accepted.
+# The alternatives were worse: editing a file with no reason to edit it so a workflow
+# would fire, or having the no-op Docs Check job impersonate the suite's check name — the
+# second is exactly the collision closed in #95 and #107, and reintroducing it would let a
+# code PR merge on a check that ran nothing.
 # IMPLEMENTATION_PLAN.md joins the referee docs above for the same reason and was
 # missed: gates.yml triggers on it, test.yml did not, so a PR touching it produced
 # "T1 fast gates" and no "Unit tests" report. Before #95 renamed Docs Check, the
@@ -52,6 +61,11 @@ on:
       - 'CLAUDE.md'
       - 'CODEOWNERS'
       - 'verify'
+      # Docs-only PRs need this workflow to trigger, not for coverage — no step below
+      # reads a Markdown file — but because branch protection requires a check named
+      # "Tests" and a workflow that never triggers leaves it permanently "expected".
+      - '**.md'
+      - 'docs/**'
     branches:
       - main
   pull_request:
@@ -81,6 +95,11 @@ on:
       - 'CLAUDE.md'
       - 'CODEOWNERS'
       - 'verify'
+      # Docs-only PRs need this workflow to trigger, not for coverage — no step below
+      # reads a Markdown file — but because branch protection requires a check named
+      # "Tests" and a workflow that never triggers leaves it permanently "expected".
+      - '**.md'
+      - 'docs/**'
     branches:
       - main
   workflow_dispatch:
