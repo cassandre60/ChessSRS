@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=ChessSRS
+GenericName=Chess Repertoire & Spaced-Repetition Trainer
+Comment=Local-first chess repertoire and spaced-repetition trainer
+Exec=chess_srs %u
+Icon=chess_srs
+Terminal=false
+Type=Application
+Categories=Game;BoardGame;
+Keywords=chess;repertoire;training;srs;openings;
+StartupWMClass=chess_srs

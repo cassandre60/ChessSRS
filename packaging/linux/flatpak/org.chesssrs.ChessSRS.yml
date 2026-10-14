@@ -1,0 +1,27 @@
+app-id: org.chesssrs.ChessSRS
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+command: chess_srs
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --socket=pulseaudio
+  - --filesystem=xdg-documents
+
+modules:
+  - name: chesssrs
+    buildsystem: simple
+    build-commands:
+      - install -d /app/bin /app/lib /app/share/applications /app/share/icons/hicolor/512x512/apps /app/share/icons/hicolor/scalable/apps
+      - cp -r * /app/bin/
+      - install -Dm644 packaging/linux/org.chesssrs.ChessSRS.desktop /app/share/applications/org.chesssrs.ChessSRS.desktop
+      - install -Dm644 assets/brand/icon-1024.png /app/share/icons/hicolor/512x512/apps/org.chesssrs.ChessSRS.png
+      - install -Dm644 assets/brand/icon.svg /app/share/icons/hicolor/scalable/apps/org.chesssrs.ChessSRS.svg
+    sources:
+      - type: archive
+        url: https://github.com/cassandre60/ChessSRS/releases/download/v1.3.1/chesssrs-v1.3.1-linux-x64.tar.gz
+        sha256: SKIP

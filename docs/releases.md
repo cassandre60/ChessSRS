@@ -17,8 +17,11 @@ not re-test.
 
 | Platform | Artifact | Shippable? |
 |---|---|---|
-| Linux x64 | `chesssrs-<tag>-linux-x64.tar.gz` | Yes. Needs system GTK/SQLite libs (standard Flutter Linux prerequisites). |
+| Linux AppImage | `chesssrs-<tag>-x86_64.AppImage` | Yes. Single-click portable executable for all distributions. |
+| Linux .deb | `chesssrs_<tag>_amd64.deb` | Yes. Native graphical package for Debian/Ubuntu/Mint. |
+| Linux Tarball | `chesssrs-<tag>-linux-x64.tar.gz` | Yes. Portable unpack-and-run archive. |
 | Android | `chesssrs-<tag>-android.apk` / `.aab` | Yes. Signed with permanent developer release keystore from GitHub Secrets. |
+| Checksums | `SHA256SUMS.txt` | Yes. Cryptographic verification for all assets. |
 
 ## Not shipped (and why)
 
