@@ -368,6 +368,23 @@ never move/delete a published tag.
 
 ## Lessons Learned
 
+### Where the open threads live (2026-10-14)
+
+Start here before asking what is outstanding. This section is the map; the files
+it names hold the detail.
+
+| Thread | File | State |
+|---|---|---|
+| Anything needing an owner decision | `docs/open-questions.md` | Q1-Q5 answered, Q6 fixed 2026-10-14 |
+| Performance work | `docs/performance-handoff.md` | mandate set, ~13 ms still unattributed |
+| Why performance is blocked | `docs/tasks/PERF-FIX-24-real-library-measurement.md` | **the benchmark is unreliable**; fix the instrument before optimising |
+| Claims the suite cannot verify | `docs/manual-test-log.md` | one open item, needs a human |
+| Work queue | `docs/tasks/README.md` | claims marked in the brief banners |
+
+Two things that are *not* outstanding and should not be reopened without new
+information: the review move sound (#93) was confirmed audible by the owner, and
+`getDueReviewStates` was deleted on the owner's authorisation (#123).
+
 - [2026-10-07, Space Bunny Free] `./scripts/gates.sh t1` run *before* committing is a
   green light that means nothing: the diff-based gates read `origin/main...HEAD`, so
   while the work is uncommitted HEAD is still the base and the diff is empty. Two
@@ -529,6 +546,25 @@ never move/delete a published tag.
   the same commit. Verified by: #106 being unmergeable with `Required status check`
   while its suite was green, and by diffing both workflows' `paths` lists, which
   showed IMPLEMENTATION_PLAN.md was the only file in the gap.
+- [2026-10-13, Space Bunny Free] A clean `flutter analyze` covers the file *as it was when
+  you ran it*. Adding code afterwards and re-running only the test meant CI caught an
+  escaped quote I had introduced after the analyse, and took a full-suite run red over a
+  string I could not see. Analyse after the LAST edit, not before it. Verified by: CI's
+  `Unnecessary escape of '''` on a file that had analysed clean minutes earlier.
+- [2026-10-13, Space Bunny Free] A wrapper that reports a verdict must be checked against
+  the source of truth once, before you trust it. A landing script read the newest CI run
+  without checking the run matched the current head, so it reported "SUITE FAILED" twice
+  for a commit it had never evaluated. The same shape bit twice more: a `Tests` check
+  whose real name turned out to be `Tests (ubuntu-latest)`, and a "control" measurement
+  fed 66 ids and read as evidence about 347 rows. Verified by: the script reporting a
+  failure while `gh run list` showed the new run still in progress.
+- [2026-10-13, Space Bunny Free] Optimising against a noisy benchmark is worse than not
+  optimising: the change lands, the number looks halved, and nothing improved. Here the
+  same call measured 16 ms, 29 ms and 36 ms purely by harness and measurement order, so
+  two earlier "this is the bottleneck" claims were both noise. Report spread, not just a
+  median, and check a method's figure across two harnesses before building on it. Verified
+  by: three harnesses disagreeing on `getAllReviewStates()` on an unchanged database.
+
 - [2026-10-01, antigravity/gemini-3.8-flash-tiered] GitHub branch protection
   requires both 'T1 fast gates' and (as of #107) 'Tests'. When a PR touches
   only files in docs/**, gates.yml does not trigger, leaving 'T1 fast gates'
