@@ -916,16 +916,6 @@ class SqliteStudyRepository implements StudyRepository {
     return map.values.toList(growable: false);
   }
 
-  @override
-  Future<List<ReviewState>> getDueReviewStates(DateTime now) async {
-    final rows = await _db.query(
-      kTableSrsReviewState,
-      where: 'nextDueAt IS NULL OR nextDueAt <= ?',
-      whereArgs: [now.toUtc().toIso8601String()],
-      orderBy: 'nextDueAt ASC',
-    );
-    return rows.map(_reviewStateFromRow).toList(growable: false);
-  }
 
   @override
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) async {

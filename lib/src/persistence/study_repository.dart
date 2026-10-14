@@ -91,7 +91,6 @@ abstract class StudyRepository {
   Future<void> saveReviewStates(List<ReviewState> states);
   Future<ReviewState?> getReviewState(String decisionId);
   Future<List<ReviewState>> getAllReviewStates();
-  Future<List<ReviewState>> getDueReviewStates(DateTime now);
 
   /// Reads from `srs_review_state` for any of the given ids, which may be
   /// per-occurrence `decisionId`s **or** canonical ids — see
