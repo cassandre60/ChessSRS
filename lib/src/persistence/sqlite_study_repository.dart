@@ -262,6 +262,35 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<Study?> getStudyByRemoteId(String remoteStudyId) async {
+    final rows = await _db.query(
+      kTableSrsStudy,
+      where: 'remoteStudyId = ?',
+      whereArgs: [remoteStudyId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _studyFromRow(rows.first);
+  }
+
+  @override
+  Future<void> updateStudyRemoteRef({
+    required String studyId,
+    required String remoteStudyId,
+    required DateTime remoteUpdatedAt,
+  }) async {
+    await _db.update(
+      kTableSrsStudy,
+      {
+        'remoteStudyId': remoteStudyId,
+        'remoteUpdatedAt': remoteUpdatedAt.toUtc().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [studyId],
+    );
+  }
+
+  @override
   Future<void> deleteStudy(String id) async {
     await _db.transaction((txn) async {
       // Find all decisions belonging to this study
@@ -999,6 +1028,7 @@ class SqliteStudyRepository implements StudyRepository {
   static Study _studyFromRow(Map<String, Object?> row) {
     final rawActive = row['isActive'];
     final isActive = rawActive == null || rawActive != 0;
+    final remoteUpdatedAtRaw = row['remoteUpdatedAt'] as String?;
     return Study(
       id: row['id']! as String,
       title: row['title']! as String,
@@ -1006,6 +1036,8 @@ class SqliteStudyRepository implements StudyRepository {
       updatedAt: DateTime.parse(row['updatedAt']! as String),
       isActive: isActive,
       pgnHash: row['pgnHash'] as String?,
+      remoteStudyId: row['remoteStudyId'] as String?,
+      remoteUpdatedAt: remoteUpdatedAtRaw != null ? DateTime.parse(remoteUpdatedAtRaw) : null,
     );
   }
 
@@ -1022,6 +1054,8 @@ class SqliteStudyRepository implements StudyRepository {
     'updatedAt': study.updatedAt?.toIso8601String() ?? nowIso,
     'isActive': study.isActive ? 1 : 0,
     'pgnHash': study.pgnHash,
+    'remoteStudyId': study.remoteStudyId,
+    'remoteUpdatedAt': study.remoteUpdatedAt?.toUtc().toIso8601String(),
   };
 
   static Chapter _chapterFromRow(Map<String, Object?> row) {

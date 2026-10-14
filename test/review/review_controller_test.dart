@@ -1447,13 +1447,13 @@ void main() {
     group('importAllMyStudies', () {
       // The listing endpoint streams NDJSON, one object per study — the shape
       // verified live against /api/study/by/:username on 2026-10-14.
-      String studiesNdJson(List<(String, String)> entries) => entries
+      String studiesNdJson(List<(String, String, int)> entries) => entries
           .map(
             (e) => jsonEncode({
               'id': e.$1,
               'name': e.$2,
               'createdAt': 1700000000000,
-              'updatedAt': 1700000000000,
+              'updatedAt': e.$3,
             }),
           )
           .join('\n');
@@ -1471,11 +1471,15 @@ void main() {
 1. e4 e6 2. d4 d5 *
 ''';
 
-      MockClient bulkClient({bool blackGone = false}) {
+      MockClient bulkClient({bool blackGone = false, void Function(Uri url)? onRequest}) {
         return MockClient((request) async {
+          onRequest?.call(request.url);
           if (request.url.path == '/api/study/by/tester') {
             return http.Response(
-              studiesNdJson([('aaaaaaaa', 'White Repertoire'), ('bbbbbbbb', 'Black Repertoire')]),
+              studiesNdJson([
+                ('aaaaaaaa', 'White Repertoire', 1700000000000),
+                ('bbbbbbbb', 'Black Repertoire', 1700000000000),
+              ]),
               200,
               headers: {'content-type': 'application/x-ndjson'},
             );
@@ -1566,6 +1570,82 @@ void main() {
 
           final state = container.read(reviewControllerProvider).requireValue;
           expect(state.studies.length, 2);
+        },
+      );
+
+      test(
+        're-running over unchanged studies downloads no PGN',
+        // SPEC INV-003. The first run records each study's remote timestamp;
+        // the second run skips the download entirely instead of re-fetching
+        // and re-hashing everything.
+        () async {
+          var pgnFetches = 0;
+          final container = bulkContainer(
+            bulkClient(
+              onRequest: (url) {
+                if (url.path.endsWith('.pgn')) pgnFetches++;
+              },
+            ),
+          );
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          final first = await controller.importAllMyStudies();
+          expect(first.imported, 2);
+          expect(pgnFetches, 2);
+
+          final second = await controller.importAllMyStudies();
+          expect(second.imported, 0);
+          expect(second.duplicates, 2);
+          expect(pgnFetches, 2);
+        },
+      );
+
+      test(
+        'a remotely changed study is re-fetched while the rest is skipped',
+        // SPEC INV-003. A newer remote timestamp re-downloads that study
+        // only; the hash still dedupes identical content.
+        () async {
+          var blackUpdatedAt = 1700000000000;
+          var pgnFetches = 0;
+          final client = MockClient((request) async {
+            if (request.url.path.endsWith('.pgn')) pgnFetches++;
+            if (request.url.path == '/api/study/by/tester') {
+              return http.Response(
+                studiesNdJson([
+                  ('aaaaaaaa', 'White Repertoire', 1700000000000),
+                  ('bbbbbbbb', 'Black Repertoire', blackUpdatedAt),
+                ]),
+                200,
+                headers: {'content-type': 'application/x-ndjson'},
+              );
+            }
+            if (request.url.path == '/api/study/aaaaaaaa.pgn') {
+              return http.Response(
+                whitePgn,
+                200,
+                headers: {'content-type': 'application/x-chess-pgn'},
+              );
+            }
+            if (request.url.path == '/api/study/bbbbbbbb.pgn') {
+              return http.Response(
+                blackPgn,
+                200,
+                headers: {'content-type': 'application/x-chess-pgn'},
+              );
+            }
+            return http.Response('Not Found', 404);
+          });
+          final container = bulkContainer(client);
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await controller.importAllMyStudies();
+          expect(pgnFetches, 2);
+
+          blackUpdatedAt = 1800000000000;
+          final rerun = await controller.importAllMyStudies();
+          expect(pgnFetches, 3);
+          expect(rerun.imported, 0);
+          expect(rerun.duplicates, 2);
         },
       );
 

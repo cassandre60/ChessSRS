@@ -18,12 +18,18 @@ void createSrsTables(Batch batch) {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       isActive INTEGER NOT NULL DEFAULT 1,
-      pgnHash TEXT
+      pgnHash TEXT,
+      remoteStudyId TEXT,
+      remoteUpdatedAt TEXT
     );
   ''');
   batch.execute('''
     CREATE INDEX IF NOT EXISTS idx_srs_study_pgnHash
     ON $kTableSrsStudy(pgnHash);
+  ''');
+  batch.execute('''
+    CREATE INDEX IF NOT EXISTS idx_srs_study_remoteStudyId
+    ON $kTableSrsStudy(remoteStudyId);
   ''');
 
   batch.execute('''

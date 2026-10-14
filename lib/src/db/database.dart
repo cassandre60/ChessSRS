@@ -90,7 +90,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 16,
+      version: 17,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -202,6 +202,24 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           if (oldVersion < 13) {
             batch.execute(
               'ALTER TABLE $kTableSrsReviewState ADD COLUMN difficulty REAL NOT NULL DEFAULT 5.0',
+            );
+          }
+          if (oldVersion < 17) {
+            // Read-before-write: a previous upgrade attempt may have added a
+            // column without recording the version (the version lands only
+            // after onUpgrade completes), and fixture databases built from
+            // the current schema already carry them. A blind ALTER would
+            // fail the open with "duplicate column name".
+            final studyColumns = await db.rawQuery('PRAGMA table_info($kTableSrsStudy)');
+            final studyColumnNames = studyColumns.map((c) => c['name']! as String).toSet();
+            if (!studyColumnNames.contains('remoteStudyId')) {
+              batch.execute('ALTER TABLE $kTableSrsStudy ADD COLUMN remoteStudyId TEXT');
+            }
+            if (!studyColumnNames.contains('remoteUpdatedAt')) {
+              batch.execute('ALTER TABLE $kTableSrsStudy ADD COLUMN remoteUpdatedAt TEXT');
+            }
+            batch.execute(
+              'CREATE INDEX IF NOT EXISTS idx_srs_study_remoteStudyId ON $kTableSrsStudy(remoteStudyId)',
             );
           }
         }
