@@ -916,7 +916,6 @@ class SqliteStudyRepository implements StudyRepository {
     return map.values.toList(growable: false);
   }
 
-
   @override
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) async {
     if (ids.isEmpty) return const [];

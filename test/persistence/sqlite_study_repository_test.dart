@@ -199,7 +199,6 @@ void main() {
       }
     });
 
-
     test('timestamps are stored as UTC so a timezone change cannot shift due dates', () async {
       // SPEC INV-002. review-4 C2 / QUALITY §3.2: due instants survive a
       // timezone change — stored form is an absolute instant (UTC), not a
