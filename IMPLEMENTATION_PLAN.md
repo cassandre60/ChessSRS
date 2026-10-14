@@ -388,6 +388,24 @@ Status:
 
 ---
 
+### Gate finding 2026-10-14 — G07 approval cannot be attributed
+
+`protected_paths_check.py` accepts `--approved` when a label named
+`gate-approved` exists, without checking who added it. The obvious hardening —
+require the approver to differ from the PR author — is **impossible in this
+repo**: `cassandre60` is the only collaborator and every PR author, because
+agents push with the owner's credentials. That rule would block every
+protected-path PR permanently.
+
+In practice G07 stopped nothing this session: #95, #99 and #117 were each
+approved by their own author. Recorded so the next agent does not assume G07
+deters self-approval, and does not build an unsatisfiable rule.
+
+The achievable change is a signed `Ack-G07: <reason>` commit trailer, matching
+G08 — accountability rather than enforcement, since one shared account means
+nothing in GitHub distinguishes the owner from an agent. Open as Q5 in
+`docs/open-questions.md`.
+
 ### Measured 2026-10-14 — real-library session cost (PERF-FIX-24)
 
 Every prior number came from a synthetic fixture. Measured against a **copy** of
