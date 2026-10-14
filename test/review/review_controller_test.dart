@@ -1654,6 +1654,33 @@ void main() {
           ),
         );
       });
+
+      test(
+        'a forbidden study list names the missing permission and the fix',
+        // SPEC INV-011. Production 2026-10-14, second sighting: after the 401
+        // case was covered, the same scopeless desktop grant answered 403.
+        // A bare status number sent the owner back with nothing actionable.
+        () async {
+          final forbiddenClient = MockClient((_) async => http.Response('Forbidden', 403));
+          final container = bulkContainer(forbiddenClient);
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await expectLater(
+            controller.importAllMyStudies(),
+            throwsA(
+              isA<BulkImportListException>().having(
+                (e) => e.message,
+                'message',
+                allOf(
+                  contains('403'),
+                  contains('sign out'),
+                  contains('lichess.org/account/oauth/token'),
+                ),
+              ),
+            ),
+          );
+        },
+      );
     });
 
     test('maxDailyReviews limit caps session and marks isDailyLimitReached', () async {

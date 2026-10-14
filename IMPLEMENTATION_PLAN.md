@@ -273,6 +273,10 @@ remains a later option — never a redesign.
       4. Progress moved inside the button (spinner + `Importing n of N…` / `Listing your studies…`).
       5. Regression tests: 401/500 listing errors, widget test that the reason reaches the screen, desktop scope URI test.
 
+- [x] **R16: 403 on the study list gets the permission message too** *(done: 2026-10-14, owner-reported)*
+      1. Second sighting of the same scopeless-grant failure, now as 403 instead of 401 — and the generic branch answered with a bare status number. 401 and 403 now share the permission message, extended with the revoke fallback (`lichess.org/account/oauth/token`) for grants Lichess silently reuses.
+      2. Regression test pins the 403 wording (status, sign-out, revoke link).
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.
