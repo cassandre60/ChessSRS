@@ -388,6 +388,16 @@ Status:
 
 ---
 
+### In progress 2026-10-14
+
+- **PERF-FIX-24 — measure the review path against a real library.** Every
+  performance number in this repo comes from a synthetic fixture (500/2000/5000
+  decisions), and PERF-FIX-32 Phase 2 was declined on that measurement. The
+  owner's live database holds 11 studies and 452 due positions, a shape no
+  fixture reproduces. Claimed on branch `perf/real-library-measurement`; the
+  deliverable is a measurement, not an optimisation. Runs against a **copy** of
+  the database — the real one is read-write user data.
+
 ### Dead-code audit 2026-10-13
 
 Tree-wide sweep for declarations with exactly one occurrence across `lib/` +
