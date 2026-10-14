@@ -444,6 +444,41 @@ void main() {
       }
     });
 
+    // SPEC INV-030: loadSessionAndSummary produces both session and due summary in a single pass.
+    test('loadSessionAndSummary yields matching summary and active session in one pass', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = _QueryCountRepository(db);
+      final service = ReviewService(repository: repo, clock: clock);
+
+      try {
+        const study = Study(id: 's_unified', title: 'Unified Study');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_unified', sourceOrder: 0, title: 'Chapter 1');
+        await repo.saveChapter(ch);
+        final d = RepertoireDecision.create(
+          studyId: 's_unified',
+          chapterId: ch.id,
+          nodeId: 'n1',
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        );
+        await repo.saveDecisions([d]);
+
+        final (:session, :summary) = await service.loadSessionAndSummary(studies: [study]);
+
+        expect(summary.totalDueCount, 1);
+        expect(session.scope, const ReviewScope.all());
+        expect(session.currentPrompt?.decision.id, d.id);
+        expect(service.activeSession, same(session));
+
+        // Deduplication proof: exactly one query each for decisions, review states, and knowledge states.
+        expect(repo.allDecisionsReads, 1);
+        expect(repo.reviewStateBatchReads, 1);
+        expect(repo.knowledgeStateBatchReads, 1);
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'ReviewService with EaseScalingScheduler schedules intervals via ease and scaling',
       () async {
@@ -993,5 +1028,32 @@ class _ToggleFailureRepository extends SqliteStudyRepository {
       throw Exception('simulated persistence failure');
     }
     return super.saveAnswerBatch(knowledgeStates: knowledgeStates, event: event);
+  }
+}
+
+/// A [SqliteStudyRepository] that records query counts for session initialization queries.
+class _QueryCountRepository extends SqliteStudyRepository {
+  _QueryCountRepository(super.db);
+
+  int reviewStateBatchReads = 0;
+  int knowledgeStateBatchReads = 0;
+  int allDecisionsReads = 0;
+
+  @override
+  Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) {
+    reviewStateBatchReads++;
+    return super.getReviewStatesByIds(ids);
+  }
+
+  @override
+  Future<List<PositionKnowledgeState>> getKnowledgeStatesByCanonicalIds(List<String> ids) {
+    knowledgeStateBatchReads++;
+    return super.getKnowledgeStatesByCanonicalIds(ids);
+  }
+
+  @override
+  Future<List<RepertoireDecision>> getAllDecisions() {
+    allDecisionsReads++;
+    return super.getAllDecisions();
   }
 }

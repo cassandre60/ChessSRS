@@ -114,8 +114,13 @@ void main() {
         final s = ReviewService(repository: repo, clock: clock);
         await s.startSession();
       });
+      final combined = await medianOf(() async {
+        final s = ReviewService(repository: repo, clock: clock);
+        await s.loadSessionAndSummary(studies: all);
+      });
       stdout.writeln('\n=== whole-library session start (median of 15, after 3 warmups) ===');
-      stdout.writeln('startSession()      ${wholeLibrary.inMilliseconds} ms');
+      stdout.writeln('startSession()          ${wholeLibrary.inMilliseconds} ms');
+      stdout.writeln('loadSessionAndSummary() ${combined.inMilliseconds} ms');
 
       // ---- Single study: what a user pays on every subsequent open.
       final chapterCounts = <int>[];
