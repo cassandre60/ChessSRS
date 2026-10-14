@@ -530,3 +530,13 @@ never move/delete a published tag.
   unreported and blocking merge even with --admin. Verified by: PR #119 failing
   merge with 'GraphQL: Required status check \"T1 fast gates\" is expected', while
   PR #112 merged cleanly because touching AGENTS.md triggered gates.yml.
+- [2026-10-14, Muse Spark] Fresh `gen-l10n` output does not match the committed
+  `lib/l10n/*.dart`: the committed files were generated under an older format, so
+  regenerating rewrites ~50k lines of wrapping churn that buries any real key
+  addition. For a single-key addition, hand-apply the generator's exact block at
+  the generator's exact position (after the neighboring key, base classes only)
+  instead of committing regen output — and commit *before* running any flutter
+  command afterwards, because `pub get`/`test` silently re-run `gen-l10n` and
+  re-dirty the tree. Verified by: #80's regen diff (+50k) vs hand-applied diff
+  (+268/-0, placement byte-identical to regen output), plus a post-restart test
+  run overwriting the hand edits and forcing a redo.
