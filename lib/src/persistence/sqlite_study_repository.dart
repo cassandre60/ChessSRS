@@ -4,16 +4,24 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:chess_srs/src/persistence/study_repository.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 import 'package:sqflite/sqflite.dart';
 
 final Logger _logger = Logger('StudyRepository');
+
+/// Provider for the application's [StudyRepository].
+final srsStudyRepositoryProvider = FutureProvider<StudyRepository>((ref) async {
+  final db = await ref.watch(databaseProvider.future);
+  return SqliteStudyRepository(db);
+}, name: 'SrsStudyRepositoryProvider');
 
 /// Concrete SQLite implementation of [StudyRepository].
 ///

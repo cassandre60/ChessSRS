@@ -1,7 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
