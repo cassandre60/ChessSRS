@@ -203,6 +203,30 @@ Any fix has to be on the Dart side: either stop materialising all 772 rows to
 count them, or find the ~13 ms above. **Neither is decided here**, because Q1 in
 `docs/open-questions.md` asks whether the pause matters to the owner at all.
 
+### Third pass — the measurement is noisier than the target (2026-10-14)
+
+Three more components ruled out, then the measurement itself turned out to be the
+problem.
+
+**Ruled out:** `toReviewState()` being heavy (an 8-field copy); FFI driver
+marshalling (raw fetch through `sqflite_common_ffi` is **3.05 ms** for both tables
+against python's sqlite3 at 0.87 ms — the Dart driver is ~3.5x slower, still far
+too small); and column width (single-column fetch 0.68 ms vs 1.66 ms for
+`SELECT *`).
+
+**The finding.** `getAllReviewStates()` has measured **16 ms, 29 ms and 36 ms** for
+the same call on the same database, varying only by harness and measurement order.
+Within one harness the spread is 20.4–27.8 ms.
+
+So **"76% of `getDueSummary`" and "~13 ms unattributed" are both unreliable**, and
+any optimisation chosen on those numbers is chosen on noise. The likely cause is
+allocation and GC — 772 objects per call, fifteen calls back to back — but that is
+a hypothesis, not a measurement, and is recorded as one.
+
+**What this blocks.** Not code — the next step. A harness that controls for
+measurement order and reports spread rather than a single median. Until that
+exists, a change that appears to halve the cost may have halved nothing.
+
 ### Reproducing
 
 ```bash
