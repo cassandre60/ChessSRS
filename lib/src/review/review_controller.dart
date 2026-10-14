@@ -65,10 +65,12 @@ typedef BulkImportProgress = ({int done, int total, String currentName});
 typedef BulkImportFailure = ({String name, String reason});
 
 /// Outcome of [ReviewController.importAllMyStudies]: freshly [imported] studies,
-/// titles skipped as [duplicates] already here, and per-study [failed] reasons.
+/// [duplicates] skipped as already here (named in [duplicateTitles]), and
+/// per-study [failed] reasons.
 typedef BulkImportResult = ({
   int imported,
-  List<String> duplicates,
+  int duplicates,
+  List<String> duplicateTitles,
   List<BulkImportFailure> failed,
 });
 
@@ -1676,7 +1678,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // Phase 2: fetch and import sequentially — polite to the API and to the
     // serialized import lock, one study at a time.
     var imported = 0;
-    final duplicates = <String>[];
+    var duplicates = 0;
+    final duplicateTitles = <String>[];
     final failed = <BulkImportFailure>[];
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
@@ -1691,7 +1694,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           switchScope: false,
         );
         if (result.isDuplicate) {
-          duplicates.add(result.study.title);
+          duplicates++;
+          duplicateTitles.add(result.study.title);
         } else {
           imported++;
         }
@@ -1707,9 +1711,14 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
     await reload();
     _logger.info(
-      'Bulk import done: $imported imported, ${duplicates.length} already here, ${failed.length} failed',
+      'Bulk import done: $imported imported, $duplicates already here, ${failed.length} failed',
     );
-    return (imported: imported, duplicates: duplicates, failed: failed);
+    return (
+      imported: imported,
+      duplicates: duplicates,
+      duplicateTitles: duplicateTitles,
+      failed: failed,
+    );
   }
 
   String? _resolveComment(ReviewPrompt? prompt, RepertoireMove? expectedMove) {

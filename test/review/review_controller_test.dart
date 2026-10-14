@@ -1527,7 +1527,7 @@ void main() {
           final result = await controller.importAllMyStudies(onProgress: seen.add);
 
           expect(result.imported, 2);
-          expect(result.duplicates, isEmpty);
+          expect(result.duplicates, 0);
           expect(result.failed, isEmpty);
           expect(seen.last, (done: 2, total: 2, currentName: 'Black Repertoire'));
 
@@ -1560,7 +1560,8 @@ void main() {
           final rerun = await controller.importAllMyStudies();
 
           expect(rerun.imported, 0);
-          expect(rerun.duplicates.length, 2);
+          expect(rerun.duplicates, 2);
+          expect(rerun.duplicateTitles, containsAll(['White Repertoire', 'Black Repertoire']));
           expect(rerun.failed, isEmpty);
 
           final state = container.read(reviewControllerProvider).requireValue;
@@ -1578,7 +1579,7 @@ void main() {
           final result = await controller.importAllMyStudies();
 
           expect(result.imported, 1);
-          expect(result.duplicates, isEmpty);
+          expect(result.duplicates, 0);
           expect(result.failed.length, 1);
           expect(result.failed.first.name, 'Black Repertoire');
 
@@ -1601,7 +1602,7 @@ void main() {
         final result = await controller.importAllMyStudies();
 
         expect(result.imported, 0);
-        expect(result.duplicates, isEmpty);
+        expect(result.duplicates, 0);
         expect(result.failed, isEmpty);
 
         final state = container.read(reviewControllerProvider).requireValue;
