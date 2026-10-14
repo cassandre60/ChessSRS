@@ -1,0 +1,41 @@
+# Maintainer: ChessSRS Contributors <https://github.com/cassandre60/ChessSRS>
+pkgname=chesssrs-bin
+pkgver=1.3.1
+pkgrel=1
+pkgdesc="Local-first chess repertoire and spaced-repetition trainer"
+arch=('x86_64')
+url="https://github.com/cassandre60/ChessSRS"
+license=('GPL-3.0-or-later')
+depends=('gtk3' 'libsecret')
+provides=('chesssrs')
+conflicts=('chesssrs')
+source_x86_64=("https://github.com/cassandre60/ChessSRS/releases/download/v${pkgver}/chesssrs-v${pkgver}-linux-x64.tar.gz")
+sha256sums_x86_64=('SKIP')
+
+package() {
+  install -d "${pkgdir}/opt/chesssrs"
+  cp -r "${srcdir}/bundle/"* "${pkgdir}/opt/chesssrs/"
+
+  install -d "${pkgdir}/usr/bin"
+  ln -s "/opt/chesssrs/chess_srs" "${pkgdir}/usr/bin/chess_srs"
+
+  install -Dm644 "${pkgdir}/opt/chesssrs/data/flutter_assets/assets/brand/icon-1024.png" \
+    "${pkgdir}/usr/share/icons/hicolor/512x512/apps/chess_srs.png"
+  install -Dm644 "${pkgdir}/opt/chesssrs/data/flutter_assets/assets/brand/icon.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/chess_srs.svg"
+
+  install -d "${pkgdir}/usr/share/applications"
+  cat > "${pkgdir}/usr/share/applications/chess_srs.desktop" << EOF
+[Desktop Entry]
+Name=ChessSRS
+GenericName=Chess Repertoire & Spaced-Repetition Trainer
+Comment=Local-first chess repertoire and spaced-repetition trainer
+Exec=chess_srs %u
+Icon=chess_srs
+Terminal=false
+Type=Application
+Categories=Game;BoardGame;
+Keywords=chess;repertoire;training;srs;openings;
+StartupWMClass=chess_srs
+EOF
+}

@@ -55,16 +55,25 @@ jobs:
       - name: Build Linux release
         run: flutter build linux --release
 
-      - name: Package bundle
+      - name: Package Linux formats (tarball, deb, AppImage)
         run: |
           TAG="${GITHUB_REF_NAME:-manual}"
-          tar -czf "chesssrs-${TAG}-linux-x64.tar.gz" -C build/linux/x64/release bundle
+          mkdir -p dist
 
-      - name: Upload bundle artifact
+          # 1. Standard portable tarball
+          tar -czf "dist/chesssrs-${TAG}-linux-x64.tar.gz" -C build/linux/x64/release bundle
+
+          # 2. Native Debian / Ubuntu package
+          bash packaging/linux/build_deb.sh build/linux/x64/release/bundle "${TAG}" dist
+
+          # 3. Standalone AppImage
+          bash packaging/linux/build_appimage.sh build/linux/x64/release/bundle "${TAG}" dist
+
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v6.0.0
         with:
-          name: linux-bundle
-          path: 'chesssrs-*.tar.gz'
+          name: linux-packages
+          path: dist/*
           retention-days: 14
 
   android:
@@ -151,17 +160,30 @@ jobs:
       - name: Collect and rename artifacts per tag
         # download-artifact with merge-multiple preserves each upload's
         # directory layout, so locate by filename instead of assuming dist/.
-        # (v0.1.1 failed here assuming a flat dist/.)
         run: |
           TAG="${GITHUB_REF_NAME}"
-          AAB=$(find dist -name 'app-release.aab' | head -1)
-          APK=$(find dist -name 'app-release.apk' | head -1)
+          AAB=$(find dist -name 'app-release.aab' -o -name '*.aab' | head -1)
+          APK=$(find dist -name 'app-release.apk' -o -name '*.apk' | head -1)
           TGZ=$(find dist -name 'chesssrs-*.tar.gz' | head -1)
-          test -n "$AAB" && test -n "$APK" && test -n "$TGZ" || { echo "missing artifacts:"; find dist -type f; exit 1; }
+          DEB=$(find dist -name '*.deb' | head -1)
+          APPIMAGE=$(find dist -name '*.AppImage' | head -1)
+          test -n "$AAB" && test -n "$APK" && test -n "$TGZ" || { echo "missing core artifacts:"; find dist -type f; exit 1; }
           mkdir -p release
           mv "$AAB" "release/chesssrs-${TAG}-android.aab"
           mv "$APK" "release/chesssrs-${TAG}-android.apk"
           mv "$TGZ" "release/chesssrs-${TAG}-linux-x64.tar.gz"
+          if [ -n "$DEB" ]; then
+            CLEAN_TAG="${TAG#v}"
+            mv "$DEB" "release/chesssrs_${CLEAN_TAG}_amd64.deb"
+          fi
+          if [ -n "$APPIMAGE" ]; then
+            mv "$APPIMAGE" "release/chesssrs-${TAG}-x86_64.AppImage"
+          fi
+
+          # Generate cryptographic SHA256 checksums
+          cd release
+          sha256sum * > SHA256SUMS.txt
+          cd ..
 
       - name: Compose release notes
         # Generated notes plus the permanent file guide, so every release
@@ -177,9 +199,12 @@ jobs:
 
           ## Which file do I download?
 
-          - **Linux** (\`chesssrs-${GITHUB_REF_NAME}-linux-x64.tar.gz\`) — the desktop app. Unpack and run; needs system GTK/SQLite libraries (standard Flutter Linux prerequisites).
-          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android.apk\`) — installs directly on your Android phone. Signed with the permanent developer release key.
+          - **Linux AppImage** (\`chesssrs-${GITHUB_REF_NAME}-x86_64.AppImage\`) — single-click portable executable for all Linux distributions.
+          - **Linux Debian / Ubuntu** (\`chesssrs_${GITHUB_REF_NAME#v}_amd64.deb\`) — native graphical installer for Ubuntu, Debian, Linux Mint, Pop!_OS.
+          - **Linux Tarball** (\`chesssrs-${GITHUB_REF_NAME}-linux-x64.tar.gz\`) — portable unpack-and-run archive.
+          - **Android APK** (\`chesssrs-${GITHUB_REF_NAME}-android.apk\`) — installs directly on your Android phone. Permanently signed with developer release key.
           - **Android AAB** (\`chesssrs-${GITHUB_REF_NAME}-android.aab\`) — Google Play Store-upload format.
+          - **SHA256SUMS.txt** — cryptographic checksums to verify download authenticity.
           EOF
 
       - name: Create release
