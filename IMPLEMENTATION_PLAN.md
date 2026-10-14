@@ -375,9 +375,10 @@ Status:
 - **In flight / Finishing CI**:
   - 27 (A11Y-FIX-27: review screen semantics)
   - 11 (POLISH-FIX-11: pgn shapes & board notify)
+  - PERF-STARTUP (single-pass session start deduplication in ReviewService and ReviewController)
 - **Queue pruned 2026-10-13.** 34 briefs were verified against `origin/main` and removed; only the two in-flight briefs above remain. They split three ways: landed by this fleet (often by another agent on the same brief), already correct in the code, or false premise. Evidence per brief is in issue #71; every file remains in git history. `docs/tasks/README.md` records the two habits that stop briefs rotting — state the premise as a runnable command rather than a line number, and say what "already fixed" would look like.
 - **Remaining / Planned**:
-  - PERF-STARTUP: Session-start and review-path latency optimization (owner mandate: "instant, as fast as possible"). Detailed handoff, profile breakdown, and implementation plan in `docs/next-task-handoff.md`.
+  - None currently queued.
 - **Pitfalls for queue work** (each verified on `origin/main`; read before picking a brief):
   - Re-check every brief claim with `git grep` on `origin/main` before editing. PERF-FIX-21 named a helper that had been renamed; DOMAIN-FIX-36 described fixes already present.
   - Before removing a "dead" symbol, grep `lib/` **and** `test/`. Several dead-code rows have live test callers, and removing them means deleting tests the gates forbid (G08). REFACTOR-FIX-20 landed nine symbols whose only reference was the declaration; `getDueReviewStates` is equally dead but still excluded, because deleting it deletes its only test and that needs a human `Ack-G08` signature — writing one on your own PR is the abuse the gate exists to prevent. `getDueCount` is dead in production but is the assertion helper for ~10 call sites, so retiring it is a test refactor rather than a deletion.

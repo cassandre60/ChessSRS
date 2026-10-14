@@ -440,16 +440,17 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // show a queue the user cannot get back to, and blank both squares. Decided
     // from chapter orientations — one indexed query — rather than from the
     // summary, which would mean walking every decision a second time.
+    final chapterOrientations = studies.isEmpty ? null : await _repository.getChapterOrientations();
     final effectiveScope = studies.isEmpty
         ? scope
-        : _resolveInitialScope(scope, await _repository.getChapterOrientations());
-    final summary = await _service.getDueSummary(
-      studies: studies,
-      scope: effectiveScope,
-      remainingDailyQuota: remainingQuota,
-    );
+        : _resolveInitialScope(scope, chapterOrientations!);
 
     if (studies.isEmpty) {
+      final summary = await _service.getDueSummary(
+        studies: studies,
+        scope: effectiveScope,
+        remainingDailyQuota: remainingQuota,
+      );
       if (generation != null && generation != _generation) return null;
       return ReviewScreenState(
         studies: studies,
@@ -470,11 +471,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       );
     }
 
-    final session = await _service.startSession(
+    final (:session, :summary) = await _service.loadSessionAndSummary(
+      studies: studies,
       scope: effectiveScope,
       mode: mode,
       remainingDailyQuota: remainingQuota,
       generation: generation,
+      preloadedChapterOrientations: chapterOrientations,
     );
 
     // Everything below reads the session that was just built, and everything above waited on
@@ -659,12 +662,6 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // 2. Persist to DB
     await _repository.updateStudyActive(studyId, isActive);
 
-    // 3. Recompute due counts using the fast summary (without setting AsyncLoading)
-    final summary = await _service.getDueSummary(
-      studies: updatedStudies,
-      scope: currentState.scope,
-    );
-
     // 4. Smoothly refresh session if affected (e.g. current prompt belonged to deactivated study)
     ReviewSession? newSession = currentState.session;
     ReviewPrompt? newPrompt = currentState.currentPrompt;
@@ -678,13 +675,17 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         (isCurrentScopeAll && !isActive && currentPromptStudyId == studyId) ||
         (currentState.isComplete && isActive);
 
+    final DueCountsSummary summary;
     if (needsSessionRefresh) {
-      newSession = await _service.startSession(
+      final loaded = await _service.loadSessionAndSummary(
+        studies: updatedStudies,
         scope: currentState.scope,
         mode: currentState.mode,
         remainingDailyQuota: await _remainingDailyQuota(currentState.mode),
         generation: generation,
       );
+      summary = loaded.summary;
+      newSession = loaded.session;
       newPrompt = newSession.currentPrompt;
       if (newPrompt != null) {
         newPosition = _parseFen(newPrompt.fen);
@@ -696,6 +697,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       // it would write the old line's dues math onto this fresh state (and resurrect its prompt).
       // The answer itself was already graded and persisted; only the UI step is discarded.
       _pendingAdvancement = null;
+    } else {
+      summary = await _service.getDueSummary(studies: updatedStudies, scope: currentState.scope);
     }
 
     // A scope change or reload that started after this toggle owns the screen now; the counts
@@ -770,12 +773,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     } else if (currentState != null) {
       final updatedStudies = currentState.studies.where((s) => s.id != studyId).toList();
       final remainingQuota = await _remainingDailyQuota(currentState.mode);
-      final summary = await _service.getDueSummary(
+      final (:session, :summary) = await _service.loadSessionAndSummary(
         studies: updatedStudies,
-        scope: currentState.scope,
-        remainingDailyQuota: remainingQuota,
-      );
-      final newSession = await _service.startSession(
         scope: currentState.scope,
         mode: currentState.mode,
         remainingDailyQuota: remainingQuota,
@@ -789,7 +788,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       // it (see toggleStudyActive): its answer was graded and persisted; only the UI step goes.
       _pendingAdvancement = null;
 
-      final prompt = newSession.currentPrompt;
+      final prompt = session.currentPrompt;
       state = AsyncData(
         currentState.copyWith(
           studies: updatedStudies,
@@ -803,7 +802,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           studySideProgress: summary.studySideProgress,
           studyIdsBySide: summary.studyIdsBySide,
           openingsBySide: summary.openingsBySide,
-          session: newSession,
+          session: session,
           currentPrompt: prompt,
           clearPrompt: prompt == null,
           boardPosition: prompt != null ? _parseFen(prompt.fen) : null,

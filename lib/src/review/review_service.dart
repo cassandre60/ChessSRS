@@ -381,6 +381,18 @@ class _DueTally {
   }
 }
 
+class _LoadedReviewData {
+  const _LoadedReviewData({
+    required this.allDecisions,
+    required this.reviewStates,
+    required this.exposureThrottle,
+  });
+
+  final List<RepertoireDecision> allDecisions;
+  final Map<String, ReviewState> reviewStates;
+  final Map<String, DateTime> exposureThrottle;
+}
+
 class ReviewService {
   ReviewService({
     required this.repository,
@@ -426,8 +438,11 @@ class ReviewService {
   /// well so the `all()` branch keeps reporting inactive studies in the session
   /// header without issuing a second identical query.
   Future<({List<Study> allStudies, List<Study> activeStudies, List<Chapter> chapters})>
-  _loadActiveStudiesAndChapters({bool Function(Chapter)? chapterWhere}) async {
-    final allStudies = await repository.getAllStudies();
+  _loadActiveStudiesAndChapters({
+    List<Study>? preloadedStudies,
+    bool Function(Chapter)? chapterWhere,
+  }) async {
+    final allStudies = preloadedStudies ?? await repository.getAllStudies();
     final activeStudies = allStudies.where((s) => s.isActive).toList();
     final chapters = <Chapter>[];
     for (final s in activeStudies) {
@@ -435,6 +450,33 @@ class ReviewService {
       chapters.addAll(chapterWhere == null ? studyChapters : studyChapters.where(chapterWhere));
     }
     return (allStudies: allStudies, activeStudies: activeStudies, chapters: chapters);
+  }
+
+  Future<_LoadedReviewData> _loadReviewData([List<RepertoireDecision>? decisions]) async {
+    final allDecisions = decisions ?? await repository.getAllDecisions();
+    final decisionIds = allDecisions.map((d) => d.id).toList();
+    final canonicalIds = allDecisions.map((d) => d.canonicalId).toSet().toList();
+    final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
+    final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
+    final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
+    final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
+    for (final k in kStates) {
+      reviewStates[k.canonicalId] = k.toReviewState();
+    }
+
+    final exposureThrottle = <String, DateTime>{};
+    for (final k in kStates) {
+      final exposedAt = k.lastExposedAt;
+      if (exposedAt != null) {
+        exposureThrottle[k.canonicalId] = exposedAt;
+      }
+    }
+
+    return _LoadedReviewData(
+      allDecisions: allDecisions,
+      reviewStates: reviewStates,
+      exposureThrottle: exposureThrottle,
+    );
   }
 
   /// Starts a new review session for the given [scope].
@@ -455,6 +497,11 @@ class ReviewService {
     int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
     int? generation,
+    List<Study>? preloadedStudies,
+    Map<String, ReviewState>? preloadedReviewStates,
+    Map<String, DateTime>? preloadedExposureThrottle,
+    List<RepertoireDecision>? preloadedAllDecisions,
+    Map<String, String?>? preloadedChapterOpenings,
   }) async {
     final List<Study> targetStudies;
     final List<Chapter> targetChapters;
@@ -463,28 +510,41 @@ class ReviewService {
     if (scope.chapterId != null) {
       final chapter = await repository.getChapter(scope.chapterId!);
       targetChapters = chapter != null ? [chapter] : const [];
-      final study = chapter != null ? await repository.getStudy(chapter.studyId) : null;
+      final study = chapter != null
+          ? (preloadedStudies?.where((s) => s.id == chapter.studyId).firstOrNull ??
+                await repository.getStudy(chapter.studyId))
+          : null;
       targetStudies = study != null ? [study] : const [];
-      decisions = await repository.getDecisionsByChapter(scope.chapterId!);
+      decisions = preloadedAllDecisions != null
+          ? preloadedAllDecisions.where((d) => d.chapterId == scope.chapterId!).toList()
+          : await repository.getDecisionsByChapter(scope.chapterId!);
     } else if (scope.studyId != null) {
-      final study = await repository.getStudy(scope.studyId!);
+      final study =
+          preloadedStudies?.where((s) => s.id == scope.studyId!).firstOrNull ??
+          await repository.getStudy(scope.studyId!);
       targetStudies = study != null ? [study] : const [];
       targetChapters = await repository.getChaptersByStudy(scope.studyId!);
       decisions = await repository.getDecisionsByStudy(scope.studyId!);
     } else if (scope.openingFamily != null) {
-      final chapterOpenings = await repository.getChapterOpenings();
+      final chapterOpenings = preloadedChapterOpenings ?? await repository.getChapterOpenings();
       final matchingChapterIds = chapterOpenings.entries
           .where((e) => e.value?.trim() == scope.openingFamily!.trim())
           .map((e) => e.key)
           .toSet();
 
       final loaded = await _loadActiveStudiesAndChapters(
+        preloadedStudies: preloadedStudies,
         chapterWhere: (c) => matchingChapterIds.contains(c.id),
       );
       final activeStudies = loaded.activeStudies;
       targetStudies = activeStudies;
       targetChapters = loaded.chapters;
-      decisions = await _getOpeningDecisions(targetChapters, scope.openingFamily!, activeStudies);
+      decisions = await _getOpeningDecisions(
+        targetChapters,
+        scope.openingFamily!,
+        activeStudies,
+        preloadedAllDecisions,
+      );
     } else if (scope.side != null) {
       // A side scope spans every active study but keeps only the chapters
       // trained from that side. Resolved here rather than by filtering the
@@ -492,41 +552,31 @@ class ReviewService {
       // narrowed together — a decision whose chapter is excluded would
       // otherwise arrive with no tree to grade against (INV-030).
       final loaded = await _loadActiveStudiesAndChapters(
+        preloadedStudies: preloadedStudies,
         chapterWhere: (c) => c.orientation == scope.side,
       );
       targetStudies = loaded.activeStudies;
       targetChapters = loaded.chapters;
-      decisions = await _getSideDecisions(targetChapters);
+      decisions = await _getSideDecisions(targetChapters, preloadedAllDecisions);
     } else {
-      final loaded = await _loadActiveStudiesAndChapters();
+      final loaded = await _loadActiveStudiesAndChapters(preloadedStudies: preloadedStudies);
       // The session header/progress counts see ALL studies including inactive ones;
       // only the chapters (and hence the queue) are active-scoped.
       targetStudies = loaded.allStudies;
       targetChapters = loaded.chapters;
-      decisions = await _getActiveDecisions(loaded.allStudies);
+      decisions = await _getActiveDecisions(loaded.allStudies, preloadedAllDecisions);
     }
 
-    // Both key kinds are queryable because saveAnswerBatch mirrors each
-    // canonical state into every per-occurrence decisionId row.
-    final decisionIds = decisions.map((d) => d.id).toList();
-    final canonicalIds = decisions.map((d) => d.canonicalId).toSet().toList();
-    final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
-    final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
-    final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
-    final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
-    for (final k in kStates) {
-      reviewStates[k.canonicalId] = k.toReviewState();
-    }
+    final Map<String, ReviewState> reviewStates;
+    final Map<String, DateTime> exposureThrottle;
 
-    // Seed the B.2 exposure cap from the store. Without this the once-per-calendar-day throttle
-    // lives only in the coordinator's memory, so it resets with every session and passive stability
-    // compounds once per session rather than once per day (review-2 C1).
-    final exposureThrottle = <String, DateTime>{};
-    for (final k in kStates) {
-      final exposedAt = k.lastExposedAt;
-      if (exposedAt != null) {
-        exposureThrottle[k.canonicalId] = exposedAt;
-      }
+    if (preloadedReviewStates != null) {
+      reviewStates = preloadedReviewStates;
+      exposureThrottle = preloadedExposureThrottle ?? const {};
+    } else {
+      final loaded = await _loadReviewData(decisions);
+      reviewStates = loaded.reviewStates;
+      exposureThrottle = loaded.exposureThrottle;
     }
 
     final engine = ReviewEngine(scheduler: scheduler, clock: clock);
@@ -679,6 +729,63 @@ class ReviewService {
     return summary.totalDueCount;
   }
 
+  /// Loads due count summary and starts a review session in a single database pass,
+  /// eliminating redundant decision, review state, and knowledge state queries.
+  Future<({ReviewSession session, DueCountsSummary summary})> loadSessionAndSummary({
+    required List<Study> studies,
+    ReviewScope scope = const ReviewScope.all(),
+    ReviewMode mode = ReviewMode.srs,
+    int? prefetchBatchSize = kDefaultPrefetchBatchSize,
+    int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
+    int? remainingDailyQuota,
+    int? generation,
+    Map<String, Side>? preloadedChapterOrientations,
+  }) async {
+    final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
+    final chapterOpenings = await repository.getChapterOpenings();
+    final chapterSides = preloadedChapterOrientations ?? await repository.getChapterOrientations();
+    final chapterStudyIds = await repository.getChapterStudyIds();
+
+    final allDecisions = await repository.getAllDecisions();
+    final loadedData = await _loadReviewData(allDecisions);
+
+    final now = clock.now();
+    final tally = _DueTally(
+      studies: studies,
+      chapterOpenings: chapterOpenings,
+      chapterSides: chapterSides,
+      chapterStudyIds: chapterStudyIds,
+    );
+    for (final d in allDecisions) {
+      tally.add(
+        d,
+        reviewStates: loadedData.reviewStates,
+        now: now,
+        activeStudyIds: activeStudyIds,
+        chapterOpenings: chapterOpenings,
+        chapterSides: chapterSides,
+        scope: scope,
+      );
+    }
+    final summary = tally.toSummary(remainingDailyQuota: remainingDailyQuota);
+
+    final session = await startSession(
+      scope: scope,
+      mode: mode,
+      prefetchBatchSize: prefetchBatchSize,
+      prefetchRefillThreshold: prefetchRefillThreshold,
+      remainingDailyQuota: remainingDailyQuota,
+      generation: generation,
+      preloadedStudies: studies,
+      preloadedReviewStates: loadedData.reviewStates,
+      preloadedExposureThrottle: loadedData.exposureThrottle,
+      preloadedAllDecisions: allDecisions,
+      preloadedChapterOpenings: chapterOpenings,
+    );
+
+    return (session: session, summary: summary);
+  }
+
   /// Returns a batched summary of due counts for all studies, opening hubs, and the given [scope].
   ///
   /// Computes all counts in a single in-memory pass over decisions without reloading
@@ -692,16 +799,7 @@ class ReviewService {
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
-    final allDecisions = await repository.getAllDecisions();
-    final decisionIds = allDecisions.map((d) => d.id).toList();
-    final canonicalIds = allDecisions.map((d) => d.canonicalId).toSet().toList();
-    final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
-    final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
-    final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
-    final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
-    for (final k in kStates) {
-      reviewStates[k.canonicalId] = k.toReviewState();
-    }
+    final loadedData = await _loadReviewData();
     final now = clock.now();
 
     final tally = _DueTally(
@@ -710,10 +808,10 @@ class ReviewService {
       chapterSides: chapterSides,
       chapterStudyIds: chapterStudyIds,
     );
-    for (final d in allDecisions) {
+    for (final d in loadedData.allDecisions) {
       tally.add(
         d,
-        reviewStates: reviewStates,
+        reviewStates: loadedData.reviewStates,
         now: now,
         activeStudyIds: activeStudyIds,
         chapterOpenings: chapterOpenings,
@@ -724,9 +822,12 @@ class ReviewService {
     return tally.toSummary(remainingDailyQuota: remainingDailyQuota);
   }
 
-  Future<List<RepertoireDecision>> _getActiveDecisions(List<Study> studies) async {
+  Future<List<RepertoireDecision>> _getActiveDecisions(
+    List<Study> studies, [
+    List<RepertoireDecision>? preloadedDecisions,
+  ]) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
-    final allDecisions = await repository.getAllDecisions();
+    final allDecisions = preloadedDecisions ?? await repository.getAllDecisions();
     return allDecisions.where((d) => activeStudyIds.contains(d.studyId)).toList();
   }
 
@@ -734,25 +835,29 @@ class ReviewService {
   ///
   /// The chapter id set is the authority, not the study: a chapter id names one
   /// study, so an id match cannot pull in a decision from a paused study.
-  Future<List<RepertoireDecision>> _getSideDecisions(List<Chapter> chapters) async {
+  Future<List<RepertoireDecision>> _getSideDecisions(
+    List<Chapter> chapters, [
+    List<RepertoireDecision>? preloadedDecisions,
+  ]) async {
     if (chapters.isEmpty) return const [];
     final chapterIds = chapters.map((c) => c.id).toSet();
-    final allDecisions = await repository.getAllDecisions();
+    final allDecisions = preloadedDecisions ?? await repository.getAllDecisions();
     return allDecisions.where((d) => chapterIds.contains(d.chapterId)).toList();
   }
 
   Future<List<RepertoireDecision>> _getOpeningDecisions(
     List<Chapter> allChapters,
     String openingFamily,
-    List<Study> studies,
-  ) async {
+    List<Study> studies, [
+    List<RepertoireDecision>? preloadedDecisions,
+  ]) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final wanted = openingFamily.trim();
     final matchingChapterIds = allChapters
         .where((c) => (c.opening?.trim() ?? '') == wanted && activeStudyIds.contains(c.studyId))
         .map((c) => c.id)
         .toSet();
-    final allDecisions = await repository.getAllDecisions();
+    final allDecisions = preloadedDecisions ?? await repository.getAllDecisions();
     return allDecisions.where((d) => matchingChapterIds.contains(d.chapterId)).toList();
   }
 }
