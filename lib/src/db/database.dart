@@ -205,21 +205,19 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
             );
           }
           if (oldVersion < 17) {
-            // Read-before-write: a previous upgrade attempt may have added a
-            // column without recording the version (the version lands only
-            // after onUpgrade completes), and fixture databases built from
-            // the current schema already carry them. A blind ALTER would
-            // fail the open with "duplicate column name".
-            final studyColumns = await db.rawQuery('PRAGMA table_info($kTableSrsStudy)');
-            final studyColumnNames = studyColumns.map((c) => c['name']! as String).toSet();
-            if (!studyColumnNames.contains('remoteStudyId')) {
-              batch.execute('ALTER TABLE $kTableSrsStudy ADD COLUMN remoteStudyId TEXT');
-            }
-            if (!studyColumnNames.contains('remoteUpdatedAt')) {
-              batch.execute('ALTER TABLE $kTableSrsStudy ADD COLUMN remoteUpdatedAt TEXT');
-            }
+            // CREATE IF NOT EXISTS: idempotent by construction, so a resumed
+            // upgrade or a fixture built from the current schema cannot fail
+            // the open with "already exists".
+            batch.execute('''
+              CREATE TABLE IF NOT EXISTS $kTableSrsStudyRemote (
+                studyId TEXT PRIMARY KEY,
+                remoteStudyId TEXT NOT NULL,
+                remoteUpdatedAt TEXT NOT NULL,
+                FOREIGN KEY (studyId) REFERENCES $kTableSrsStudy(id) ON DELETE CASCADE
+              );
+            ''');
             batch.execute(
-              'CREATE INDEX IF NOT EXISTS idx_srs_study_remoteStudyId ON $kTableSrsStudy(remoteStudyId)',
+              'CREATE INDEX IF NOT EXISTS idx_srs_study_remote_remoteStudyId ON $kTableSrsStudyRemote(remoteStudyId)',
             );
           }
         }

@@ -9,6 +9,7 @@ const kTableSrsDecision = 'srs_decision';
 const kTableSrsReviewState = 'srs_review_state';
 const kTableSrsReviewEvent = 'srs_review_event';
 const kTablePositionKnowledgeState = 'position_knowledge_state';
+const kTableSrsStudyRemote = 'srs_study_remote';
 
 void createSrsTables(Batch batch) {
   batch.execute('''
@@ -18,18 +19,28 @@ void createSrsTables(Batch batch) {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       isActive INTEGER NOT NULL DEFAULT 1,
-      pgnHash TEXT,
-      remoteStudyId TEXT,
-      remoteUpdatedAt TEXT
+      pgnHash TEXT
     );
   ''');
   batch.execute('''
     CREATE INDEX IF NOT EXISTS idx_srs_study_pgnHash
     ON $kTableSrsStudy(pgnHash);
   ''');
+
+  // Bulk-import linkage lives beside the study, not on the domain entity:
+  // it is sync metadata (which remote study, how fresh), not repertoire
+  // content, and a side table needs no ALTER hazard on upgrade.
   batch.execute('''
-    CREATE INDEX IF NOT EXISTS idx_srs_study_remoteStudyId
-    ON $kTableSrsStudy(remoteStudyId);
+    CREATE TABLE IF NOT EXISTS $kTableSrsStudyRemote (
+      studyId TEXT PRIMARY KEY,
+      remoteStudyId TEXT NOT NULL,
+      remoteUpdatedAt TEXT NOT NULL,
+      FOREIGN KEY (studyId) REFERENCES $kTableSrsStudy(id) ON DELETE CASCADE
+    );
+  ''');
+  batch.execute('''
+    CREATE INDEX IF NOT EXISTS idx_srs_study_remote_remoteStudyId
+    ON $kTableSrsStudyRemote(remoteStudyId);
   ''');
 
   batch.execute('''

@@ -18,8 +18,6 @@ class Study {
     this.updatedAt,
     this.isActive = true,
     this.pgnHash,
-    this.remoteStudyId,
-    this.remoteUpdatedAt,
   });
 
   /// Creates a new [Study] with a freshly-generated UUID.
@@ -28,8 +26,6 @@ class Study {
     DateTime? createdAt,
     bool isActive = true,
     String? pgnHash,
-    String? remoteStudyId,
-    DateTime? remoteUpdatedAt,
   }) {
     final now = createdAt ?? DateTime.now();
     return Study(
@@ -39,8 +35,6 @@ class Study {
       updatedAt: now,
       isActive: isActive,
       pgnHash: pgnHash,
-      remoteStudyId: remoteStudyId,
-      remoteUpdatedAt: remoteUpdatedAt,
     );
   }
 
@@ -59,27 +53,7 @@ class Study {
   /// SHA-256 fingerprint of the source PGN content (Listudy tree_hash pattern).
   final String? pgnHash;
 
-  /// The Lichess study id this was bulk-imported from, if any.
-  ///
-  /// Lets a later bulk run recognise the same remote study without
-  /// downloading it again; local-only and single-pasted imports leave it null
-  /// and keep matching by PGN hash.
-  final String? remoteStudyId;
-
-  /// The remote `updatedAt` at the last import of [remoteStudyId].
-  ///
-  /// A listing entry no newer than this means the remote side is unchanged,
-  /// so the batch skips the download entirely.
-  final DateTime? remoteUpdatedAt;
-
-  Study copyWith({
-    String? title,
-    DateTime? updatedAt,
-    bool? isActive,
-    String? pgnHash,
-    String? remoteStudyId,
-    DateTime? remoteUpdatedAt,
-  }) {
+  Study copyWith({String? title, DateTime? updatedAt, bool? isActive, String? pgnHash}) {
     return Study(
       id: id,
       title: title ?? this.title,
@@ -87,8 +61,6 @@ class Study {
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
       pgnHash: pgnHash ?? this.pgnHash,
-      remoteStudyId: remoteStudyId ?? this.remoteStudyId,
-      remoteUpdatedAt: remoteUpdatedAt ?? this.remoteUpdatedAt,
     );
   }
 
@@ -101,21 +73,10 @@ class Study {
           other.createdAt == createdAt &&
           other.updatedAt == updatedAt &&
           other.isActive == isActive &&
-          other.pgnHash == pgnHash &&
-          other.remoteStudyId == remoteStudyId &&
-          other.remoteUpdatedAt == remoteUpdatedAt;
+          other.pgnHash == pgnHash;
 
   @override
-  int get hashCode => Object.hash(
-    id,
-    title,
-    createdAt,
-    updatedAt,
-    isActive,
-    pgnHash,
-    remoteStudyId,
-    remoteUpdatedAt,
-  );
+  int get hashCode => Object.hash(id, title, createdAt, updatedAt, isActive, pgnHash);
 
   @override
   String toString() => 'Study(id: $id, title: $title, active: $isActive, hash: $pgnHash)';

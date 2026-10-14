@@ -27,8 +27,9 @@ abstract class StudyRepository {
   Future<void> updateStudyActive(String studyId, bool isActive);
   Future<void> updateStudyTitle(String studyId, String newTitle);
 
-  /// The local study bulk-imported from the Lichess study [remoteStudyId], if any.
-  Future<Study?> getStudyByRemoteId(String remoteStudyId);
+  /// The local study bulk-imported from the Lichess study [remoteStudyId], if any,
+  /// with the remote timestamp at its last import.
+  Future<({Study study, DateTime? remoteUpdatedAt})?> getStudyByRemoteId(String remoteStudyId);
 
   /// Records (or refreshes) which remote study [studyId] was imported from.
   Future<void> updateStudyRemoteRef({

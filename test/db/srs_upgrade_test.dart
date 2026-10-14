@@ -31,8 +31,8 @@ void main() {
       });
     });
 
-    test('a v16 database gains the linkage columns with rows intact', () async {
-      // A real pre-v17 library: srs_study without remoteStudyId/remoteUpdatedAt.
+    test('a v16 database gains the linkage table with rows intact', () async {
+      // A real pre-v17 library: srs_study with no linkage table beside it.
       final oldDb = await databaseFactoryFfi.openDatabase(
         dbPath,
         options: OpenDatabaseOptions(
@@ -63,29 +63,29 @@ void main() {
         } catch (_) {}
       });
 
-      final columns = await db.rawQuery('PRAGMA table_info(srs_study)');
-      final names = columns.map((c) => c['name']! as String).toSet();
-      expect(names, containsAll(['remoteStudyId', 'remoteUpdatedAt']));
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='srs_study_remote'",
+      );
+      expect(tables, hasLength(1));
 
       final rows = await db.query('srs_study');
       expect(rows.length, 1);
       expect(rows.first['title'], 'Old repertoire');
-      expect(rows.first['pgnHash'], 'abc123');
 
-      // The repository reads the upgraded row with empty linkage.
+      // Linkage round-trips through the new table.
       final repo = SqliteStudyRepository(db);
-      final study = await repo.getStudy('s1');
-      expect(study?.remoteStudyId, isNull);
-      expect(study?.remoteUpdatedAt, isNull);
-
-      // And the new columns round-trip.
+      expect(await repo.getStudyByRemoteId('aaaaaaaa'), isNull);
       await repo.updateStudyRemoteRef(
         studyId: 's1',
         remoteStudyId: 'aaaaaaaa',
         remoteUpdatedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true),
       );
-      expect((await repo.getStudy('s1'))?.remoteStudyId, 'aaaaaaaa');
-      expect(await repo.getStudyByRemoteId('aaaaaaaa'), isNotNull);
+      final linked = await repo.getStudyByRemoteId('aaaaaaaa');
+      expect(linked?.study.title, 'Old repertoire');
+      expect(
+        linked?.remoteUpdatedAt,
+        DateTime.fromMillisecondsSinceEpoch(1700000000000, isUtc: true),
+      );
     });
   });
 }

@@ -262,15 +262,23 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<Study?> getStudyByRemoteId(String remoteStudyId) async {
-    final rows = await _db.query(
-      kTableSrsStudy,
-      where: 'remoteStudyId = ?',
-      whereArgs: [remoteStudyId],
-      limit: 1,
+  Future<({Study study, DateTime? remoteUpdatedAt})?> getStudyByRemoteId(
+    String remoteStudyId,
+  ) async {
+    final rows = await _db.rawQuery(
+      '''
+      SELECT s.*, r.remoteUpdatedAt AS linkedUpdatedAt
+      FROM $kTableSrsStudy s JOIN $kTableSrsStudyRemote r ON r.studyId = s.id
+      WHERE r.remoteStudyId = ? LIMIT 1
+      ''',
+      [remoteStudyId],
     );
     if (rows.isEmpty) return null;
-    return _studyFromRow(rows.first);
+    final raw = rows.first['linkedUpdatedAt'] as String?;
+    return (
+      study: _studyFromRow(rows.first),
+      remoteUpdatedAt: raw != null ? DateTime.parse(raw) : null,
+    );
   }
 
   @override
@@ -279,15 +287,11 @@ class SqliteStudyRepository implements StudyRepository {
     required String remoteStudyId,
     required DateTime remoteUpdatedAt,
   }) async {
-    await _db.update(
-      kTableSrsStudy,
-      {
-        'remoteStudyId': remoteStudyId,
-        'remoteUpdatedAt': remoteUpdatedAt.toUtc().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [studyId],
-    );
+    await _db.insert(kTableSrsStudyRemote, {
+      'studyId': studyId,
+      'remoteStudyId': remoteStudyId,
+      'remoteUpdatedAt': remoteUpdatedAt.toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -1028,7 +1032,6 @@ class SqliteStudyRepository implements StudyRepository {
   static Study _studyFromRow(Map<String, Object?> row) {
     final rawActive = row['isActive'];
     final isActive = rawActive == null || rawActive != 0;
-    final remoteUpdatedAtRaw = row['remoteUpdatedAt'] as String?;
     return Study(
       id: row['id']! as String,
       title: row['title']! as String,
@@ -1036,8 +1039,6 @@ class SqliteStudyRepository implements StudyRepository {
       updatedAt: DateTime.parse(row['updatedAt']! as String),
       isActive: isActive,
       pgnHash: row['pgnHash'] as String?,
-      remoteStudyId: row['remoteStudyId'] as String?,
-      remoteUpdatedAt: remoteUpdatedAtRaw != null ? DateTime.parse(remoteUpdatedAtRaw) : null,
     );
   }
 
@@ -1054,8 +1055,6 @@ class SqliteStudyRepository implements StudyRepository {
     'updatedAt': study.updatedAt?.toIso8601String() ?? nowIso,
     'isActive': study.isActive ? 1 : 0,
     'pgnHash': study.pgnHash,
-    'remoteStudyId': study.remoteStudyId,
-    'remoteUpdatedAt': study.remoteUpdatedAt?.toUtc().toIso8601String(),
   };
 
   static Chapter _chapterFromRow(Map<String, Object?> row) {

@@ -1704,7 +1704,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             !item.updatedAt.isAfter(linked.remoteUpdatedAt!)) {
           _logger.info('Bulk import skips unchanged "${item.name}" (${item.id.value})');
           duplicates++;
-          duplicateTitles.add(linked.title);
+          duplicateTitles.add(linked.study.title);
           onProgress?.call((done: i + 1, total: items.length, currentName: item.name));
           continue;
         }
