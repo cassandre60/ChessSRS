@@ -58,6 +58,23 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
     );
   }
 
+  List<Widget> _buildSection({
+    required String title,
+    required SrsColors c,
+    required bool compact,
+    required List<Widget> children,
+  }) {
+    return [
+      _buildSectionHeader(title, c, compact: compact),
+      Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: c.hairline)),
+        ),
+        child: Column(children: children),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.srs;
@@ -154,454 +171,433 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                           // page all sat in widgets nothing could navigate to. The import dialog
                           // offers sign-in in context for private studies; this is the way back
                           // for everything else, including signing out again.
-                          _buildSectionHeader('Account', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: _NavRow(
-                              label: 'Lichess account',
-                              help: 'Sign in to import private and unlisted studies.',
-                              value: authUser == null ? 'Not signed in' : authUser.user.name,
-                              onTap: () =>
-                                  Navigator.of(context).push(AccountMenuScreen.buildRoute(context)),
-                            ),
+                          ..._buildSection(
+                            title: 'Account',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _NavRow(
+                                label: 'Lichess account',
+                                help: 'Sign in to import private and unlisted studies.',
+                                value: authUser == null ? 'Not signed in' : authUser.user.name,
+                                onTap: () => Navigator.of(
+                                  context,
+                                ).push(AccountMenuScreen.buildRoute(context)),
+                              ),
+                            ],
                           ),
                           SizedBox(height: compact ? 4 : 28),
 
                           // 2. Section: Review & Spaced Repetition
-                          _buildSectionHeader('Review & Spaced Repetition', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _SettingRow(
-                                  label: 'Daily limit',
-                                  help: 'Positions reviewed per day, White and Black combined.',
-                                  control: SrsSegmented<int>(
-                                    options: const {
-                                      25: '25',
-                                      50: '50',
-                                      100: '100',
-                                      150: '150',
-                                      200: '200',
-                                      0: 'None',
-                                    },
-                                    value: studyPrefs.maxDailyReviews,
-                                    onChanged: (val) => studyNotifier.setMaxDailyReviews(val),
-                                  ),
+                          ..._buildSection(
+                            title: 'Review & Spaced Repetition',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _SettingRow(
+                                label: 'Daily limit',
+                                help: 'Positions reviewed per day, White and Black combined.',
+                                control: SrsSegmented<int>(
+                                  options: const {
+                                    25: '25',
+                                    50: '50',
+                                    100: '100',
+                                    150: '150',
+                                    200: '200',
+                                    0: 'None',
+                                  },
+                                  value: studyPrefs.maxDailyReviews,
+                                  onChanged: (val) => studyNotifier.setMaxDailyReviews(val),
                                 ),
+                              ),
+                              _SettingRow(
+                                label: 'Target retention',
+                                help:
+                                    'Higher means more reviews. 88% suits most players; 95% is for tournament preparation.',
+                                control: SrsSegmented<double>(
+                                  options: {
+                                    0.80: '80%',
+                                    0.85: '85%',
+                                    0.88: '88%',
+                                    0.90: '90%',
+                                    0.95: '95%',
+                                  },
+                                  value: studyPrefs.targetRetention,
+                                  onChanged: (val) => studyNotifier.setTargetRetention(val),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Scheduling algorithm',
+                                help: 'FSRS adapts to how well you remember each position.',
+                                control: SrsSegmented<SchedulerType>(
+                                  options: const {
+                                    SchedulerType.fsrs: 'FSRS',
+                                    SchedulerType.simple: 'Simple',
+                                    SchedulerType.easeScaling: 'Ease',
+                                  },
+                                  value: studyPrefs.schedulerType,
+                                  onChanged: (algo) => studyNotifier.setSchedulerType(algo),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Review order',
+                                help:
+                                    'Same due cards in every mode. Due date serves the most overdue first; By line walks each line in order; Random shuffles the queue.',
+                                control: SrsSegmented<ReviewOrder>(
+                                  options: const {
+                                    ReviewOrder.dueDate: 'Due date',
+                                    ReviewOrder.byLine: 'By line',
+                                    ReviewOrder.random: 'Random',
+                                  },
+                                  value: studyPrefs.reviewOrder,
+                                  onChanged: (order) => studyNotifier.setReviewOrder(order),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Transposed moves',
+                                help:
+                                    'A move from another reviewed line counts as correct and review jumps there. Within study limits it to the same study; Off requires the expected line\u2019s moves.',
+                                control: SrsSegmented<TransposeScope>(
+                                  options: const {
+                                    TransposeScope.off: 'Off',
+                                    TransposeScope.withinStudy: 'Within study',
+                                    TransposeScope.inScope: 'In scope',
+                                  },
+                                  value: studyPrefs.transposeScope,
+                                  onChanged: (scope) => studyNotifier.setTransposeScope(scope),
+                                ),
+                              ),
+                              if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
                                 _SettingRow(
-                                  label: 'Target retention',
-                                  help:
-                                      'Higher means more reviews. 88% suits most players; 95% is for tournament preparation.',
+                                  label: 'Initial ease factor',
+                                  help: 'Multiplier applied on first success.',
                                   control: SrsSegmented<double>(
-                                    options: {
-                                      0.80: '80%',
-                                      0.85: '85%',
-                                      0.88: '88%',
-                                      0.90: '90%',
-                                      0.95: '95%',
-                                    },
-                                    value: studyPrefs.targetRetention,
-                                    onChanged: (val) => studyNotifier.setTargetRetention(val),
+                                    options: {2.0: '2.0', 2.5: '2.5', 3.0: '3.0'},
+                                    value: studyPrefs.schedulerEase,
+                                    onChanged: (val) => studyNotifier.setSchedulerEase(val),
                                   ),
                                 ),
                                 _SettingRow(
-                                  label: 'Scheduling algorithm',
-                                  help: 'FSRS adapts to how well you remember each position.',
-                                  control: SrsSegmented<SchedulerType>(
-                                    options: const {
-                                      SchedulerType.fsrs: 'FSRS',
-                                      SchedulerType.simple: 'Simple',
-                                      SchedulerType.easeScaling: 'Ease',
-                                    },
-                                    value: studyPrefs.schedulerType,
-                                    onChanged: (algo) => studyNotifier.setSchedulerType(algo),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Review order',
-                                  help:
-                                      'Same due cards in every mode. Due date serves the most overdue first; By line walks each line in order; Random shuffles the queue.',
-                                  control: SrsSegmented<ReviewOrder>(
-                                    options: const {
-                                      ReviewOrder.dueDate: 'Due date',
-                                      ReviewOrder.byLine: 'By line',
-                                      ReviewOrder.random: 'Random',
-                                    },
-                                    value: studyPrefs.reviewOrder,
-                                    onChanged: (order) => studyNotifier.setReviewOrder(order),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Transposed moves',
-                                  help:
-                                      'A move from another reviewed line counts as correct and review jumps there. Within study limits it to the same study; Off requires the expected line\u2019s moves.',
-                                  control: SrsSegmented<TransposeScope>(
-                                    options: const {
-                                      TransposeScope.off: 'Off',
-                                      TransposeScope.withinStudy: 'Within study',
-                                      TransposeScope.inScope: 'In scope',
-                                    },
-                                    value: studyPrefs.transposeScope,
-                                    onChanged: (scope) => studyNotifier.setTransposeScope(scope),
-                                  ),
-                                ),
-                                if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
-                                  _SettingRow(
-                                    label: 'Initial ease factor',
-                                    help: 'Multiplier applied on first success.',
-                                    control: SrsSegmented<double>(
-                                      options: {2.0: '2.0', 2.5: '2.5', 3.0: '3.0'},
-                                      value: studyPrefs.schedulerEase,
-                                      onChanged: (val) => studyNotifier.setSchedulerEase(val),
-                                    ),
-                                  ),
-                                  _SettingRow(
-                                    label: 'Interval scaling',
-                                    help: 'Growth multiplier for subsequent reviews.',
-                                    control: SrsSegmented<double>(
-                                      options: {1.3: '1.3x', 1.5: '1.5x', 1.8: '1.8x'},
-                                      value: studyPrefs.schedulerScaling,
-                                      onChanged: (val) => studyNotifier.setSchedulerScaling(val),
-                                    ),
-                                  ),
-                                ],
-                                _SettingRow(
-                                  label: 'Show move notation',
-                                  help:
-                                      'Display preceding moves (e.g. 1. e4 e5) in the review screen.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.showMoveHistory,
-                                    semanticLabel: 'Show move notation',
-                                    onChanged: (_) => studyNotifier.toggleShowMoveHistory(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  // The design's words, verbatim (01-identity.md). The row
-                                  // gates studyPrefs.showAnnotations, inherited from Lichess.
-                                  label: 'Show arrows and circles',
-                                  help: 'Drawn from your study, only after you answer.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.showAnnotations,
-                                    semanticLabel: 'Show arrows and circles',
-                                    onChanged: (_) => studyNotifier.toggleAnnotations(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Show notes after a move',
-                                  help: 'Comments from your study appear once you have answered.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.showPgnComments,
-                                    semanticLabel: 'Show notes after a move',
-                                    onChanged: (_) => studyNotifier.togglePgnComments(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Collapsible list groups',
-                                  help:
-                                      'Let the Everywhere, Openings and Studies headers fold away in the scope list.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.collapsibleScopeGroups,
-                                    semanticLabel: 'Collapsible list groups',
-                                    onChanged: (_) => studyNotifier.toggleCollapsibleScopeGroups(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Review Diagnostics HUD',
-                                  help:
-                                      'Show real-time FSRS retrievability, stability, and difficulty HUD in review.',
-                                  control: SrsSwitch(
-                                    value: studyPrefs.srsDiagnostics,
-                                    semanticLabel: 'Review Diagnostics HUD',
-                                    onChanged: (_) => studyNotifier.toggleSrsDiagnostics(),
+                                  label: 'Interval scaling',
+                                  help: 'Growth multiplier for subsequent reviews.',
+                                  control: SrsSegmented<double>(
+                                    options: {1.3: '1.3x', 1.5: '1.5x', 1.8: '1.8x'},
+                                    value: studyPrefs.schedulerScaling,
+                                    onChanged: (val) => studyNotifier.setSchedulerScaling(val),
                                   ),
                                 ),
                               ],
-                            ),
+                              _SettingRow(
+                                label: 'Show move notation',
+                                help:
+                                    'Display preceding moves (e.g. 1. e4 e5) in the review screen.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.showMoveHistory,
+                                  semanticLabel: 'Show move notation',
+                                  onChanged: (_) => studyNotifier.toggleShowMoveHistory(),
+                                ),
+                              ),
+                              _SettingRow(
+                                // The design's words, verbatim (01-identity.md). The row
+                                // gates studyPrefs.showAnnotations, inherited from Lichess.
+                                label: 'Show arrows and circles',
+                                help: 'Drawn from your study, only after you answer.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.showAnnotations,
+                                  semanticLabel: 'Show arrows and circles',
+                                  onChanged: (_) => studyNotifier.toggleAnnotations(),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Show notes after a move',
+                                help: 'Comments from your study appear once you have answered.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.showPgnComments,
+                                  semanticLabel: 'Show notes after a move',
+                                  onChanged: (_) => studyNotifier.togglePgnComments(),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Collapsible list groups',
+                                help:
+                                    'Let the Everywhere, Openings and Studies headers fold away in the scope list.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.collapsibleScopeGroups,
+                                  semanticLabel: 'Collapsible list groups',
+                                  onChanged: (_) => studyNotifier.toggleCollapsibleScopeGroups(),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Review Diagnostics HUD',
+                                help:
+                                    'Show real-time FSRS retrievability, stability, and difficulty HUD in review.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.srsDiagnostics,
+                                  semanticLabel: 'Review Diagnostics HUD',
+                                  onChanged: (_) => studyNotifier.toggleSrsDiagnostics(),
+                                ),
+                              ),
+                            ],
                           ),
 
                           // 3. Section: Appearance
-                          _buildSectionHeader('Appearance', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _SettingRow(
-                                  label: 'Theme',
-                                  control: SrsSegmented<bool>(
-                                    options: const {false: 'Light', true: 'Dark'},
-                                    value: isDark,
-                                    onChanged: (dark) => generalNotifier.setBackgroundThemeMode(
-                                      dark ? BackgroundThemeMode.dark : BackgroundThemeMode.light,
-                                    ),
+                          ..._buildSection(
+                            title: 'Appearance',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _SettingRow(
+                                label: 'Theme',
+                                control: SrsSegmented<bool>(
+                                  options: const {false: 'Light', true: 'Dark'},
+                                  value: isDark,
+                                  onChanged: (dark) => generalNotifier.setBackgroundThemeMode(
+                                    dark ? BackgroundThemeMode.dark : BackgroundThemeMode.light,
                                   ),
                                 ),
-                                _SettingRow(
-                                  label: 'Accent',
-                                  help: 'Colour of the correct move arrow and selection.',
-                                  control: SrsAccentDots(
-                                    value: accent,
-                                    onChanged: (newAccent) {
-                                      ref.read(srsAccentProvider.notifier).accent = newAccent;
-                                    },
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'Accent',
+                                help: 'Colour of the correct move arrow and selection.',
+                                control: SrsAccentDots(
+                                  value: accent,
+                                  onChanged: (newAccent) {
+                                    ref.read(srsAccentProvider.notifier).accent = newAccent;
+                                  },
                                 ),
-                                _NavRow(
-                                  label: 'Board theme',
-                                  value: boardPrefs.boardTheme.label,
-                                  onTap: () =>
-                                      Navigator.of(context).push(BoardChoiceScreen.buildRoute()),
+                              ),
+                              _NavRow(
+                                label: 'Board theme',
+                                value: boardPrefs.boardTheme.label,
+                                onTap: () =>
+                                    Navigator.of(context).push(BoardChoiceScreen.buildRoute()),
+                              ),
+                              _NavRow(
+                                label: 'Piece set',
+                                value: boardPrefs.pieceSet.label,
+                                onTap: () =>
+                                    Navigator.of(context).push(PieceSetScreen.buildRoute()),
+                              ),
+                              _SettingRow(
+                                label: 'Board coordinates',
+                                control: SrsSwitch(
+                                  value: boardPrefs.coordinates,
+                                  semanticLabel: 'Board coordinates',
+                                  onChanged: (_) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .toggleCoordinates(),
                                 ),
-                                _NavRow(
-                                  label: 'Piece set',
-                                  value: boardPrefs.pieceSet.label,
-                                  onTap: () =>
-                                      Navigator.of(context).push(PieceSetScreen.buildRoute()),
+                              ),
+                              _SettingRow(
+                                label: 'Piece animation',
+                                control: SrsSwitch(
+                                  value: boardPrefs.pieceAnimation,
+                                  semanticLabel: 'Piece animation',
+                                  onChanged: (_) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .togglePieceAnimation(),
                                 ),
-                                _SettingRow(
-                                  label: 'Board coordinates',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.coordinates,
-                                    semanticLabel: 'Board coordinates',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .toggleCoordinates(),
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'Board highlights',
+                                control: SrsSwitch(
+                                  value: boardPrefs.boardHighlights,
+                                  semanticLabel: 'Board highlights',
+                                  onChanged: (_) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .toggleBoardHighlights(),
                                 ),
-                                _SettingRow(
-                                  label: 'Piece animation',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.pieceAnimation,
-                                    semanticLabel: 'Piece animation',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .togglePieceAnimation(),
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'Shape drawing',
+                                help: 'Draw arrows and circles with two fingers.',
+                                control: SrsSwitch(
+                                  value: boardPrefs.enableShapeDrawings,
+                                  semanticLabel: 'Shape drawing',
+                                  onChanged: (_) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .toggleEnableShapeDrawings(),
                                 ),
-                                _SettingRow(
-                                  label: 'Board highlights',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.boardHighlights,
-                                    semanticLabel: 'Board highlights',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .toggleBoardHighlights(),
-                                  ),
-                                ),
-                                _SettingRow(
-                                  label: 'Shape drawing',
-                                  help: 'Draw arrows and circles with two fingers.',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.enableShapeDrawings,
-                                    semanticLabel: 'Shape drawing',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .toggleEnableShapeDrawings(),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
 
                           // 4. Section: Game behaviour
-                          _buildSectionHeader('Game behaviour', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _SettingRow(
-                                  label: 'Premoves',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.premoves,
-                                    semanticLabel: 'Premoves',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .togglePremoves(),
-                                  ),
+                          ..._buildSection(
+                            title: 'Game behaviour',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _SettingRow(
+                                label: 'Premoves',
+                                control: SrsSwitch(
+                                  value: boardPrefs.premoves,
+                                  semanticLabel: 'Premoves',
+                                  onChanged: (_) =>
+                                      ref.read(boardPreferencesProvider.notifier).togglePremoves(),
                                 ),
-                                _SettingRow(
-                                  label: 'How you move pieces',
-                                  control: SrsSegmented<PieceShiftMethod>(
-                                    options: const {
-                                      PieceShiftMethod.either: 'Either',
-                                      PieceShiftMethod.drag: 'Drag',
-                                      PieceShiftMethod.tapTwoSquares: 'Tap',
-                                    },
-                                    value: boardPrefs.pieceShiftMethod,
-                                    onChanged: (val) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .setPieceShiftMethod(val),
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'How you move pieces',
+                                control: SrsSegmented<PieceShiftMethod>(
+                                  options: const {
+                                    PieceShiftMethod.either: 'Either',
+                                    PieceShiftMethod.drag: 'Drag',
+                                    PieceShiftMethod.tapTwoSquares: 'Tap',
+                                  },
+                                  value: boardPrefs.pieceShiftMethod,
+                                  onChanged: (val) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .setPieceShiftMethod(val),
                                 ),
-                                _SettingRow(
-                                  label: 'Move on release',
-                                  help: 'Commit a drag move when you lift your finger.',
-                                  control: SrsSwitch(
-                                    value: boardPrefs.moveOnRelease,
-                                    semanticLabel: 'Move on release',
-                                    onChanged: (_) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .toggleMoveOnRelease(),
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'Move on release',
+                                help: 'Commit a drag move when you lift your finger.',
+                                control: SrsSwitch(
+                                  value: boardPrefs.moveOnRelease,
+                                  semanticLabel: 'Move on release',
+                                  onChanged: (_) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .toggleMoveOnRelease(),
                                 ),
-                                _SettingRow(
-                                  label: 'Castling method',
-                                  control: SrsSegmented<CastlingMethod>(
-                                    options: const {
-                                      CastlingMethod.kingOverRook: 'King over rook',
-                                      CastlingMethod.kingTwoSquares: 'Two squares',
-                                    },
-                                    value: boardPrefs.castlingMethod,
-                                    onChanged: (val) => ref
-                                        .read(boardPreferencesProvider.notifier)
-                                        .setCastlingMethod(val),
-                                  ),
+                              ),
+                              _SettingRow(
+                                label: 'Castling method',
+                                control: SrsSegmented<CastlingMethod>(
+                                  options: const {
+                                    CastlingMethod.kingOverRook: 'King over rook',
+                                    CastlingMethod.kingTwoSquares: 'Two squares',
+                                  },
+                                  value: boardPrefs.castlingMethod,
+                                  onChanged: (val) => ref
+                                      .read(boardPreferencesProvider.notifier)
+                                      .setCastlingMethod(val),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
 
                           // 5. Section: Sound
-                          _buildSectionHeader('Sound', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _SettingRow(
-                                  label: 'Sound',
-                                  control: SrsSwitch(
-                                    value: isSoundOn,
-                                    semanticLabel: 'Sound',
-                                    onChanged: (_) => generalNotifier.toggleSoundEnabled(),
+                          ..._buildSection(
+                            title: 'Sound',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _SettingRow(
+                                label: 'Sound',
+                                control: SrsSwitch(
+                                  value: isSoundOn,
+                                  semanticLabel: 'Sound',
+                                  onChanged: (_) => generalNotifier.toggleSoundEnabled(),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Volume',
+                                control: SizedBox(
+                                  width: 160,
+                                  child: Slider(
+                                    value: generalPrefs.masterVolume,
+                                    max: 1,
+                                    divisions: 10,
+                                    label: volumeLabel(generalPrefs.masterVolume),
+                                    onChanged: (value) => generalNotifier.setMasterVolume(value),
                                   ),
                                 ),
-                                _SettingRow(
-                                  label: 'Volume',
-                                  control: SizedBox(
-                                    width: 160,
-                                    child: Slider(
-                                      value: generalPrefs.masterVolume,
-                                      max: 1,
-                                      divisions: 10,
-                                      label: volumeLabel(generalPrefs.masterVolume),
-                                      onChanged: (value) => generalNotifier.setMasterVolume(value),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
 
                           // 6. Section: Chess Engine
-                          _buildSectionHeader('Chess Engine', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                _NavRow(
-                                  label: 'Chess engine',
-                                  help: 'Threads, hash memory, search time, and multi-PV lines.',
-                                  onTap: () =>
-                                      Navigator.of(context).push(EngineSettingsScreen.buildRoute()),
-                                ),
-                              ],
-                            ),
+                          ..._buildSection(
+                            title: 'Chess Engine',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              _NavRow(
+                                label: 'Chess engine',
+                                help: 'Threads, hash memory, search time, and multi-PV lines.',
+                                onTap: () =>
+                                    Navigator.of(context).push(EngineSettingsScreen.buildRoute()),
+                              ),
+                            ],
                           ),
 
                           // 7. Section: Data & Diagnostics (debug/beta only)
                           if (kDebugMode) ...[
-                            _buildSectionHeader('Data & Diagnostics', c, compact: compact),
-                            Container(
-                              decoration: BoxDecoration(
-                                border: Border(top: BorderSide(color: c.hairline)),
-                              ),
-                              child: Column(
-                                children: [
-                                  _SettingRow(
-                                    label: 'Local database size',
-                                    help: 'Storage used by local database files.',
-                                    control: Text(
-                                      dbSize.hasValue && dbSize.value != null
-                                          ? '${(dbSize.value! / (1024 * 1024)).toStringAsFixed(2)} MB'
-                                          : '...',
-                                      style: TextStyle(
-                                        fontFamily: SrsText.ui,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: c.ink2,
-                                      ),
+                            ..._buildSection(
+                              title: 'Data & Diagnostics',
+                              c: c,
+                              compact: compact,
+                              children: [
+                                _SettingRow(
+                                  label: 'Local database size',
+                                  help: 'Storage used by local database files.',
+                                  control: Text(
+                                    dbSize.hasValue && dbSize.value != null
+                                        ? '${(dbSize.value! / (1024 * 1024)).toStringAsFixed(2)} MB'
+                                        : '...',
+                                    style: TextStyle(
+                                      fontFamily: SrsText.ui,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: c.ink2,
                                     ),
                                   ),
-                                  _NavRow(
-                                    label: 'HTTP network logs',
-                                    help: 'Inspect raw HTTP requests and responses.',
-                                    onTap: () =>
-                                        Navigator.of(context).push(HttpLogScreen.buildRoute()),
-                                  ),
-                                  _NavRow(
-                                    label: 'App diagnostics logs',
-                                    help: 'Application error and debug traces.',
-                                    onTap: () => Navigator.of(
-                                      context,
-                                    ).push(AppLogSettingsScreen.buildRoute()),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                _NavRow(
+                                  label: 'HTTP network logs',
+                                  help: 'Inspect raw HTTP requests and responses.',
+                                  onTap: () =>
+                                      Navigator.of(context).push(HttpLogScreen.buildRoute()),
+                                ),
+                                _NavRow(
+                                  label: 'App diagnostics logs',
+                                  help: 'Application error and debug traces.',
+                                  onTap: () =>
+                                      Navigator.of(context).push(AppLogSettingsScreen.buildRoute()),
+                                ),
+                              ],
                             ),
                           ],
 
                           // 8. Section: About & Licences
-                          _buildSectionHeader('About', c, compact: compact),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border(top: BorderSide(color: c.hairline)),
-                            ),
-                            child: Column(
-                              children: [
-                                // Rate this app is disabled until published to the app stores.
-                                // Code preserved for future release.
-                                if (_kRateAppEnabled) ...[
-                                  SrsSettingsRow(
-                                    label: 'Rate this app',
-                                    help: 'Open the store listing for Chess Repertoire SRS.',
-                                    onTap: () async {
-                                      final isAndroid =
-                                          Theme.of(context).platform == TargetPlatform.android;
-                                      final links = androidAppStoreLinks();
-                                      final launched = await launchUrl(
-                                        isAndroid
-                                            ? links.native
-                                            : appStoreListingUrl(isAndroid: false),
+                          ..._buildSection(
+                            title: 'About',
+                            c: c,
+                            compact: compact,
+                            children: [
+                              // Rate this app is disabled until published to the app stores.
+                              // Code preserved for future release.
+                              if (_kRateAppEnabled) ...[
+                                SrsSettingsRow(
+                                  label: 'Rate this app',
+                                  help: 'Open the store listing for Chess Repertoire SRS.',
+                                  onTap: () async {
+                                    final isAndroid =
+                                        Theme.of(context).platform == TargetPlatform.android;
+                                    final links = androidAppStoreLinks();
+                                    final launched = await launchUrl(
+                                      isAndroid
+                                          ? links.native
+                                          : appStoreListingUrl(isAndroid: false),
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                    if (!launched && isAndroid) {
+                                      await launchUrl(
+                                        links.web,
                                         mode: LaunchMode.externalApplication,
                                       );
-                                      if (!launched && isAndroid) {
-                                        await launchUrl(
-                                          links.web,
-                                          mode: LaunchMode.externalApplication,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ],
-                                _NavRow(
-                                  label: 'About and licences',
-                                  help: 'Attributions, GPL-3.0, and third-party notices.',
-                                  onTap: () => Navigator.of(context).push(AboutPage.buildRoute()),
+                                    }
+                                  },
                                 ),
                               ],
-                            ),
+                              _NavRow(
+                                label: 'About and licences',
+                                help: 'Attributions, GPL-3.0, and third-party notices.',
+                                onTap: () => Navigator.of(context).push(AboutPage.buildRoute()),
+                              ),
+                            ],
                           ),
                         ],
                       ),
