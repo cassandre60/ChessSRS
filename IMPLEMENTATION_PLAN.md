@@ -260,6 +260,12 @@ remains a later option — never a redesign.
       4. On a correct answer it announces the move *played*, not the expected one: `expectedMoves` is a list, so a transposition can make an alternative equally correct, in which case the repertoire move is not what the player played.
       5. Test covers both verdicts, the silent state before an answer, and that the announcement does not linger after Continue. Verified to fail on the pre-fix code.
 
+- [x] **R14: Bulk import of owned Lichess studies** *(done: 2026-10-14, owner request)*
+      1. `ReviewController.importAllMyStudies`: pages `StudyCategory.mine` (signed-in client, so private studies included), fetches each PGN, imports via the normal pipeline with `repertoireSide: null` so every chapter trains from its own side (INV-013). Duplicates skipped by hash (INV-003); failures recorded per study, batch continues (INV-011). Scope reloaded once at the end, never jumped per study.
+      2. `importPgnText` gained `switchScope` (default true, single-import behavior unchanged).
+      3. UI: "Import all my studies" action in the import dialog's Lichess tab, signed-in only, with determinate progress and an imported/already-here/failed summary.
+      4. Tests cite INV-003/INV-011/INV-013; no SPEC change needed.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.
