@@ -90,7 +90,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 17,
+      version: 18,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -219,6 +219,75 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
             batch.execute(
               'CREATE INDEX IF NOT EXISTS idx_srs_study_remote_remoteStudyId ON $kTableSrsStudyRemote(remoteStudyId)',
             );
+          }
+
+          if (oldVersion < 18) {
+            // Ghost FK removal: V3 created srs_review_state and
+            // srs_review_event with FOREIGN KEY (decisionId) REFERENCES
+            // srs_decision(id); later schemas dropped the clauses but SQLite
+            // keeps enforcing them on old tables — and since enforcement was
+            // switched on per connection, every canonical-mirror write (whose
+            // id is a position key, never a decision row) fails on long-lived
+            // databases while fresh installs work. Rebuild both tables
+            // without the clauses, preserving every row and index. Only
+            // tables that exist are rebuilt, so fixtures lacking them pass
+            // through untouched.
+            final legacyTables = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+              "('$kTableSrsReviewState','$kTableSrsReviewEvent')",
+            );
+            final legacyNames = legacyTables.map((r) => r['name']! as String).toSet();
+            if (legacyNames.contains(kTableSrsReviewState)) {
+              batch.execute('DROP TABLE IF EXISTS ${kTableSrsReviewState}_new');
+              batch.execute('''
+                CREATE TABLE ${kTableSrsReviewState}_new (
+                  decisionId TEXT PRIMARY KEY,
+                  firstReviewedAt TEXT,
+                  lastReviewedAt TEXT,
+                  nextDueAt TEXT,
+                  repetitionCount INTEGER NOT NULL DEFAULT 0,
+                  lapseCount INTEGER NOT NULL DEFAULT 0,
+                  stability REAL NOT NULL DEFAULT 0.0,
+                  difficulty REAL NOT NULL DEFAULT 5.0
+                );
+              ''');
+              batch.execute(
+                'INSERT INTO ${kTableSrsReviewState}_new SELECT * FROM $kTableSrsReviewState',
+              );
+              batch.execute('DROP TABLE $kTableSrsReviewState');
+              batch.execute(
+                'ALTER TABLE ${kTableSrsReviewState}_new RENAME TO $kTableSrsReviewState',
+              );
+              batch.execute(
+                'CREATE INDEX IF NOT EXISTS idx_srs_review_state_nextDueAt ON $kTableSrsReviewState(nextDueAt)',
+              );
+            }
+            if (legacyNames.contains(kTableSrsReviewEvent)) {
+              batch.execute('DROP TABLE IF EXISTS ${kTableSrsReviewEvent}_new');
+              batch.execute('''
+                CREATE TABLE ${kTableSrsReviewEvent}_new (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  decisionId TEXT NOT NULL,
+                  whenTimestamp TEXT NOT NULL,
+                  result TEXT NOT NULL,
+                  oldStateJson TEXT NOT NULL,
+                  newStateJson TEXT NOT NULL
+                );
+              ''');
+              batch.execute(
+                'INSERT INTO ${kTableSrsReviewEvent}_new SELECT * FROM $kTableSrsReviewEvent',
+              );
+              batch.execute('DROP TABLE $kTableSrsReviewEvent');
+              batch.execute(
+                'ALTER TABLE ${kTableSrsReviewEvent}_new RENAME TO $kTableSrsReviewEvent',
+              );
+              batch.execute(
+                'CREATE INDEX IF NOT EXISTS idx_srs_review_event_decisionId ON $kTableSrsReviewEvent(decisionId)',
+              );
+              batch.execute(
+                'CREATE INDEX IF NOT EXISTS idx_srs_review_event_whenTimestamp ON $kTableSrsReviewEvent(whenTimestamp)',
+              );
+            }
           }
         }
 

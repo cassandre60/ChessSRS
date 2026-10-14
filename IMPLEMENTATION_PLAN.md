@@ -289,8 +289,13 @@ remains a later option — never a redesign.
 
 - [x] **R19: Bulk re-import skips unchanged studies + awaiting-advance deadlock heals** *(done: 2026-10-14, owner-reported)*
       1. Slow re-import: every run re-downloaded and re-hashed all 60 studies. Linkage now lives in a side table (`srs_study_remote`: study id, remote id, remote timestamp; schema v17 via idempotent `CREATE TABLE IF NOT EXISTS`, cascade on study delete) — deliberately not on the Study entity, so the domain stays untouched and no ALTER can fail an open. Unchanged remotes skip the fetch; duplicates backfill the linkage for pre-linkage imports.
-      2. Permanent freeze suspect: `continueAdvancement` with the awaiting flag set and no pending step returns silently, so every later tap no-ops forever (scope change is the only exit). No reachable path sets that combination, but no path recovers it either — so it now releases the board with a warning log. If the freeze recurs, that log line (or its absence) names the culprit.
-      3. Still needed from the owner: one frozen-board log paste (bulk import → three dead taps) to confirm which path fires.
+      2. Permanent freeze suspect: `continueAdvancement` with the awaiting flag set and no pending step returns silently, so every later tap no-ops forever (scope change is the only exit). No reachable path sets that combination, but no path recovers it either — so it now releases the board with a warning log.
+      3. Freeze root cause found separately (R20) via the owner's log paste.
+
+- [x] **R20: Drop ghost FKs blocking every graded answer (the freeze)** *(done: 2026-10-14, owner log)*
+      1. Chain, all verified: V3 created `srs_review_state/event.decisionId → srs_decision(id)` FKs; later schemas dropped the clauses without removing them from old tables; R4's canonical-mirror writes position keys (never decision rows) into review_state; #88 switched FK enforcement on. Since then every graded answer crashes on persist (UI never updates; skip writes nothing so it works). Fresh installs never had the clauses — which is why no test caught it.
+      2. Schema v18 rebuilds both tables without the undeclared clauses, preserving rows and indexes; only existing tables are rebuilt. Existing-data upgrade, idempotent create, and the exact production write (canonical mirror with no decision row) are pinned by tests citing INV-001/INV-005 — verified to fail pre-fix.
+      3. Owner note: failed writes rolled back, so SRS memory is intact; answers given since enforcement began need re-reviewing.
 
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
