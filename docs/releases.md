@@ -18,13 +18,11 @@ not re-test.
 | Platform | Artifact | Shippable? |
 |---|---|---|
 | Linux x64 | `chesssrs-<tag>-linux-x64.tar.gz` | Yes. Needs system GTK/SQLite libs (standard Flutter Linux prerequisites). |
-| Android | `chesssrs-<tag>-android-testing.apk` / `.aab` | Testing only: throwaway-signed. Installs and runs; cannot update to/from a store build. |
+| Android | `chesssrs-<tag>-android.apk` / `.aab` | Yes. Signed with permanent developer release keystore from GitHub Secrets. |
 
 ## Not shipped (and why)
 
-- **Play Store**: needs the permanent upload keystore, which lives with the
-  owner and must never enter this repo. When it exists: add keystore +
-  `key.properties` as action secrets and extend the Android job to use them.
+- **Play Store**: AAB is generated and signed with the developer key; direct store upload is done via Google Play Console.
 - **iOS**: no signing certificates and no Apple Developer account. Needs both
   plus a macOS-runner job, when there is a device to put it on.
 - **Web**: the sqflite store and the native Stockfish engine have no web
