@@ -82,8 +82,6 @@ class AccountPreferences extends AsyncNotifier<AccountPrefState> {
   Future<void> setShowRatings(ShowRatings value) =>
       _setPref('ratings', value, (prefs) => prefs.copyWith(showRatings: value));
 
-  Future<void> setPremove(BooleanPref value) =>
-      _setPref('premove', value, (prefs) => prefs.copyWith(premove: value));
   Future<void> setTakeback(Takeback value) =>
       _setPref('takeback', value, (prefs) => prefs.copyWith(takeback: value));
   Future<void> setAutoQueen(AutoQueen value) =>
@@ -96,8 +94,6 @@ class AccountPreferences extends AsyncNotifier<AccountPrefState> {
       _setPref('clockTenths', value, (prefs) => prefs.copyWith(clockTenths: value));
   Future<void> setClockSound(BooleanPref value) =>
       _setPref('clockSound', value, (prefs) => prefs.copyWith(clockSound: value));
-  Future<void> setConfirmResign(BooleanPref value) =>
-      _setPref('confirmResign', value, (prefs) => prefs.copyWith(confirmResign: value));
   Future<void> setSubmitMove(SubmitMove value) =>
       _setPref('submitMove', value, (prefs) => prefs.copyWith(submitMove: value));
   Future<void> setFollow(BooleanPref value) =>

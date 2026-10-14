@@ -33,13 +33,6 @@ sealed class Eval {
   /// 1  = infinitely winning
   /// -1 = infinitely losing
   double winningChances(Side side) => _toPov(side, _toWhiteWinningChances(cp, mate));
-
-  /// The difference, in winning chances, between two [Eval]s.
-  ///
-  /// 1  = e1 is infinitely better than e2
-  /// -1 = e1 is infinitely worse  than e2
-  static double winningChancesPovDiff(Side side, Eval e1, Eval e2) =>
-      (e1.winningChances(side) - e2.winningChances(side)) / 2;
 }
 
 /// The eval from the client side, either from the cloud or the local engine.
@@ -146,11 +139,6 @@ sealed class ExternalEval extends Eval with _$ExternalEval {
     String? variation,
     ({String name, String comment})? judgment,
   }) = _ExternalEval;
-
-  /// Whether this eval has a valid cp or mate value.
-  ///
-  /// While the server analysis is still pending, the eval may be null.
-  bool get hasEval => cp != null || mate != null;
 
   factory ExternalEval.fromPgnEval(PgnEvaluation eval) {
     return ExternalEval(

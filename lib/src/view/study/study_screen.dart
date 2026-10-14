@@ -24,6 +24,7 @@ import 'package:chess_srs/src/view/study/study_bottom_bar.dart';
 import 'package:chess_srs/src/view/study/study_gamebook.dart';
 import 'package:chess_srs/src/view/study/study_tree_view.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
+import 'package:chess_srs/src/widgets/pgn_shapes.dart';
 import 'package:chessground/chessground.dart';
 import 'package:collection/collection.dart';
 import 'package:dartchess/dartchess.dart';
@@ -497,20 +498,6 @@ class _Body extends ConsumerWidget {
         }
       }).toList(),
     );
-  }
-}
-
-extension on PgnCommentShape {
-  Shape get chessground {
-    final shapeColor = switch (color) {
-      CommentShapeColor.green => ShapeColor.green,
-      CommentShapeColor.red => ShapeColor.red,
-      CommentShapeColor.blue => ShapeColor.blue,
-      CommentShapeColor.yellow => ShapeColor.yellow,
-    };
-    return from != to
-        ? Arrow(color: shapeColor.color, orig: from, dest: to)
-        : Circle(color: shapeColor.color, orig: from);
   }
 }
 

@@ -843,9 +843,6 @@ sealed class StudyState
     IList<ExternalEval>? acplChartData,
   }) = _StudyState;
 
-  /// Whether the current user is the owner of the study.
-  bool get amIOwner => myId == study.ownerId || (isAdmin == true && canIContribute);
-
   /// The current user's member information, if available.
   StudyMember? get myMember => myId != null ? study.members[myId!] : null;
 
@@ -867,8 +864,6 @@ sealed class StudyState
   );
 
   bool get isOpeningExplorerAvailable => !gamebookActive && study.chapter.features.explorer;
-
-  bool get isServerAnalysisAllowed => !gamebookActive && study.chapter.features.computer;
 
   ChapterServerAnalysisStatus get chapterServerAnalysisStatus {
     if (analysisSummary != null) {

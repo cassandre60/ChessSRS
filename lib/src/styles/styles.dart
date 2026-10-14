@@ -1,5 +1,4 @@
 import 'package:chess_srs/src/styles/lichess_colors.dart';
-import 'package:dynamic_system_colors/dynamic_system_colors.dart';
 import 'package:material_ui/material_ui.dart';
 
 // ignore: avoid_classes_with_only_static_members
@@ -112,18 +111,6 @@ class LichessCustomColors extends ThemeExtension<LichessCustomColors> {
       fancy: Color.lerp(fancy, other.fancy, t) ?? fancy,
       purple: Color.lerp(purple, other.purple, t) ?? purple,
       primary: Color.lerp(primary, other.primary, t) ?? primary,
-    );
-  }
-
-  LichessCustomColors harmonized(ColorScheme colorScheme) {
-    return copyWith(
-      cyan: cyan.harmonizeWith(colorScheme.primary),
-      brag: brag.harmonizeWith(colorScheme.primary),
-      good: good.harmonizeWith(colorScheme.primary),
-      error: error.harmonizeWith(colorScheme.primary),
-      fancy: fancy.harmonizeWith(colorScheme.primary),
-      purple: purple.harmonizeWith(colorScheme.primary),
-      primary: primary.harmonizeWith(colorScheme.primary),
     );
   }
 }
