@@ -30,9 +30,18 @@ and repertoire lookup on a move. Session start is off that path.
 the remaining cost may already be near the floor for this schema. I did not
 optimise further because I cannot tell whether it is worth doing.
 
+**Not optimised, and now with the reason.** A second pass (2026-10-14) attributed
+the cost: `getAllReviewStates()` is 76% of it, at 16.7 ms of a 20.8 ms total. The
+SQL involved is ~1.4 ms, so **an index would buy nothing**, and the mapper's
+`DateTime.parse` calls are 1.92 ms, so **that is not it either**. ~13 ms sits in
+Dart, constructing and merging 772 objects, and is not yet attributed further —
+two hypotheses were tested and refuted, and a third guess would be no more
+reliable than the two that were wrong.
+
 **What I need from you.** Whether a ~37 ms pause when opening review is
-noticeable in normal use. If yes, this is worth a look; if no, it should stay
-recorded and closed rather than optimised speculatively.
+noticeable in normal use. If yes, the next step is a profiler run on that ~13 ms,
+not an index and not date parsing. If no, this should stay recorded and closed
+rather than optimised speculatively.
 
 ---
 
