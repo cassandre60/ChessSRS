@@ -1,8 +1,5 @@
 # PERF-FIX-24 — Measure the review path against a real library, not a synthetic one
 
-> **CLAIMED 2026-10-14 by OpenCode (Space Bunny Free)** — branch
-> `perf/real-library-measurement`, in progress. **Do not pick this up.** If this
-> banner is stale (branch merged or abandoned), remove it before starting.
 
 ## 1. Why this is a brief at all
 
@@ -74,3 +71,73 @@ already far outside `QUALITY.md §4.1`.
 Not an optimisation task. Do not start optimising. The deliverable is a
 measurement, because the current evidence base is entirely synthetic and that is
 the gap.
+---
+
+## 7. Findings (measured 2026-10-14, owner library)
+
+Measured on a **copy** of the owner's database via
+`test/perf/real_library_session_cost_test.dart`. Median of 15 after 3 warmups,
+stable across repeated runs.
+
+### The data shape
+
+| | |
+|---|---|
+| active studies | 10 (11 total) |
+| chapters | 23 |
+| decisions | 519 |
+| due (all scopes) | 480 |
+| database size | 7 MiB |
+| decisions carrying `canonicalStateId` | 77 of 528 — sharing factor **1.17x** |
+
+The sharing factor matters: a fixture that shares canonical states heavily will
+not reproduce this, and the canonical-merge path is a plausible source of the
+query cost below.
+
+### The numbers
+
+| Measurement | Result |
+|---|---|
+| whole-library `startSession()` | **37–39 ms** |
+| `getDueSummary()` alone (the queries) | **26–30 ms** |
+| largest single study `startSession()` | 15–16 ms |
+
+### What this means
+
+**The synthetic harness was right about its subject and silent about the one
+that matters.** `session_constructor_cost_test.dart` measures
+`ReviewSession`'s constructor at ~4 µs/decision, which at 519 decisions is
+~2 ms. The constructor is genuinely cheap. But the path a user actually pays is
+**37 ms**, and **~75% of it is SQLite query time inside `getDueSummary`** — a
+cost no benchmark in this repo had ever measured.
+
+The consequence for PERF-FIX-32: Phase 2 proposed chunking the constructor.
+The constructor is ~2 ms of a ~37 ms path, so that work would have targeted
+roughly **5%** of the observed cost. Declining it was correct *for the
+constructor*; the risk was reading that decline as "no performance work needed."
+
+### This is NOT a QUALITY.md §4.1 breach
+
+§4.1's 16 ms is **Move Response Time** — legality validation and repertoire
+lookup on a move. A session start is not on that path, and 37 ms is not a
+violation of anything the spec asserts. It is a visible pause on opening review,
+which is a product judgement about whether that matters, not an invariant.
+
+### Suggested follow-up (not done here)
+
+`getDueSummary` at 26–30 ms is the thing worth a decision. It is read-only, so
+an index or a single-pass query may help — but that is optimisation work, and
+this brief's deliverable was the measurement. Note that PERF-FIX-21 already
+landed a targeted query here (#84); whatever remains may already be near the
+floor for this schema.
+
+### Reproducing
+
+```bash
+cp ~/.local/share/org.chesssrs.chess_srs/chess_srs.db{,-wal,-shm} /tmp/perf/
+CHESS_SRS_PERF_DB=/tmp/perf/chess_srs.db \
+  fvm flutter test test/perf/real_library_session_cost_test.dart
+```
+
+The `-wal` sidecar is required: this database has a 4 MiB write-ahead log, and
+copying only the `.db` yields a snapshot missing recent transactions.

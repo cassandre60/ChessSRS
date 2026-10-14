@@ -12,7 +12,7 @@ agent can pick up and execute top-to-bottom.
 | `REFACTOR-FIX-21-pick-helpers-no-callers.md` | Ready |
 | `REFACTOR-FIX-22-dead-predicates-and-providers.md` | Ready |
 | `REFACTOR-FIX-23-enum-values-not-dead.md` | Ready — investigation, **read before deleting** |
-| `PERF-FIX-24-real-library-measurement.md` | **CLAIMED 2026-10-14** by OpenCode — in progress, do not pick up |
+| `PERF-FIX-24-real-library-measurement.md` | Investigated 2026-10-14 — findings recorded |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
 across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:
