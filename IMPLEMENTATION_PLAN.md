@@ -306,6 +306,10 @@ remains a later option — never a redesign.
       1. Tapping a square awaited the full scope reload (whole-library session rebuild, seconds at 61 studies) before the drawer opened. The drawer now opens first and the reload lands behind it; its highlight and counts refresh via the provider watch, and a scope picked inside supersedes the in-flight load by generation.
       2. No new test: timing-dependent and the drawer suites cover the flow; verified by analyze + owner runtime check.
 
+- [x] **R23: Colour squares work inside the scope drawer** *(done: 2026-10-15, owner request)*
+      1. Switching colour cost dismiss plus retap. The drawer's search header now carries the same square pair (extracted as shared `SrsColourSwitch`, top bar unchanged visually); tapping the other square switches the drawer's content in place and follows with the scope switch behind it.
+      2. Same-side taps no-op; search text survives the switch. Test pins the one-tap switch with scope following (INV-030).
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.

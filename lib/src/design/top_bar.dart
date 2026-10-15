@@ -67,21 +67,9 @@ class SrsTopBar extends StatelessWidget {
           if (wordmark != null)
             Text(wordmark!, style: SrsText.scopeName(c.ink))
           else
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ColourSquare(
-                  side: Side.white,
-                  isActive: activeSide == Side.white,
-                  onPressed: onSidePressed,
-                ),
-                const SizedBox(width: 2),
-                _ColourSquare(
-                  side: Side.black,
-                  isActive: activeSide == Side.black,
-                  onPressed: onSidePressed,
-                ),
-              ],
+            SrsColourSwitch(
+              activeSide: activeSide,
+              onSidePressed: onSidePressed,
             ),
 
           const SizedBox(width: 6),
@@ -98,7 +86,9 @@ class SrsTopBar extends StatelessWidget {
               semanticLabel: context.l10n.mobileReviewExitPractice,
               radius: 8,
               builder: (_, hover, _) => Container(
-                constraints: const BoxConstraints(minHeight: SrsLayout.minTouchTarget),
+                constraints: const BoxConstraints(
+                  minHeight: SrsLayout.minTouchTarget,
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: hover ? c.hairlineSoft : const Color(0x00000000),
@@ -110,7 +100,8 @@ class SrsTopBar extends StatelessWidget {
                   // merges with it and a screen reader says "Exit practice Practice".
                   child: Text(
                     context.l10n.practice,
-                    style: SrsText.due(c.accent).copyWith(fontWeight: FontWeight.w600),
+                    style: SrsText.due(c.accent)
+                        .copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -162,6 +153,44 @@ class SrsTopBar extends StatelessWidget {
   }
 }
 
+/// The two colour squares as one switch: white then black, ringed on active.
+///
+/// Shared by the top bar and the scope drawer so the pair reads identically
+/// wherever it appears: 20px squares on 48px targets, 2px apart.
+class SrsColourSwitch extends StatelessWidget {
+  const SrsColourSwitch({
+    super.key,
+    required this.activeSide,
+    required this.onSidePressed,
+  });
+
+  /// The colour currently live. Null rings neither square.
+  final Side? activeSide;
+
+  /// Called with the square that was tapped. Null disables both squares.
+  final void Function(Side side)? onSidePressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ColourSquare(
+          side: Side.white,
+          isActive: activeSide == Side.white,
+          onPressed: onSidePressed,
+        ),
+        const SizedBox(width: 2),
+        _ColourSquare(
+          side: Side.black,
+          isActive: activeSide == Side.black,
+          onPressed: onSidePressed,
+        ),
+      ],
+    );
+  }
+}
+
 /// One square of the colour switch: white or black, ringed when it is the
 /// colour being reviewed.
 ///
@@ -170,7 +199,11 @@ class SrsTopBar extends StatelessWidget {
 /// both themes (with a hairline border so it stays distinct on a dark bar).
 /// The active square carries an accent ring (width 2).
 class _ColourSquare extends StatelessWidget {
-  const _ColourSquare({required this.side, required this.isActive, this.onPressed});
+  const _ColourSquare({
+    required this.side,
+    required this.isActive,
+    this.onPressed,
+  });
 
   final Side side;
   final bool isActive;
@@ -209,7 +242,10 @@ class _ColourSquare extends StatelessWidget {
             decoration: BoxDecoration(
               color: fillColor,
               borderRadius: BorderRadius.circular(_radius),
-              border: Border.all(color: isActive ? c.accent : c.hairline, width: isActive ? 2 : 1),
+              border: Border.all(
+                color: isActive ? c.accent : c.hairline,
+                width: isActive ? 2 : 1,
+              ),
             ),
             child: const SizedBox(width: _edge, height: _edge),
           ),

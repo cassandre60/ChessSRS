@@ -13,7 +13,8 @@ import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderContainer, ProviderScope;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show ProviderContainer, ProviderScope;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -44,7 +45,10 @@ void main() {
 
   setUp(() async {
     tempDir = Directory.systemTemp.createTempSync('chess_srs_split_drawers_');
-    db = await openAppDatabase(databaseFactoryFfi, p.join(tempDir.path, 'drawers.db'));
+    db = await openAppDatabase(
+      databaseFactoryFfi,
+      p.join(tempDir.path, 'drawers.db'),
+    );
     repo = SqliteStudyRepository(db);
     clock = FixedClock(DateTime.utc(2026, 10, 6, 12));
 
@@ -84,7 +88,9 @@ void main() {
       surfaceSize: surfaceSize,
       home: ReviewScopeDrawer(side: side),
       overrides: {
-        srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+        srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith(
+          (ref) => repo,
+        ),
         clockProvider: clockProvider.overrideWithValue(clock),
         reviewServiceProvider: reviewServiceProvider.overrideWith(
           (ref) => ReviewService(repository: repo, clock: clock),
@@ -97,7 +103,9 @@ void main() {
     await pumpAsync(tester);
     // Captured before any tap: the drawer pops itself on selection, so its
     // element is gone by the time the resulting scope is read.
-    return ProviderScope.containerOf(tester.element(find.byType(ReviewScopeDrawer)));
+    return ProviderScope.containerOf(
+      tester.element(find.byType(ReviewScopeDrawer)),
+    );
   }
 
   Finder inDrawer(Finder matching) =>
@@ -125,24 +133,55 @@ void main() {
     expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
   });
 
-  testWidgets('neither drawer spells out the colour or offers an everywhere row', (tester) async {
-    for (final side in [Side.white, Side.black]) {
-      await pumpDrawer(tester, side);
+  testWidgets(
+    'neither drawer spells out the colour or offers an everywhere row',
+    (tester) async {
+      for (final side in [Side.white, Side.black]) {
+        await pumpDrawer(tester, side);
 
-      expect(inDrawer(find.text('All studies')), findsNothing);
-      expect(inDrawer(find.text('Repertoires')), findsNothing);
-      expect(inDrawer(find.textContaining('White repertoire')), findsNothing);
-      expect(inDrawer(find.textContaining('Black repertoire')), findsNothing);
-    }
+        expect(inDrawer(find.text('All studies')), findsNothing);
+        expect(inDrawer(find.text('Repertoires')), findsNothing);
+        expect(inDrawer(find.textContaining('White repertoire')), findsNothing);
+        expect(inDrawer(find.textContaining('Black repertoire')), findsNothing);
+      }
+    },
+  );
+
+  testWidgets('the in-drawer switch moves to the other colour in one tap', (
+    tester,
+  ) async {
+    // Owner request 2026-10-15: switching colour cost dismiss plus retap.
+    // SPEC INV-030.
+    final container = await pumpDrawer(tester, Side.white);
+    expect(inDrawer(find.text('White book')), findsOneWidget);
+
+    await tester.tap(inDrawer(find.bySemanticsLabel('Black repertoire')));
+    await pumpAsync(tester);
+
+    expect(inDrawer(find.text('Black book')), findsOneWidget);
+    expect(inDrawer(find.text('White book')), findsNothing);
+
+    final state = await tester.runAsync(
+      () async => container.read(reviewControllerProvider).value,
+    );
+    expect(
+      state?.activeSide,
+      Side.black,
+      reason: 'the switch behaves like the matching square: scope follows',
+    );
   });
 
-  testWidgets('tapping a row scopes to it and carries the drawer’s colour', (tester) async {
+  testWidgets('tapping a row scopes to it and carries the drawer’s colour', (
+    tester,
+  ) async {
     final container = await pumpDrawer(tester, Side.black);
 
     await tester.tap(inDrawer(find.text('Black book')));
     await pumpAsync(tester);
 
-    final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
+    final state = await tester.runAsync(
+      () async => container.read(reviewControllerProvider).value,
+    );
     expect(state?.scope.studyId, isNotNull);
     expect(
       state?.activeSide,
@@ -157,33 +196,40 @@ void main() {
     await tester.tap(inDrawer(find.text('Sicilian Defence')));
     await pumpAsync(tester);
 
-    final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
+    final state = await tester.runAsync(
+      () async => container.read(reviewControllerProvider).value,
+    );
     expect(state?.scope.openingFamily, 'Sicilian Defence');
     expect(state?.activeSide, Side.white);
   });
 
-  testWidgets('an empty colour lists nothing rather than the other side’s work', (tester) async {
-    final blackBook = await tester.runAsync(() async {
-      final all = await repo.getAllStudies();
-      return all.where((s) => s.title == 'Black book').first;
-    });
-    await tester.runAsync(() async {
-      await repo.deleteStudy(blackBook!.id);
-    });
+  testWidgets(
+    'an empty colour lists nothing rather than the other side’s work',
+    (tester) async {
+      final blackBook = await tester.runAsync(() async {
+        final all = await repo.getAllStudies();
+        return all.where((s) => s.title == 'Black book').first;
+      });
+      await tester.runAsync(() async {
+        await repo.deleteStudy(blackBook!.id);
+      });
 
-    await pumpDrawer(tester, Side.black);
+      await pumpDrawer(tester, Side.black);
 
-    expect(inDrawer(find.text('Black book')), findsNothing);
-    expect(
-      inDrawer(find.text('White book')),
-      findsNothing,
-      reason: 'the White study must not stand in for the Black drawer having nothing',
-    );
-    expect(inDrawer(find.text('Openings')), findsNothing);
-    expect(inDrawer(find.text('Studies')), findsNothing);
-  });
+      expect(inDrawer(find.text('Black book')), findsNothing);
+      expect(
+        inDrawer(find.text('White book')),
+        findsNothing,
+        reason: 'the White study must not stand in for the Black drawer having nothing',
+      );
+      expect(inDrawer(find.text('Openings')), findsNothing);
+      expect(inDrawer(find.text('Studies')), findsNothing);
+    },
+  );
 
-  testWidgets('searching only matches within the drawer’s own colour', (tester) async {
+  testWidgets('searching only matches within the drawer’s own colour', (
+    tester,
+  ) async {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'French');
@@ -194,7 +240,9 @@ void main() {
     expect(find.text('Nothing matches “French”.'), findsOneWidget);
   });
 
-  testWidgets('the clear-search button meets the 44px touch target', (tester) async {
+  testWidgets('the clear-search button meets the 44px touch target', (
+    tester,
+  ) async {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'Sicilian');
@@ -209,7 +257,9 @@ void main() {
 
   // DESIGN 02 §3 (tokens): wide if app-area width >= 720 via SrsLayout.isWide.
   // DESIGN 03 §6: drawer wide max-height H - 80, width min(470, W - 52).
-  testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (tester) async {
+  testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (
+    tester,
+  ) async {
     // Width 730 is between 720 and the former 768 breakpoint.
     await pumpDrawer(tester, Side.white, surfaceSize: const Size(730, 900));
 
@@ -223,7 +273,9 @@ void main() {
     // Width 710 is below the 720 breakpoint -> narrow layout.
     await pumpDrawer(tester, Side.white, surfaceSize: const Size(710, 900));
 
-    final narrowAlign = tester.widget<Align>(inDrawer(find.byType(Align)).first);
+    final narrowAlign = tester.widget<Align>(
+      inDrawer(find.byType(Align)).first,
+    );
     expect(
       narrowAlign.alignment,
       Alignment.bottomCenter,
