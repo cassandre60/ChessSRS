@@ -51,7 +51,9 @@ PRODUCT SCOPE
    repertoire branch is accepted immediately; playing any other move (even
    legal chess moves) is marked incorrect.
 3. **SRS Interval Progression**:
-   - New items are due immediately upon creation.
+   - A position is due only after it has been presented. New items are
+     **not** due; they are introduced gradually, after due work, and
+     only then enter the SRS ladder (SPEC INV-068).
    - Successful recalls increase the interval (1 day → 2 days → 4 days → ...).
    - Failed recalls reset the repetition streak and schedule a
      short-interval retry.
