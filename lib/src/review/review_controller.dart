@@ -338,6 +338,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
   _PendingAdvancement? _pendingAdvancement;
   bool _isProcessingMove = false;
+  Move? _prewarmedCandidateMove;
+  Position? _prewarmedCandidatePosition;
+  bool? _prewarmedIsCapture;
+  bool? _prewarmedIsCheck;
 
   /// Bumped by every request that establishes a review session.
   ///
@@ -1008,9 +1012,14 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     required bool isFirstAttempt,
   }) async {
     final currentPos = currentState.boardPosition;
-    final posAfterUser = currentPos != null && userMove is NormalMove
-        ? currentPos.play(userMove)
-        : null;
+    final posAfterUser =
+        (userMove == _prewarmedCandidateMove && _prewarmedCandidatePosition != null)
+        ? _prewarmedCandidatePosition
+        : (currentPos != null && userMove is NormalMove ? currentPos.play(userMove) : null);
+    _prewarmedCandidateMove = null;
+    _prewarmedCandidatePosition = null;
+    _prewarmedIsCapture = null;
+    _prewarmedIsCheck = null;
 
     final comment = _resolveComment(currentState.currentPrompt, result.expectedMoves.firstOrNull);
 
@@ -1283,6 +1292,31 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
   }
 
+  /// Pre-warms destination position, legality, and feedback cues during the physical human drag
+  /// transit window (80-200ms) when a piece is touched at [fromSquare] (PERF-FIX-41).
+  void prewarmMoveCandidate(Square fromSquare) {
+    final currentState = state.asData?.value;
+    if (currentState == null || currentState.currentPrompt == null) return;
+    final prompt = currentState.currentPrompt!;
+    final expected = prompt.expectedMoves.firstOrNull;
+    if (expected == null || expected.from != fromSquare.name) return;
+
+    final pos = currentState.boardPosition;
+    if (pos == null) return;
+
+    final parsedMove = Move.parse(expected.uci);
+    if (parsedMove == null || !pos.isLegal(parsedMove)) return;
+
+    final playedPos = pos.play(parsedMove);
+    final target = pos.board.pieceAt(parsedMove.to);
+    final isCapture = target != null && target.color != pos.turn;
+
+    _prewarmedCandidateMove = parsedMove;
+    _prewarmedCandidatePosition = playedPos;
+    _prewarmedIsCapture = isCapture;
+    _prewarmedIsCheck = playedPos.isCheck;
+  }
+
   /// Submits a move played by the user.
   Future<ReviewStepResult?> onUserMove(Move move) async {
     var currentState = state.asData?.value;
@@ -1397,7 +1431,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     try {
       var isCapture = false;
       var isCheck = false;
-      if (position != null) {
+      if (move == _prewarmedCandidateMove && _prewarmedCandidatePosition != null) {
+        isCapture = _prewarmedIsCapture ?? false;
+        isCheck = _prewarmedIsCheck ?? false;
+      } else if (position != null) {
         final target = position.board.pieceAt(move.to);
         isCapture = target != null && target.color != position.turn;
         try {
