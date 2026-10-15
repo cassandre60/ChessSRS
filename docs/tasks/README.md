@@ -16,7 +16,7 @@ agent can pick up and execute top-to-bottom.
 | `PERF-FIX-33-slim-due-summary-decision-load.md` | Implemented |
 | `PERF-FIX-34-adaptive-review-state-loading.md` | Implemented |
 | `PERF-FIX-35-fast-utc-iso-date-parsing.md` | Implemented |
-| `PERF-FIX-36-targeted-scope-due-summary.md` | Ready — eliminates 500ms hitch on scope navigation |
+| `PERF-FIX-36-targeted-scope-due-summary.md` | Implemented |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
 across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:

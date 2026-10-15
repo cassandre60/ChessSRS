@@ -645,6 +645,43 @@ void main() {
       expect(state.currentPrompt!.studyId, importB.study.id);
     });
 
+    test(
+      'changeScope targeted session start reuses summary and updates due count accurately',
+      () async {
+        // SPEC INV-030. PERF-FIX-36: targeted scope session start without full-library re-summarisation.
+        final container = createContainer();
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        final importA = await controller.importPgnText(
+          pgnText: '1. e4 e5 2. Nf3 Nc6 *',
+          title: 'King Pawn',
+          repertoireSide: Side.white,
+        );
+        final importB = await controller.importPgnText(
+          pgnText: '1. d4 d5 *',
+          title: 'Queen Pawn',
+          repertoireSide: Side.white,
+        );
+
+        // importPgnText leaves scope at the imported study (Study B)
+        final stateB = container.read(reviewControllerProvider).requireValue;
+        expect(stateB.scope, ReviewScope.study(importB.study.id));
+        expect(stateB.totalDueCount, 1);
+        expect(stateB.studyDueCounts[importA.study.id], 2);
+        expect(stateB.studyDueCounts[importB.study.id], 1);
+
+        // Targeted changeScope to Study A
+        await controller.changeScope(ReviewScope.study(importA.study.id));
+        final stateA = container.read(reviewControllerProvider).requireValue;
+        expect(stateA.scope, ReviewScope.study(importA.study.id));
+        expect(stateA.totalDueCount, 2);
+        // Study totals and drawer metadata are preserved
+        expect(stateA.studyDueCounts[importA.study.id], 2);
+        expect(stateA.studyDueCounts[importB.study.id], 1);
+        expect(stateA.session?.currentPrompt?.decision.studyId, importA.study.id);
+      },
+    );
+
     // SPEC INV-030: opening the active colour drawer preserves narrower scope (issue #59).
     test('selectSide on active colour preserves study and opening scope without reload', () async {
       final container = createContainer();
