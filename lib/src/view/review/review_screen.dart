@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
@@ -1175,13 +1176,15 @@ class _OpenInAnalysisButton extends StatelessWidget {
 
 /// Switches to [side]'s colour and opens its drawer.
 ///
-/// Shared by all three top-bar placements, so switching colour and opening the
-/// matching drawer stay one gesture wherever the bar appears: the squares are
-/// the only way into a drawer, so tapping one and leaving the previous colour's
-/// drawer on screen would land somewhere the user did not ask for.
+/// The drawer opens first and the scope reload lands behind it: the reload
+/// walks the whole library (slow on large collections), and making the sheet
+/// wait for it reads as the squares being broken. The drawer watches the
+/// controller, so its highlight and counts refresh when the reload publishes;
+/// a scope picked inside meanwhile supersedes the in-flight load by
+/// generation, so nothing can publish over it.
 Future<void> _openColourDrawer(BuildContext context, Side side) async {
   final container = ProviderScope.containerOf(context);
-  await container.read(reviewControllerProvider.notifier).selectSide(side);
+  unawaited(container.read(reviewControllerProvider.notifier).selectSide(side));
   if (!context.mounted) return;
   await ReviewScopeDrawer.show(context, side);
 }
