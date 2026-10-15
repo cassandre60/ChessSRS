@@ -360,7 +360,7 @@ void main() {
           );
           await repo.saveReviewState(masteredState);
 
-          // In standard mode: unreviewed 3.e5 is considered due, so dueCount is 1
+          // In standard mode with INV-068: unreviewed 3.e5 is fresh (new), dueCount is 0
           final normalService = ReviewService(
             repository: repo,
             clock: clock,
@@ -370,22 +370,25 @@ void main() {
             studies: [study],
             scope: const ReviewScope.opening('French Defense'),
           );
-          expect(normalSummary.totalDueCount, 1);
+          expect(normalSummary.totalDueCount, 0);
+          expect(normalSummary.totalFreshCount, 1);
 
-          // In dynamic mode: unreviewed 3.e5 is dormant, 3.Nc3 is not due -> 0 due!
+          // In dynamic mode: unreviewed 3.e5 is dormant (neither due nor fresh), 3.Nc3 is not due -> 0 due, 0 fresh!
           final dynSummary = await dynamicService.getDueSummary(
             studies: [study],
             scope: const ReviewScope.opening('French Defense'),
           );
           expect(dynSummary.totalDueCount, 0);
+          expect(dynSummary.totalFreshCount, 0);
 
-          // When 3.e5 is unlocked into the active repertoire:
+          // When 3.e5 is unlocked into the active repertoire: it becomes fresh (new)
           await repo.unlockDecisions([decE5.id]);
           final unlockedSummary = await dynamicService.getDueSummary(
             studies: [study],
             scope: const ReviewScope.opening('French Defense'),
           );
-          expect(unlockedSummary.totalDueCount, 1);
+          expect(unlockedSummary.totalDueCount, 0);
+          expect(unlockedSummary.totalFreshCount, 1);
         } finally {
           await db.close();
         }
