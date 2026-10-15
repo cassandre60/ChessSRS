@@ -15,19 +15,19 @@ class ReviewScope {
   const ReviewScope.black() : this._(Side.black);
   const ReviewScope._(this.side) : studyId = null, chapterId = null, openingFamily = null;
 
-  const ReviewScope.study(String this.studyId)
+  const ReviewScope.study(String this.studyId, {this.side})
     : chapterId = null,
-      openingFamily = null,
-      side = null;
+      openingFamily = null;
 
-  const ReviewScope.chapter({required String this.studyId, required String this.chapterId})
-    : openingFamily = null,
-      side = null;
+  const ReviewScope.chapter({
+    required String this.studyId,
+    required String this.chapterId,
+    this.side,
+  }) : openingFamily = null;
 
-  const ReviewScope.opening(String this.openingFamily)
+  const ReviewScope.opening(String this.openingFamily, {this.side})
     : studyId = null,
-      chapterId = null,
-      side = null;
+      chapterId = null;
 
   final String? studyId;
   final String? chapterId;

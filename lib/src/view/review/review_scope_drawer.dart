@@ -299,13 +299,18 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                                 '${entry.key} opening, ${entry.value} due',
                                             dueCount: entry.value,
                                             isPaused: false,
-                                            isSelected: activeScope.openingFamily == entry.key,
+                                            isSelected:
+                                                activeScope.openingFamily == entry.key &&
+                                                (activeScope.side == null ||
+                                                    activeScope.side == side),
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
                                               ref
                                                   .read(reviewControllerProvider.notifier)
-                                                  .changeScope(ReviewScope.opening(entry.key));
+                                                  .changeScope(
+                                                    ReviewScope.opening(entry.key, side: side),
+                                                  );
                                             },
                                           );
                                         },
@@ -338,13 +343,18 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                                 '${study.isActive ? '' : ', paused'}',
                                             dueCount: due,
                                             isPaused: !study.isActive,
-                                            isSelected: activeScope.studyId == study.id,
+                                            isSelected:
+                                                activeScope.studyId == study.id &&
+                                                (activeScope.side == null ||
+                                                    activeScope.side == side),
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
                                               ref
                                                   .read(reviewControllerProvider.notifier)
-                                                  .changeScope(ReviewScope.study(study.id));
+                                                  .changeScope(
+                                                    ReviewScope.study(study.id, side: side),
+                                                  );
                                             },
                                             onShowActions: (anchor) => _showStudyActionsSheet(
                                               context,
@@ -498,7 +508,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           Navigator.of(context).pop();
           ref
               .read(reviewControllerProvider.notifier)
-              .startPracticeMode(scope: ReviewScope.study(study.id));
+              .startPracticeMode(scope: ReviewScope.study(study.id, side: side));
         },
         onCreateOpposite: () {
           Navigator.of(dialogContext).pop();
