@@ -90,6 +90,9 @@ void main() {
               repository: store,
               scheduler: ref.watch(schedulerProvider),
               clock: clock,
+              dynamicRepertoireMode: ref.watch(
+                studyPreferencesProvider.select((p) => p.dynamicRepertoireMode),
+              ),
             ),
           ),
           ...extraOverrides,
@@ -2097,6 +2100,55 @@ void main() {
         // Due count decrements, but learned count does NOT increment beyond 1!
         expect(updatedStudyProg.dueDecisions, 0);
         expect(updatedStudyProg.learnedDecisions, 1);
+      },
+    );
+
+    test(
+      'dynamic repertoire mode: practice move on un-unlocked branch sets pendingUnlock and unlockBranch unlocks it',
+      () async {
+        final container = createContainer();
+        await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        await controller.importPgnText(
+          pgnText: '1. e4 e5 2. Nf3 *',
+          title: 'Dynamic Practice Study',
+          repertoireSide: Side.white,
+        );
+
+        // In dynamic mode, 0 items due initially since decisions are dormant
+        var state = container.read(reviewControllerProvider).requireValue;
+        expect(state.totalDueCount, 0);
+
+        // Start Practice Mode
+        await controller.startPracticeMode();
+        state = container.read(reviewControllerProvider).requireValue;
+        expect(state.mode, ReviewMode.practice);
+
+        // Play 1. e4
+        final result = await controller.onUserMove(
+          const NormalMove(from: Square.e2, to: Square.e4),
+        );
+        expect(result?.isCorrect, isTrue);
+
+        // pendingUnlock is set!
+        state = container.read(reviewControllerProvider).requireValue;
+        expect(state.pendingUnlock, isNotNull);
+        expect(state.pendingUnlock?.moveSan, 'e4');
+
+        // Call unlockBranch
+        await controller.unlockBranch(
+          state.pendingUnlock!.decisionId,
+          state.pendingUnlock!.chapterId,
+        );
+
+        // pendingUnlock is cleared and the branch is now unlocked in DB!
+        state = container.read(reviewControllerProvider).requireValue;
+        expect(state.pendingUnlock, isNull);
+
+        final unlocked = await repo.getUnlockedDecisionIds();
+        expect(unlocked, isNotEmpty);
       },
     );
   });

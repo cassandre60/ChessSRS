@@ -125,6 +125,11 @@ abstract class StudyRepository {
   /// recurs.
   Future<int> getTodayIntroducedPositionsCount(DateTime now);
 
+  // Dynamic repertoire unlocked decisions
+  Future<Set<String>> getUnlockedDecisionIds({String? studyId});
+  Future<void> unlockDecisions(Iterable<String> decisionIds);
+  Future<void> lockDecisions(Iterable<String> decisionIds);
+
   // Review events (SRS log)
   Future<void> saveReviewEvent(ReviewEvent event);
   Future<List<ReviewEvent>> getReviewEvents(String decisionId);

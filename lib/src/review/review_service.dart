@@ -35,6 +35,9 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final clock = ref.watch(clockProvider);
   final reviewOrder = ref.watch(studyPreferencesProvider.select((p) => p.reviewOrder));
   final transposeScope = ref.watch(studyPreferencesProvider.select((p) => p.transposeScope));
+  final dynamicRepertoireMode = ref.watch(
+    studyPreferencesProvider.select((p) => p.dynamicRepertoireMode),
+  );
 
   if (repo == null) {
     throw StateError('StudyRepository is not yet initialized');
@@ -46,6 +49,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
     clock: clock,
     reviewOrder: reviewOrder,
     transposeScope: transposeScope,
+    dynamicRepertoireMode: dynamicRepertoireMode,
   );
 });
 
@@ -246,15 +250,21 @@ class _DueTally {
     required Map<String, String?> chapterOpenings,
     required Map<String, Side> chapterSides,
     required ReviewScope scope,
+    bool dynamicRepertoireMode = false,
+    Set<String> unlockedDecisionIds = const {},
   }) {
     final state =
         reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
-    // INV-068: "no review state" is a position that has never been presented,
-    // which is fresh — not recall work the user is answerable for right now.
     final status = dueStatusOf(state, now);
     final isDue = status.isDue;
-    final isFresh = status.isFresh;
     final isLearned = state != null && state.repetitionCount > 0;
+    final isUnlocked =
+        isLearned ||
+        unlockedDecisionIds.contains(d.id) ||
+        unlockedDecisionIds.contains(d.canonicalId);
+    final isFresh = dynamicRepertoireMode
+        ? (status.isFresh && isUnlocked)
+        : status.isFresh;
 
     if (studyTotals.containsKey(d.studyId)) {
       studyTotals[d.studyId] = (studyTotals[d.studyId] ?? 0) + 1;
@@ -451,6 +461,7 @@ class ReviewService {
     this.clock = const SystemClock(),
     this.reviewOrder = ReviewOrder.dueDate,
     this.transposeScope = TransposeScope.inScope,
+    this.dynamicRepertoireMode = false,
   });
 
   final StudyRepository repository;
@@ -463,6 +474,9 @@ class ReviewService {
 
   /// Whether off-line-but-book moves are accepted (INV-065).
   final TransposeScope transposeScope;
+
+  /// Whether dynamic repertoire branch selection is active.
+  final bool dynamicRepertoireMode;
 
   ReviewSession? _activeSession;
   ReviewSession? get activeSession => _activeSession;
@@ -650,6 +664,7 @@ class ReviewService {
     }
 
     final engine = ReviewEngine(scheduler: scheduler, clock: clock);
+    final unlockedIds = await repository.getUnlockedDecisionIds();
 
     final session = engine.createSession(
       studies: targetStudies,
@@ -660,6 +675,8 @@ class ReviewService {
       mode: mode,
       order: reviewOrder,
       transposeScope: transposeScope,
+      dynamicRepertoireMode: dynamicRepertoireMode,
+      unlockedDecisionIds: unlockedIds,
       initialExposureThrottle: exposureThrottle,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
@@ -825,6 +842,7 @@ class ReviewService {
     );
 
     final now = clock.now();
+    final unlockedIds = await repository.getUnlockedDecisionIds();
     final tally = _DueTally(
       studies: studies,
       chapterOpenings: chapterOpenings,
@@ -840,6 +858,8 @@ class ReviewService {
         chapterOpenings: chapterOpenings,
         chapterSides: chapterSides,
         scope: scope,
+        dynamicRepertoireMode: dynamicRepertoireMode,
+        unlockedDecisionIds: unlockedIds,
       );
     }
     final summary = tally.toSummary();
@@ -879,6 +899,7 @@ class ReviewService {
       canonicalIds: tallyDecisions.map((d) => d.canonicalId),
     );
     final now = clock.now();
+    final unlockedIds = await repository.getUnlockedDecisionIds();
 
     final tally = _DueTally(
       studies: studies,
@@ -895,6 +916,8 @@ class ReviewService {
         chapterOpenings: chapterOpenings,
         chapterSides: chapterSides,
         scope: scope,
+        dynamicRepertoireMode: dynamicRepertoireMode,
+        unlockedDecisionIds: unlockedIds,
       );
     }
     return tally.toSummary();

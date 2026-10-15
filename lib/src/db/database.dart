@@ -90,7 +90,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 18,
+      version: 19,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -301,6 +301,19 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
                 'CREATE INDEX IF NOT EXISTS idx_srs_review_event_whenTimestamp ON $kTableSrsReviewEvent(whenTimestamp)',
               );
             }
+          }
+
+          if (oldVersion < 19) {
+            batch.execute('''
+              CREATE TABLE IF NOT EXISTS $kTableSrsUnlockedDecision (
+                decisionId TEXT PRIMARY KEY,
+                unlockedAt TEXT NOT NULL,
+                FOREIGN KEY (decisionId) REFERENCES $kTableSrsDecision(id) ON DELETE CASCADE
+              );
+            ''');
+            batch.execute(
+              'CREATE INDEX IF NOT EXISTS idx_srs_unlocked_decision_decisionId ON $kTableSrsUnlockedDecision(decisionId)',
+            );
           }
         }
 

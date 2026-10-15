@@ -283,6 +283,16 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   onChanged: (scope) => studyNotifier.setTransposeScope(scope),
                                 ),
                               ),
+                              _SettingRow(
+                                label: 'Dynamic repertoire mode',
+                                help:
+                                    'Only schedule lines you choose to play; unplayed branches remain reference material.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.dynamicRepertoireMode,
+                                  semanticLabel: 'Dynamic repertoire mode',
+                                  onChanged: (_) => studyNotifier.toggleDynamicRepertoireMode(),
+                                ),
+                              ),
                               if (studyPrefs.schedulerType == SchedulerType.easeScaling) ...[
                                 _SettingRow(
                                   label: 'Initial ease factor',

@@ -974,6 +974,17 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
       );
     }
 
+    if (state.pendingUnlock != null) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _UnlockBranchBanner(pending: state.pendingUnlock!),
+          if (content is! SizedBox) content,
+        ],
+      );
+    }
+
     if (showDiagnostics) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1158,6 +1169,49 @@ class _VerdictLiveRegion extends StatelessWidget {
       liveRegion: true,
       label: message,
       child: const ExcludeSemantics(child: SizedBox.shrink()),
+    );
+  }
+}
+
+class _UnlockBranchBanner extends ConsumerWidget {
+  const _UnlockBranchBanner({required this.pending});
+
+  final ({String decisionId, String chapterId, String moveSan}) pending;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final srsColors = SrsTheme.maybeOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: srsColors?.surface ?? Colors.black12,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: srsColors?.hairline ?? Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'New branch played: ${pending.moveSan}. Add to review queue?',
+                style: TextStyle(color: srsColors?.ink, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => ref
+                  .read(reviewControllerProvider.notifier)
+                  .unlockBranch(pending.decisionId, pending.chapterId),
+              child: const Text('Add to SRS'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => ref.read(reviewControllerProvider.notifier).dismissUnlockPrompt(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

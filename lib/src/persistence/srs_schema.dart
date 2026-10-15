@@ -10,6 +10,7 @@ const kTableSrsReviewState = 'srs_review_state';
 const kTableSrsReviewEvent = 'srs_review_event';
 const kTablePositionKnowledgeState = 'position_knowledge_state';
 const kTableSrsStudyRemote = 'srs_study_remote';
+const kTableSrsUnlockedDecision = 'srs_unlocked_decision';
 
 void createSrsTables(Batch batch) {
   batch.execute('''
@@ -141,5 +142,17 @@ void createSrsTables(Batch batch) {
   batch.execute('''
     CREATE INDEX IF NOT EXISTS idx_srs_review_event_whenTimestamp
     ON $kTableSrsReviewEvent(whenTimestamp);
+  ''');
+
+  batch.execute('''
+    CREATE TABLE IF NOT EXISTS $kTableSrsUnlockedDecision (
+      decisionId TEXT PRIMARY KEY,
+      unlockedAt TEXT NOT NULL,
+      FOREIGN KEY (decisionId) REFERENCES $kTableSrsDecision(id) ON DELETE CASCADE
+    );
+  ''');
+  batch.execute('''
+    CREATE INDEX IF NOT EXISTS idx_srs_unlocked_decision_decisionId
+    ON $kTableSrsUnlockedDecision(decisionId);
   ''');
 }

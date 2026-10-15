@@ -101,6 +101,7 @@ class ReviewScreenState {
     this.studyIdsBySide = const {},
     this.openingsBySide = const {},
     this.lastStepResult,
+    this.pendingUnlock,
     this.dailyReviewedCount = 0,
     this.maxDailyReviews = 100,
   });
@@ -153,6 +154,7 @@ class ReviewScreenState {
   final ReviewMode mode;
   final bool isAwaitingAdvance;
   final ReviewStepResult? lastStepResult;
+  final ({String decisionId, String chapterId, String moveSan})? pendingUnlock;
   final int dailyReviewedCount;
   final int maxDailyReviews;
 
@@ -297,6 +299,8 @@ class ReviewScreenState {
     bool? isAwaitingAdvance,
     ReviewStepResult? lastStepResult,
     bool clearLastStepResult = false,
+    ({String decisionId, String chapterId, String moveSan})? pendingUnlock,
+    bool clearPendingUnlock = false,
     int? dailyReviewedCount,
     int? maxDailyReviews,
   }) {
@@ -326,6 +330,7 @@ class ReviewScreenState {
       mode: mode ?? this.mode,
       isAwaitingAdvance: isAwaitingAdvance ?? this.isAwaitingAdvance,
       lastStepResult: clearLastStepResult ? null : (lastStepResult ?? this.lastStepResult),
+      pendingUnlock: clearPendingUnlock ? null : (pendingUnlock ?? this.pendingUnlock),
       dailyReviewedCount: dailyReviewedCount ?? this.dailyReviewedCount,
       maxDailyReviews: maxDailyReviews ?? this.maxDailyReviews,
     );
@@ -751,6 +756,59 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   /// Exits practice mode and returns to standard SRS review.
   Future<void> exitPracticeMode() async {
     await _loadAndPublish(state.value?.scope ?? const ReviewScope.all(), ReviewMode.srs);
+  }
+
+  /// Unlocks the decision branch at [decisionId] and all its descendants into active SRS review.
+  Future<void> unlockBranch(String decisionId, String chapterId) async {
+    final current = state.asData?.value;
+    if (current == null) return;
+
+    final chapter = await _repository.getChapter(chapterId);
+    final allDecisions = await _repository.getDecisionsByChapter(chapterId);
+
+    final decisionIdsToUnlock = <String>{decisionId};
+    if (chapter?.root != null) {
+      RepertoireNode? findNode(RepertoireNode node, String id) {
+        if (node.id == id) return node;
+        for (final c in node.children) {
+          final f = findNode(c, id);
+          if (f != null) return f;
+        }
+        return null;
+      }
+
+      final targetDecision = allDecisions.where((d) => d.id == decisionId).firstOrNull;
+      if (targetDecision != null) {
+        final rootNode = findNode(chapter!.root!, targetDecision.nodeId);
+        if (rootNode != null) {
+          final descendantNodeIds = <String>{};
+          void collectNodes(RepertoireNode n) {
+            descendantNodeIds.add(n.id);
+            for (final c in n.children) {
+              collectNodes(c);
+            }
+          }
+
+          collectNodes(rootNode);
+          for (final d in allDecisions) {
+            if (descendantNodeIds.contains(d.nodeId)) {
+              decisionIdsToUnlock.add(d.id);
+            }
+          }
+        }
+      }
+    }
+
+    await _repository.unlockDecisions(decisionIdsToUnlock);
+    state = AsyncData(current.copyWith(clearPendingUnlock: true));
+    await _loadAndPublish(current.scope, current.mode);
+  }
+
+  /// Dismisses the pending line unlock prompt without adding to SRS.
+  void dismissUnlockPrompt() {
+    final current = state.asData?.value;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(clearPendingUnlock: true));
   }
 
   /// Toggles whether a study is included in the daily review pool (PRODUCT.md Journey 5).
@@ -1324,6 +1382,28 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         ? currentState.dailyReviewedCount
         : currentState.dailyReviewedCount + 1;
 
+    // In Practice Mode under dynamic repertoire mode: check if this was an unreviewed, un-unlocked line
+    ({String decisionId, String chapterId, String moveSan})? pendingUnlock;
+    if (currentState.isPracticeMode && _service.dynamicRepertoireMode) {
+      final prompt = currentState.currentPrompt;
+      if (prompt != null) {
+        final d = prompt.decision;
+        final dState = session.reviewStates[d.canonicalId] ?? session.reviewStates[d.id];
+        final isLearned = dState != null && dState.repetitionCount > 0;
+        final isUnlocked =
+            isLearned ||
+            session.unlockedDecisionIds.contains(d.id) ||
+            session.unlockedDecisionIds.contains(d.canonicalId);
+        if (!isUnlocked) {
+          pendingUnlock = (
+            decisionId: d.id,
+            chapterId: d.chapterId,
+            moveSan: result.movePlayed.san ?? result.movePlayed.uci,
+          );
+        }
+      }
+    }
+
     state = AsyncData(
       state.value!.copyWith(
         dailyReviewedCount: updatedDailyCount,
@@ -1345,6 +1425,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         clearExpectedMove: true,
         isLapseAcknowledged: true,
         isAwaitingAdvance: false,
+        pendingUnlock: pendingUnlock,
+        clearPendingUnlock: pendingUnlock == null,
         lastMove: shouldAnimateBranchPreMove
             ? null
             : (opponentMoves.isNotEmpty ? state.value?.lastMove : null),

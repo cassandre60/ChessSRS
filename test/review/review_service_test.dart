@@ -313,6 +313,85 @@ void main() {
       },
     );
 
+    test(
+      'dynamic repertoire mode: learned lines mastered + unreviewed dormant lines report 0 due',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final dynamicService = ReviewService(
+          repository: repo,
+          clock: clock,
+          dynamicRepertoireMode: true,
+        );
+
+        try {
+          const study = Study(id: 's_french_dyn', title: 'French Encyclopedia');
+          await repo.saveStudy(study);
+
+          final ch1 = Chapter.create(studyId: study.id, sourceOrder: 0, opening: 'French Defense');
+          final ch2 = Chapter.create(studyId: study.id, sourceOrder: 1, opening: 'French Defense');
+          await repo.saveChapter(ch1);
+          await repo.saveChapter(ch2);
+
+          // ch1: 3.Nc3 (learned and mastered, nextDueAt in 4 months)
+          final decNc3 = RepertoireDecision(
+            id: 'dec-nc3',
+            studyId: 's_french_dyn',
+            chapterId: ch1.id,
+            nodeId: 'n_nc3',
+            expectedMoves: const [],
+          );
+          // ch2: 3.e5 (dormant, never reviewed, not unlocked)
+          final decE5 = RepertoireDecision(
+            id: 'dec-e5',
+            studyId: 's_french_dyn',
+            chapterId: ch2.id,
+            nodeId: 'n_e5',
+            expectedMoves: const [],
+          );
+          await repo.saveDecision(decNc3);
+          await repo.saveDecision(decE5);
+
+          // Mark 3.Nc3 as mastered in 4 months
+          final masteredState = ReviewState(
+            decisionId: decNc3.canonicalId,
+            repetitionCount: 5,
+            nextDueAt: now.add(const Duration(days: 120)),
+          );
+          await repo.saveReviewState(masteredState);
+
+          // In standard mode: unreviewed 3.e5 is considered due, so dueCount is 1
+          final normalService = ReviewService(
+            repository: repo,
+            clock: clock,
+            dynamicRepertoireMode: false,
+          );
+          final normalSummary = await normalService.getDueSummary(
+            studies: [study],
+            scope: const ReviewScope.opening('French Defense'),
+          );
+          expect(normalSummary.totalDueCount, 1);
+
+          // In dynamic mode: unreviewed 3.e5 is dormant, 3.Nc3 is not due -> 0 due!
+          final dynSummary = await dynamicService.getDueSummary(
+            studies: [study],
+            scope: const ReviewScope.opening('French Defense'),
+          );
+          expect(dynSummary.totalDueCount, 0);
+
+          // When 3.e5 is unlocked into the active repertoire:
+          await repo.unlockDecisions([decE5.id]);
+          final unlockedSummary = await dynamicService.getDueSummary(
+            studies: [study],
+            scope: const ReviewScope.opening('French Defense'),
+          );
+          expect(unlockedSummary.totalDueCount, 1);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     // SPEC INV-051: summaries load review state for the decisions they count, not the whole table.
     test('getDueSummary reads review state by the ids it counts, not the whole table', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
