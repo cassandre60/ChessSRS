@@ -664,7 +664,9 @@ class ReviewService {
     }
 
     final engine = ReviewEngine(scheduler: scheduler, clock: clock);
-    final unlockedIds = await repository.getUnlockedDecisionIds();
+    final unlockedIds = (decisions.isEmpty || !dynamicRepertoireMode)
+        ? const <String>{}
+        : await repository.getUnlockedDecisionIds();
 
     final session = engine.createSession(
       studies: targetStudies,
@@ -842,7 +844,9 @@ class ReviewService {
     );
 
     final now = clock.now();
-    final unlockedIds = await repository.getUnlockedDecisionIds();
+    final unlockedIds = (tallyDecisions.isEmpty || !dynamicRepertoireMode)
+        ? const <String>{}
+        : await repository.getUnlockedDecisionIds();
     final tally = _DueTally(
       studies: studies,
       chapterOpenings: chapterOpenings,
@@ -889,6 +893,13 @@ class ReviewService {
     required List<Study> studies,
     ReviewScope scope = const ReviewScope.all(),
   }) async {
+    if (studies.isEmpty) {
+      return const DueCountsSummary(
+        totalDueCount: 0,
+        studyDueCounts: {},
+        openingDueCounts: {},
+      );
+    }
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = await repository.getChapterOrientations();
@@ -899,7 +910,9 @@ class ReviewService {
       canonicalIds: tallyDecisions.map((d) => d.canonicalId),
     );
     final now = clock.now();
-    final unlockedIds = await repository.getUnlockedDecisionIds();
+    final unlockedIds = (tallyDecisions.isEmpty || !dynamicRepertoireMode)
+        ? const <String>{}
+        : await repository.getUnlockedDecisionIds();
 
     final tally = _DueTally(
       studies: studies,
