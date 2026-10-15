@@ -614,7 +614,7 @@ class SqliteStudyRepository implements StudyRepository {
         .map((r) {
           final id = r['id']! as String;
           final canonical = (r['canonicalStateId'] as String?) ?? id;
-          return SimpleTallyDecision(
+          return (
             id: id,
             studyId: r['studyId']! as String,
             chapterId: r['chapterId']! as String,

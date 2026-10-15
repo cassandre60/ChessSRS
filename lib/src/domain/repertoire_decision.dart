@@ -7,49 +7,6 @@ library;
 import 'package:chess_srs/src/domain/ids.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 
-/// A lightweight projection of a decision for due-summary tallies,
-/// omitting moves and node IDs to avoid parsing and allocation.
-abstract interface class TallyDecision {
-  String get id;
-  String get studyId;
-  String get chapterId;
-  String get canonicalId;
-}
-
-/// Simple implementation of [TallyDecision] constructed from row projections.
-class SimpleTallyDecision implements TallyDecision {
-  const SimpleTallyDecision({
-    required this.id,
-    required this.studyId,
-    required this.chapterId,
-    required this.canonicalId,
-  });
-
-  @override
-  final String id;
-  @override
-  final String studyId;
-  @override
-  final String chapterId;
-  @override
-  final String canonicalId;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is TallyDecision &&
-          other.id == id &&
-          other.studyId == studyId &&
-          other.chapterId == chapterId &&
-          other.canonicalId == canonicalId;
-
-  @override
-  int get hashCode => Object.hash(id, studyId, chapterId, canonicalId);
-
-  @override
-  String toString() => 'SimpleTallyDecision(id: $id, canonical: $canonicalId)';
-}
-
 /// The scheduled unit of active recall.
 ///
 /// A [RepertoireDecision] represents a *position from the player's perspective*
@@ -60,7 +17,7 @@ class SimpleTallyDecision implements TallyDecision {
 ///
 /// Inspired by chessrs `Move` entity (GPL-3.0, ZackMurry/chessrs); reimplemented
 /// cleanly in Dart against our own contracts.
-class RepertoireDecision implements TallyDecision {
+class RepertoireDecision {
   const RepertoireDecision({
     required this.id,
     required this.studyId,
@@ -88,11 +45,8 @@ class RepertoireDecision implements TallyDecision {
     );
   }
 
-  @override
   final String id;
-  @override
   final String studyId;
-  @override
   final String chapterId;
 
   /// The [RepertoireNode.id] of the position from which the player must move.
@@ -106,7 +60,6 @@ class RepertoireDecision implements TallyDecision {
   final String? canonicalStateId;
 
   /// Effective canonical knowledge identifier: [canonicalStateId] if set, else [id].
-  @override
   String get canonicalId => canonicalStateId ?? id;
 
   /// Returns true if [move] is one of the accepted continuations.
