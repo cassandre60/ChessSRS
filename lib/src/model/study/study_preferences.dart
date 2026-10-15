@@ -149,6 +149,26 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
   Future<void> setTransposeScope(TransposeScope scope) {
     return save(state.copyWith(transposeScope: scope));
   }
+
+  Future<void> toggleDynamicRepertoireMode() {
+    return save(state.copyWith(dynamicRepertoireMode: !state.dynamicRepertoireMode));
+  }
+
+  Future<void> toggleDynamicRepertoireForStudy(String studyId) {
+    final current = Set<String>.of(state.dynamicRepertoireStudyIds);
+    if (!current.add(studyId)) {
+      current.remove(studyId);
+    }
+    return save(state.copyWith(dynamicRepertoireStudyIds: current));
+  }
+
+  Future<void> toggleDynamicRepertoireForOpening(String openingFamily) {
+    final current = Set<String>.of(state.dynamicRepertoireOpeningIds);
+    if (!current.add(openingFamily)) {
+      current.remove(openingFamily);
+    }
+    return save(state.copyWith(dynamicRepertoireOpeningIds: current));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -197,6 +217,11 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Transposed-move acceptance scope (INV-065): off, within the same
     // study, or anywhere in scope. Stored on/off installs migrate.
     @JsonKey(defaultValue: TransposeScope.inScope) required TransposeScope transposeScope,
+    // Dynamic repertoire mode: only lines the user actively plays/unlocks are scheduled;
+    // unchosen branches remain dormant encyclopedia reference material.
+    @JsonKey(defaultValue: false) required bool dynamicRepertoireMode,
+    @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireStudyIds,
+    @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireOpeningIds,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -222,7 +247,17 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,
     transposeScope: TransposeScope.inScope,
+    dynamicRepertoireMode: false,
+    dynamicRepertoireStudyIds: {},
+    dynamicRepertoireOpeningIds: {},
   );
+
+  bool isDynamicRepertoireEnabled({String? studyId, String? openingFamily}) {
+    if (dynamicRepertoireMode) return true;
+    if (studyId != null && dynamicRepertoireStudyIds.contains(studyId)) return true;
+    if (openingFamily != null && dynamicRepertoireOpeningIds.contains(openingFamily)) return true;
+    return false;
+  }
 
   factory StudyPrefs.fromJson(Map<String, dynamic> json) {
     // The on/off transpose switch became a three-way scope: carry the old

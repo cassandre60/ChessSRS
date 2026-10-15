@@ -1893,5 +1893,54 @@ void main() {
         await upgraded.close();
       }
     });
+
+    test(
+      'unlockDecisions, getUnlockedDecisionIds, and lockDecisions manage unlocked lines',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 10, 15, 12, 0, 0);
+          final study = Study(
+            id: 'study-dyn',
+            title: 'Dynamic Test',
+            createdAt: now,
+            updatedAt: now,
+          );
+          final chapter = Chapter(id: 'ch-dyn', studyId: study.id, sourceOrder: 0);
+          const dec1 = RepertoireDecision(
+            id: 'dec-dyn-1',
+            studyId: 'study-dyn',
+            chapterId: 'ch-dyn',
+            nodeId: 'n1',
+            expectedMoves: [],
+          );
+          const dec2 = RepertoireDecision(
+            id: 'dec-dyn-2',
+            studyId: 'study-dyn',
+            chapterId: 'ch-dyn',
+            nodeId: 'n2',
+            expectedMoves: [],
+          );
+
+          await repo.saveStudy(study);
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(dec1);
+          await repo.saveDecision(dec2);
+
+          expect(await repo.getUnlockedDecisionIds(), isEmpty);
+
+          await repo.unlockDecisions(['dec-dyn-1']);
+          expect(await repo.getUnlockedDecisionIds(), equals({'dec-dyn-1'}));
+          expect(await repo.getUnlockedDecisionIds(studyId: 'study-dyn'), equals({'dec-dyn-1'}));
+
+          await repo.lockDecisions(['dec-dyn-1']);
+          expect(await repo.getUnlockedDecisionIds(), isEmpty);
+        } finally {
+          await db.close();
+        }
+      },
+    );
   });
 }

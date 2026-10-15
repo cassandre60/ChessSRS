@@ -62,6 +62,8 @@ class ReviewSession {
     this.prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     this.remainingDailyQuota,
     this.remainingNewQuota,
+    this.dynamicRepertoireMode = false,
+    this.unlockedDecisionIds = const {},
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
     Random? random,
@@ -121,11 +123,14 @@ class ReviewSession {
       }
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
       // INV-068: a position with no review state has never been presented, so it
-      // is fresh rather than due. It is still queued — the fresh cap below is
-      // what keeps that honest. Practice mode is exempt: it rehearses rather
-      // than schedules, so it walks fresh material freely.
+      // is fresh rather than due. In dynamic repertoire mode, unreviewed positions
+      // are only introduced if explicitly unlocked.
       final status = dueStatusOf(state, now);
-      if (mode == ReviewMode.practice || status.isDue || status.isFresh) {
+      final isUnlocked =
+          !dynamicRepertoireMode ||
+          unlockedDecisionIds.contains(d.id) ||
+          unlockedDecisionIds.contains(d.canonicalId);
+      if (mode == ReviewMode.practice || status.isDue || (status.isFresh && isUnlocked)) {
         // In multi-study scope, deduplicate shared canonical transpositions
         if (scope.studyId == null && scope.chapterId == null) {
           if (!queuedCanonicalIds.add(d.canonicalId)) {
@@ -280,6 +285,8 @@ class ReviewSession {
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
   final TransposeScope transposeScope;
+  final bool dynamicRepertoireMode;
+  final Set<String> unlockedDecisionIds;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;
@@ -352,10 +359,7 @@ class ReviewSession {
     }
   }
 
-  // ---------------------------------------------------------------------------
   // Getters
-  // ---------------------------------------------------------------------------
-
   ReviewPrompt? get currentPrompt => _currentPrompt;
   int get remainingDueCount =>
       _dueQueue.length + _unbufferedQueue.length + (_currentPrompt != null ? 1 : 0);
@@ -386,15 +390,7 @@ class ReviewSession {
   /// Returns the chapter with [chapterId] if present in this session.
   Chapter? getChapter(String chapterId) => _chapters[chapterId];
 
-  // ---------------------------------------------------------------------------
   // Transactional rollback
-  // ---------------------------------------------------------------------------
-
-  /// Captures the mutable session state so it can be restored if persisting an
-  /// answer fails (QUALITY.md §2 incremental state writes).
-  ///
-  /// The snapshot is shallow because [ReviewState], [RepertoireDecision] and
-  /// [ReviewPrompt] are immutable; only the containers holding them are copied.
   ReviewSessionCheckpoint checkpoint() {
     return ReviewSessionCheckpoint._(
       reviewStates: Map<String, ReviewState>.of(_reviewStates),
@@ -436,11 +432,7 @@ class ReviewSession {
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
   }
 
-  // ---------------------------------------------------------------------------
   // Session Actions
-  // ---------------------------------------------------------------------------
-
-  /// Submit a user move to validate against the expected repertoire continuation.
   ReviewStepResult submitMove({required String from, required String to, String? promotion}) {
     final prompt = _currentPrompt;
     if (prompt == null) {
@@ -706,7 +698,7 @@ class ReviewSession {
       final nextDecision = _decisionForNode[opponentChild.id];
       if (nextDecision != null) {
         final decState = _reviewStates[nextDecision.canonicalId] ?? _reviewStates[nextDecision.id];
-        final isDue = mode == ReviewMode.practice || decState == null || decState.isDueAt(now);
+        final isDue = _isDecisionDue(nextDecision, decState, now);
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
@@ -836,10 +828,7 @@ class ReviewSession {
     return _currentPrompt;
   }
 
-  // ---------------------------------------------------------------------------
   // Internal Helpers
-  // ---------------------------------------------------------------------------
-
   void _advanceToNextDue() {
     if (mode == ReviewMode.srs &&
         remainingDailyQuota != null &&
@@ -1099,7 +1088,7 @@ class ReviewSession {
     final decision = _decisionForNode[node.id];
     if (decision != null) {
       final state = _reviewStates[decision.canonicalId] ?? _reviewStates[decision.id];
-      final isDue = mode == ReviewMode.practice || state == null || state.isDueAt(now);
+      final isDue = _isDecisionDue(decision, state, now);
       if (isDue) {
         count++;
       }
@@ -1109,6 +1098,15 @@ class ReviewSession {
     }
     memo[node.id] = count;
     return count;
+  }
+
+  bool _isDecisionDue(RepertoireDecision d, ReviewState? state, DateTime now) {
+    if (mode == ReviewMode.practice) return true;
+    final isLearned = state != null && state.repetitionCount > 0;
+    if (!dynamicRepertoireMode) return state == null || state.isDueAt(now);
+    return isLearned
+        ? state.isDueAt(now)
+        : (unlockedDecisionIds.contains(d.id) || unlockedDecisionIds.contains(d.canonicalId));
   }
 
   int _countNodesInSubtree(RepertoireNode node) {

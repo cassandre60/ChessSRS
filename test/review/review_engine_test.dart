@@ -2482,5 +2482,38 @@ void main() {
         expect(session.currentPrompt?.sideToMove, Side.black);
       });
     });
+
+    test(
+      'dynamicRepertoireMode excludes dormant decisions in SRS but includes them in practice',
+      () {
+        final (study, chapter, decisions) = buildTestRepertoire();
+        final engine = ReviewEngine(clock: clock);
+
+        // In dynamic mode with first decision unlocked:
+        final srsSession = engine.createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: decisions,
+          reviewStates: const {},
+          dynamicRepertoireMode: true,
+          unlockedDecisionIds: {decisions.first.id},
+        );
+        // Only unlocked first decision is queued; dormant decisions are not.
+        expect(srsSession.remainingDueCount, 1);
+        expect(srsSession.currentPrompt?.decision.id, decisions.first.id);
+
+        // In practice mode: all are included
+        final practiceSession = engine.createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: decisions,
+          reviewStates: const {},
+          mode: ReviewMode.practice,
+          dynamicRepertoireMode: true,
+          unlockedDecisionIds: {decisions.first.id},
+        );
+        expect(practiceSession.remainingDueCount, decisions.length);
+      },
+    );
   });
 }

@@ -625,6 +625,51 @@ class SqliteStudyRepository implements StudyRepository {
         .toList(growable: false);
   }
 
+  @override
+  Future<Set<String>> getUnlockedDecisionIds({String? studyId}) async {
+    List<Map<String, Object?>> rows;
+    if (studyId != null) {
+      rows = await _db.rawQuery(
+        'SELECT u.decisionId FROM $kTableSrsUnlockedDecision u '
+        'INNER JOIN $kTableSrsDecision d ON u.decisionId = d.id '
+        'WHERE d.studyId = ?',
+        [studyId],
+      );
+    } else {
+      rows = await _db.query(kTableSrsUnlockedDecision, columns: ['decisionId']);
+    }
+    return rows.map((r) => r['decisionId']! as String).toSet();
+  }
+
+  @override
+  Future<void> unlockDecisions(Iterable<String> decisionIds) async {
+    if (decisionIds.isEmpty) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final batch = _db.batch();
+    for (final id in decisionIds) {
+      batch.insert(kTableSrsUnlockedDecision, {
+        'decisionId': id,
+        'unlockedAt': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  @override
+  Future<void> lockDecisions(Iterable<String> decisionIds) async {
+    if (decisionIds.isEmpty) return;
+    final idList = decisionIds.toList();
+    for (var i = 0; i < idList.length; i += 400) {
+      final chunk = idList.sublist(i, (i + 400 > idList.length) ? idList.length : i + 400);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      await _db.delete(
+        kTableSrsUnlockedDecision,
+        where: 'decisionId IN ($placeholders)',
+        whereArgs: chunk,
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Position Knowledge States (canonical SRS layer)
   // ---------------------------------------------------------------------------

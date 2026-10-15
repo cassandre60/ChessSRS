@@ -22,6 +22,7 @@ agent can pick up and execute top-to-bottom.
 | `PERF-FIX-39-pipelined-animation-overlapped-durability.md` | Implemented |
 | `PERF-FIX-40-board-repaint-boundary-and-prewarm.md` | Implemented |
 | `PERF-FIX-41-sub-sensory-move-pre-warming.md` | Implemented |
+| `FEAT-REP-43-dynamic-repertoire-branch-selection.md` | Implemented |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
 across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:
