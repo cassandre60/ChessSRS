@@ -846,6 +846,9 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
                       onMove: (move, {viaDragAndDrop}) {
                         ref.read(reviewControllerProvider.notifier).onUserMove(move);
                       },
+                      onTouchedSquare: (sq) {
+                        ref.read(reviewControllerProvider.notifier).prewarmMoveCandidate(sq);
+                      },
                       shapes: shapes,
                     ),
                   ),

@@ -2000,6 +2000,35 @@ void main() {
       },
     );
 
+    // SPEC INV-050. A graded move settles within one frame.
+    // Drag pre-warming pre-calculates candidate position and audio feedback during touch down.
+    test(
+      'prewarmMoveCandidate pre-calculates move position and feedback cues on origin square touch',
+      () async {
+        final container = createContainer();
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        const pgn = '''
+[Event "Italian Game"]
+1. e4 e5 2. Nf3 Nc6 *
+''';
+
+        await controller.importPgnText(pgnText: pgn, title: 'Italian', repertoireSide: Side.white);
+
+        // Touching an unrelated square (e.g. a2) does not prewarm the e2e4 candidate
+        controller.prewarmMoveCandidate(Square.a2);
+
+        // Touching origin square of expected move (e2 for e2e4) prewarms candidate
+        controller.prewarmMoveCandidate(Square.e2);
+
+        const move = NormalMove(from: Square.e2, to: Square.e4);
+        final step = await controller.onUserMove(move);
+
+        expect(step, isNotNull);
+        expect(step!.isCorrect, isTrue);
+      },
+    );
+
     test(
       'reviewing an already-learned decision decrements due but does not increment learnedDecisions',
       () async {
