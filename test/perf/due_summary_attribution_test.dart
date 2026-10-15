@@ -129,11 +129,22 @@ void main() {
         }
         expect(sink, isNonZero);
       });
+      final fastParseCost = await medianOf(() async {
+        var sink = 0;
+        for (var i = 0; i < rows * fieldsPerRow; i++) {
+          sink += parseUtcIso(sample).millisecondsSinceEpoch;
+        }
+        expect(sink, isNonZero);
+      });
       stdout.writeln("\n=== direct cost of the mapper's date parsing ===");
       stdout.writeln('rows returned       $rows');
       stdout.writeln(
         'DateTime.parse x${rows * fieldsPerRow}   '
         '${(parseCost.inMicroseconds / 1000).toStringAsFixed(2)} ms',
+      );
+      stdout.writeln(
+        'parseUtcIso    x${rows * fieldsPerRow}   '
+        '${(fastParseCost.inMicroseconds / 1000).toStringAsFixed(2)} ms',
       );
 
       expect(total.inMilliseconds, lessThan(2000));

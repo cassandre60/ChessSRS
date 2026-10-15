@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:chess_srs/src/persistence/fast_date_parser.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:chess_srs/src/persistence/study_repository.dart';
@@ -277,7 +278,7 @@ class SqliteStudyRepository implements StudyRepository {
     final raw = rows.first['linkedUpdatedAt'] as String?;
     return (
       study: _studyFromRow(rows.first),
-      remoteUpdatedAt: raw != null ? DateTime.parse(raw) : null,
+      remoteUpdatedAt: raw != null ? parseUtcIso(raw) : null,
     );
   }
 
@@ -833,16 +834,16 @@ class SqliteStudyRepository implements StudyRepository {
 
     return PositionKnowledgeState(
       canonicalId: row['canonicalId']! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
-      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
-      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
+      firstReviewedAt: first != null ? parseUtcIso(first) : null,
+      lastReviewedAt: last != null ? parseUtcIso(last) : null,
+      nextDueAt: next != null ? parseUtcIso(next) : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
       difficulty: (row['difficulty'] as num?)?.toDouble() ?? 5.0,
       latencyEmaMs: (row['latencyEmaMs'] as num?)?.toDouble(),
       latencySampleCount: (row['latencySampleCount'] as num?)?.toInt() ?? 0,
-      lastExposedAt: exposed != null ? DateTime.parse(exposed).toUtc() : null,
+      lastExposedAt: exposed != null ? parseUtcIso(exposed) : null,
     );
   }
 
@@ -1081,8 +1082,8 @@ class SqliteStudyRepository implements StudyRepository {
     return Study(
       id: row['id']! as String,
       title: row['title']! as String,
-      createdAt: DateTime.parse(row['createdAt']! as String),
-      updatedAt: DateTime.parse(row['updatedAt']! as String),
+      createdAt: parseUtcIso(row['createdAt']! as String),
+      updatedAt: parseUtcIso(row['updatedAt']! as String),
       isActive: isActive,
       pgnHash: row['pgnHash'] as String?,
     );
@@ -1119,7 +1120,7 @@ class SqliteStudyRepository implements StudyRepository {
       title: row['title'] as String?,
       startingFen: row['startingFen'] as String?,
       root: root,
-      createdAt: DateTime.parse(row['createdAt']! as String),
+      createdAt: parseUtcIso(row['createdAt']! as String),
       opening: row['opening'] as String?,
       orientation: orientation,
     );
@@ -1175,9 +1176,9 @@ class SqliteStudyRepository implements StudyRepository {
 
     return ReviewState(
       decisionId: (row['canonicalId'] ?? row['decisionId'])! as String,
-      firstReviewedAt: first != null ? DateTime.parse(first).toUtc() : null,
-      lastReviewedAt: last != null ? DateTime.parse(last).toUtc() : null,
-      nextDueAt: next != null ? DateTime.parse(next).toUtc() : null,
+      firstReviewedAt: first != null ? parseUtcIso(first) : null,
+      lastReviewedAt: last != null ? parseUtcIso(last) : null,
+      nextDueAt: next != null ? parseUtcIso(next) : null,
       repetitionCount: (row['repetitionCount']! as num).toInt(),
       lapseCount: (row['lapseCount']! as num).toInt(),
       stability: (row['stability']! as num).toDouble(),
@@ -1204,7 +1205,7 @@ class SqliteStudyRepository implements StudyRepository {
   static ReviewEvent _reviewEventFromRow(Map<String, Object?> row) {
     return ReviewEvent(
       decisionId: row['decisionId']! as String,
-      when: DateTime.parse(row['whenTimestamp']! as String).toUtc(),
+      when: parseUtcIso(row['whenTimestamp']! as String),
       result: ReviewResult.values.byName(row['result']! as String),
       oldState: reviewStateFromJson(
         jsonDecode(row['oldStateJson']! as String) as Map<String, dynamic>,
