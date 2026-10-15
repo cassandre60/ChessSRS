@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/domain/review/review_continuity.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/model/analysis/common_analysis_prefs.dart';
@@ -146,6 +147,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     return save(state.copyWith(reviewOrder: order));
   }
 
+  Future<void> setReviewContinuity(ReviewContinuity continuity) {
+    return save(state.copyWith(reviewContinuity: continuity));
+  }
+
   Future<void> setTransposeScope(TransposeScope scope) {
     return save(state.copyWith(transposeScope: scope));
   }
@@ -214,6 +219,9 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // Presentation order of the due queue (P-ORDER). The due set never
     // depends on this: urgency filtering and the quota cut apply first.
     @JsonKey(defaultValue: ReviewOrder.byLine) required ReviewOrder reviewOrder,
+    // In-line continuity after a correct move: quiz only due positions
+    // (auto-playing the rest) or quiz every step of the walked line in order.
+    @JsonKey(defaultValue: ReviewContinuity.dueOnly) required ReviewContinuity reviewContinuity,
     // Transposed-move acceptance scope (INV-065): off, within the same
     // study, or anywhere in scope. Stored on/off installs migrate.
     @JsonKey(defaultValue: TransposeScope.inScope) required TransposeScope transposeScope,
@@ -246,6 +254,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,
+    reviewContinuity: ReviewContinuity.dueOnly,
     transposeScope: TransposeScope.inScope,
     dynamicRepertoireMode: false,
     dynamicRepertoireStudyIds: {},

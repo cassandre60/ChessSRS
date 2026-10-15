@@ -13,6 +13,7 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/review/due_status.dart';
+import 'package:chess_srs/src/domain/review/review_continuity.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
@@ -55,6 +56,7 @@ class ReviewSession {
     this.scope = const ReviewScope.all(),
     this.mode = ReviewMode.srs,
     this.order = ReviewOrder.dueDate,
+    this.continuity = ReviewContinuity.dueOnly,
     this.transposeScope = TransposeScope.inScope,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
@@ -282,6 +284,15 @@ class ReviewSession {
 
   /// Presentation order of the due queue; the due set never depends on this.
   final ReviewOrder order;
+
+  /// In-line continuity after a correct move (user setting).
+  ///
+  /// [ReviewContinuity.dueOnly] quizzes only due positions and auto-plays the
+  /// rest. [ReviewContinuity.fullLine] quizzes every position along the
+  /// walked line in tree order, even when not yet due, and picks branches
+  /// deterministically (mainline first) instead of steering toward due
+  /// material — so a line never jumps over an unasked middle step.
+  final ReviewContinuity continuity;
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
   final TransposeScope transposeScope;
@@ -703,8 +714,13 @@ class ReviewSession {
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _completedDecisionIds.length >= remainingDailyQuota!;
-        if (isDue && !isQuotaExhausted) {
-          // Found next due decision along this branch!
+        // Full-line continuity quizzes every step of the walked line in order,
+        // even when not yet due, so a line never jumps over an unasked middle
+        // step. The quota still caps prompted work: exhausted means auto-play.
+        final shouldPrompt =
+            (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
+        if (shouldPrompt) {
+          // Found the next decision along this branch!
           _dueQueue.removeWhere(
             (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
           );
@@ -1025,6 +1041,13 @@ class ReviewSession {
       return node.children.first;
     }
 
+    // Full-line continuity walks each line in tree order (mainline first) so
+    // consecutive positions stay in the same line instead of steering toward
+    // whichever branch holds due material.
+    if (continuity == ReviewContinuity.fullLine) {
+      return node.children.first;
+    }
+
     final dueCounts = <RepertoireNode, int>{};
     for (final child in node.children) {
       dueCounts[child] = _countDueDecisionsInSubtree(child, now, dueCountMemo);
@@ -1055,6 +1078,11 @@ class ReviewSession {
     DateTime now,
     Map<String, int> dueCountMemo,
   ) {
+    // Full-line continuity follows list order (mainline first) so the walked
+    // line stays predictable instead of veering toward due-dense variations.
+    if (continuity == ReviewContinuity.fullLine) {
+      return opponentChild.children.first;
+    }
     var best = opponentChild.children.first;
     var bestDue = -1;
     for (final child in opponentChild.children) {

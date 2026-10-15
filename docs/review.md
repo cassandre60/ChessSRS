@@ -50,6 +50,19 @@ not:
 
 A previously auto-played decision must become testable again when its SRS state becomes due, even after a very long interval.
 
+### Line continuity setting
+
+`Line continuity` (Review & SRS settings, default Due only) governs what
+"traverse" does after a correct move:
+
+- **Due only**: only due positions are tested; known moves auto-play and the
+  opponent steers toward due material. Fastest; best for large mature
+  repertoires.
+- **Full line**: every position along the walked line is tested in tree order
+  (mainline first), even when not yet due — so a line never jumps over an
+  unasked middle step. Slower (extra prompts count toward the daily limit),
+  but lines stay coherent; best while learning new material.
+
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 
 In a chess repertoire, the opponent frequently has multiple branching responses at a given position.
