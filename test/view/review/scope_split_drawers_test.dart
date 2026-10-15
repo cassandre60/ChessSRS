@@ -136,6 +136,26 @@ void main() {
     }
   });
 
+  testWidgets('the in-drawer switch moves to the other colour in one tap', (tester) async {
+    // Owner request 2026-10-15: switching colour cost dismiss plus retap.
+    // SPEC INV-030.
+    final container = await pumpDrawer(tester, Side.white);
+    expect(inDrawer(find.text('White book')), findsOneWidget);
+
+    await tester.tap(inDrawer(find.bySemanticsLabel('Black repertoire')));
+    await pumpAsync(tester);
+
+    expect(inDrawer(find.text('Black book')), findsOneWidget);
+    expect(inDrawer(find.text('White book')), findsNothing);
+
+    final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
+    expect(
+      state?.activeSide,
+      Side.black,
+      reason: 'the switch behaves like the matching square: scope follows',
+    );
+  });
+
   testWidgets('tapping a row scopes to it and carries the drawer’s colour', (tester) async {
     final container = await pumpDrawer(tester, Side.black);
 

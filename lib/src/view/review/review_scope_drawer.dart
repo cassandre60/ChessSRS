@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:chess_srs/l10n/l10n.dart';
@@ -80,6 +81,17 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
+  /// The colour this drawer currently shows. Starts as the square that opened
+  /// it; the in-drawer switch moves it without closing, so switching colour
+  /// costs one tap instead of dismiss plus retap.
+  late Side _side;
+
+  @override
+  void initState() {
+    super.initState();
+    _side = widget.side;
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -126,7 +138,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     // membership comes from the summary rather than from the current scope: the
     // scope may be a single study or a single opening by the time the drawer is
     // reopened, and a study's own colour is not always the scope's.
-    final side = widget.side;
+    final side = _side;
     final activeScope = reviewState.scope;
 
     final query = _searchQuery.trim().toLowerCase();
@@ -250,6 +262,20 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 setState(() => _searchQuery = '');
                               },
                             ),
+                          const SizedBox(width: 4),
+                          SrsColourSwitch(
+                            activeSide: side,
+                            onSidePressed: (tapped) {
+                              if (tapped == side) return;
+                              // Scope reload lands behind (see _openColourDrawer):
+                              // the switch itself is instant, lists rebuild
+                              // from state, counts follow on publish.
+                              unawaited(
+                                ref.read(reviewControllerProvider.notifier).selectSide(tapped),
+                              );
+                              setState(() => _side = tapped);
+                            },
+                          ),
                         ],
                       ),
                     ),
