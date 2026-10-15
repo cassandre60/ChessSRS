@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-003, INV-010, INV-011, INV-012, INV-013, INV-014, INV-015, INV-016, INV-017.
 
-import 'dart:io';
+import 'dart:io' show Directory;
+import 'dart:io' as io show File;
 
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
@@ -108,17 +109,61 @@ void main() {
 1. e4 e6 2. d4 d5 *
 ''';
       final result = importPgn(pgn);
-      expect(result.chapters.first.opening, 'French Defence');
+      expect(result.chapters.first.opening, 'French Defense');
     });
 
     test('ignores Event headers that merely mention an opening', () {
       const pgn = '''
 [Event "White vs French"]
-1. e4 e6 2. d4 d5 *
+*
 ''';
       final result = importPgn(pgn);
       expect(result.chapters.first.opening, isNull);
     });
+
+    test('falls back to move inspection when Event merely mentions an opening', () {
+      const pgn = '''
+[Event "White vs French"]
+1. e4 e6 2. d4 d5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, 'French Defense');
+    });
+
+    test('falls back to move inspection when Opening header is question mark', () {
+      const pgn = '''
+[Opening "?"]
+1. e4 c5 2. Nf3 d6 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, 'Sicilian Defense');
+    });
+
+    test('falls back to FEN inspection when chapter starts from a FEN setup', () {
+      const pgn = '''
+[FEN "rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq - 0 1"]
+[SetUp "1"]
+1... Bb4 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, 'French Defense');
+    });
+
+    test(
+      'real French study chapters classify into French Defense even with FEN setups and ? headers',
+      () {
+        final file = io.File(
+          'test_fixtures/lichess_study_white-vs-french_by_MansourMohamed_2024.04.09.pgn',
+        );
+        final result = importPgn(file.readAsStringSync());
+        // Chapter 1: Introduction
+        expect(result.chapters[0].opening, 'French Defense');
+        // Chapter 2: A tempo up French from FEN setup
+        expect(result.chapters[1].opening, 'French Defense');
+        // Chapter 6: Winawer setup from FEN
+        expect(result.chapters[5].opening, 'French Defense');
+      },
+    );
 
     test('classifies opening family from ECO header fallback', () {
       const pgn = '''
@@ -773,7 +818,7 @@ void main() {
         extractOpeningFamily({'Opening': 'Sicilian Defense: Najdorf Variation'}),
         'Sicilian Defense',
       );
-      expect(extractOpeningFamily({'Opening': 'French Defence - Winawer'}), 'French Defence');
+      expect(extractOpeningFamily({'Opening': 'French Defence - Winawer'}), 'French Defense');
     });
 
     test('short ECO codes return null instead of throwing', () {

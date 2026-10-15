@@ -17,7 +17,8 @@
 /// explicit `Opening` header rather than guessed at.
 library;
 
-import 'package:dartchess/dartchess.dart' show PgnHeaders;
+import 'package:chess_srs/src/domain/repertoire_node.dart';
+import 'package:dartchess/dartchess.dart';
 
 /// Opening families whose presence at the *start* of a name identifies it.
 const List<String> _familyLeads = [
@@ -83,6 +84,15 @@ bool mentionsOpeningButIsNotFamily(String name) {
       _categoryTails.any((n) => lower.contains(' $n '));
 }
 
+/// Normalizes an opening family name: standardizes UK/US spelling variants
+/// (e.g. "Defence" -> "Defense", "Grunfeld" -> "Grünfeld").
+String normalizeOpeningFamily(String name) {
+  var s = name.trim();
+  s = s.replaceAll(RegExp(r'\bdefence\b', caseSensitive: false), 'Defense');
+  s = s.replaceAll(RegExp(r'\bGrunfeld\b', caseSensitive: false), 'Grünfeld');
+  return s;
+}
+
 /// Reduces a PGN opening or event header to its family.
 ///
 /// Splits on `:` and `,` always, and on `-` only when spaced: "French Defence
@@ -90,17 +100,153 @@ bool mentionsOpeningButIsNotFamily(String name) {
 String simplifyOpeningName(String raw) {
   final splitColon = raw.split(RegExp(r':|,|\s+-\s+'));
   if (splitColon.isNotEmpty && splitColon.first.trim().isNotEmpty) {
-    return splitColon.first.trim();
+    return normalizeOpeningFamily(splitColon.first.trim());
   }
-  return raw.trim();
+  return normalizeOpeningFamily(raw.trim());
 }
 
-/// Reads the opening family from [headers], or null when it carries none.
+/// Detects opening family by inspecting the mainline moves in [root].
+String? detectOpeningFamilyFromMoves(RepertoireNode? root) {
+  if (root == null) return null;
+  final sans = <String>[];
+  var current = root;
+  while (current.children.isNotEmpty && sans.length < 8) {
+    final next = current.children.first;
+    final san = next.incomingMove?.san;
+    if (san != null) {
+      sans.add(san);
+    }
+    current = next;
+  }
+  if (sans.isEmpty) return null;
+
+  final m1 = sans[0];
+  final m2 = sans.length > 1 ? sans[1] : null;
+  final m3 = sans.length > 2 ? sans[2] : null;
+  final m4 = sans.length > 3 ? sans[3] : null;
+  final m5 = sans.length > 4 ? sans[4] : null;
+  final m6 = sans.length > 5 ? sans[5] : null;
+
+  if (m1 == 'e4') {
+    if (m2 == 'e6') return 'French Defense';
+    if (m2 == 'c5') return 'Sicilian Defense';
+    if (m2 == 'c6') return 'Caro-Kann Defense';
+    if (m2 == 'd5') return 'Scandinavian Defense';
+    if (m2 == 'Nf6') return 'Alekhine Defense';
+    if (m2 == 'd6') return 'Pirc Defense';
+    if (m2 == 'g6') return 'Modern Defense';
+    if (m2 == 'e5') {
+      if (m3 == 'Nf3') {
+        if (m4 == 'Nc6') {
+          if (m5 == 'Bb5') return 'Ruy Lopez';
+          if (m5 == 'Bc4') return 'Italian Game';
+          if (m5 == 'd4') return 'Scotch Game';
+          return 'Open Game';
+        }
+        if (m4 == 'Nf6') return 'Petrov Defense';
+        return 'Open Game';
+      }
+      if (m3 == 'f4') return "King's Gambit";
+      if (m3 == 'Nc3') return 'Vienna Game';
+      return 'Open Game';
+    }
+  } else if (m1 == 'd4') {
+    if (m2 == 'd5') {
+      if (m3 == 'c4') {
+        if (m4 == 'c6') return 'Slav Defense';
+        return "Queen's Gambit";
+      }
+      if (m3 == 'Bf4' || (m3 == 'Nf3' && m5 == 'Bf4')) return 'London System';
+      return "Queen's Pawn Game";
+    }
+    if (m2 == 'Nf6') {
+      if (m3 == 'c4') {
+        if (m4 == 'g6') {
+          if (m6 == 'd5') return 'Grünfeld Defense';
+          return "King's Indian Defense";
+        }
+        if (m4 == 'e6') {
+          if (m5 == 'Nc3' && m6 == 'Bb4') return 'Nimzo-Indian Defense';
+          if (m5 == 'Nf3' && m6 == 'b6') return "Queen's Indian Defense";
+          if (m5 == 'g3') return 'Catalan Opening';
+          return "Queen's Pawn Game";
+        }
+        if (m4 == 'c5') return 'Benoni Defense';
+        return "Queen's Pawn Game";
+      }
+      if (m3 == 'Bf4' || (m3 == 'Nf3' && m5 == 'Bf4')) return 'London System';
+      return "Queen's Pawn Game";
+    }
+    if (m2 == 'f5') return 'Dutch Defense';
+    return "Queen's Pawn Game";
+  } else if (m1 == 'c4') {
+    return 'English Opening';
+  } else if (m1 == 'Nf3') {
+    return 'Réti Opening';
+  }
+  return null;
+}
+
+/// Detects opening family by inspecting piece placement in a custom starting [fen].
+String? detectOpeningFamilyFromFen(String fen) {
+  try {
+    final setup = Setup.parseFen(fen.trim());
+    final board = setup.board;
+
+    bool isPawn(Square sq, Side color) {
+      final p = board.pieceAt(sq);
+      return p != null && p.role == Role.pawn && p.color == color;
+    }
+
+    final e6Black = isPawn(Square.fromName('e6'), Side.black);
+    final c5Black = isPawn(Square.fromName('c5'), Side.black);
+    final c6Black = isPawn(Square.fromName('c6'), Side.black);
+    final d5Black = isPawn(Square.fromName('d5'), Side.black);
+    final g6Black = isPawn(Square.fromName('g6'), Side.black);
+
+    final e4White = isPawn(Square.fromName('e4'), Side.white);
+    final e5White = isPawn(Square.fromName('e5'), Side.white);
+    final d4White = isPawn(Square.fromName('d4'), Side.white);
+    final c4White = isPawn(Square.fromName('c4'), Side.white);
+
+    // French Defense: Black has e6, White has d4 and (e4 or e5)
+    if (e6Black && (e4White || e5White) && d4White) {
+      return 'French Defense';
+    }
+    // Sicilian Defense: Black has c5, White has e4
+    if (c5Black && e4White) {
+      return 'Sicilian Defense';
+    }
+    // Caro-Kann Defense: Black has c6, White has e4
+    if (c6Black && e4White) {
+      return 'Caro-Kann Defense';
+    }
+    // Scandinavian Defense: Black has d5, White has e4, no d4
+    if (d5Black && e4White && !d4White) {
+      return 'Scandinavian Defense';
+    }
+    // Queen's Gambit / Slav: White has d4 and c4, Black has d5
+    if (d4White && c4White && d5Black) {
+      if (c6Black) return 'Slav Defense';
+      return "Queen's Gambit";
+    }
+    // Indian defenses: White has d4 and c4, Black has g6
+    if (d4White && c4White && g6Black) {
+      if (d5Black) return 'Grünfeld Defense';
+      return "King's Indian Defense";
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+/// Reads the opening family from [headers], or falls back to move/FEN tree inspection.
 ///
 /// A direct `Opening` header is authoritative and passed through the
 /// simplification only; `Event` and `ECO` are fallbacks that have to prove
-/// themselves.
-String? extractOpeningFamily(PgnHeaders headers) {
+/// themselves. If headers yield nothing, [root] and [startingFen] are inspected.
+String? extractOpeningFamily(PgnHeaders headers, {RepertoireNode? root, String? startingFen}) {
   // 1. Direct Opening header (e.g. "Sicilian Defense: Najdorf Variation")
   final opening = headers['Opening'];
   if (opening != null && opening.trim().isNotEmpty && opening != '?') {
@@ -119,7 +265,18 @@ String? extractOpeningFamily(PgnHeaders headers) {
   // 3. Fallback: ECO code classification (standard FIDE/ChessBase ECO families)
   final eco = headers['ECO'];
   if (eco != null && eco.trim().isNotEmpty && eco != '?') {
-    return ecoToOpeningFamily(eco.trim().toUpperCase());
+    final fromEco = ecoToOpeningFamily(eco.trim().toUpperCase());
+    if (fromEco != null) return fromEco;
+  }
+
+  // 4. Move tree inspection fallback
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null) return fromMoves;
+
+  // 5. Custom FEN piece-placement inspection fallback
+  if (startingFen != null) {
+    final fromFen = detectOpeningFamilyFromFen(startingFen);
+    if (fromFen != null) return fromFen;
   }
 
   return null;

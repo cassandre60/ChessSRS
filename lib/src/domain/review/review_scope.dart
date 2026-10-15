@@ -50,9 +50,10 @@ class ReviewScope {
     if (this.studyId != null && this.studyId != studyId) return false;
     if (this.chapterId != null && this.chapterId != chapterId) return false;
     if (this.openingFamily != null &&
-        // Opening names come from PGN headers and may carry stray whitespace;
-        // compare trimmed so loading and queue filtering agree.
-        (openingFamily?.trim() ?? '') != this.openingFamily!.trim()) {
+        // Opening names come from PGN headers and may carry stray whitespace or
+        // UK/US spelling variants (Defence vs Defense); compare normalized so
+        // loading and queue filtering agree across studies.
+        !_openingsMatch(openingFamily, this.openingFamily)) {
       return false;
     }
     // A null `side` means the caller's chapter was unresolvable, which is not the
@@ -63,6 +64,14 @@ class ReviewScope {
 
   /// Whether this scope spans studies rather than naming one.
   bool get isAggregate => studyId == null && chapterId == null;
+
+  static bool _openingsMatch(String? a, String? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    final normA = a.trim().toLowerCase().replaceAll('defence', 'defense');
+    final normB = b.trim().toLowerCase().replaceAll('defence', 'defense');
+    return normA == normB;
+  }
 
   @override
   bool operator ==(Object other) =>
