@@ -1313,6 +1313,19 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // the service call so it lands with the animation rather than after the database work.
     _playMoveFeedback(currentState.boardPosition, move);
 
+    // Frame 0 optimistic piece placement (PERF-FIX-39):
+    // Display the user move immediately on pointer drop so piece animation starts on frame 0,
+    // hiding the subsequent 2-6ms SQLite write latency behind the visual animation.
+    final posAfterUser = currentState.boardPosition?.play(move);
+    if (posAfterUser != null) {
+      state = AsyncData(
+        currentState.copyWith(
+          boardPosition: posAfterUser,
+          lastMove: move,
+        ),
+      );
+    }
+
     _isProcessingMove = true;
     try {
       if (isRetrying) {
@@ -1368,6 +1381,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
 
       return result;
+    } catch (e) {
+      // If persistence fails, restore board position and state to pre-move checkpoint
+      state = AsyncData(currentState);
+      rethrow;
     } finally {
       _isProcessingMove = false;
     }
