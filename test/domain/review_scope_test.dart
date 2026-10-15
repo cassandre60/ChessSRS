@@ -118,5 +118,15 @@ void main() {
       expect(scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'French Defense'), isFalse);
       expect(scope.matches(studyId: 's', chapterId: 'c'), isFalse);
     });
+
+    test('Defense and Defence spelling variants match each other', () {
+      const scope = ReviewScope.opening('French Defense');
+      expect(scope.matches(studyId: 's', chapterId: 'c', openingFamily: 'French Defence'), isTrue);
+      const ukScope = ReviewScope.opening('French Defence');
+      expect(
+        ukScope.matches(studyId: 's', chapterId: 'c', openingFamily: 'French Defense'),
+        isTrue,
+      );
+    });
   });
 }

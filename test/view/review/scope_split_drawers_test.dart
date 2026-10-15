@@ -107,22 +107,22 @@ void main() {
     await pumpDrawer(tester, Side.white);
 
     expect(inDrawer(find.text('White book')), findsOneWidget);
-    expect(inDrawer(find.text('Sicilian Defence')), findsOneWidget);
+    expect(inDrawer(find.text('Sicilian Defense')), findsOneWidget);
     expect(
       inDrawer(find.text('Black book')),
       findsNothing,
       reason: 'a Black study in the White drawer is the independence bug this file is for',
     );
-    expect(inDrawer(find.text('French Defence')), findsNothing);
+    expect(inDrawer(find.text('French Defense')), findsNothing);
   });
 
   testWidgets('the Black drawer lists only Black material', (tester) async {
     await pumpDrawer(tester, Side.black);
 
     expect(inDrawer(find.text('Black book')), findsOneWidget);
-    expect(inDrawer(find.text('French Defence')), findsOneWidget);
+    expect(inDrawer(find.text('French Defense')), findsOneWidget);
     expect(inDrawer(find.text('White book')), findsNothing);
-    expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
+    expect(inDrawer(find.text('Sicilian Defense')), findsNothing);
   });
 
   testWidgets('neither drawer spells out the colour or offers an everywhere row', (tester) async {
@@ -174,11 +174,11 @@ void main() {
   testWidgets('an opening row carries the colour too', (tester) async {
     final container = await pumpDrawer(tester, Side.white);
 
-    await tester.tap(inDrawer(find.text('Sicilian Defence')));
+    await tester.tap(inDrawer(find.text('Sicilian Defense')));
     await pumpAsync(tester);
 
     final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
-    expect(state?.scope.openingFamily, 'Sicilian Defence');
+    expect(state?.scope.openingFamily, 'Sicilian Defense');
     expect(state?.activeSide, Side.white);
   });
 

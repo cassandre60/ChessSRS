@@ -50,9 +50,8 @@ class ReviewScope {
     if (this.studyId != null && this.studyId != studyId) return false;
     if (this.chapterId != null && this.chapterId != chapterId) return false;
     if (this.openingFamily != null &&
-        // Opening names come from PGN headers and may carry stray whitespace;
-        // compare trimmed so loading and queue filtering agree.
-        (openingFamily?.trim() ?? '') != this.openingFamily!.trim()) {
+        (openingFamily?.toLowerCase().replaceAll('defence', 'defense').trim() ?? '') !=
+            this.openingFamily!.toLowerCase().replaceAll('defence', 'defense').trim()) {
       return false;
     }
     // A null `side` means the caller's chapter was unresolvable, which is not the

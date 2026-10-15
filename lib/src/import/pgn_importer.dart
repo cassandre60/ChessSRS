@@ -303,7 +303,11 @@ ImportResult importPgn(
 
     errors.addAll(chapterErrors);
 
-    final opening = extractOpeningFamily(headers);
+    final opening = extractOpeningFamily(
+      headers,
+      root: root,
+      startingFen: headers.containsKey('FEN') ? startingFen : null,
+    );
     final chapterOrientation = resolveChapterOrientation(
       headers,
       explicitSide: repertoireSide,
