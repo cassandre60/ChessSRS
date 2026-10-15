@@ -1318,12 +1318,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // hiding the subsequent 2-6ms SQLite write latency behind the visual animation.
     final posAfterUser = currentState.boardPosition?.play(move);
     if (posAfterUser != null) {
-      state = AsyncData(
-        currentState.copyWith(
-          boardPosition: posAfterUser,
-          lastMove: move,
-        ),
-      );
+      state = AsyncData(currentState.copyWith(boardPosition: posAfterUser, lastMove: move));
     }
 
     _isProcessingMove = true;
