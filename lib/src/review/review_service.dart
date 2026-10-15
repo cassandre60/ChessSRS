@@ -208,7 +208,7 @@ class _DueTally {
   final Set<String> accountedDueCanonicalIds = <String>{};
 
   void add(
-    RepertoireDecision d, {
+    TallyDecision d, {
     required Map<String, ReviewState> reviewStates,
     required DateTime now,
     required Set<String> activeStudyIds,
@@ -381,14 +381,14 @@ class _DueTally {
   }
 }
 
-class _LoadedReviewData {
+class _LoadedReviewData<T extends TallyDecision> {
   const _LoadedReviewData({
     required this.allDecisions,
     required this.reviewStates,
     required this.exposureThrottle,
   });
 
-  final List<RepertoireDecision> allDecisions;
+  final List<T> allDecisions;
   final Map<String, ReviewState> reviewStates;
   final Map<String, DateTime> exposureThrottle;
 }
@@ -452,8 +452,8 @@ class ReviewService {
     return (allStudies: allStudies, activeStudies: activeStudies, chapters: chapters);
   }
 
-  Future<_LoadedReviewData> _loadReviewData([List<RepertoireDecision>? decisions]) async {
-    final allDecisions = decisions ?? await repository.getAllDecisions();
+  Future<_LoadedReviewData<T>> _loadReviewData<T extends TallyDecision>(List<T> decisions) async {
+    final allDecisions = decisions;
     final decisionIds = allDecisions.map((d) => d.id).toList();
     final canonicalIds = allDecisions.map((d) => d.canonicalId).toSet().toList();
     final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
@@ -472,7 +472,7 @@ class ReviewService {
       }
     }
 
-    return _LoadedReviewData(
+    return _LoadedReviewData<T>(
       allDecisions: allDecisions,
       reviewStates: reviewStates,
       exposureThrottle: exposureThrottle,
@@ -799,7 +799,8 @@ class ReviewService {
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
-    final loadedData = await _loadReviewData();
+    final tallyDecisions = await repository.getTallyDecisions();
+    final loadedData = await _loadReviewData(tallyDecisions);
     final now = clock.now();
 
     final tally = _DueTally(

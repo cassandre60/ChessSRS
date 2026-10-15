@@ -604,6 +604,26 @@ class SqliteStudyRepository implements StudyRepository {
     return rows.map(_decisionFromRow).toList(growable: false);
   }
 
+  @override
+  Future<List<TallyDecision>> getTallyDecisions() async {
+    final rows = await _db.query(
+      kTableSrsDecision,
+      columns: ['id', 'studyId', 'chapterId', 'canonicalStateId'],
+    );
+    return rows
+        .map((r) {
+          final id = r['id']! as String;
+          final canonical = (r['canonicalStateId'] as String?) ?? id;
+          return SimpleTallyDecision(
+            id: id,
+            studyId: r['studyId']! as String,
+            chapterId: r['chapterId']! as String,
+            canonicalId: canonical,
+          );
+        })
+        .toList(growable: false);
+  }
+
   // ---------------------------------------------------------------------------
   // Position Knowledge States (canonical SRS layer)
   // ---------------------------------------------------------------------------

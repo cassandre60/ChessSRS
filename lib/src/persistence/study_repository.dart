@@ -86,6 +86,10 @@ abstract class StudyRepository {
   Future<List<RepertoireDecision>> getDecisionsByStudy(String studyId);
   Future<List<RepertoireDecision>> getAllDecisions();
 
+  /// Returns a lightweight projection of all decisions for due-summary tallies,
+  /// omitting moves and node IDs to avoid decoding JSON move lists.
+  Future<List<TallyDecision>> getTallyDecisions();
+
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);
   Future<void> savePositionKnowledgeStates(List<PositionKnowledgeState> states);

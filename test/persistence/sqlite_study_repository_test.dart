@@ -199,6 +199,37 @@ void main() {
       }
     });
 
+    test('getTallyDecisions projects decision identifiers without decoding moves', () async {
+      // SPEC INV-051. PERF-FIX-33: slim decision projection for due summary tallies.
+      final db = await openAppDatabase(databaseFactoryFfi, inMemoryDatabasePath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_tally', title: 'Tally Study');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: study.id, sourceOrder: 0, title: 'Chapter 1');
+        await repo.saveChapter(ch);
+        final decision = RepertoireDecision.create(
+          studyId: study.id,
+          chapterId: ch.id,
+          nodeId: 'n_tally',
+          expectedMoves: const [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+          canonicalStateId: 'canonical_pos_1',
+        );
+        await repo.saveDecision(decision);
+
+        final tallies = await repo.getTallyDecisions();
+        expect(tallies, hasLength(1));
+        final tally = tallies.first;
+        expect(tally.id, decision.id);
+        expect(tally.studyId, study.id);
+        expect(tally.chapterId, ch.id);
+        expect(tally.canonicalId, 'canonical_pos_1');
+      } finally {
+        await db.close();
+      }
+    });
+
     test('timestamps are stored as UTC so a timezone change cannot shift due dates', () async {
       // SPEC INV-002. review-4 C2 / QUALITY §3.2: due instants survive a
       // timezone change — stored form is an absolute instant (UTC), not a
