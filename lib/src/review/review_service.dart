@@ -120,7 +120,12 @@ class _DueTally {
     required Map<String, String> chapterStudyIds,
   }) : studyDueCounts = {for (final s in studies) s.id: 0},
        studyTotals = {for (final s in studies) s.id: 0},
-       studyLearned = {for (final s in studies) s.id: 0} {
+       studyLearned = {for (final s in studies) s.id: 0},
+       _chapterSides = chapterSides,
+       _trimmedOpenings = {
+         for (final e in chapterOpenings.entries)
+           if (e.value != null && e.value!.trim().isNotEmpty) e.key: e.value!.trim(),
+       } {
     for (final op in chapterOpenings.values) {
       if (op != null && op.trim().isNotEmpty) {
         openingFamilies.add(op.trim());
@@ -160,6 +165,8 @@ class _DueTally {
   }
 
   final List<Study> studies;
+  final Map<String, Side> _chapterSides;
+  final Map<String, String> _trimmedOpenings;
 
   final Map<String, int> studyDueCounts;
   final Map<String, int> studyTotals;
@@ -216,7 +223,8 @@ class _DueTally {
     required Map<String, Side> chapterSides,
     required ReviewScope scope,
   }) {
-    final state = reviewStates[d.canonicalId] ?? reviewStates[d.id];
+    final state =
+        reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
     final isDue = state == null || state.isDueAt(now);
     final isLearned = state != null && state.repetitionCount > 0;
 
@@ -235,9 +243,9 @@ class _DueTally {
       chapterDue[d.chapterId] = (chapterDue[d.chapterId] ?? 0) + 1;
     }
 
-    final opening = chapterOpenings[d.chapterId]?.trim();
+    final opening = _trimmedOpenings[d.chapterId];
     final isActiveStudy = activeStudyIds.contains(d.studyId);
-    final side = chapterSides[d.chapterId] ?? Side.white;
+    final side = _chapterSides[d.chapterId] ?? Side.white;
 
     // Per-study figures partitioned by side (INV-030). Totals and learned
     // cover every study like the study-wide maps do; due counts below cover
@@ -759,10 +767,10 @@ class ReviewService {
     final chapterSides = preloadedChapterOrientations ?? await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
 
-    final allDecisions = await repository.getAllDecisions();
+    final tallyDecisions = await repository.getTallyDecisions();
     final loadedData = await _loadReviewData(
-      decisionIds: allDecisions.map((d) => d.id),
-      canonicalIds: allDecisions.map((d) => d.canonicalId),
+      decisionIds: tallyDecisions.map((d) => d.id),
+      canonicalIds: tallyDecisions.map((d) => d.canonicalId),
     );
 
     final now = clock.now();
@@ -772,9 +780,9 @@ class ReviewService {
       chapterSides: chapterSides,
       chapterStudyIds: chapterStudyIds,
     );
-    for (final d in allDecisions) {
+    for (final d in tallyDecisions) {
       tally.add(
-        (id: d.id, studyId: d.studyId, chapterId: d.chapterId, canonicalId: d.canonicalId),
+        d,
         reviewStates: loadedData.reviewStates,
         now: now,
         activeStudyIds: activeStudyIds,
@@ -795,7 +803,6 @@ class ReviewService {
       preloadedStudies: studies,
       preloadedReviewStates: loadedData.reviewStates,
       preloadedExposureThrottle: loadedData.exposureThrottle,
-      preloadedAllDecisions: allDecisions,
       preloadedChapterOpenings: chapterOpenings,
     );
 
