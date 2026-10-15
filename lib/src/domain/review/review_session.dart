@@ -126,7 +126,8 @@ class ReviewSession {
       // is fresh rather than due. In dynamic repertoire mode, unreviewed positions
       // are only introduced if explicitly unlocked.
       final status = dueStatusOf(state, now);
-      final isUnlocked = !dynamicRepertoireMode ||
+      final isUnlocked =
+          !dynamicRepertoireMode ||
           unlockedDecisionIds.contains(d.id) ||
           unlockedDecisionIds.contains(d.canonicalId);
       if (mode == ReviewMode.practice || status.isDue || (status.isFresh && isUnlocked)) {
