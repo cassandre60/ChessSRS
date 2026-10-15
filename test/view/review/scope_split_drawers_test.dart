@@ -133,9 +133,7 @@ void main() {
     expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
   });
 
-  testWidgets(
-    'neither drawer spells out the colour or offers an everywhere row',
-    (tester) async {
+  testWidgets('neither drawer spells out the colour or offers an everywhere row', (tester) async {
       for (final side in [Side.white, Side.black]) {
         await pumpDrawer(tester, side);
 
@@ -147,7 +145,7 @@ void main() {
     },
   );
 
-  testWidgets('the in-drawer switch moves to the other colour in one tap', (
+  testWidgets('the in-drawer switch moves to the other colour in one tap', (tester) async {
     tester,
   ) async {
     // Owner request 2026-10-15: switching colour cost dismiss plus retap.
@@ -171,9 +169,7 @@ void main() {
     );
   });
 
-  testWidgets('tapping a row scopes to it and carries the drawer’s colour', (
-    tester,
-  ) async {
+  testWidgets('tapping a row scopes to it and carries the drawer’s colour', (tester) async {
     final container = await pumpDrawer(tester, Side.black);
 
     await tester.tap(inDrawer(find.text('Black book')));
@@ -203,9 +199,7 @@ void main() {
     expect(state?.activeSide, Side.white);
   });
 
-  testWidgets(
-    'an empty colour lists nothing rather than the other side’s work',
-    (tester) async {
+  testWidgets('an empty colour lists nothing rather than the other side’s work', (tester) async {
       final blackBook = await tester.runAsync(() async {
         final all = await repo.getAllStudies();
         return all.where((s) => s.title == 'Black book').first;
@@ -227,9 +221,7 @@ void main() {
     },
   );
 
-  testWidgets('searching only matches within the drawer’s own colour', (
-    tester,
-  ) async {
+  testWidgets('searching only matches within the drawer’s own colour', (tester) async {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'French');
@@ -240,9 +232,7 @@ void main() {
     expect(find.text('Nothing matches “French”.'), findsOneWidget);
   });
 
-  testWidgets('the clear-search button meets the 44px touch target', (
-    tester,
-  ) async {
+  testWidgets('the clear-search button meets the 44px touch target', (tester) async {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'Sicilian');
@@ -257,9 +247,7 @@ void main() {
 
   // DESIGN 02 §3 (tokens): wide if app-area width >= 720 via SrsLayout.isWide.
   // DESIGN 03 §6: drawer wide max-height H - 80, width min(470, W - 52).
-  testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (
-    tester,
-  ) async {
+  testWidgets('drawer resolves to wide layout at width 730 and narrow at 710', (tester) async {
     // Width 730 is between 720 and the former 768 breakpoint.
     await pumpDrawer(tester, Side.white, surfaceSize: const Size(730, 900));
 
