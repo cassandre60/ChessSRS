@@ -93,8 +93,11 @@ void main() {
 
       expect(s.progressForSide(Side.white).totalDecisions, whiteDecisions);
       expect(s.progressForSide(Side.black).totalDecisions, blackDecisions);
-      expect(s.dueCountForSide(Side.white), whiteDecisions);
-      expect(s.dueCountForSide(Side.black), blackDecisions);
+      // INV-068: never presented, so the buttons report fresh, not due.
+      expect(s.freshCountForSide(Side.white), whiteDecisions);
+      expect(s.freshCountForSide(Side.black), blackDecisions);
+      expect(s.dueCountForSide(Side.white), 0);
+      expect(s.dueCountForSide(Side.black), 0);
     });
 
     test('a side scope counts exactly that side', () async {
@@ -148,8 +151,12 @@ void main() {
       final all = await service.startSession(scope: const ReviewScope.all());
       final white = await service.startSession(scope: const ReviewScope.white());
 
-      expect(white.initialDueCount, greaterThan(0));
-      expect(white.initialDueCount, lessThan(all.initialDueCount));
+      expect(white.initialQueueCount, greaterThan(0));
+      expect(white.initialQueueCount, lessThan(all.initialQueueCount));
+      // Nothing is due anywhere in this fixture (INV-068), so the sessions
+      // carry fresh introductions only.
+      expect(white.initialDueCount, 0);
+      expect(all.initialDueCount, 0);
     });
 
     test('a paused study leaves both repertoire buttons', () async {
@@ -160,8 +167,12 @@ void main() {
       final s = await summary();
 
       expect(s.dueCountForSide(Side.black), 0);
+      expect(s.freshCountForSide(Side.black), 0);
       expect(s.progressForSide(Side.black).totalDecisions, 0);
-      expect(s.dueCountForSide(Side.white), greaterThan(0));
+      // INV-068: the White book is still fresh — never presented — so it counts
+      // as new material, not as work the paused study was hiding.
+      expect(s.dueCountForSide(Side.white), 0);
+      expect(s.freshCountForSide(Side.white), greaterThan(0));
     });
   });
 }

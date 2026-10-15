@@ -1072,6 +1072,27 @@ class SqliteStudyRepository implements StudyRepository {
     return count;
   }
 
+  @override
+  Future<int> getTodayIntroducedPositionsCount(DateTime now) async {
+    // `firstReviewedAt` rather than `lastReviewedAt` (INV-068): a position is
+    // introduced once, so a position reviewed three times today spends one unit
+    // of the new-position allowance, not three. Canonical knowledge is the
+    // authority — a legacy per-occurrence row for the same position carries the
+    // same first-review instant and would otherwise count it twice.
+    final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+    final result = await _db.rawQuery(
+      '''
+      SELECT COUNT(*) as count
+      FROM $kTablePositionKnowledgeState
+      WHERE firstReviewedAt >= ?
+      ''',
+      [startOfDay],
+    );
+    final count = Sqflite.firstIntValue(result) ?? 0;
+    _logger.fine('Today introduced positions count: $count (startOfDay: $startOfDay)');
+    return count;
+  }
+
   // ---------------------------------------------------------------------------
   // Row mappers
   // ---------------------------------------------------------------------------

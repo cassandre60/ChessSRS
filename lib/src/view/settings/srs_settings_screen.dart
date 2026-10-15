@@ -211,6 +211,22 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                 ),
                               ),
                               _SettingRow(
+                                label: 'New positions per day',
+                                help:
+                                    'Positions you have never seen are introduced this many times a day, after due work. A position only becomes due once you have seen it.',
+                                control: SrsSegmented<int>(
+                                  options: const {
+                                    10: '10',
+                                    20: '20',
+                                    50: '50',
+                                    100: '100',
+                                    0: 'None',
+                                  },
+                                  value: studyPrefs.maxNewPerDay,
+                                  onChanged: (val) => studyNotifier.setMaxNewPerDay(val),
+                                ),
+                              ),
+                              _SettingRow(
                                 label: 'Target retention',
                                 help:
                                     'Higher means more reviews. 88% suits most players; 95% is for tournament preparation.',

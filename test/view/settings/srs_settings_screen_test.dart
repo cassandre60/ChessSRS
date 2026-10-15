@@ -19,6 +19,24 @@ void main() {
     await TestLichessBinding.instance.sharedPreferences.clear();
   });
 
+  /// Finds segmented option [option] inside the settings row labelled [label].
+  ///
+  /// The Daily limit and New positions rows share option labels ('50', '100',
+  /// 'None'), so a bare find.text is ambiguous. The row root is the Container
+  /// ancestor of the label whose subtree holds the option — robust to row
+  /// reordering, unlike positional (.first/.last) picks.
+  Finder settingOption(WidgetTester tester, String label, String option) {
+    final containers = find.ancestor(of: find.text(label), matching: find.byType(Container));
+    final row = containers.evaluate().firstWhere(
+      (e) => find
+          .descendant(of: find.byWidget(e.widget), matching: find.text(option))
+          .evaluate()
+          .isNotEmpty,
+      orElse: () => throw StateError('no $label row contains $option'),
+    );
+    return find.descendant(of: find.byWidget(row.widget), matching: find.text(option));
+  }
+
   testWidgets('SrsSettingsScreen renders Diagram layout and updates preferences', (tester) async {
     final app = await makeTestProviderScopeApp(tester, home: const SrsSettingsScreen());
 
@@ -40,15 +58,25 @@ void main() {
     expect(find.text('Sound'), findsOneWidget);
     expect(find.text('Scheduling algorithm'), findsOneWidget);
 
-    // Segmented daily limits
+    // Segmented daily limits (scoped: the New positions row shares '50'/'100'/'None')
     expect(find.text('25'), findsOneWidget);
-    expect(find.text('50'), findsOneWidget);
-    expect(find.text('100'), findsOneWidget);
-    expect(find.text('None'), findsOneWidget);
+    expect(settingOption(tester, 'Daily limit', '50'), findsOneWidget);
+    expect(settingOption(tester, 'Daily limit', '100'), findsOneWidget);
+    expect(settingOption(tester, 'Daily limit', 'None'), findsOneWidget);
 
     // Tap 50 daily limit
-    await tester.tap(find.text('50'));
+    await tester.tap(settingOption(tester, 'Daily limit', '50'));
     await tester.pumpAndSettle();
+
+    // New positions per day (INV-068): the introduction allowance beside the daily limit.
+    expect(find.text('New positions per day'), findsOneWidget);
+    expect(find.text('10'), findsOneWidget);
+    expect(find.text('20'), findsOneWidget);
+    await tester.tap(settingOption(tester, 'New positions per day', '10'));
+    await tester.pumpAndSettle();
+    await tester.tap(settingOption(tester, 'New positions per day', '20'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
 
     // Tap 95% retention
     expect(find.text('95%'), findsOneWidget);
@@ -147,7 +175,10 @@ void main() {
 
     // The six-way control wraps inside a narrow viewport rather than overflowing.
     await tester.ensureVisible(find.text('Daily limit'));
-    expect(tester.getRect(find.text('None')).right, lessThanOrEqualTo(width));
+    expect(
+      tester.getRect(settingOption(tester, 'Daily limit', 'None')).right,
+      lessThanOrEqualTo(width),
+    );
     expect(
       (tester.getCenter(find.text('Daily limit')).dy - tester.getCenter(find.text('25')).dy).abs(),
       greaterThan(20),

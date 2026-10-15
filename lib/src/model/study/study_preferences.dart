@@ -122,6 +122,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     return save(state.copyWith(maxDailyReviews: limit));
   }
 
+  Future<void> setMaxNewPerDay(int limit) {
+    return save(state.copyWith(maxNewPerDay: limit));
+  }
+
   Future<void> toggleSrsDiagnostics() {
     return save(state.copyWith(srsDiagnostics: !state.srsDiagnostics));
   }
@@ -175,6 +179,11 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: 2.5) required double schedulerEase,
     @JsonKey(defaultValue: 1.5) required double schedulerScaling,
     @JsonKey(defaultValue: 100) required int maxDailyReviews,
+    // How many never-presented positions a day may introduce (INV-068). A
+    // position is due only once it has been presented, so without a cap this
+    // setting is the only thing between a bulk import and its entire backlog
+    // landing on the user at once. 0 means no cap.
+    @JsonKey(defaultValue: 20) required int maxNewPerDay,
     // Scope-drawer group ids ('everywhere', 'openings', 'studies') the user
     // collapsed. Empty (default) means every group is expanded.
     @JsonKey(defaultValue: <String>{}) required Set<String> collapsedScopeGroups,
@@ -208,6 +217,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     schedulerEase: 2.5,
     schedulerScaling: 1.5,
     maxDailyReviews: 100,
+    maxNewPerDay: 20,
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,

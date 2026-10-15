@@ -12,6 +12,7 @@ import 'package:chess_srs/src/domain/graph_aware_review_coordinator.dart';
 import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
+import 'package:chess_srs/src/domain/review/due_status.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
@@ -60,6 +61,7 @@ class ReviewSession {
     this.prefetchBatchSize = kDefaultPrefetchBatchSize,
     this.prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     this.remainingDailyQuota,
+    this.remainingNewQuota,
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
     Random? random,
@@ -118,19 +120,60 @@ class ReviewSession {
         continue;
       }
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
-      if (mode == ReviewMode.practice || state == null || state.isDueAt(now)) {
+      // INV-068: a position with no review state has never been presented, so it
+      // is fresh rather than due. It is still queued — the fresh cap below is
+      // what keeps that honest. Practice mode is exempt: it rehearses rather
+      // than schedules, so it walks fresh material freely.
+      final status = dueStatusOf(state, now);
+      if (mode == ReviewMode.practice || status.isDue || status.isFresh) {
         // In multi-study scope, deduplicate shared canonical transpositions
         if (scope.studyId == null && scope.chapterId == null) {
           if (!queuedCanonicalIds.add(d.canonicalId)) {
             continue;
           }
         }
+        // Snapshot the queue-time classification (INV-068): the answer-time
+        // state cannot tell a lapsed fresh introduction from a lapsed due
+        // debt — both hold rows by then — but the optimistic tally patch must
+        // retire exactly what the load-time summary counted.
+        if (status.isFresh) {
+          _freshAtQueueTime.add(d.canonicalId);
+        }
         _unbufferedQueue.add(d);
       }
     }
 
+    // Never-presented as of the queue build. Re-read per decision because a
+    // position's classification is the only thing separating the two buckets.
+    bool isFresh(RepertoireDecision d) =>
+        dueStatusOf(_reviewStates[d.canonicalId] ?? _reviewStates[d.id], now).isFresh;
+
     if (mode == ReviewMode.srs) {
-      _unbufferedQueue.sort((a, b) {
+      // Due first, then fresh (INV-068). Two ordered buckets rather than one
+      // pool sorted by date: fresh positions carry no date at all, so a date
+      // sort floats them to the front and buries the recall work the user is
+      // actually answerable for.
+      final dueBucket = _unbufferedQueue.where((d) => !isFresh(d)).toList();
+      final freshBucket = _unbufferedQueue.where(isFresh).toList();
+
+      // Introduce at most `remainingNewQuota` never-presented positions; the
+      // rest stay fresh for a later day instead of counting as work.
+      var introduced = freshBucket;
+      final newAllowance = remainingNewQuota;
+      if (newAllowance != null && newAllowance >= 0 && freshBucket.length > newAllowance) {
+        introduced = freshBucket.sublist(0, newAllowance);
+        _logger.info(
+          'Fresh backlog (${freshBucket.length}) exceeds the daily new-position '
+          'allowance ($remainingNewQuota); holding back ${freshBucket.length - introduced.length}',
+        );
+      }
+
+      _unbufferedQueue
+        ..clear()
+        ..addAll(dueBucket)
+        ..addAll(introduced);
+
+      dueBucket.sort((a, b) {
         final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
         final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
         final dueA = stateA?.nextDueAt;
@@ -140,6 +183,11 @@ class ReviewSession {
         if (dueB == null) return 1;
         return dueA.compareTo(dueB);
       });
+      // Re-seat the sorted due items ahead of the fresh ones.
+      _unbufferedQueue
+        ..clear()
+        ..addAll(dueBucket)
+        ..addAll(introduced);
 
       if (remainingDailyQuota != null &&
           remainingDailyQuota! >= 0 &&
@@ -157,12 +205,28 @@ class ReviewSession {
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
 
+      // Presentation order (INV-066) applies within each bucket, so a chosen
+      // order reshuffles the work without letting fresh material overtake due.
+      void reorderWithinBuckets(int Function(RepertoireDecision, RepertoireDecision) compare) {
+        final dueCount = _unbufferedQueue.where((d) => !isFresh(d)).length;
+        if (dueCount >= _unbufferedQueue.length) {
+          _unbufferedQueue.sort(compare);
+          return;
+        }
+        final due = _unbufferedQueue.sublist(0, dueCount)..sort(compare);
+        final fresh = _unbufferedQueue.sublist(dueCount)..sort(compare);
+        _unbufferedQueue
+          ..clear()
+          ..addAll(due)
+          ..addAll(fresh);
+      }
+
       // By-line order (INV-066): same set, walking study, chapter, tree order.
       if (order == ReviewOrder.byLine) {
         final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
         var n = 0;
         final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
-        _unbufferedQueue.sort((a, b) {
+        reorderWithinBuckets((a, b) {
           var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
           if (c != 0) return c;
           c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
@@ -173,22 +237,43 @@ class ReviewSession {
         });
       }
 
-      // Random order: same set, shuffled with the session Random.
+      // Random order: same set, shuffled with the session Random. Each bucket is
+      // drawn independently and due is re-seated first, so shuffling reshuffles
+      // the work without letting fresh material overtake recall work.
       if (order == ReviewOrder.random) {
-        _unbufferedQueue.shuffle(_random);
+        final due = _unbufferedQueue.where((d) => !isFresh(d)).toList()..shuffle(_random);
+        final fresh = _unbufferedQueue.where(isFresh).toList()..shuffle(_random);
+        _unbufferedQueue
+          ..clear()
+          ..addAll(due)
+          ..addAll(fresh);
       }
     }
 
-    _initialDueCount = _unbufferedQueue.length;
+    _initialQueueCount = _unbufferedQueue.length;
+    // Practice mode rehearses rather than schedules, so it has no fresh/due
+    // distinction to report: everything it queued counts as due.
+    _initialDueCount = mode == ReviewMode.practice
+        ? _initialQueueCount
+        : _unbufferedQueue.where((d) => !isFresh(d)).length;
     _refillPrefetchBuffer();
     _advanceToNextDue();
     _logger.info(
-      'ReviewSession created: mode=$mode, scope=$scope, initialDueCount=$_initialDueCount, remainingQuota=$remainingDailyQuota',
+      'ReviewSession created: mode=$mode, scope=$scope, initialDueCount=$_initialQueueCount, '
+      'dueOfThose=$_initialDueCount, remainingQuota=$remainingDailyQuota',
     );
   }
 
   final ReviewScope scope;
   final ReviewMode mode;
+
+  /// Queued prompts at build time, of which [initialDueCount] are due.
+  ///
+  /// The two differ because a session may hold fresh introductions as well
+  /// (INV-068): `initialQueueCount` is how much work the session will ask for,
+  /// `initialDueCount` is how much of it the user actually owes.
+  late final int _initialDueCount;
+  late final int _initialQueueCount;
 
   /// Presentation order of the due queue; the due set never depends on this.
   final ReviewOrder order;
@@ -201,6 +286,13 @@ class ReviewSession {
 
   /// Optional daily quota limit for SRS reviews. When met, review completes for the day.
   final int? remainingDailyQuota;
+
+  /// How many never-presented positions this session may introduce (INV-068).
+  ///
+  /// Null means no introduction cap, which only practice mode and the domain
+  /// default use; SRS sessions pass the day's remaining allowance so a bulk
+  /// import cannot dump its whole backlog on the user at once.
+  final int? remainingNewQuota;
 
   /// Maximum batch size of due decisions to buffer in the active queue at once.
   /// Null disables batching and buffers the entire queue.
@@ -238,7 +330,16 @@ class ReviewSession {
   /// handler promises them, so the quota cut keeps these and drops the rest (review-3 C2).
   final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
-  late final int _initialDueCount;
+
+  /// Canonical ids queued as never-presented introductions (INV-068).
+  ///
+  /// Snapshot at queue-build time and never mutated afterwards, so it needs no
+  /// checkpoint slot: answering, lapsing and re-testing all resolve against the
+  /// classification the load-time summary reported.
+  final Set<String> _freshAtQueueTime = {};
+
+  /// Whether [canonicalId] entered this session as a fresh introduction.
+  bool wasFreshAtQueueTime(String canonicalId) => _freshAtQueueTime.contains(canonicalId);
 
   void _refillPrefetchBuffer() {
     if (prefetchBatchSize == null) {
@@ -263,6 +364,17 @@ class ReviewSession {
   /// a re-test of an already-completed lapse must not count twice, and a retry-driven session
   /// must not report zero (review-3 C1). One source of truth, by construction.
   int get completedCount => _completedDecisionIds.length;
+
+  /// Work this session will ask for: due positions plus fresh introductions.
+  ///
+  /// Named "due count" for the callers that have always read it as queue size
+  /// (prefetch, session-size tests); see [initialDueCount] for the subset the
+  /// user actually owes. Practice mode reports the whole queue, having no
+  /// fresh/due distinction to make.
+  int get initialQueueCount => _initialQueueCount;
+
+  /// Of [initialQueueCount], how many are genuinely due (INV-068). Practice
+  /// mode reports the whole queue, having no fresh/due distinction to make.
   int get initialDueCount => _initialDueCount;
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);

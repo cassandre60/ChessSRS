@@ -162,6 +162,16 @@
   "mobileReviewLegendLearning": "learning",
   "mobileReviewLegendNew": "new",
   "mobileReviewNothingDueTitle": "Nothing due.",
+  "mobileReviewFreshOnlyTitle": "Nothing due yet.",
+  "mobileReviewFreshOnlySubtext": "{param1} positions are new. They join your review as you work through them, a few a day.",
+  "@mobileReviewFreshOnlySubtext": {
+    "placeholders": {
+      "param1": {
+        "type": "String",
+        "example": "25033"
+      }
+    }
+  },
   "mobileReviewDailyLimitReached": "Daily limit reached.",
   "mobileReviewNextReviewAutomatic": "Next review will appear automatically.",
   "mobileReviewDailyProgress": "You reviewed {param1} of {param2} positions today. White and Black combined.",

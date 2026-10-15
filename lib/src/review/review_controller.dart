@@ -79,6 +79,7 @@ class ReviewScreenState {
     required this.studies,
     required this.scope,
     required this.totalDueCount,
+    required this.totalFreshCount,
     required this.studyDueCounts,
     this.session,
     this.currentPrompt,
@@ -107,6 +108,13 @@ class ReviewScreenState {
   final List<Study> studies;
   final ReviewScope scope;
   final int totalDueCount;
+
+  /// Never-presented positions in scope (INV-068), from the service's summary.
+  ///
+  /// Carried so the reuse fast path (#149) reproduces the same figure the
+  /// summary pass would, and so the review screen can tell an unstarted scope
+  /// from a finished one.
+  final int totalFreshCount;
   final Map<String, int> studyDueCounts;
   final Map<String, int> openingDueCounts;
   final Map<String, RepertoireProgress> studyProgress;
@@ -156,7 +164,7 @@ class ReviewScreenState {
   bool get isComplete =>
       hasStudies &&
       !isAwaitingAdvance &&
-      ((totalDueCount == 0 && !isPracticeMode) || currentPrompt == null);
+      ((totalDueCount == 0 && totalFreshCount == 0 && !isPracticeMode) || currentPrompt == null);
   bool get isPracticeMode => mode == ReviewMode.practice;
 
   /// The active repertoire colour (for the top bar's colour squares).
@@ -197,6 +205,13 @@ class ReviewScreenState {
     }
     if (scope.openingFamily != null) {
       return openingProgress[scope.openingFamily!];
+    }
+    // A colour scope reports that colour's figures (INV-030), not the whole
+    // library's: the other colour's fresh introductions are not this scope's
+    // "new", and showing them here made a finished White queue read as
+    // "Nothing due yet" on Black's account.
+    if (scope.side != null) {
+      return sideProgress[scope.side];
     }
     return totalProgress;
   }
@@ -255,6 +270,7 @@ class ReviewScreenState {
     List<Study>? studies,
     ReviewScope? scope,
     int? totalDueCount,
+    int? totalFreshCount,
     Map<String, int>? studyDueCounts,
     Map<String, int>? openingDueCounts,
     Map<String, RepertoireProgress>? studyProgress,
@@ -288,6 +304,7 @@ class ReviewScreenState {
       studies: studies ?? this.studies,
       scope: scope ?? this.scope,
       totalDueCount: totalDueCount ?? this.totalDueCount,
+      totalFreshCount: totalFreshCount ?? this.totalFreshCount,
       studyDueCounts: studyDueCounts ?? this.studyDueCounts,
       openingDueCounts: openingDueCounts ?? this.openingDueCounts,
       studyProgress: studyProgress ?? this.studyProgress,
@@ -396,6 +413,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         studies: [],
         scope: ReviewScope.all(),
         totalDueCount: 0,
+        totalFreshCount: 0,
         studyDueCounts: {},
       );
     }
@@ -408,6 +426,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           studies: [],
           scope: ReviewScope.all(),
           totalDueCount: 0,
+          totalFreshCount: 0,
           studyDueCounts: {},
         );
   }
@@ -417,6 +436,24 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final maxDailyReviews = ref.read(studyPreferencesProvider).maxDailyReviews;
     if (mode != ReviewMode.srs || maxDailyReviews <= 0) return null;
     return (maxDailyReviews - reviewedCount).clamp(0, maxDailyReviews);
+  }
+
+  /// How many never-presented positions the session may still introduce today
+  /// (INV-068). Null disables the cap, which is the practice-mode and
+  /// unlimited-settings case.
+  ///
+  /// Counted from the day's *introductions* rather than its reviews: a position
+  /// reviewed three times has spent one introduction, not three. Without this a
+  /// bulk import's whole backlog is playable on day one, which is the behaviour
+  /// INV-068 exists to stop.
+  Future<int?> _remainingNewQuota(ReviewMode mode) async {
+    if (mode != ReviewMode.srs) return null;
+    final maxNewPerDay = ref.read(studyPreferencesProvider).maxNewPerDay;
+    if (maxNewPerDay <= 0) return null;
+    final introduced = await _repository.getTodayIntroducedPositionsCount(
+      ref.read(clockProvider).now(),
+    );
+    return (maxNewPerDay - introduced).clamp(0, maxNewPerDay);
   }
 
   /// Reads the day's usage and derives what is left of the allowance.
@@ -487,17 +524,14 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         : _resolveInitialScope(scope, chapterOrientations!);
 
     if (studies.isEmpty) {
-      final summary = await _service.getDueSummary(
-        studies: studies,
-        scope: effectiveScope,
-        remainingDailyQuota: remainingQuota,
-      );
+      final summary = await _service.getDueSummary(studies: studies, scope: effectiveScope);
       if (generation != null && generation != _generation) return null;
       return ReviewScreenState(
         studies: studies,
         scope: effectiveScope,
         mode: mode,
         totalDueCount: 0,
+        totalFreshCount: summary.totalFreshCount,
         studyDueCounts: summary.studyDueCounts,
         openingDueCounts: summary.openingDueCounts,
         studyProgress: summary.studyProgress,
@@ -524,11 +558,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         scope: effectiveScope,
         mode: mode,
         remainingDailyQuota: remainingQuota,
+        remainingNewQuota: await _remainingNewQuota(mode),
         generation: generation,
         preloadedStudies: studies,
       );
       summary = DueCountsSummary(
         totalDueCount: session.initialDueCount,
+        totalFreshCount: session.initialQueueCount - session.initialDueCount,
         studyDueCounts: currentState.studyDueCounts,
         openingDueCounts: currentState.openingDueCounts,
         studyProgress: currentState.studyProgress,
@@ -545,6 +581,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         scope: effectiveScope,
         mode: mode,
         remainingDailyQuota: remainingQuota,
+        remainingNewQuota: await _remainingNewQuota(mode),
         generation: generation,
         preloadedChapterOrientations: chapterOrientations,
       );
@@ -598,6 +635,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       scope: effectiveScope,
       mode: mode,
       totalDueCount: summary.totalDueCount,
+      totalFreshCount: summary.totalFreshCount,
       studyDueCounts: summary.studyDueCounts,
       openingDueCounts: summary.openingDueCounts,
       studyProgress: summary.studyProgress,
@@ -755,6 +793,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         scope: currentState.scope,
         mode: currentState.mode,
         remainingDailyQuota: await _remainingDailyQuota(currentState.mode),
+        remainingNewQuota: await _remainingNewQuota(currentState.mode),
         generation: generation,
       );
       summary = loaded.summary;
@@ -781,6 +820,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     var published = currentState.copyWith(
       studies: updatedStudies,
       totalDueCount: summary.totalDueCount,
+      totalFreshCount: summary.totalFreshCount,
       studyDueCounts: summary.studyDueCounts,
       openingDueCounts: summary.openingDueCounts,
       studyProgress: summary.studyProgress,
@@ -851,6 +891,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         scope: currentState.scope,
         mode: currentState.mode,
         remainingDailyQuota: remainingQuota,
+        remainingNewQuota: await _remainingNewQuota(currentState.mode),
         generation: generation,
       );
 
@@ -1127,13 +1168,31 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       nextOrientation = nextPrompt.sideToMove;
     }
 
-    final newTotalDue = isFirstAttempt && currentState.totalDueCount > 0
+    // INV-068: the answered position may have been a fresh introduction rather
+    // than a due debt. Only the queue-time classification tells them apart — a
+    // lapsed fresh position holds a row by answer time, exactly like a lapsed
+    // due one — so the session snapshots it at build. Answering fresh retires
+    // fresh, never due: decrementing due here would eat a debt the user still
+    // owes in any scope mixing the two. Practice answers keep the old path:
+    // they persist nothing, so the position stays fresh. (A corrected
+    // false-start retest carries no event by design, yet still retires its
+    // introduction — hence the mode gate rather than an event gate.)
+    final wasFreshIntroduction =
+        isFirstAttempt &&
+        !currentState.isPracticeMode &&
+        session.wasFreshAtQueueTime(currentState.currentPrompt!.decision.canonicalId);
+
+    final newTotalDue = isFirstAttempt && !wasFreshIntroduction && currentState.totalDueCount > 0
         ? currentState.totalDueCount - 1
         : currentState.totalDueCount;
+    final newTotalFresh = wasFreshIntroduction && currentState.totalFreshCount > 0
+        ? currentState.totalFreshCount - 1
+        : currentState.totalFreshCount;
 
     final studyCounts = Map<String, int>.from(currentState.studyDueCounts);
     final currentStudyId = currentState.currentPrompt!.studyId;
     if (isFirstAttempt &&
+        !wasFreshIntroduction &&
         studyCounts.containsKey(currentStudyId) &&
         studyCounts[currentStudyId]! > 0) {
       studyCounts[currentStudyId] = studyCounts[currentStudyId]! - 1;
@@ -1143,6 +1202,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final currentChapter = session.getChapter(currentState.currentPrompt!.chapterId);
     final currentOpening = currentChapter?.opening;
     if (isFirstAttempt &&
+        !wasFreshIntroduction &&
         currentOpening != null &&
         openingCounts.containsKey(currentOpening) &&
         openingCounts[currentOpening]! > 0) {
@@ -1170,7 +1230,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           learnedDecisions: isNewlyLearned
               ? (stProg.learnedDecisions + 1).clamp(0, stProg.totalDecisions)
               : stProg.learnedDecisions,
-          dueDecisions: (stProg.dueDecisions - 1).clamp(0, stProg.totalDecisions),
+          dueDecisions: wasFreshIntroduction
+              ? stProg.dueDecisions
+              : (stProg.dueDecisions - 1).clamp(0, stProg.totalDecisions),
+          freshDecisions: wasFreshIntroduction
+              ? (stProg.freshDecisions - 1).clamp(0, stProg.totalDecisions)
+              : stProg.freshDecisions,
         );
       }
       final chProg = chapterProgressMap[currentChapterId];
@@ -1180,7 +1245,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           learnedDecisions: isNewlyLearned
               ? (chProg.learnedDecisions + 1).clamp(0, chProg.totalDecisions)
               : chProg.learnedDecisions,
-          dueDecisions: (chProg.dueDecisions - 1).clamp(0, chProg.totalDecisions),
+          dueDecisions: wasFreshIntroduction
+              ? chProg.dueDecisions
+              : (chProg.dueDecisions - 1).clamp(0, chProg.totalDecisions),
+          freshDecisions: wasFreshIntroduction
+              ? (chProg.freshDecisions - 1).clamp(0, chProg.totalDecisions)
+              : chProg.freshDecisions,
         );
       }
       if (currentOpening != null) {
@@ -1191,7 +1261,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             learnedDecisions: isNewlyLearned
                 ? (opProg.learnedDecisions + 1).clamp(0, opProg.totalDecisions)
                 : opProg.learnedDecisions,
-            dueDecisions: (opProg.dueDecisions - 1).clamp(0, opProg.totalDecisions),
+            dueDecisions: wasFreshIntroduction
+                ? opProg.dueDecisions
+                : (opProg.dueDecisions - 1).clamp(0, opProg.totalDecisions),
+            freshDecisions: wasFreshIntroduction
+                ? (opProg.freshDecisions - 1).clamp(0, opProg.totalDecisions)
+                : opProg.freshDecisions,
           );
         }
       }
@@ -1207,7 +1282,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             learnedDecisions: isNewlyLearned
                 ? (sideProg.learnedDecisions + 1).clamp(0, sideProg.totalDecisions)
                 : sideProg.learnedDecisions,
-            dueDecisions: (sideProg.dueDecisions - 1).clamp(0, sideProg.totalDecisions),
+            dueDecisions: wasFreshIntroduction
+                ? sideProg.dueDecisions
+                : (sideProg.dueDecisions - 1).clamp(0, sideProg.totalDecisions),
+            freshDecisions: wasFreshIntroduction
+                ? (sideProg.freshDecisions - 1).clamp(0, sideProg.totalDecisions)
+                : sideProg.freshDecisions,
           );
         }
         // The repertoire menu the study sits under reads this map, not the
@@ -1222,7 +1302,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
                   learnedDecisions: isNewlyLearned
                       ? (perSide.learnedDecisions + 1).clamp(0, perSide.totalDecisions)
                       : perSide.learnedDecisions,
-                  dueDecisions: (perSide.dueDecisions - 1).clamp(0, perSide.totalDecisions),
+                  dueDecisions: wasFreshIntroduction
+                      ? perSide.dueDecisions
+                      : (perSide.dueDecisions - 1).clamp(0, perSide.totalDecisions),
+                  freshDecisions: wasFreshIntroduction
+                      ? (perSide.freshDecisions - 1).clamp(0, perSide.totalDecisions)
+                      : perSide.freshDecisions,
                 );
         }
       }
@@ -1243,6 +1328,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       state.value!.copyWith(
         dailyReviewedCount: updatedDailyCount,
         totalDueCount: newTotalDue,
+        totalFreshCount: newTotalFresh,
         studyDueCounts: studyCounts,
         openingDueCounts: openingCounts,
         studyProgress: studyProgressMap,

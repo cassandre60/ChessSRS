@@ -7120,6 +7120,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get mobileReviewExportPgnSubtitle =>
       'Share or copy standard PGN notation';
   @override
+  String mobileReviewFreshOnlySubtext(String param1) {
+    return '$param1 positions are new. They join your review as you work through them, a few a day.';
+  }
+  @override
+  String get mobileReviewFreshOnlyTitle => 'Nothing due yet.';
+  @override
   String get mobileReviewFetchImport => 'Fetch & Import from Lichess';
   @override
   String get mobileReviewFetching => 'Fetching from Lichess...';

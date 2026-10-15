@@ -10,12 +10,20 @@ import 'package:meta/meta.dart';
 ///
 /// Implements Listudy-inspired `tree_progress` semantics (docs/INTEGRATION_MAP.md §From Listudy),
 /// tracking total scheduled decisions, learned moves (repetition count > 0), and currently due moves.
+///
+/// [freshDecisions], [dueDecisions] and [scheduledDecisions] are the three
+/// states of INV-068 and are disjoint: together they partition [totalDecisions].
+/// They are *not* the same as "learned / unlearned" — a position that was
+/// presented and then missed is due while still unlearned, and before INV-068
+/// it counted as both due and new, so the memory bar drew each such position
+/// twice and a screen reader announced twice the positions the scope holds.
 @immutable
 class RepertoireProgress {
   const RepertoireProgress({
     required this.totalDecisions,
     required this.learnedDecisions,
     required this.dueDecisions,
+    this.freshDecisions = 0,
   });
 
   /// Empty progress representing zero decisions.
@@ -30,8 +38,19 @@ class RepertoireProgress {
   /// Number of decision points currently due for review.
   final int dueDecisions;
 
+  /// Number of decision points that have never been presented, and so owe the
+  /// user nothing yet. Excluded from [dueDecisions] (INV-068).
+  final int freshDecisions;
+
   /// Number of decisions not yet learned (unseen or 0 repetitions).
   int get unlearnedDecisions => totalDecisions - learnedDecisions;
+
+  /// Presented before, and not due yet — the third state of INV-068.
+  ///
+  /// Derived rather than stored so the three states cannot drift apart: it is
+  /// exactly what is left of the total once fresh and due are removed.
+  int get scheduledDecisions =>
+      (totalDecisions - freshDecisions - dueDecisions).clamp(0, totalDecisions);
 
   /// Mastery fraction between 0.0 and 1.0.
   double get progressFraction =>
@@ -46,6 +65,7 @@ class RepertoireProgress {
       totalDecisions: totalDecisions + other.totalDecisions,
       learnedDecisions: learnedDecisions + other.learnedDecisions,
       dueDecisions: dueDecisions + other.dueDecisions,
+      freshDecisions: freshDecisions + other.freshDecisions,
     );
   }
 
@@ -56,12 +76,13 @@ class RepertoireProgress {
           runtimeType == other.runtimeType &&
           totalDecisions == other.totalDecisions &&
           learnedDecisions == other.learnedDecisions &&
-          dueDecisions == other.dueDecisions;
+          dueDecisions == other.dueDecisions &&
+          freshDecisions == other.freshDecisions;
 
   @override
-  int get hashCode => Object.hash(totalDecisions, learnedDecisions, dueDecisions);
+  int get hashCode => Object.hash(totalDecisions, learnedDecisions, dueDecisions, freshDecisions);
 
   @override
   String toString() =>
-      'RepertoireProgress(total: $totalDecisions, learned: $learnedDecisions, due: $dueDecisions, pct: $progressPercentage%)';
+      'RepertoireProgress(total: $totalDecisions, learned: $learnedDecisions, due: $dueDecisions, fresh: $freshDecisions, pct: $progressPercentage%)';
 }

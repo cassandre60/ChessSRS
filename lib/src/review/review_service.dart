@@ -1,8 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'dart:math' as math;
-
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
@@ -56,6 +54,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
 class DueCountsSummary {
   const DueCountsSummary({
     required this.totalDueCount,
+    required this.totalFreshCount,
     required this.studyDueCounts,
     required this.openingDueCounts,
     this.studyProgress = const {},
@@ -67,7 +66,16 @@ class DueCountsSummary {
     this.openingsBySide = const {},
   });
 
+  /// Positions in scope the user has been shown and whose date has arrived.
+  ///
+  /// Never clamped to the day's remaining allowance. It used to be
+  /// `min(totalDue, remainingQuota)`, which put a number that was not a count
+  /// of anything under the word "due" in the top bar (INV-068).
   final int totalDueCount;
+
+  /// Positions in scope that have never been presented, and so owe nothing yet.
+  final int totalFreshCount;
+
   final Map<String, int> studyDueCounts;
   final Map<String, int> openingDueCounts;
   final Map<String, RepertoireProgress> studyProgress;
@@ -103,6 +111,9 @@ class DueCountsSummary {
   /// Due positions for [side], or 0 when the summary predates this field.
   int dueCountForSide(Side side) => sideProgress[side]?.dueDecisions ?? 0;
 
+  /// Never-presented positions for [side] (INV-068).
+  int freshCountForSide(Side side) => sideProgress[side]?.freshDecisions ?? 0;
+
   RepertoireProgress progressForSide(Side side) => sideProgress[side] ?? RepertoireProgress.zero;
 }
 
@@ -121,6 +132,7 @@ class _DueTally {
   }) : studyDueCounts = {for (final s in studies) s.id: 0},
        studyTotals = {for (final s in studies) s.id: 0},
        studyLearned = {for (final s in studies) s.id: 0},
+       studyFresh = {for (final s in studies) s.id: 0},
        _chapterSides = chapterSides,
        _trimmedOpenings = {
          for (final e in chapterOpenings.entries)
@@ -134,6 +146,7 @@ class _DueTally {
     openingDueCounts = {for (final op in openingFamilies) op: 0};
     openingTotals = {for (final op in openingFamilies) op: 0};
     openingLearned = {for (final op in openingFamilies) op: 0};
+    openingFresh = {for (final op in openingFamilies) op: 0};
 
     // Which colour each drawer lists. Derived from chapters, not from decisions,
     // and deliberately including paused studies: a drawer that hid a paused study
@@ -172,6 +185,9 @@ class _DueTally {
   final Map<String, int> studyTotals;
   final Map<String, int> studyLearned;
 
+  /// Never-presented positions per study (INV-068).
+  final Map<String, int> studyFresh;
+
   // Per-study figures partitioned by side, so each repertoire menu shows
   // only its own side's numbers (INV-030). Keyed sparsely: a side with no
   // decisions in the study has no entry, which is also how the drawer
@@ -179,15 +195,18 @@ class _DueTally {
   final Map<String, Map<Side, int>> studySideTotals = {};
   final Map<String, Map<Side, int>> studySideLearned = {};
   final Map<String, Map<Side, int>> studySideDue = {};
+  final Map<String, Map<Side, int>> studySideFresh = {};
 
   final Map<String, int> chapterTotals = {};
   final Map<String, int> chapterLearned = {};
   final Map<String, int> chapterDue = {};
+  final Map<String, int> chapterFresh = {};
 
   final Set<String> openingFamilies = {};
   late final Map<String, int> openingDueCounts;
   late final Map<String, int> openingTotals;
   late final Map<String, int> openingLearned;
+  late final Map<String, int> openingFresh;
 
   // Per-side tallies for the drawer's two repertoire buttons. Counted over
   // active studies only, so a paused study leaves neither button showing work
@@ -195,6 +214,7 @@ class _DueTally {
   final Map<Side, int> sideDueCounts = {Side.white: 0, Side.black: 0};
   final Map<Side, int> sideTotals = {Side.white: 0, Side.black: 0};
   final Map<Side, int> sideLearned = {Side.white: 0, Side.black: 0};
+  final Map<Side, int> sideFresh = {Side.white: 0, Side.black: 0};
   // Canonical ids already counted into a side, so a position reached by
   // transposition through two chapters of the same side is due once there —
   // the same rule the all-studies scope applies across studies.
@@ -212,6 +232,10 @@ class _DueTally {
   };
 
   int totalDueCount = 0;
+
+  /// Never-presented positions in scope (INV-068), counted the same way as
+  /// [totalDueCount]: once per canonical position in a wide scope.
+  int totalFreshCount = 0;
   final Set<String> accountedDueCanonicalIds = <String>{};
 
   void add(
@@ -225,7 +249,11 @@ class _DueTally {
   }) {
     final state =
         reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
-    final isDue = state == null || state.isDueAt(now);
+    // INV-068: "no review state" is a position that has never been presented,
+    // which is fresh — not recall work the user is answerable for right now.
+    final status = dueStatusOf(state, now);
+    final isDue = status.isDue;
+    final isFresh = status.isFresh;
     final isLearned = state != null && state.repetitionCount > 0;
 
     if (studyTotals.containsKey(d.studyId)) {
@@ -233,11 +261,17 @@ class _DueTally {
       if (isLearned) {
         studyLearned[d.studyId] = (studyLearned[d.studyId] ?? 0) + 1;
       }
+      if (isFresh) {
+        studyFresh[d.studyId] = (studyFresh[d.studyId] ?? 0) + 1;
+      }
     }
 
     chapterTotals[d.chapterId] = (chapterTotals[d.chapterId] ?? 0) + 1;
     if (isLearned) {
       chapterLearned[d.chapterId] = (chapterLearned[d.chapterId] ?? 0) + 1;
+    }
+    if (isFresh) {
+      chapterFresh[d.chapterId] = (chapterFresh[d.chapterId] ?? 0) + 1;
     }
     if (isDue) {
       chapterDue[d.chapterId] = (chapterDue[d.chapterId] ?? 0) + 1;
@@ -263,6 +297,13 @@ class _DueTally {
         );
         learnedForStudy[side] = learnedForStudy[side]! + 1;
       }
+      if (isFresh) {
+        final freshForStudy = studySideFresh.putIfAbsent(
+          d.studyId,
+          () => {Side.white: 0, Side.black: 0},
+        );
+        freshForStudy[side] = freshForStudy[side]! + 1;
+      }
     }
 
     if (isActiveStudy && opening != null && opening.isNotEmpty) {
@@ -270,6 +311,9 @@ class _DueTally {
         openingTotals[opening] = (openingTotals[opening] ?? 0) + 1;
         if (isLearned) {
           openingLearned[opening] = (openingLearned[opening] ?? 0) + 1;
+        }
+        if (isFresh) {
+          openingFresh[opening] = (openingFresh[opening] ?? 0) + 1;
         }
       }
     }
@@ -279,53 +323,56 @@ class _DueTally {
       if (isLearned) {
         sideLearned[side] = sideLearned[side]! + 1;
       }
+      if (isFresh) {
+        sideFresh[side] = sideFresh[side]! + 1;
+      }
     }
 
-    if (!isDue) return;
-
-    if (studyDueCounts.containsKey(d.studyId)) {
+    if (studyDueCounts.containsKey(d.studyId) && isDue) {
       studyDueCounts[d.studyId] = (studyDueCounts[d.studyId] ?? 0) + 1;
       final dueForStudy = studySideDue.putIfAbsent(d.studyId, () => {Side.white: 0, Side.black: 0});
       dueForStudy[side] = dueForStudy[side]! + 1;
     }
 
-    if (isActiveStudy && opening != null && opening.isNotEmpty) {
+    if (isDue && isActiveStudy && opening != null && opening.isNotEmpty) {
       if (openingDueCounts.containsKey(opening)) {
         openingDueCounts[opening] = (openingDueCounts[opening] ?? 0) + 1;
       }
     }
 
-    if (isActiveStudy && sideAccountedCanonicalIds[side]!.add(d.canonicalId)) {
+    if (isDue && isActiveStudy && sideAccountedCanonicalIds[side]!.add(d.canonicalId)) {
       sideDueCounts[side] = sideDueCounts[side]! + 1;
     }
 
-    if (scope.matches(
+    if (!scope.matches(
       studyId: d.studyId,
       chapterId: d.chapterId,
       openingFamily: opening,
       side: side,
     )) {
-      if (scope.studyId != null || scope.chapterId != null) {
-        totalDueCount++;
-      } else if (scope.openingFamily != null) {
-        if (isActiveStudy && accountedDueCanonicalIds.add(d.canonicalId)) {
-          totalDueCount++;
-        }
-      } else {
-        if (isActiveStudy && accountedDueCanonicalIds.add(d.canonicalId)) {
-          totalDueCount++;
-        }
-      }
+      return;
     }
+
+    // A study or chapter scope names one position set, so every row in it is
+    // counted; any wider scope counts each canonical position once however many
+    // studies and chapters reach it.
+    final dedupeByCanonical = scope.studyId == null && scope.chapterId == null;
+    final countable =
+        !dedupeByCanonical || (isActiveStudy && accountedDueCanonicalIds.add(d.canonicalId));
+
+    if (!countable) return;
+    if (isDue) totalDueCount++;
+    if (isFresh) totalFreshCount++;
   }
 
-  DueCountsSummary toSummary({int? remainingDailyQuota}) {
+  DueCountsSummary toSummary() {
     final studyProgress = <String, RepertoireProgress>{
       for (final s in studies)
         s.id: RepertoireProgress(
           totalDecisions: studyTotals[s.id] ?? 0,
           learnedDecisions: studyLearned[s.id] ?? 0,
           dueDecisions: studyDueCounts[s.id] ?? 0,
+          freshDecisions: studyFresh[s.id] ?? 0,
         ),
     };
 
@@ -335,6 +382,7 @@ class _DueTally {
           totalDecisions: chapterTotals[chId] ?? 0,
           learnedDecisions: chapterLearned[chId] ?? 0,
           dueDecisions: chapterDue[chId] ?? 0,
+          freshDecisions: chapterFresh[chId] ?? 0,
         ),
     };
 
@@ -344,6 +392,7 @@ class _DueTally {
           totalDecisions: openingTotals[op] ?? 0,
           learnedDecisions: openingLearned[op] ?? 0,
           dueDecisions: openingDueCounts[op] ?? 0,
+          freshDecisions: openingFresh[op] ?? 0,
         ),
     };
 
@@ -353,6 +402,7 @@ class _DueTally {
           totalDecisions: sideTotals[side] ?? 0,
           learnedDecisions: sideLearned[side] ?? 0,
           dueDecisions: sideDueCounts[side] ?? 0,
+          freshDecisions: sideFresh[side] ?? 0,
         ),
     };
 
@@ -366,16 +416,14 @@ class _DueTally {
                 totalDecisions: entry.value[side] ?? 0,
                 learnedDecisions: studySideLearned[entry.key]?[side] ?? 0,
                 dueDecisions: studySideDue[entry.key]?[side] ?? 0,
+                freshDecisions: studySideFresh[entry.key]?[side] ?? 0,
               ),
         },
     };
 
-    final effectiveTotalDue = remainingDailyQuota != null && remainingDailyQuota >= 0
-        ? math.min(totalDueCount, remainingDailyQuota)
-        : totalDueCount;
-
     return DueCountsSummary(
-      totalDueCount: effectiveTotalDue,
+      totalDueCount: totalDueCount,
+      totalFreshCount: totalFreshCount,
       studyDueCounts: studyDueCounts,
       openingDueCounts: openingDueCounts,
       studyProgress: studyProgress,
@@ -496,6 +544,7 @@ class ReviewService {
     int? prefetchBatchSize = kDefaultPrefetchBatchSize,
     int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
+    int? remainingNewQuota,
     int? generation,
     List<Study>? preloadedStudies,
     Map<String, ReviewState>? preloadedReviewStates,
@@ -615,6 +664,7 @@ class ReviewService {
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,
+      remainingNewQuota: remainingNewQuota,
     );
 
     // A later request has already claimed the active slot, so this session is only being
@@ -759,6 +809,7 @@ class ReviewService {
     int? prefetchBatchSize = kDefaultPrefetchBatchSize,
     int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
+    int? remainingNewQuota,
     int? generation,
     Map<String, Side>? preloadedChapterOrientations,
   }) async {
@@ -791,7 +842,7 @@ class ReviewService {
         scope: scope,
       );
     }
-    final summary = tally.toSummary(remainingDailyQuota: remainingDailyQuota);
+    final summary = tally.toSummary();
 
     final session = await startSession(
       scope: scope,
@@ -799,6 +850,7 @@ class ReviewService {
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,
       remainingDailyQuota: remainingDailyQuota,
+      remainingNewQuota: remainingNewQuota,
       generation: generation,
       preloadedStudies: studies,
       preloadedReviewStates: loadedData.reviewStates,
@@ -816,7 +868,6 @@ class ReviewService {
   Future<DueCountsSummary> getDueSummary({
     required List<Study> studies,
     ReviewScope scope = const ReviewScope.all(),
-    int? remainingDailyQuota,
   }) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
@@ -846,7 +897,7 @@ class ReviewService {
         scope: scope,
       );
     }
-    return tally.toSummary(remainingDailyQuota: remainingDailyQuota);
+    return tally.toSummary();
   }
 
   Future<List<RepertoireDecision>> _getActiveDecisions(
