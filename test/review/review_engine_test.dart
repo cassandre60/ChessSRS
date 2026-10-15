@@ -1,7 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-010, INV-012, INV-015, INV-016, INV-017, INV-020, INV-021, INV-022,
-//   INV-023, INV-027, INV-028, INV-029, INV-031, INV-033, INV-041.
+//   INV-023, INV-027, INV-028, INV-029, INV-031, INV-033, INV-041, INV-068.
 
 import 'dart:math';
 
@@ -672,7 +672,7 @@ void main() {
         );
 
         // Total remaining due count accurately accounts for all 10 items (1 current prompt + 9 queued)
-        expect(session.initialDueCount, 10);
+        expect(session.initialQueueCount, 10);
         expect(session.remainingDueCount, 10);
         expect(session.currentPrompt?.decision.id, 'dec-0');
 
@@ -1025,6 +1025,167 @@ void main() {
             'nothing reached the quota -- 0 of 1 positions reviewed -- so "reached" sends '
             'the reader after the wrong number',
       );
+    });
+
+    // SPEC INV-068: a position nobody has been shown is fresh, not due, and
+    // the daily allowance governs how many of them a session may introduce.
+    group('fresh introduction (INV-068)', () {
+      /// [dueCount] positions already due, [freshCount] never presented.
+      ({
+        List<Study> study,
+        List<Chapter> chapter,
+        List<RepertoireDecision> decisions,
+        Map<String, ReviewState> states,
+      })
+      buildMixed({required int dueCount, required int freshCount}) {
+        const study = Study(id: 's_fresh', title: 'Fresh Study');
+        final chapter = Chapter.create(studyId: study.id, sourceOrder: 0);
+        final decisions = <RepertoireDecision>[];
+        final states = <String, ReviewState>{};
+
+        for (var i = 0; i < dueCount + freshCount; i++) {
+          final d = RepertoireDecision.create(
+            studyId: study.id,
+            chapterId: chapter.id,
+            nodeId: 'n$i',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          );
+          decisions.add(d);
+          if (i < dueCount) {
+            states[d.canonicalId] = ReviewState(
+              decisionId: d.canonicalId,
+              firstReviewedAt: clock.now().subtract(const Duration(days: 4)),
+              nextDueAt: clock.now().subtract(const Duration(days: 2)),
+              repetitionCount: 1,
+            );
+          }
+        }
+        return (study: [study], chapter: [chapter], decisions: decisions, states: states);
+      }
+
+      test('fresh positions are queued but held to the new-position allowance', () {
+        final f = buildMixed(dueCount: 3, freshCount: 40);
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: f.study,
+          chapters: f.chapter,
+          decisions: f.decisions,
+          reviewStates: f.states,
+          remainingNewQuota: 5,
+        );
+
+        // 3 due plus 5 introductions, not all 43.
+        expect(session.initialQueueCount, 8);
+        expect(session.initialDueCount, 3);
+      });
+
+      test('due work is served before fresh introductions', () {
+        final f = buildMixed(dueCount: 3, freshCount: 40);
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: f.study,
+          chapters: f.chapter,
+          decisions: f.decisions,
+          reviewStates: f.states,
+          remainingNewQuota: 5,
+        );
+
+        final dueIds = f.states.keys.toSet();
+        final served = <String>[];
+        for (var i = 0; i < 8; i++) {
+          final prompt = session.currentPrompt;
+          if (prompt == null) break;
+          served.add(prompt.decision.canonicalId);
+          session.skip();
+        }
+
+        expect(served.take(3).toSet(), dueIds, reason: 'the three due positions come first');
+        expect(served.skip(3).every((id) => !dueIds.contains(id)), isTrue);
+      });
+
+      test('with no allowance left, a session offers due work and no introductions', () {
+        final f = buildMixed(dueCount: 3, freshCount: 40);
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: f.study,
+          chapters: f.chapter,
+          decisions: f.decisions,
+          reviewStates: f.states,
+          remainingNewQuota: 0,
+        );
+
+        expect(session.initialDueCount, 3);
+      });
+
+      test('a fully fresh import still yields a playable session', () {
+        // The reported first-launch state: nothing reviewed, so with no cap the
+        // queue must not be empty or the user opens the app to a blank board.
+        final f = buildMixed(dueCount: 0, freshCount: 12);
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: f.study,
+          chapters: f.chapter,
+          decisions: f.decisions,
+          reviewStates: f.states,
+          remainingNewQuota: 20,
+        );
+
+        expect(session.initialQueueCount, 12);
+        expect(session.initialDueCount, 0, reason: 'INV-068: a wholly fresh import owes nothing');
+        expect(session.currentPrompt, isNotNull);
+      });
+
+      test('practice mode is exempt and walks fresh material freely', () {
+        final f = buildMixed(dueCount: 0, freshCount: 30);
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: f.study,
+          chapters: f.chapter,
+          decisions: f.decisions,
+          reviewStates: f.states,
+          mode: ReviewMode.practice,
+          remainingNewQuota: 2,
+        );
+
+        expect(session.initialQueueCount, 30);
+        expect(session.initialDueCount, 30);
+      });
+
+      test('a position scheduled ahead is neither due nor fresh', () {
+        // Three disjoint states, and the scheduled one is held back entirely.
+        const study = Study(id: 's_sched', title: 'Scheduled Study');
+        final chapter = Chapter.create(studyId: study.id, sourceOrder: 0);
+        final d = RepertoireDecision.create(
+          studyId: study.id,
+          chapterId: chapter.id,
+          nodeId: 'n_sched',
+          expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        );
+        final engine = ReviewEngine(clock: clock);
+
+        final session = engine.createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: [d],
+          reviewStates: {
+            d.canonicalId: ReviewState(
+              decisionId: d.canonicalId,
+              firstReviewedAt: clock.now().subtract(const Duration(days: 1)),
+              nextDueAt: clock.now().add(const Duration(days: 3)),
+              repetitionCount: 1,
+            ),
+          },
+          remainingNewQuota: 20,
+        );
+
+        expect(session.initialQueueCount, 0);
+        expect(session.initialDueCount, 0);
+      });
     });
 
     test('SRS review queue prioritizes overdue items by nextDueAt urgency', () {
@@ -1709,12 +1870,13 @@ void main() {
         scope: const ReviewScope.study('study-collision'),
       );
 
-      // Never-reviewed positions sort ahead of scheduled ones, so decB is asked first and decA
-      // second. Both are answered, because the damage shows on the second: decA is the mature
-      // memory item, and answering it must advance decA's own history.
-      expect(session.currentPrompt?.decision.id, decB.id);
-      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+      // decB is fresh, so it comes after the due mature item (INV-068: due work
+      // leads, introductions follow). Both are answered, because the damage
+      // shows on decB's answer: submitting e4 against a session whose two
+      // questions share FEN and first move must not schedule decA's history.
       expect(session.currentPrompt?.decision.id, decA.id);
+      expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, decB.id);
 
       expect(session.submitMove(from: 'e2', to: 'e4').isCorrect, isTrue);
 

@@ -269,7 +269,8 @@ void main() {
       final state = container.read(reviewControllerProvider).requireValue;
       expect(state.hasStudies, isTrue);
       expect(state.scope, ReviewScope.study(importResult.study.id));
-      expect(state.totalDueCount, 2);
+      // INV-068: freshly imported, so fresh rather than due.
+      expect(state.totalDueCount, 0);
       expect(state.currentPrompt, isNotNull);
       expect(state.boardOrientation, Side.black);
       expect(state.boardPosition, isNotNull);
@@ -297,7 +298,9 @@ void main() {
       await controller.importPgnText(pgnText: pgn, title: 'Italian', repertoireSide: Side.white);
 
       var state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 2);
+      // INV-068: never presented, so the freshly imported positions are fresh,
+      // not due. They are still queued — that is what the session asks for.
+      expect(state.totalDueCount, 0);
       expect(state.boardOrientation, Side.white);
 
       // Play 1. e4
@@ -308,7 +311,7 @@ void main() {
 
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.feedback, ReviewFeedback.none);
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
       // Auto-traversal played 1... e5, so next prompt is for 2. Nf3
       expect(state.currentPrompt, isNotNull);
       expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
@@ -432,9 +435,11 @@ void main() {
       await controller.changeScope(const ReviewScope.white());
       var state = container.read(reviewControllerProvider).requireValue;
 
-      expect(state.sideProgress[Side.white]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.white]!.dueDecisions, 0);
+      expect(state.sideProgress[Side.white]!.freshDecisions, 2);
       expect(state.sideProgress[Side.white]!.learnedDecisions, 0);
-      expect(state.sideProgress[Side.black]!.dueDecisions, 2);
+      expect(state.sideProgress[Side.black]!.dueDecisions, 0);
+      expect(state.sideProgress[Side.black]!.freshDecisions, 2);
       expect(state.sideProgress[Side.black]!.learnedDecisions, 0);
 
       // Play 1. e4 in the White repertoire.
@@ -442,12 +447,16 @@ void main() {
 
       state = container.read(reviewControllerProvider).requireValue;
 
-      // White's button has one less due and one more learned.
-      expect(state.sideProgress[Side.white]!.dueDecisions, 1);
+      // White's button has one less fresh and one more learned.
+      // INV-068: answering retires the answered introduction (fresh 2 → 1) and
+      // records the learning (learned 0 → 1), without touching due — which was
+      // already 0. The unanswered continuation stays fresh until it is asked.
+      expect(state.sideProgress[Side.white]!.dueDecisions, 0);
+      expect(state.sideProgress[Side.white]!.freshDecisions, 1);
       expect(state.sideProgress[Side.white]!.learnedDecisions, 1);
       // Black's button is untouched — answering one repertoire must not debit the other.
       expect(
-        state.sideProgress[Side.black]!.dueDecisions,
+        state.sideProgress[Side.black]!.freshDecisions,
         2,
         reason: "the other side's button moved when only this repertoire was reviewed",
       );
@@ -473,10 +482,15 @@ void main() {
       final state = container.read(reviewControllerProvider).requireValue;
 
       expect(state.scope, const ReviewScope.white());
-      expect(state.totalDueCount, greaterThan(0));
+      // INV-068: a fresh import owes nothing, but the session must still queue
+      // that side's positions — the set the summary and the session agree on is
+      // now the fresh one, not the due one.
+      expect(state.totalDueCount, 0);
+      expect(state.totalFreshCount, greaterThan(0));
+      expect(state.session?.initialQueueCount, greaterThan(0));
       expect(
         state.session?.initialDueCount,
-        state.totalDueCount,
+        0,
         reason: 'summary and session were built for different scopes',
       );
       final prompt = state.currentPrompt;
@@ -581,14 +595,15 @@ void main() {
       await controller.importPgnText(pgnText: pgn, title: 'Queen Pawn', repertoireSide: Side.white);
 
       var state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
 
-      // Lapse: play 1. e4 instead of 1. d4. The item is re-queued, still due.
+      // Lapse: play 1. e4 instead of 1. d4. The item is re-queued.
       final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
       expect(lapse, isNotNull);
       expect(lapse!.isCorrect, isFalse);
       state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 1);
+      // INV-068: a lapse writes a state, so the item is no longer fresh.
+      expect(state.totalDueCount, 0);
 
       // Reguess correctly: proves the move was seen, but the re-test is still
       // pending, so dues must NOT drop yet (the screen still shows a prompt).
@@ -597,7 +612,7 @@ void main() {
       expect(retry!.isCorrect, isTrue);
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.currentPrompt, isNotNull);
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
 
       // Answer the re-test correctly first-try: now the item resolves.
       final retest = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
@@ -622,10 +637,11 @@ void main() {
         repertoireSide: Side.white,
       );
 
-      // Back to study A: one due prompt (1. e4).
+      // Back to study A: one queued prompt (1. e4). Never presented, so it is
+      // fresh rather than due (INV-068).
       await controller.changeScope(ReviewScope.study(importA.study.id));
       var state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
 
       // Answer correctly but do not await the advancement: the 300ms+
       // opponent-reply animation is still in flight below.
@@ -640,7 +656,7 @@ void main() {
       // scope, prompt and dues all belong to B.
       state = container.read(reviewControllerProvider).requireValue;
       expect(state.scope, ReviewScope.study(importB.study.id));
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
       expect(state.currentPrompt, isNotNull);
       expect(state.currentPrompt!.studyId, importB.study.id);
     });
@@ -666,18 +682,22 @@ void main() {
         // importPgnText leaves scope at the imported study (Study B)
         final stateB = container.read(reviewControllerProvider).requireValue;
         expect(stateB.scope, ReviewScope.study(importB.study.id));
-        expect(stateB.totalDueCount, 1);
-        expect(stateB.studyDueCounts[importA.study.id], 2);
-        expect(stateB.studyDueCounts[importB.study.id], 1);
+        // INV-068: both books were just imported, so nothing is due yet — the
+        // per-study figures below are the fresh counts by another name.
+        expect(stateB.totalDueCount, 0);
+        expect(stateB.studyProgress[importA.study.id]!.freshDecisions, 2);
+        expect(stateB.studyProgress[importB.study.id]!.freshDecisions, 1);
 
         // Targeted changeScope to Study A
         await controller.changeScope(ReviewScope.study(importA.study.id));
         final stateA = container.read(reviewControllerProvider).requireValue;
         expect(stateA.scope, ReviewScope.study(importA.study.id));
-        expect(stateA.totalDueCount, 2);
-        // Study totals and drawer metadata are preserved
-        expect(stateA.studyDueCounts[importA.study.id], 2);
-        expect(stateA.studyDueCounts[importB.study.id], 1);
+        // INV-068: nothing is due. The reuse path keeps the all-library study
+        // figures it already had, which is what PERF-FIX-36 preserved.
+        expect(stateA.totalDueCount, 0);
+        expect(stateA.studyProgress[importA.study.id]!.dueDecisions, 0);
+        expect(stateA.studyProgress[importA.study.id]!.freshDecisions, 2);
+        expect(stateA.studyProgress[importB.study.id]!.freshDecisions, 1);
         expect(stateA.session?.currentPrompt?.decision.studyId, importA.study.id);
       },
     );
@@ -798,13 +818,16 @@ void main() {
 
       await controller.changeScope(const ReviewScope.all());
       var state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 2);
+      // INV-068: both studies are fresh, so neither owes anything yet.
+      expect(state.totalDueCount, 0);
+      expect(state.studies.length, 2);
 
       // Suspend the 'Closed' study from daily review pool
       await controller.toggleStudyActive(res2.study.id, false);
 
       state = container.read(reviewControllerProvider).requireValue;
-      expect(state.totalDueCount, 1);
+      expect(state.totalDueCount, 0);
+      expect(state.studies.length, 2);
       final updatedStudies = state.studies;
       expect(updatedStudies.firstWhere((s) => s.id == res2.study.id).isActive, isFalse);
     });
@@ -1219,7 +1242,7 @@ void main() {
         );
 
         var state = container.read(reviewControllerProvider).requireValue;
-        expect(state.totalDueCount, 2);
+        expect(state.totalDueCount, 0);
 
         // Play 1. e4
         final result = await controller.onUserMove(
@@ -1236,7 +1259,7 @@ void main() {
         expect(state.revealedComment, contains('[%cal Ge4d5]'));
         // Position is White's move 1. e4 (opponent has not replied yet)
         expect(state.lastMove, const NormalMove(from: Square.e2, to: Square.e4));
-        expect(state.totalDueCount, 2);
+        expect(state.totalDueCount, 0);
 
         // Wait a moment: queue must remain paused and not auto-advance
         await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -1250,7 +1273,7 @@ void main() {
         state = container.read(reviewControllerProvider).requireValue;
         expect(state.isAwaitingAdvance, isFalse);
         expect(state.feedback, ReviewFeedback.none);
-        expect(state.totalDueCount, 1);
+        expect(state.totalDueCount, 0);
         expect(state.currentPrompt, isNotNull);
         expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
       },
@@ -1284,7 +1307,7 @@ void main() {
         // Does not pause awaiting continue
         final state = container.read(reviewControllerProvider).requireValue;
         expect(state.isAwaitingAdvance, isFalse);
-        expect(state.totalDueCount, 1);
+        expect(state.totalDueCount, 0);
         expect(state.currentPrompt!.expectedMoves.first.san, 'Nf3');
       },
     );

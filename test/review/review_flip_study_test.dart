@@ -166,12 +166,15 @@ void main() {
       expect(due, wide.dueDecisions);
     }
 
+    // INV-068: never presented, so both sides are fresh rather than due.
     final whiteDue = await service.getDueCount(scope: const ReviewScope.white());
     final blackDue = await service.getDueCount(scope: const ReviewScope.black());
     final whiteDecisions = await repo.getDecisionsByStudy(whiteId);
     final blackDecisions = await repo.getDecisionsByStudy(blackId);
-    expect(whiteDue, whiteDecisions.length);
-    expect(blackDue, blackDecisions.length);
+    expect(whiteDue, 0);
+    expect(blackDue, 0);
+    expect(whiteDecisions, isNotEmpty, reason: 'the White book still holds material');
+    expect(blackDecisions, isNotEmpty, reason: 'the flipped book still holds material');
   });
 
   test('answering on one side leaves the other side due', () async {
@@ -182,12 +185,14 @@ void main() {
     final whiteId = await importWhite(controller);
     final flipped = await controller.flipStudyColors(whiteId, targetSide: Side.black);
 
+    // Both books are fresh, so neither owes anything yet — but the sessions
+    // still queue them (INV-068), which is what this test drives.
     final blackBefore = await service.getDueCount(scope: const ReviewScope.black());
-    expect(blackBefore, greaterThan(0));
+    expect(blackBefore, 0);
 
     final session = await service.startSession(scope: const ReviewScope.white());
     final prompt = session.currentPrompt;
-    expect(prompt, isNotNull, reason: 'the White study has due positions to answer');
+    expect(prompt, isNotNull, reason: 'the White study still has positions to introduce');
     final expected = prompt!.decision.expectedMoves.first;
     final result = await service.submitMove(
       from: expected.from,

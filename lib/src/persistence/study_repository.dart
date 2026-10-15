@@ -116,6 +116,15 @@ abstract class StudyRepository {
   /// `SqliteStudyRepository.saveAnswerBatch`'s mirroring.
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids);
 
+  /// Positions first presented on the local calendar day containing [now].
+  ///
+  /// Counts introductions, not reviews: one canonical position answers once
+  /// however many times it is re-tested that day, which is what the new-position
+  /// allowance is spent on (INV-068). Reads `firstReviewedAt`, so a position
+  /// introduced on an earlier day does not count again no matter how often it
+  /// recurs.
+  Future<int> getTodayIntroducedPositionsCount(DateTime now);
+
   // Review events (SRS log)
   Future<void> saveReviewEvent(ReviewEvent event);
   Future<List<ReviewEvent>> getReviewEvents(String decisionId);

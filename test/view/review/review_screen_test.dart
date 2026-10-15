@@ -991,7 +991,9 @@ void main() {
 
       // Tap 'Practice'
       await tester.tap(find.widgetWithText(SrsPillButton, 'Practice'));
-      await pumpAsync(tester);
+      // The practice reload crosses the database; poll for the board rather
+      // than sleeping a fixed window that a longer load outlasts.
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Now board is active in practice mode with Practice badge in TopBar!
       expect(find.byType(Chessboard), findsOneWidget);
@@ -1000,7 +1002,7 @@ void main() {
       // Exit practice mode via the TopBar's Practice label, which is the target (00-agent-brief.md
       // open decision 3). It used to be a separate `Exit Practice` button beside inert text.
       await tester.tap(find.text('Practice'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Nothing due.'));
 
       // Returned to Nothing due view
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -1413,7 +1415,8 @@ void main() {
       await tester.pumpWidget(app);
       await pumpAsync(tester);
 
-      // Open drawer: before any reviews, both positions are still in the learning bucket.
+      // Open drawer: before any reviews, both positions are fresh — never
+      // presented, so they sit in the new segment, not the learning one (INV-068).
       await tester.tap(find.byTooltip('White repertoire'));
       await pumpAsync(tester);
 
@@ -1429,7 +1432,8 @@ void main() {
           )
           .toList();
       expect(drawerBars().first.retained, 0);
-      expect(drawerBars().first.learning, 2);
+      expect(drawerBars().first.learning, 0);
+      expect(drawerBars().first.fresh, 2);
 
       // Close drawer by tapping the study row
       await tester.tap(
@@ -2073,13 +2077,26 @@ void main() {
         await repo.saveImportResult(
           importPgn('1. e4 e5 2. Nf3 *', studyTitle: 'White book', repertoireSide: Side.white),
         );
-        await repo.saveImportResult(
-          importPgn(
-            '[Event "French Defence"]\n1. e4 e6 *',
-            studyTitle: 'Black book',
-            repertoireSide: Side.black,
-          ),
+        final blackImport = importPgn(
+          '[Event "French Defence"]\n1. e4 e6 *',
+          studyTitle: 'Black book',
+          repertoireSide: Side.black,
         );
+        await repo.saveImportResult(blackImport);
+        // INV-068: the cross-side offer is for genuinely due work. A merely
+        // fresh Black position owes nothing yet, so Black holds a past-due
+        // state here rather than an untouched import.
+        for (final d in blackImport.decisions) {
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: d.id,
+              firstReviewedAt: DateTime.utc(2026, 9, 10),
+              lastReviewedAt: DateTime.utc(2026, 9, 14),
+              nextDueAt: DateTime.utc(2026, 9, 15),
+              repetitionCount: 1,
+            ),
+          );
+        }
       });
 
       final app = await makeTestProviderScopeApp(
@@ -2156,13 +2173,25 @@ void main() {
         await repo.saveImportResult(
           importPgn('1. e4 e5 2. Nf3 *', studyTitle: 'White book', repertoireSide: Side.white),
         );
-        await repo.saveImportResult(
-          importPgn(
-            '[Event "French Defence"]\n1. e4 e6 *',
-            studyTitle: 'Black book',
-            repertoireSide: Side.black,
-          ),
+        final blackImport = importPgn(
+          '[Event "French Defence"]\n1. e4 e6 *',
+          studyTitle: 'Black book',
+          repertoireSide: Side.black,
         );
+        await repo.saveImportResult(blackImport);
+        // INV-068: the sanity offer below needs genuinely due Black work —
+        // a fresh import owes nothing and offers nothing.
+        for (final d in blackImport.decisions) {
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: d.id,
+              firstReviewedAt: DateTime.utc(2026, 9, 10),
+              lastReviewedAt: DateTime.utc(2026, 9, 14),
+              nextDueAt: DateTime.utc(2026, 9, 15),
+              repetitionCount: 1,
+            ),
+          );
+        }
       });
 
       final app = await makeTestProviderScopeApp(

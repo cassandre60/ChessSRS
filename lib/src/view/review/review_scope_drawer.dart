@@ -741,12 +741,12 @@ class _ScopeRow extends StatelessWidget {
                       height: 5,
                       gap: 2,
                       radius: 1,
-                      retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
-                        0,
-                        progress.totalDecisions,
-                      ),
+                      // The three disjoint INV-068 states, which sum to the row's total.
+                      // Derived from `learned` they overlapped: a position that was
+                      // due and not yet learned counted as both retained and new.
+                      retained: progress.scheduledDecisions,
                       learning: progress.dueDecisions,
-                      fresh: progress.unlearnedDecisions.clamp(0, progress.totalDecisions),
+                      fresh: progress.freshDecisions,
                     ),
                     const SizedBox(width: 10),
                     Flexible(

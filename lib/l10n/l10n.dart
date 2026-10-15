@@ -11768,6 +11768,17 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share or copy standard PGN notation'**
   String get mobileReviewExportPgnSubtitle;
+  /// No description provided for @mobileReviewFreshOnlySubtext.
+  ///
+  /// In en, this message translates to:
+  /// **'{param1} positions are new. They join your review as you work through them, a few a day.'**
+  String mobileReviewFreshOnlySubtext(String param1);
+  /// No description provided for @mobileReviewFreshOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing due yet.'**
+  String get mobileReviewFreshOnlyTitle;
+
   /// No description provided for @mobileReviewFetchImport.
   ///
   /// In en, this message translates to:

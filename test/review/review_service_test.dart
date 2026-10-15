@@ -81,7 +81,8 @@ void main() {
 
         final service = ReviewService(repository: repo, clock: clock);
 
-        expect(await service.getDueCount(), 1);
+        // INV-068: never presented, so fresh rather than due.
+        expect(await service.getDueCount(), 0);
 
         // Start session
         final session = await service.startSession();
@@ -103,7 +104,8 @@ void main() {
         expect(events.first.result, ReviewResult.correct);
         expect(events.first.decisionId, 'd1');
 
-        // Due count is now 0
+        // After the answer, it holds a scheduled state: still 0 due, and the
+        // position is introduced rather than outstanding.
         expect(await service.getDueCount(), 0);
       } finally {
         await db.close();
@@ -210,15 +212,16 @@ void main() {
         await repo.saveDecision(d1);
         await repo.saveDecision(d2);
 
+        // INV-068: never presented, so both are fresh rather than due.
         // Due count for all should only count the active study decision
         final allDueCount = await service.getDueCount(scope: const ReviewScope.all());
-        expect(allDueCount, 1);
+        expect(allDueCount, 0);
 
         // Explicit study scope still returns the inactive study due count
         final inactiveDueCount = await service.getDueCount(
           scope: const ReviewScope.study('inactive_s'),
         );
-        expect(inactiveDueCount, 1);
+        expect(inactiveDueCount, 0);
 
         // Session for all should only load the active study decision
         final session = await service.startSession(scope: const ReviewScope.all());
@@ -289,15 +292,16 @@ void main() {
           await repo.saveDecision(d3);
 
           // Scope by Sicilian Opening Hub: should pull d1 and d2 (2 decisions), excluding French (d3)
+          // INV-068: never presented, so all three are fresh and none is due.
           final sicilianDue = await service.getDueCount(
             scope: const ReviewScope.opening('Sicilian Defense'),
           );
-          expect(sicilianDue, 2);
+          expect(sicilianDue, 0);
 
           final frenchDue = await service.getDueCount(
             scope: const ReviewScope.opening('French Defense'),
           );
-          expect(frenchDue, 1);
+          expect(frenchDue, 0);
 
           final session = await service.startSession(
             scope: const ReviewScope.opening('Sicilian Defense'),
@@ -331,7 +335,9 @@ void main() {
         final summary = await service.getDueSummary(studies: [study]);
 
         expect(repo.fullTableReads, 0);
-        expect(summary.totalDueCount, 1);
+        // INV-068: a single never-presented decision is fresh, not due.
+        expect(summary.totalDueCount, 0);
+        expect(summary.totalFreshCount, 1);
       } finally {
         await db.close();
       }
@@ -405,7 +411,7 @@ void main() {
         await repo.saveReviewState(
           ReviewState(decisionId: d3.id, repetitionCount: 0, nextDueAt: now),
         );
-        // d4 is unlearned (no state record => due)
+        // d4 is unlearned and has no state record => fresh (INV-068): never presented
         // d5 is learned and not due
         await repo.saveReviewState(
           ReviewState(
@@ -417,12 +423,13 @@ void main() {
 
         final summary = await service.getDueSummary(studies: [study]);
 
-        // Study progress: 5 total, 3 learned (d1, d2, d5), 3 due (d2, d3, d4)
+        // Study progress: 5 total, 3 learned (d1, d2, d5), 2 due (d2, d3); d4 is fresh
         final studyProg = summary.studyProgress['s_prog'];
         expect(studyProg, isNotNull);
         expect(studyProg!.totalDecisions, 5);
         expect(studyProg.learnedDecisions, 3);
-        expect(studyProg.dueDecisions, 3);
+        expect(studyProg.dueDecisions, 2);
+        expect(studyProg.freshDecisions, 1);
         expect(studyProg.progressPercentage, 60);
 
         // Chapter 1: 3 total, 2 learned (d1, d2), 2 due (d2, d3)
@@ -433,12 +440,13 @@ void main() {
         expect(ch1Prog.dueDecisions, 2);
         expect(ch1Prog.progressPercentage, 67);
 
-        // Chapter 2: 2 total, 1 learned (d5), 1 due (d4)
+        // Chapter 2: 2 total, 1 learned (d5), 1 fresh (d4), 0 due
         final ch2Prog = summary.chapterProgress[ch2.id];
         expect(ch2Prog, isNotNull);
         expect(ch2Prog!.totalDecisions, 2);
         expect(ch2Prog.learnedDecisions, 1);
-        expect(ch2Prog.dueDecisions, 1);
+        expect(ch2Prog.dueDecisions, 0);
+        expect(ch2Prog.freshDecisions, 1);
         expect(ch2Prog.progressPercentage, 50);
       } finally {
         await db.close();
@@ -466,7 +474,9 @@ void main() {
 
         final (:session, :summary) = await service.loadSessionAndSummary(studies: [study]);
 
-        expect(summary.totalDueCount, 1);
+        // INV-068: fresh, not due, but still the session's prompt.
+        expect(summary.totalDueCount, 0);
+        expect(summary.totalFreshCount, 1);
         expect(session.scope, const ReviewScope.all());
         expect(session.currentPrompt?.decision.id, d.id);
         expect(service.activeSession, same(session));
@@ -716,11 +726,14 @@ void main() {
           await repo.saveDecisions([decA, decB]);
 
           // In All Studies, the shared transposition is counted ONCE, not twice!
+          // INV-068: fresh rather than due, but still one canonical position rather than
+          // two occurrences (INV-065 sharing is unaffected by the classification change).
           final dueSummary = await service.getDueSummary(
             studies: [studyA, studyB],
             scope: const ReviewScope.all(),
           );
-          expect(dueSummary.totalDueCount, 1);
+          expect(dueSummary.totalDueCount, 0);
+          expect(dueSummary.totalFreshCount, 1);
 
           // Start session in Study A and answer the move correctly
           final session = await service.startSession(scope: const ReviewScope.study('study_a'));
@@ -1096,6 +1109,138 @@ void main() {
           expect(service.activeSession, same(fast));
         } finally {
           await db.close();
+        }
+      });
+    });
+
+    // SPEC INV-068.
+    group('fresh positions are not due (INV-068)', () {
+      /// A study with [count] decisions in one chapter, and no review state for
+      /// any of them — exactly what a PGN import writes.
+      Future<(Database, SqliteStudyRepository, Directory)> seedFreshImport({
+        required int count,
+        required String dbFile,
+      }) async {
+        final dir = Directory.systemTemp.createTempSync('chess_srs_fresh_test_');
+        final db = await openAppDatabase(databaseFactoryFfi, p.join(dir.path, dbFile));
+        final repo = SqliteStudyRepository(db);
+
+        final study = Study(id: 's_fresh', title: 'Fresh Import', createdAt: now, updatedAt: now);
+        await repo.saveStudy(study);
+        final chapter = Chapter.create(studyId: study.id, sourceOrder: 0, title: 'Chapter 1');
+        await repo.saveChapter(chapter);
+        await repo.saveDecisions([
+          for (var i = 0; i < count; i++)
+            RepertoireDecision.create(
+              studyId: study.id,
+              chapterId: chapter.id,
+              nodeId: 'n$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+        ]);
+        return (db, repo, dir);
+      }
+
+      test('an untouched import reports zero due and every position fresh', () async {
+        // The reported defect: 63 bulk-imported studies reported thousands due
+        // on first launch, for positions the user had never been shown.
+        final (db, repo, dir) = await seedFreshImport(count: 40, dbFile: 'a.db');
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final studies = await repo.getAllStudies();
+          final summary = await service.getDueSummary(studies: studies);
+
+          expect(summary.totalDueCount, 0);
+          expect(summary.studyDueCounts['s_fresh'], 0);
+          expect(summary.sideProgress[Side.white]!.dueDecisions, 0);
+          expect(summary.sideProgress[Side.white]!.freshDecisions, 40);
+
+          final progress = summary.studyProgress['s_fresh']!;
+          expect(progress.totalDecisions, 40);
+          expect(progress.learnedDecisions, 0);
+          expect(progress.dueDecisions, 0);
+          expect(progress.freshDecisions, 40);
+        } finally {
+          await db.close();
+          dir.deleteSync(recursive: true);
+        }
+      });
+
+      test('a position becomes due only once it holds a state whose date arrived', () async {
+        final (db, repo, dir) = await seedFreshImport(count: 3, dbFile: 'b.db');
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final decisions = await repo.getAllDecisions();
+          // One position presented three days ago and due since; one presented
+          // two hours ago and not yet due; one never presented at all.
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: decisions[0].id,
+              firstReviewedAt: now.subtract(const Duration(days: 3)),
+              lastReviewedAt: now.subtract(const Duration(days: 3)),
+              nextDueAt: now.subtract(const Duration(days: 1)),
+              repetitionCount: 1,
+            ),
+          );
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: decisions[1].id,
+              firstReviewedAt: now.subtract(const Duration(hours: 2)),
+              lastReviewedAt: now.subtract(const Duration(hours: 2)),
+              nextDueAt: now.add(const Duration(days: 2)),
+              repetitionCount: 1,
+            ),
+          );
+
+          final studies = await repo.getAllStudies();
+          final summary = await service.getDueSummary(studies: studies);
+
+          expect(summary.totalDueCount, 1);
+          final progress = summary.studyProgress['s_fresh']!;
+          expect(progress.dueDecisions, 1);
+          expect(progress.freshDecisions, 1);
+          expect(progress.scheduledDecisions, 1);
+          expect(
+            progress.freshDecisions + progress.dueDecisions + progress.scheduledDecisions,
+            progress.totalDecisions,
+          );
+        } finally {
+          await db.close();
+          dir.deleteSync(recursive: true);
+        }
+      });
+
+      test('the headline due figure is not clamped to the remaining daily quota', () async {
+        // The bar used to read "94 due" while tens of thousands were due,
+        // because the figure was min(totalDue, remainingQuota) under the word
+        // "due". Now that due means something, the clamp has to go.
+        final (db, repo, dir) = await seedFreshImport(count: 5, dbFile: 'c.db');
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final decisions = await repo.getAllDecisions();
+          for (final d in decisions) {
+            await repo.saveReviewState(
+              ReviewState(
+                decisionId: d.id,
+                firstReviewedAt: now.subtract(const Duration(days: 3)),
+                nextDueAt: now.subtract(const Duration(days: 1)),
+                repetitionCount: 1,
+              ),
+            );
+          }
+
+          final studies = await repo.getAllStudies();
+          final uncapped = await service.getDueSummary(studies: studies);
+          final capped = await service.getDueSummary(studies: studies);
+
+          expect(uncapped.totalDueCount, 5);
+          expect(capped.totalDueCount, 5);
+        } finally {
+          await db.close();
+          dir.deleteSync(recursive: true);
         }
       });
     });

@@ -349,15 +349,22 @@ class _NothingDueView extends ConsumerWidget {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
     final progress = state.activeScopeProgress;
-    final totalDecisions = progress?.totalDecisions ?? 0;
-    final learnedDecisions = progress?.learnedDecisions ?? 0;
-    final dueDecisions = progress?.dueDecisions ?? 0;
-    final retained = (learnedDecisions - dueDecisions).clamp(0, totalDecisions);
-    final learning = dueDecisions;
-    final fresh = (totalDecisions - learnedDecisions).clamp(0, totalDecisions);
+    // The three INV-068 states, read straight off the progress record so they
+    // partition the scope instead of being re-derived from `learned`, which put
+    // every due-but-unlearned position in two segments at once.
+    final retained = progress?.scheduledDecisions ?? 0;
+    final learning = progress?.dueDecisions ?? 0;
+    final fresh = progress?.freshDecisions ?? 0;
 
+    // A scope holding only never-presented positions has nothing *due*, which
+    // used to read as "Nothing due." over a bar showing thousands — when the
+    // truth was that the user had simply not started. Name the other state
+    // rather than letting an unstarted library look finished (INV-068).
+    final hasFreshMaterial = fresh > 0;
     final displayTitle = state.isDailyLimitReached
         ? context.l10n.mobileReviewDailyLimitReached
+        : hasFreshMaterial
+        ? context.l10n.mobileReviewFreshOnlyTitle
         : context.l10n.mobileReviewNothingDueTitle;
     final headlineSize = math.max(44.0, math.min(mediaQuery.size.width * 0.09, 72.0));
 
@@ -424,6 +431,11 @@ class _NothingDueView extends ConsumerWidget {
                               state.dailyReviewedCount.toString(),
                               state.maxDailyReviews.toString(),
                             ),
+                            style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
+                          )
+                        else if (hasFreshMaterial)
+                          Text(
+                            context.l10n.mobileReviewFreshOnlySubtext(fresh.toString()),
                             style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           )
                         else if (state.timeUntilNextReview != null)
