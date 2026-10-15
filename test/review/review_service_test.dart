@@ -9,6 +9,7 @@ import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -573,6 +574,109 @@ void main() {
         }
       },
     );
+
+    group('side-carrying study and opening scopes', () {
+      // SPEC INV-030. A drawer names its colour when it builds a study or
+      // opening scope; the session must then train that side only, so a
+      // mixed-orientation study never flips the board mid-session. The
+      // owner's French study carries White chapters next to Black-to-move
+      // middlegame excerpts (2026-10-15).
+      Future<SqliteStudyRepository> seedMixedStudy(SqliteStudyRepository repo) async {
+        const study = Study(id: 's_mixed', title: 'Mixed Study');
+        await repo.saveStudy(study);
+
+        final chWhite = Chapter.create(
+          studyId: 's_mixed',
+          sourceOrder: 0,
+          title: 'White chapter',
+          opening: 'French Defense',
+          orientation: Side.white,
+        );
+        final chBlack = Chapter.create(
+          studyId: 's_mixed',
+          sourceOrder: 1,
+          title: 'Black chapter',
+          opening: 'French Defense',
+          orientation: Side.black,
+        );
+        await repo.saveChapter(chWhite);
+        await repo.saveChapter(chBlack);
+
+        await repo.saveDecisions([
+          RepertoireDecision.create(
+            studyId: 's_mixed',
+            chapterId: chWhite.id,
+            nodeId: 'n-white',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          ),
+          RepertoireDecision.create(
+            studyId: 's_mixed',
+            chapterId: chBlack.id,
+            nodeId: 'n-black',
+            expectedMoves: const [RepertoireMove(from: 'e7', to: 'e5', san: 'e5')],
+          ),
+        ]);
+        return repo;
+      }
+
+      test('study scope with a side trains only that side', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = await seedMixedStudy(SqliteStudyRepository(db));
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final white = await service.startSession(
+            scope: const ReviewScope.study('s_mixed', side: Side.white),
+          );
+          expect(white.remainingDueCount, 1);
+          expect(white.currentPrompt?.chapterId, isNotNull);
+          final whiteChapter = await repo.getChapter(white.currentPrompt!.chapterId);
+          expect(whiteChapter?.orientation, Side.white);
+
+          final black = await service.startSession(
+            scope: const ReviewScope.study('s_mixed', side: Side.black),
+          );
+          expect(black.remainingDueCount, 1);
+          final blackChapter = await repo.getChapter(black.currentPrompt!.chapterId);
+          expect(blackChapter?.orientation, Side.black);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('study scope without a side keeps the legacy unfiltered set', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = await seedMixedStudy(SqliteStudyRepository(db));
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final session = await service.startSession(scope: const ReviewScope.study('s_mixed'));
+          expect(session.remainingDueCount, 2);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('opening scope with a side trains only that side', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = await seedMixedStudy(SqliteStudyRepository(db));
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final white = await service.startSession(
+            scope: const ReviewScope.opening('French Defense', side: Side.white),
+          );
+          expect(white.remainingDueCount, 1);
+
+          final both = await service.startSession(
+            scope: const ReviewScope.opening('French Defense'),
+          );
+          expect(both.remainingDueCount, 2);
+        } finally {
+          await db.close();
+        }
+      });
+    });
 
     test(
       'transposition sharing: reviewing move in Study A updates shared canonical state in Study B',
