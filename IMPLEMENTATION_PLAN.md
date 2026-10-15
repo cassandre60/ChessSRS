@@ -297,6 +297,11 @@ remains a later option — never a redesign.
       2. Schema v18 rebuilds both tables without the undeclared clauses, preserving rows and indexes; only existing tables are rebuilt. Existing-data upgrade, idempotent create, and the exact production write (canonical mirror with no decision row) are pinned by tests citing INV-001/INV-005 — verified to fail pre-fix.
       3. Owner note: failed writes rolled back, so SRS memory is intact; answers given since enforcement began need re-reviewing.
 
+- [x] **R21: Drawer scopes carry the drawer colour (no more mid-session side flips)** *(done: 2026-10-15, owner-reported on device)*
+      1. The scope model documents that every drawer-produced scope names its side — but the study/opening/chapter constructors hardcoded `side: null` and the drawer never passed its colour. Sessions therefore mixed White and Black chapters: finishing a White French line could serve a Black prompt (the owner's French study holds Black-to-move middlegame excerpts auto-oriented Black), flipping the board unprompted; the squares then disagreed about which colour was live, so only one behaved.
+      2. Constructors take an optional `side` (default null: all existing callers and sideless behavior unchanged); the drawer passes its colour for study, opening, and practice scopes; the service narrows study/opening/chapter loads to that side (trees and states together, per the INV-030 note on the side branch). Selection highlight requires the side to match, falling back to study-only for sideless scopes.
+      3. No import, heuristic, migration, or re-import involved: orientations stay as stored; training from a colour drawer stays that colour. Tests cite INV-030.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.

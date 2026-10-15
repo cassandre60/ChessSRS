@@ -64,6 +64,40 @@ void main() {
       expect(const ReviewScope.black().isAggregate, isTrue);
       expect(const ReviewScope.study('s').isAggregate, isFalse);
     });
+
+    test('study and opening scopes carry the drawer colour', () {
+      // The scope doc requires every drawer-produced scope to name its side;
+      // the constructors take it optionally so older callers keep meaning
+      // "no restriction".
+      const study = ReviewScope.study('s', side: Side.white);
+      expect(study.side, Side.white);
+      expect(study.matches(studyId: 's', chapterId: 'c', side: Side.white), isTrue);
+      expect(study.matches(studyId: 's', chapterId: 'c', side: Side.black), isFalse);
+
+      const opening = ReviewScope.opening('French Defense', side: Side.black);
+      expect(opening.side, Side.black);
+      expect(
+        opening.matches(
+          studyId: 's',
+          chapterId: 'c',
+          openingFamily: 'French Defense',
+          side: Side.black,
+        ),
+        isTrue,
+      );
+      expect(
+        opening.matches(
+          studyId: 's',
+          chapterId: 'c',
+          openingFamily: 'French Defense',
+          side: Side.white,
+        ),
+        isFalse,
+      );
+
+      const chapter = ReviewScope.chapter(studyId: 's', chapterId: 'c', side: Side.white);
+      expect(chapter.side, Side.white);
+    });
   });
 
   group('ReviewScope.matches opening normalization', () {

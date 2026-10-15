@@ -509,22 +509,38 @@ class ReviewService {
 
     if (scope.chapterId != null) {
       final chapter = await repository.getChapter(scope.chapterId!);
-      targetChapters = chapter != null ? [chapter] : const [];
       final study = chapter != null
           ? (preloadedStudies?.where((s) => s.id == chapter.studyId).firstOrNull ??
                 await repository.getStudy(chapter.studyId))
           : null;
       targetStudies = study != null ? [study] : const [];
-      decisions = preloadedAllDecisions != null
-          ? preloadedAllDecisions.where((d) => d.chapterId == scope.chapterId!).toList()
-          : await repository.getDecisionsByChapter(scope.chapterId!);
+      final chapterPool = chapter != null ? [chapter] : const <Chapter>[];
+      targetChapters = scope.side == null
+          ? chapterPool
+          : chapterPool.where((c) => c.orientation == scope.side).toList();
+      if (targetChapters.isEmpty) {
+        decisions = const [];
+      } else if (preloadedAllDecisions != null) {
+        decisions = preloadedAllDecisions.where((d) => d.chapterId == scope.chapterId!).toList();
+      } else {
+        decisions = await repository.getDecisionsByChapter(scope.chapterId!);
+      }
     } else if (scope.studyId != null) {
       final study =
           preloadedStudies?.where((s) => s.id == scope.studyId!).firstOrNull ??
           await repository.getStudy(scope.studyId!);
       targetStudies = study != null ? [study] : const [];
-      targetChapters = await repository.getChaptersByStudy(scope.studyId!);
-      decisions = await repository.getDecisionsByStudy(scope.studyId!);
+      final studyChapters = await repository.getChaptersByStudy(scope.studyId!);
+      // A drawer names its colour when it builds this scope (INV-030): keep
+      // only that side's chapters so the queue, its trees and its states
+      // narrow together. Sideless scopes keep the legacy unfiltered set.
+      targetChapters = scope.side == null
+          ? studyChapters
+          : studyChapters.where((c) => c.orientation == scope.side).toList();
+      final chapterIds = targetChapters.map((c) => c.id).toSet();
+      decisions = (await repository.getDecisionsByStudy(
+        scope.studyId!,
+      )).where((d) => chapterIds.contains(d.chapterId)).toList();
     } else if (scope.openingFamily != null) {
       final chapterOpenings = preloadedChapterOpenings ?? await repository.getChapterOpenings();
       final matchingChapterIds = chapterOpenings.entries
@@ -534,7 +550,9 @@ class ReviewService {
 
       final loaded = await _loadActiveStudiesAndChapters(
         preloadedStudies: preloadedStudies,
-        chapterWhere: (c) => matchingChapterIds.contains(c.id),
+        chapterWhere: (c) =>
+            matchingChapterIds.contains(c.id) &&
+            (scope.side == null || c.orientation == scope.side),
       );
       final activeStudies = loaded.activeStudies;
       targetStudies = activeStudies;
