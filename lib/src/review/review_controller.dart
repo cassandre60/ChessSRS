@@ -432,11 +432,20 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   ///
   /// Bumping [_generation] first is what supersedes any load already in flight, so the older one
   /// reaches neither the screen nor the service's active session once it finishes.
-  Future<void> _loadAndPublish(ReviewScope scope, ReviewMode mode) async {
+  Future<void> _loadAndPublish(
+    ReviewScope scope,
+    ReviewMode mode, {
+    bool reuseSummary = false,
+  }) async {
     _pendingAdvancement = null;
     final generation = ++_generation;
     try {
-      final next = await _loadState(scope: scope, mode: mode, generation: generation);
+      final next = await _loadState(
+        scope: scope,
+        mode: mode,
+        generation: generation,
+        reuseSummary: reuseSummary,
+      );
       // Null means a newer request took over; it publishes its own result.
       if (next == null || !ref.mounted) return;
       state = AsyncData(next);
@@ -454,6 +463,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     required ReviewScope scope,
     ReviewMode mode = ReviewMode.srs,
     int? generation,
+    bool reuseSummary = false,
   }) async {
     final maxDailyReviews = ref.read(studyPreferencesProvider).maxDailyReviews;
     final now = ref.read(clockProvider).now();
@@ -498,14 +508,45 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       );
     }
 
-    final (:session, :summary) = await _service.loadSessionAndSummary(
-      studies: studies,
-      scope: effectiveScope,
-      mode: mode,
-      remainingDailyQuota: remainingQuota,
-      generation: generation,
-      preloadedChapterOrientations: chapterOrientations,
-    );
+    final currentState = state.value;
+    final bool canReuse =
+        reuseSummary && currentState != null && currentState.studies.length == studies.length;
+
+    final ReviewSession session;
+    final DueCountsSummary summary;
+
+    if (canReuse) {
+      session = await _service.startSession(
+        scope: effectiveScope,
+        mode: mode,
+        remainingDailyQuota: remainingQuota,
+        generation: generation,
+        preloadedStudies: studies,
+      );
+      summary = DueCountsSummary(
+        totalDueCount: session.initialDueCount,
+        studyDueCounts: currentState.studyDueCounts,
+        openingDueCounts: currentState.openingDueCounts,
+        studyProgress: currentState.studyProgress,
+        chapterProgress: currentState.chapterProgress,
+        openingProgress: currentState.openingProgress,
+        sideProgress: currentState.sideProgress,
+        studySideProgress: currentState.studySideProgress,
+        studyIdsBySide: currentState.studyIdsBySide,
+        openingsBySide: currentState.openingsBySide,
+      );
+    } else {
+      final loaded = await _service.loadSessionAndSummary(
+        studies: studies,
+        scope: effectiveScope,
+        mode: mode,
+        remainingDailyQuota: remainingQuota,
+        generation: generation,
+        preloadedChapterOrientations: chapterOrientations,
+      );
+      session = loaded.session;
+      summary = loaded.summary;
+    }
 
     // Everything below reads the session that was just built, and everything above waited on
     // the database. A request made in between owns the screen now, so this load is abandoned
@@ -575,7 +616,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   }
 
   /// Changes the active review scope (all studies or a specific study).
-  Future<void> changeScope(ReviewScope scope) => _loadAndPublish(scope, ReviewMode.srs);
+  Future<void> changeScope(ReviewScope scope) =>
+      _loadAndPublish(scope, ReviewMode.srs, reuseSummary: true);
 
   /// Switches the active colour and its drawer.
   ///
