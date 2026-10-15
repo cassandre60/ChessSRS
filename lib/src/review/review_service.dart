@@ -262,9 +262,7 @@ class _DueTally {
         isLearned ||
         unlockedDecisionIds.contains(d.id) ||
         unlockedDecisionIds.contains(d.canonicalId);
-    final isFresh = dynamicRepertoireMode
-        ? (status.isFresh && isUnlocked)
-        : status.isFresh;
+    final isFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
 
     if (studyTotals.containsKey(d.studyId)) {
       studyTotals[d.studyId] = (studyTotals[d.studyId] ?? 0) + 1;
@@ -894,7 +892,12 @@ class ReviewService {
     ReviewScope scope = const ReviewScope.all(),
   }) async {
     if (studies.isEmpty) {
-      return const DueCountsSummary(totalDueCount: 0, studyDueCounts: {}, openingDueCounts: {});
+      return const DueCountsSummary(
+        totalDueCount: 0,
+        totalFreshCount: 0,
+        studyDueCounts: {},
+        openingDueCounts: {},
+      );
     }
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
