@@ -18,7 +18,7 @@ agent can pick up and execute top-to-bottom.
 | `PERF-FIX-35-fast-utc-iso-date-parsing.md` | Implemented |
 | `PERF-FIX-36-targeted-scope-due-summary.md` | Implemented |
 | `PERF-FIX-37-sqlite-native-page-mmap.md` | Implemented |
-| `PERF-FIX-38-differential-summary-tallying.md` | Ready — O(Reviewed) tallying instead of O(31k) iteration |
+| `PERF-FIX-38-differential-summary-tallying.md` | Implemented |
 | `PERF-FIX-39-pipelined-animation-overlapped-durability.md` | Implemented |
 | `PERF-FIX-40-board-repaint-boundary-and-prewarm.md` | Implemented |
 | `PERF-FIX-41-sub-sensory-move-pre-warming.md` | Implemented |
