@@ -425,6 +425,24 @@ and appear only after grading (or never, when annotations are disabled).
 - Gates: review screen suite.
 - Tier: T1. Covering: `test/view/review/review_screen_test.dart`.
 
+### INV-068 A position is due only once it has been presented
+A position counts as due only if it holds a review state whose scheduled date
+has arrived. A position with no review state has never been shown, so it is
+fresh: excluded from every due figure, and introduced to the session at a capped
+rate after due work. The three states — fresh, due, scheduled — are disjoint and
+partition each scope's positions, so reported counts of the three sum to the
+total. Practice mode is exempt and still surfaces fresh positions.
+- Oracle: fresh-vs-due classification tests, fresh-cap session tests, and a
+  segment-partition assertion over a freshly imported scope.
+- Gates: domain suite, review engine suite, service suite.
+- Tier: T1. History: 2026-10-15, owner-reported on first launch after bulk
+  importing 63 studies — the due figure read in the thousands for positions
+  never presented once (MVP §4 AC3 reversed).
+- Covering: `test/domain/due_status_test.dart`,
+  `test/review/review_engine_test.dart`,
+  `test/review/review_service_test.dart`,
+  `test/domain/repertoire_progress_test.dart`.
+
 ---
 
 ## Change log
@@ -438,3 +456,4 @@ and appear only after grading (or never, when annotations are disabled).
 | 2026-10-04 | INV-066 | Amended: Random order over the same due set (owner options) | (owner, on merge) |
 | 2026-10-05 | INV-030 | Amended: `white()`/`black()` side scopes aggregate by chapter orientation | (owner, on merge) |
 | 2026-10-05 | INV-067 | Added: an opening hub is a family name, not a title that mentions one (spurious hubs) | (owner, on merge) |
+| 2026-10-15 | INV-068 | Added: due requires a prior presentation; fresh is introduced under its own cap | (owner, on merge) |
