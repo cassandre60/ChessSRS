@@ -894,11 +894,7 @@ class ReviewService {
     ReviewScope scope = const ReviewScope.all(),
   }) async {
     if (studies.isEmpty) {
-      return const DueCountsSummary(
-        totalDueCount: 0,
-        studyDueCounts: {},
-        openingDueCounts: {},
-      );
+      return const DueCountsSummary(totalDueCount: 0, studyDueCounts: {}, openingDueCounts: {});
     }
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
     final chapterOpenings = await repository.getChapterOpenings();
