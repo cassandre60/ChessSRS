@@ -208,7 +208,7 @@ class _DueTally {
   final Set<String> accountedDueCanonicalIds = <String>{};
 
   void add(
-    RepertoireDecision d, {
+    TallyDecision d, {
     required Map<String, ReviewState> reviewStates,
     required DateTime now,
     required Set<String> activeStudyIds,
@@ -382,13 +382,8 @@ class _DueTally {
 }
 
 class _LoadedReviewData {
-  const _LoadedReviewData({
-    required this.allDecisions,
-    required this.reviewStates,
-    required this.exposureThrottle,
-  });
+  const _LoadedReviewData({required this.reviewStates, required this.exposureThrottle});
 
-  final List<RepertoireDecision> allDecisions;
   final Map<String, ReviewState> reviewStates;
   final Map<String, DateTime> exposureThrottle;
 }
@@ -452,14 +447,15 @@ class ReviewService {
     return (allStudies: allStudies, activeStudies: activeStudies, chapters: chapters);
   }
 
-  Future<_LoadedReviewData> _loadReviewData([List<RepertoireDecision>? decisions]) async {
-    final allDecisions = decisions ?? await repository.getAllDecisions();
-    final decisionIds = allDecisions.map((d) => d.id).toList();
-    final canonicalIds = allDecisions.map((d) => d.canonicalId).toSet().toList();
-    final allQueryIds = {...decisionIds, ...canonicalIds}.toList();
+  Future<_LoadedReviewData> _loadReviewData({
+    required Iterable<String> decisionIds,
+    required Iterable<String> canonicalIds,
+  }) async {
+    final distinctCanonical = canonicalIds.toSet().toList();
+    final allQueryIds = {...decisionIds, ...distinctCanonical}.toList();
     final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
-    final kStates = await repository.getKnowledgeStatesByCanonicalIds(canonicalIds);
+    final kStates = await repository.getKnowledgeStatesByCanonicalIds(distinctCanonical);
     for (final k in kStates) {
       reviewStates[k.canonicalId] = k.toReviewState();
     }
@@ -472,11 +468,7 @@ class ReviewService {
       }
     }
 
-    return _LoadedReviewData(
-      allDecisions: allDecisions,
-      reviewStates: reviewStates,
-      exposureThrottle: exposureThrottle,
-    );
+    return _LoadedReviewData(reviewStates: reviewStates, exposureThrottle: exposureThrottle);
   }
 
   /// Starts a new review session for the given [scope].
@@ -592,7 +584,10 @@ class ReviewService {
       reviewStates = preloadedReviewStates;
       exposureThrottle = preloadedExposureThrottle ?? const {};
     } else {
-      final loaded = await _loadReviewData(decisions);
+      final loaded = await _loadReviewData(
+        decisionIds: decisions.map((d) => d.id),
+        canonicalIds: decisions.map((d) => d.canonicalId),
+      );
       reviewStates = loaded.reviewStates;
       exposureThrottle = loaded.exposureThrottle;
     }
@@ -765,7 +760,10 @@ class ReviewService {
     final chapterStudyIds = await repository.getChapterStudyIds();
 
     final allDecisions = await repository.getAllDecisions();
-    final loadedData = await _loadReviewData(allDecisions);
+    final loadedData = await _loadReviewData(
+      decisionIds: allDecisions.map((d) => d.id),
+      canonicalIds: allDecisions.map((d) => d.canonicalId),
+    );
 
     final now = clock.now();
     final tally = _DueTally(
@@ -776,7 +774,7 @@ class ReviewService {
     );
     for (final d in allDecisions) {
       tally.add(
-        d,
+        (id: d.id, studyId: d.studyId, chapterId: d.chapterId, canonicalId: d.canonicalId),
         reviewStates: loadedData.reviewStates,
         now: now,
         activeStudyIds: activeStudyIds,
@@ -817,7 +815,11 @@ class ReviewService {
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
-    final loadedData = await _loadReviewData();
+    final tallyDecisions = await repository.getTallyDecisions();
+    final loadedData = await _loadReviewData(
+      decisionIds: tallyDecisions.map((d) => d.id),
+      canonicalIds: tallyDecisions.map((d) => d.canonicalId),
+    );
     final now = clock.now();
 
     final tally = _DueTally(
@@ -826,7 +828,7 @@ class ReviewService {
       chapterSides: chapterSides,
       chapterStudyIds: chapterStudyIds,
     );
-    for (final d in loadedData.allDecisions) {
+    for (final d in tallyDecisions) {
       tally.add(
         d,
         reviewStates: loadedData.reviewStates,

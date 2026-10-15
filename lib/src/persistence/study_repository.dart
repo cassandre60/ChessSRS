@@ -5,6 +5,10 @@ import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 
+/// Lightweight projection of a decision for due-summary tallies,
+/// omitting moves and node IDs to avoid decoding JSON move lists.
+typedef TallyDecision = ({String id, String studyId, String chapterId, String canonicalId});
+
 /// Abstract interface for local persistence of studies, chapters, trees,
 /// decisions, and spaced repetition review states.
 abstract class StudyRepository {
@@ -85,6 +89,10 @@ abstract class StudyRepository {
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId);
   Future<List<RepertoireDecision>> getDecisionsByStudy(String studyId);
   Future<List<RepertoireDecision>> getAllDecisions();
+
+  /// Returns a lightweight projection of all decisions for due-summary tallies,
+  /// omitting moves and node IDs to avoid decoding JSON move lists.
+  Future<List<TallyDecision>> getTallyDecisions();
 
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);

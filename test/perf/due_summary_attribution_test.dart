@@ -85,6 +85,7 @@ void main() {
         'getChapterOrientations': () => repo.getChapterOrientations(),
         'getChapterStudyIds': () => repo.getChapterStudyIds(),
         'getAllDecisions': () => repo.getAllDecisions(),
+        'getTallyDecisions': () => repo.getTallyDecisions(),
         'getAllReviewStates': () => repo.getAllReviewStates(),
         'getKnowledgeStates': () => repo.getKnowledgeStatesByCanonicalIds(canonicalIds),
       };
