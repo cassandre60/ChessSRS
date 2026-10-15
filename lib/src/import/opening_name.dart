@@ -141,14 +141,15 @@ String? detectOpeningFamilyFromMoves(RepertoireNode? root) {
           if (m5 == 'Bb5') return 'Ruy Lopez';
           if (m5 == 'Bc4') return 'Italian Game';
           if (m5 == 'd4') return 'Scotch Game';
-          return 'Open Game';
+          if (m5 != null) return 'Open Game';
         }
         if (m4 == 'Nf6') return 'Petrov Defense';
-        return 'Open Game';
+        if (m4 == 'd6') return 'Philidor Defense';
+      } else if (m3 == 'f4') {
+        return "King's Gambit";
+      } else if (m3 == 'Nc3') {
+        return 'Vienna Game';
       }
-      if (m3 == 'f4') return "King's Gambit";
-      if (m3 == 'Nc3') return 'Vienna Game';
-      return 'Open Game';
     }
   } else if (m1 == 'd4') {
     if (m2 == 'd5') {
