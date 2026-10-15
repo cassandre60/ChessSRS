@@ -271,9 +271,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                               // the switch itself is instant, lists rebuild
                               // from state, counts follow on publish.
                               unawaited(
-                                ref
-                                    .read(reviewControllerProvider.notifier)
-                                    .selectSide(tapped),
+                                ref.read(reviewControllerProvider.notifier).selectSide(tapped),
                               );
                               setState(() => _side = tapped);
                             },
