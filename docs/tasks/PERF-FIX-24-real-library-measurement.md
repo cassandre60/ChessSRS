@@ -227,6 +227,41 @@ a hypothesis, not a measurement, and is recorded as one.
 measurement order and reports spread rather than a single median. Until that
 exists, a change that appears to halve the cost may have halved nothing.
 
+### Fourth pass — real library scale jump: 31k decisions and the true bottleneck (2026-10-15)
+
+Following bulk study import (#131, #134), the owner's library grew by 60x:
+- **63 studies** (from 11)
+- **312 chapters** (from 25)
+- **31,182 decisions** (from 528)
+- **25,102 distinct canonicalStateId** (from 66)
+- Database size: 35 MiB with WAL checkpointed
+
+At 31,182 decisions, `getDueSummary()` jumped from **20 ms to ~512 ms**.
+This 60x scale jump completely shifted the bottleneck and made the true costs
+obvious:
+
+1. **Move decoding in `getAllDecisions()` dominates (`186 ms` / 66%)**:
+   `getAllDecisions()` parses JSON move lists for all 31,182 decisions, even
+   though `_DueTally` only uses `id, studyId, chapterId, canonicalStateId`.
+   -> Handed off to **PERF-FIX-33**.
+
+2. **143 sequential SQLite queries for ~400 rows (`~80 ms`)**:
+   `_loadReviewData` chunked 32,000 decision IDs and 25,102 canonical IDs into
+   400-item `IN` queries (80 queries for review state, 63 queries for knowledge
+   state). The two tables hold only 427 and 349 rows! Querying 143 times over
+   FFI to find 400 rows is pathological.
+   -> Handed off to **PERF-FIX-34**.
+
+3. **Date parsing overhead (`~14 ms`)**:
+   General-purpose `DateTime.parse` costs ~5-6 µs on real FFI strings. Only
+   `nextDueAt` is needed for the summary, yet 3-4 dates per row are parsed.
+   -> Handed off to **PERF-FIX-35**.
+
+4. **Redundant full-library tallying on scope changes (`~500 ms` hitch)**:
+   Switching between White/Black drawers or tapping a study re-runs the entire
+   31k-decision pipeline, even though only the active scope filter changed.
+   -> Handed off to **PERF-FIX-36**.
+
 ### Reproducing
 
 ```bash
