@@ -230,6 +230,56 @@ void main() {
       }
     });
 
+    test(
+      'adaptive review and knowledge state loading handles >800 ids with single-pass scan',
+      () async {
+        // SPEC INV-051. PERF-FIX-34: adaptive state loading when id set exceeds 800 items.
+        final db = await openAppDatabase(databaseFactoryFfi, inMemoryDatabasePath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 10, 15, 12);
+          final reviewState = ReviewState(
+            decisionId: 'dec_42',
+            nextDueAt: now,
+            firstReviewedAt: now,
+            lastReviewedAt: now,
+          );
+          await repo.saveReviewState(reviewState);
+
+          final kState = PositionKnowledgeState(
+            canonicalId: 'can_42',
+            nextDueAt: now,
+            firstReviewedAt: now,
+            lastReviewedAt: now,
+          );
+          await repo.savePositionKnowledgeState(kState);
+
+          // Build list of 850 query ids including our target
+          final queryDecisionIds = List.generate(
+            850,
+            (i) => i == 42 ? 'dec_42' : 'dummy_dec_$i',
+            growable: false,
+          );
+          final queryCanonicalIds = List.generate(
+            850,
+            (i) => i == 42 ? 'can_42' : 'dummy_can_$i',
+            growable: false,
+          );
+
+          final fetchedReviews = await repo.getReviewStatesByIds(queryDecisionIds);
+          expect(fetchedReviews, hasLength(1));
+          expect(fetchedReviews.single.decisionId, 'dec_42');
+
+          final fetchedKnowledge = await repo.getKnowledgeStatesByCanonicalIds(queryCanonicalIds);
+          expect(fetchedKnowledge, hasLength(1));
+          expect(fetchedKnowledge.single.canonicalId, 'can_42');
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     test('timestamps are stored as UTC so a timezone change cannot shift due dates', () async {
       // SPEC INV-002. review-4 C2 / QUALITY §3.2: due instants survive a
       // timezone change — stored form is an absolute instant (UTC), not a

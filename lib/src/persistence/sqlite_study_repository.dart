@@ -788,6 +788,19 @@ class SqliteStudyRepository implements StudyRepository {
     List<String> canonicalIds,
   ) async {
     if (canonicalIds.isEmpty) return const [];
+    // SPEC INV-051: Scoped queries (e.g. within a study or chapter) use bounded
+    // 400-item chunks. When querying across large decision sets (>800 items),
+    // scanning the ~400-row table and filtering in memory avoids issuing dozens
+    // of redundant SQLite round-trips over FFI.
+    if (canonicalIds.length > 800) {
+      final idSet = canonicalIds.toSet();
+      final rows = await _db.query(kTablePositionKnowledgeState);
+      return rows
+          .where((r) => idSet.contains(r['canonicalId']! as String))
+          .map(_knowledgeStateFromRow)
+          .toList(growable: false);
+    }
+
     const chunkSize = 400;
     final results = <PositionKnowledgeState>[];
     for (var i = 0; i < canonicalIds.length; i += chunkSize) {
@@ -972,6 +985,19 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) async {
     if (ids.isEmpty) return const [];
+    // SPEC INV-051: Scoped queries (e.g. within a study or chapter) use bounded
+    // 400-item chunks. When querying across large decision sets (>800 items),
+    // scanning the ~400-row table and filtering in memory avoids issuing dozens
+    // of redundant SQLite round-trips over FFI.
+    if (ids.length > 800) {
+      final idSet = ids.toSet();
+      final rows = await _db.query(kTableSrsReviewState);
+      return rows
+          .where((r) => idSet.contains(r['decisionId']! as String))
+          .map(_reviewStateFromRow)
+          .toList(growable: false);
+    }
+
     const chunkSize = 400;
     final results = <ReviewState>[];
     for (var i = 0; i < ids.length; i += chunkSize) {
