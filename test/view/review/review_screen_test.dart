@@ -282,6 +282,39 @@ void main() {
       expect(find.text('Nothing due.'), findsOneWidget);
     });
 
+    // SPEC INV-050: RepaintBoundary isolates BoardWidget from outer widget repaints.
+    testWidgets('RepaintBoundary isolates BoardWidget render layer', (tester) async {
+      final importResult = importPgn(
+        '1. e4 e5 2. Nf3 *',
+        studyTitle: 'King Pawn Repertoire',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      final repaintBoundaryFinder = find.ancestor(
+        of: find.byType(BoardWidget),
+        matching: find.byType(RepaintBoundary),
+      );
+      expect(repaintBoundaryFinder, findsAtLeastNWidgets(1));
+    });
+
     testWidgets('displays lapse feedback and allows user to reguess on the board', (tester) async {
       final importResult = importPgn(
         '1. d4 d5 *',

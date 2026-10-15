@@ -20,6 +20,7 @@ class BoardWidget extends StatelessWidget {
     required this.settings,
     required this.controller,
     this.onMove,
+    this.onTouchedSquare,
     this.shapes = const {},
     this.annotations = const {},
     this.boardOverlay,
@@ -36,6 +37,9 @@ class BoardWidget extends StatelessWidget {
 
   /// Called when the user completes a move on the board.
   final void Function(Move, {bool? viaDragAndDrop})? onMove;
+
+  /// Called when a square on the board is touched (pointer down).
+  final void Function(Square)? onTouchedSquare;
 
   /// External shapes to draw on the board (engine arrows, analysis annotations, etc.).
   final Set<Shape> shapes;
@@ -57,6 +61,7 @@ class BoardWidget extends StatelessWidget {
       size: size,
       orientation: orientation,
       onMove: onMove,
+      onTouchedSquare: onTouchedSquare,
       shapes: shapes,
       annotations: annotations,
       settings: srsColors != null && settings.enableCoordinates

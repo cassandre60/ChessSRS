@@ -612,6 +612,10 @@ class _ActiveReviewView extends ConsumerStatefulWidget {
 class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   ChessboardController? _controller;
   final FocusNode _focusNode = FocusNode();
+  GameData? _prewarmedGameData;
+  String? _prewarmedFen;
+  PlayerSide? _prewarmedPlayerSide;
+  Move? _prewarmedLastMove;
 
   @override
   void initState() {
@@ -622,6 +626,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   void _initController() {
     final gameData = _buildGameData();
     _controller = ChessboardController(game: gameData);
+    _prewarmNextPosition();
   }
 
   @override
@@ -632,6 +637,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
 
     final newGameData = _buildGameData();
     ctrl.updatePosition(newGameData);
+    _prewarmNextPosition();
   }
 
   @override
@@ -647,6 +653,19 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     final playerSide = widget.state.isAwaitingAdvance
         ? PlayerSide.none
         : (widget.state.boardOrientation == Side.white ? PlayerSide.white : PlayerSide.black);
+    final lastMove = widget.state.lastMove;
+
+    final prewarmed = _prewarmedGameData;
+    if (prewarmed != null &&
+        _prewarmedFen == pos.fen &&
+        _prewarmedPlayerSide == playerSide &&
+        _prewarmedLastMove == lastMove) {
+      _prewarmedGameData = null;
+      _prewarmedFen = null;
+      _prewarmedPlayerSide = null;
+      _prewarmedLastMove = null;
+      return prewarmed;
+    }
 
     return buildGameData(
       fen: pos.fen,
@@ -655,8 +674,43 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
       playerSide: playerSide,
       castlingMethod: boardPrefs.castlingMethod,
       boardHighlights: boardPrefs.boardHighlights,
-      lastMove: widget.state.lastMove,
+      lastMove: lastMove,
     );
+  }
+
+  void _prewarmNextPosition() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final expected = widget.prompt.expectedMoves.firstOrNull;
+      final pos = widget.state.boardPosition;
+      if (expected == null || pos == null) return;
+      try {
+        final parsedMove = Move.parse(expected.uci);
+        if (parsedMove == null) return;
+        final playedPos = pos.play(parsedMove);
+        final playerSide = widget.state.boardOrientation == Side.white
+            ? PlayerSide.white
+            : PlayerSide.black;
+        final boardPrefs = ref.read(boardPreferencesProvider);
+        _prewarmedFen = playedPos.fen;
+        _prewarmedPlayerSide = playerSide;
+        _prewarmedLastMove = parsedMove;
+        _prewarmedGameData = buildGameData(
+          fen: playedPos.fen,
+          variant: Variant.standard,
+          position: playedPos,
+          playerSide: playerSide,
+          castlingMethod: boardPrefs.castlingMethod,
+          boardHighlights: boardPrefs.boardHighlights,
+          lastMove: parsedMove,
+        );
+      } catch (_) {
+        _prewarmedGameData = null;
+        _prewarmedFen = null;
+        _prewarmedPlayerSide = null;
+        _prewarmedLastMove = null;
+      }
+    });
   }
 
   @override
@@ -778,20 +832,25 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Semantics(
-                  container: true,
-                  label: _boardSemanticsLabel(prompt, state.boardOrientation),
-                  child: BoardWidget(
-                    size: size,
-                    orientation: state.boardOrientation,
-                    settings: boardPrefs
-                        .toBoardSettings(Variant.standard, srsColors: srsColors)
-                        .copyWith(enableCoordinates: false),
-                    controller: _controller!,
-                    onMove: (move, {viaDragAndDrop}) {
-                      ref.read(reviewControllerProvider.notifier).onUserMove(move);
-                    },
-                    shapes: shapes,
+                RepaintBoundary(
+                  child: Semantics(
+                    container: true,
+                    label: _boardSemanticsLabel(prompt, state.boardOrientation),
+                    child: BoardWidget(
+                      size: size,
+                      orientation: state.boardOrientation,
+                      settings: boardPrefs
+                          .toBoardSettings(Variant.standard, srsColors: srsColors)
+                          .copyWith(enableCoordinates: false),
+                      controller: _controller!,
+                      onMove: (move, {viaDragAndDrop}) {
+                        ref.read(reviewControllerProvider.notifier).onUserMove(move);
+                      },
+                      onTouchedSquare: (sq) {
+                        ref.read(reviewControllerProvider.notifier).prewarmMoveCandidate(sq);
+                      },
+                      shapes: shapes,
+                    ),
                   ),
                 ),
                 if (isLapse && state.expectedMove != null)
