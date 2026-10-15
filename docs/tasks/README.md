@@ -15,7 +15,7 @@ agent can pick up and execute top-to-bottom.
 | `PERF-FIX-24-real-library-measurement.md` | Measured 2026-10-15 — 31k-decision findings recorded |
 | `PERF-FIX-33-slim-due-summary-decision-load.md` | Implemented |
 | `PERF-FIX-34-adaptive-review-state-loading.md` | Implemented |
-| `PERF-FIX-35-fast-utc-iso-date-parsing.md` | Ready — cuts date parsing overhead |
+| `PERF-FIX-35-fast-utc-iso-date-parsing.md` | Implemented |
 | `PERF-FIX-36-targeted-scope-due-summary.md` | Ready — eliminates 500ms hitch on scope navigation |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
