@@ -668,7 +668,9 @@ void main() {
           );
           expect(white.remainingDueCount, 1);
 
-          final both = await service.startSession(scope: const ReviewScope.opening('French Defense'));
+          final both = await service.startSession(
+            scope: const ReviewScope.opening('French Defense'),
+          );
           expect(both.remainingDueCount, 2);
         } finally {
           await db.close();
