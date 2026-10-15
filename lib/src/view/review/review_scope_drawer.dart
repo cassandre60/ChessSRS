@@ -41,8 +41,7 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
   /// A colour's name. The top bar's squares use it as their tooltip and
   /// semantics label, and the study actions sheet uses it to name the drawer a
   /// study would be copied into, so the three can never disagree.
-  static String sideLabel(Side side, AppLocalizations strings) =>
-      side == Side.white
+  static String sideLabel(Side side, AppLocalizations strings) => side == Side.white
       ? strings.mobileReviewWhiteRepertoire
       : strings.mobileReviewBlackRepertoire;
 
@@ -54,10 +53,7 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
       barrierDismissible: true,
       barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
-      transitionDuration: SrsMotion.resolve(
-        context,
-        const Duration(milliseconds: 180),
-      ),
+      transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return ReviewScopeDrawer(side: side);
       },
@@ -68,15 +64,9 @@ class ReviewScopeDrawer extends ConsumerStatefulWidget {
         if (isWide) {
           return FadeTransition(opacity: animation, child: child);
         }
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.08),
-            end: Offset.zero,
-          ).animate(curved),
+          position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(curved),
           child: FadeTransition(opacity: animation, child: child),
         );
       },
@@ -117,9 +107,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     final maxHeight = isWide
         ? math.max(0.0, mediaQuery.size.height - 80.0)
         : math.min(mediaQuery.size.height * 0.82, 720.0);
-    final maxWidth = isWide
-        ? math.min(470.0, mediaQuery.size.width - 52.0)
-        : double.infinity;
+    final maxWidth = isWide ? math.min(470.0, mediaQuery.size.width - 52.0) : double.infinity;
 
     final reviewStateAsync = ref.watch(reviewControllerProvider);
     final reviewState = reviewStateAsync.value;
@@ -163,10 +151,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
     // Master switch: with collapsing off, headers are plain titles and every
     // group always expanded, whatever the persisted per-group state says.
     final collapseEnabled =
-        ref.watch(
-          studyPreferencesProvider.select((p) => p.collapsibleScopeGroups),
-        ) &&
-        !searching;
+        ref.watch(studyPreferencesProvider.select((p) => p.collapsibleScopeGroups)) && !searching;
 
     final myOpenings = reviewState.openingsBySide[side] ?? const <String>[];
     final myStudyIds = reviewState.studyIdsBySide[side] ?? const <String>[];
@@ -181,10 +166,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         .where((s) => query.isEmpty || s.title.toLowerCase().contains(query))
         .toList();
 
-    final hasNoResults =
-        query.isNotEmpty &&
-        filteredOpeningHubs.isEmpty &&
-        filteredStudies.isEmpty;
+    final hasNoResults = query.isNotEmpty && filteredOpeningHubs.isEmpty && filteredStudies.isEmpty;
 
     final content = Align(
       alignment: isWide ? Alignment.topLeft : Alignment.bottomCenter,
@@ -201,13 +183,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
             color: c.surface,
             borderRadius: BorderRadius.circular(isWide ? 18 : 22),
             border: Border.all(color: c.hairline, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: c.scrim,
-                blurRadius: 30,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: c.scrim, blurRadius: 30, offset: const Offset(0, 8))],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(isWide ? 18 : 22),
@@ -235,14 +211,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
 
                     // Search field matching demo (.search)
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20.0,
-                        vertical: 12.0,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
                       decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(color: c.hairlineSoft),
-                        ),
+                        border: Border(bottom: BorderSide(color: c.hairlineSoft)),
                       ),
                       child: Row(
                         children: [
@@ -257,12 +228,9 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                               autofocus:
                                   isWide &&
                                   (kIsWeb ||
-                                      Theme.of(context).platform ==
-                                          TargetPlatform.macOS ||
-                                      Theme.of(context).platform ==
-                                          TargetPlatform.windows ||
-                                      Theme.of(context).platform ==
-                                          TargetPlatform.linux),
+                                      Theme.of(context).platform == TargetPlatform.macOS ||
+                                      Theme.of(context).platform == TargetPlatform.windows ||
+                                      Theme.of(context).platform == TargetPlatform.linux),
                               style: TextStyle(
                                 fontFamily: SrsText.ui,
                                 fontSize: 15.5,
@@ -282,8 +250,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.zero,
                               ),
-                              onChanged: (text) =>
-                                  setState(() => _searchQuery = text),
+                              onChanged: (text) => setState(() => _searchQuery = text),
                             ),
                           ),
                           if (_searchQuery.isNotEmpty)
@@ -324,9 +291,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 padding: const EdgeInsets.all(28.0),
                                 child: Text(
                                   // design/docs/01-identity.md: `Nothing matches "{query}".`
-                                  context.l10n.mobileReviewNothingMatches(
-                                    _searchQuery,
-                                  ),
+                                  context.l10n.mobileReviewNothingMatches(_searchQuery),
                                   style: TextStyle(
                                     fontFamily: SrsText.ui,
                                     fontSize: 15,
@@ -336,9 +301,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                               ),
                             )
                           : ListView(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 4.0,
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
@@ -348,19 +311,15 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     c,
                                     group: 'openings',
                                     title: context.l10n.openings,
-                                    collapsed: collapsedGroups.contains(
-                                      'openings',
-                                    ),
+                                    collapsed: collapsedGroups.contains('openings'),
                                     plain: !collapseEnabled,
                                   ),
-                                  if (!collapseEnabled ||
-                                      !collapsedGroups.contains('openings'))
+                                  if (!collapseEnabled || !collapsedGroups.contains('openings'))
                                     for (final entry in filteredOpeningHubs)
                                       Builder(
                                         builder: (context) {
                                           final progress =
-                                              reviewState.openingProgress[entry
-                                                  .key] ??
+                                              reviewState.openingProgress[entry.key] ??
                                               RepertoireProgress.zero;
                                           return _ScopeRow(
                                             name: entry.key,
@@ -369,23 +328,16 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                             dueCount: entry.value,
                                             isPaused: false,
                                             isSelected:
-                                                activeScope.openingFamily ==
-                                                    entry.key &&
+                                                activeScope.openingFamily == entry.key &&
                                                 (activeScope.side == null ||
                                                     activeScope.side == side),
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
                                               ref
-                                                  .read(
-                                                    reviewControllerProvider
-                                                        .notifier,
-                                                  )
+                                                  .read(reviewControllerProvider.notifier)
                                                   .changeScope(
-                                                    ReviewScope.opening(
-                                                      entry.key,
-                                                      side: side,
-                                                    ),
+                                                    ReviewScope.opening(entry.key, side: side),
                                                   );
                                             },
                                           );
@@ -400,25 +352,17 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                     ref,
                                     c,
                                     group: 'studies',
-                                    title:
-                                        context.l10n.mobileReviewStudiesGroup,
-                                    collapsed: collapsedGroups.contains(
-                                      'studies',
-                                    ),
+                                    title: context.l10n.mobileReviewStudiesGroup,
+                                    collapsed: collapsedGroups.contains('studies'),
                                     plain: !collapseEnabled,
                                   ),
-                                  if (!collapseEnabled ||
-                                      !collapsedGroups.contains('studies'))
+                                  if (!collapseEnabled || !collapsedGroups.contains('studies'))
                                     for (final study in filteredStudies)
                                       Builder(
                                         builder: (context) {
-                                          final due =
-                                              reviewState.studyDueCounts[study
-                                                  .id] ??
-                                              0;
+                                          final due = reviewState.studyDueCounts[study.id] ?? 0;
                                           final progress =
-                                              reviewState.studyProgress[study
-                                                  .id] ??
+                                              reviewState.studyProgress[study.id] ??
                                               RepertoireProgress.zero;
                                           return _ScopeRow(
                                             name: study.title,
@@ -428,33 +372,25 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                             dueCount: due,
                                             isPaused: !study.isActive,
                                             isSelected:
-                                                activeScope.studyId ==
-                                                    study.id &&
+                                                activeScope.studyId == study.id &&
                                                 (activeScope.side == null ||
                                                     activeScope.side == side),
                                             progress: progress,
                                             onPressed: () {
                                               Navigator.of(context).pop();
                                               ref
-                                                  .read(
-                                                    reviewControllerProvider
-                                                        .notifier,
-                                                  )
+                                                  .read(reviewControllerProvider.notifier)
                                                   .changeScope(
-                                                    ReviewScope.study(
-                                                      study.id,
-                                                      side: side,
-                                                    ),
+                                                    ReviewScope.study(study.id, side: side),
                                                   );
                                             },
-                                            onShowActions: (anchor) =>
-                                                _showStudyActionsSheet(
-                                                  context,
-                                                  ref,
-                                                  study,
-                                                  side: side,
-                                                  anchor: anchor,
-                                                ),
+                                            onShowActions: (anchor) => _showStudyActionsSheet(
+                                              context,
+                                              ref,
+                                              study,
+                                              side: side,
+                                              anchor: anchor,
+                                            ),
                                           );
                                         },
                                       ),
@@ -466,10 +402,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                     // Bottom action: Import PGN
                     Container(height: 1, color: c.hairlineSoft),
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18.0,
-                        vertical: 10.0,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 10.0),
                       child: SizedBox(
                         width: double.infinity,
                         child: SrsPillButton(
@@ -532,9 +465,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         ? context.l10n.mobileReviewExpandSection(title)
         : context.l10n.mobileReviewCollapseSection(title);
     return SrsPressable(
-      onPressed: () => ref
-          .read(studyPreferencesProvider.notifier)
-          .toggleScopeGroupCollapsed(group),
+      onPressed: () => ref.read(studyPreferencesProvider.notifier).toggleScopeGroupCollapsed(group),
       semanticLabel: semanticLabel,
       semanticsToggled: !collapsed,
       radius: 10,
@@ -551,9 +482,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
             ExcludeSemantics(child: label),
             const Spacer(),
             Icon(
-              collapsed
-                  ? Symbols.expand_more_rounded
-                  : Symbols.expand_less_rounded,
+              collapsed ? Symbols.expand_more_rounded : Symbols.expand_less_rounded,
               size: 14,
               color: c.ink3,
             ),
@@ -586,127 +515,96 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
       barrierDismissible: true,
       barrierLabel: context.l10n.mobileReviewDismissBarrier,
       barrierColor: c.scrim,
-      transitionDuration: SrsMotion.resolve(
-        context,
-        const Duration(milliseconds: 180),
-      ),
-      pageBuilder: (dialogContext, animation, secondaryAnimation) =>
-          StudyActionsSheet(
-            study: study,
-            side: side,
-            anchor: anchor,
-            onDismiss: () => Navigator.of(dialogContext).pop(),
-            onTogglePause: () {
-              Navigator.of(dialogContext).pop();
-              ref
-                  .read(reviewControllerProvider.notifier)
-                  .toggleStudyActive(study.id, !study.isActive);
-            },
-            onAnalyze: () {
-              final navigator = Navigator.of(context, rootNavigator: true);
-              Navigator.of(dialogContext).pop();
-              Navigator.of(context).pop();
-              navigator.push(
-                StudyScreen.buildRoute((
-                  id: StudyId(study.id),
-                  initialChapter: null,
-                )),
-              );
-            },
-            onPractice: () {
-              Navigator.of(dialogContext).pop();
-              Navigator.of(context).pop();
-              ref
-                  .read(reviewControllerProvider.notifier)
-                  .startPracticeMode(
-                    scope: ReviewScope.study(study.id, side: side),
-                  );
-            },
-            onCreateOpposite: () {
-              Navigator.of(dialogContext).pop();
-              final other = side == Side.white ? Side.black : Side.white;
-              ref
-                  .read(reviewControllerProvider.notifier)
-                  .createStudyInSide(study.id, other)
-                  .then((created) {
-                    if (!context.mounted) return;
-                    if (created == null) {
-                      showSnackBar(
-                        context,
-                        context.l10n.mobileReviewAlreadyOpposite(
-                          ReviewScopeDrawer.sideLabel(
-                            other,
-                            context.l10n,
-                          ).toLowerCase(),
-                        ),
-                        type: SnackBarType.info,
-                      );
-                    } else {
-                      showSnackBar(
-                        context,
-                        context.l10n.mobileReviewCreatedOpposite(
-                          ReviewScopeDrawer.sideLabel(
-                            other,
-                            context.l10n,
-                          ).toLowerCase(),
-                        ),
-                        type: SnackBarType.success,
-                      );
-                    }
-                  })
-                  .catchError((Object e) {
-                    if (!context.mounted) return null;
-                    _logger.severe('Could not create it.', e);
-                    showSnackBar(
-                      context,
-                      'Could not create it',
-                      type: SnackBarType.error,
-                    );
-                    return null;
-                  });
-            },
-            onExport: () async {
-              Navigator.of(dialogContext).pop();
-              final pgn = await ref
-                  .read(reviewControllerProvider.notifier)
-                  .exportStudyPgn(study.id);
-              if (pgn == null || pgn.trim().isEmpty) {
-                if (context.mounted) {
+      transitionDuration: SrsMotion.resolve(context, const Duration(milliseconds: 180)),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) => StudyActionsSheet(
+        study: study,
+        side: side,
+        anchor: anchor,
+        onDismiss: () => Navigator.of(dialogContext).pop(),
+        onTogglePause: () {
+          Navigator.of(dialogContext).pop();
+          ref.read(reviewControllerProvider.notifier).toggleStudyActive(study.id, !study.isActive);
+        },
+        onAnalyze: () {
+          final navigator = Navigator.of(context, rootNavigator: true);
+          Navigator.of(dialogContext).pop();
+          Navigator.of(context).pop();
+          navigator.push(StudyScreen.buildRoute((id: StudyId(study.id), initialChapter: null)));
+        },
+        onPractice: () {
+          Navigator.of(dialogContext).pop();
+          Navigator.of(context).pop();
+          ref
+              .read(reviewControllerProvider.notifier)
+              .startPracticeMode(scope: ReviewScope.study(study.id, side: side));
+        },
+        onCreateOpposite: () {
+          Navigator.of(dialogContext).pop();
+          final other = side == Side.white ? Side.black : Side.white;
+          ref
+              .read(reviewControllerProvider.notifier)
+              .createStudyInSide(study.id, other)
+              .then((created) {
+                if (!context.mounted) return;
+                if (created == null) {
                   showSnackBar(
                     context,
-                    context.l10n.mobileReviewNoExportMoves,
+                    context.l10n.mobileReviewAlreadyOpposite(
+                      ReviewScopeDrawer.sideLabel(other, context.l10n).toLowerCase(),
+                    ),
                     type: SnackBarType.info,
                   );
+                } else {
+                  showSnackBar(
+                    context,
+                    context.l10n.mobileReviewCreatedOpposite(
+                      ReviewScopeDrawer.sideLabel(other, context.l10n).toLowerCase(),
+                    ),
+                    type: SnackBarType.success,
+                  );
                 }
-                return;
-              }
-              if (context.mounted) {
-                ExportPgnDialog.show(context, title: study.title, pgnText: pgn);
-              }
-            },
-            onRename: () {
-              Navigator.of(dialogContext).pop();
-              _showRenameDialog(context, ref, study);
-            },
-            onDelete: () {
-              Navigator.of(dialogContext).pop();
-              _showDeleteConfirmDialog(context, ref, study);
-            },
-          ),
+              })
+              .catchError((Object e) {
+                if (!context.mounted) return null;
+                _logger.severe('Could not create it.', e);
+                showSnackBar(context, 'Could not create it', type: SnackBarType.error);
+                return null;
+              });
+        },
+        onExport: () async {
+          Navigator.of(dialogContext).pop();
+          final pgn = await ref.read(reviewControllerProvider.notifier).exportStudyPgn(study.id);
+          if (pgn == null || pgn.trim().isEmpty) {
+            if (context.mounted) {
+              showSnackBar(
+                context,
+                context.l10n.mobileReviewNoExportMoves,
+                type: SnackBarType.info,
+              );
+            }
+            return;
+          }
+          if (context.mounted) {
+            ExportPgnDialog.show(context, title: study.title, pgnText: pgn);
+          }
+        },
+        onRename: () {
+          Navigator.of(dialogContext).pop();
+          _showRenameDialog(context, ref, study);
+        },
+        onDelete: () {
+          Navigator.of(dialogContext).pop();
+          _showDeleteConfirmDialog(context, ref, study);
+        },
+      ),
       transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
         // DESIGN 02 §3: wide if width >= 720, via the shared token rather than a literal.
         // A dialog route has no LayoutBuilder box above it, so this measures the window.
         final isWide = SrsLayout.isWide(MediaQuery.sizeOf(dialogContext).width);
         if (isWide) return FadeTransition(opacity: animation, child: child);
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.08),
-            end: Offset.zero,
-          ).animate(curved),
+          position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(curved),
           child: FadeTransition(opacity: animation, child: child),
         );
       },
@@ -723,19 +621,13 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   /// against the drawer's context, which is still mounted, instead of one that has just been
   /// popped. The controller is owned by [_RenameDialogBody] so it is disposed with the dialog
   /// rather than at some point during its exit animation.
-  Future<void> _showRenameDialog(
-    BuildContext context,
-    WidgetRef ref,
-    Study study,
-  ) async {
+  Future<void> _showRenameDialog(BuildContext context, WidgetRef ref, Study study) async {
     final newName = await SrsDialog.show<String>(
       context: context,
       builder: (ctx) => _RenameDialogBody(initial: study.title),
     );
     if (newName == null || newName.isEmpty || newName == study.title) return;
-    await ref
-        .read(reviewControllerProvider.notifier)
-        .renameStudy(study.id, newName);
+    await ref.read(reviewControllerProvider.notifier).renameStudy(study.id, newName);
     if (context.mounted) {
       showSnackBar(
         context,
@@ -748,35 +640,17 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
   /// The delete confirmation. §12 gives the copy verbatim and forbids red: "Destructive copy must
   /// name the item: `Delete "{name}" and its {n} positions? This cannot be undone.`", with the
   /// confirm label `Delete`.
-  Future<void> _showDeleteConfirmDialog(
-    BuildContext context,
-    WidgetRef ref,
-    Study study,
-  ) async {
+  Future<void> _showDeleteConfirmDialog(BuildContext context, WidgetRef ref, Study study) async {
     final positions =
-        ref
-            .read(reviewControllerProvider)
-            .value
-            ?.studyProgress[study.id]
-            ?.totalDecisions ??
-        0;
+        ref.read(reviewControllerProvider).value?.studyProgress[study.id]?.totalDecisions ?? 0;
     final confirmed = await SrsDialog.show<bool>(
       context: context,
       builder: (ctx) => SrsDialog(
         title: context.l10n.mobileReviewDeleteStudyTitle,
-        body: context.l10n.mobileReviewDeleteStudyConfirm(
-          study.title,
-          positions.toString(),
-        ),
+        body: context.l10n.mobileReviewDeleteStudyConfirm(study.title, positions.toString()),
         actions: [
-          SrsTextButton(
-            label: context.l10n.cancel,
-            onPressed: () => Navigator.of(ctx).pop(false),
-          ),
-          SrsPillButton(
-            label: context.l10n.delete,
-            onPressed: () => Navigator.of(ctx).pop(true),
-          ),
+          SrsTextButton(label: context.l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
+          SrsPillButton(label: context.l10n.delete, onPressed: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );
@@ -841,9 +715,7 @@ class _ScopeRow extends StatelessWidget {
       builder: (rowContext) {
         void showActions() {
           final box = rowContext.findRenderObject() as RenderBox?;
-          actions?.call(
-            box == null ? null : box.localToGlobal(Offset.zero) & box.size,
-          );
+          actions?.call(box == null ? null : box.localToGlobal(Offset.zero) & box.size);
         }
 
         return SrsPressable(
@@ -861,9 +733,7 @@ class _ScopeRow extends StatelessWidget {
                   name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: SrsText.rowName(
-                    isSelected ? c.ink2 : (isPaused ? c.ink3 : c.ink),
-                  ),
+                  style: SrsText.rowName(isSelected ? c.ink2 : (isPaused ? c.ink3 : c.ink)),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -873,14 +743,12 @@ class _ScopeRow extends StatelessWidget {
                       height: 5,
                       gap: 2,
                       radius: 1,
-                      retained:
-                          (progress.learnedDecisions - progress.dueDecisions)
-                              .clamp(0, progress.totalDecisions),
-                      learning: progress.dueDecisions,
-                      fresh: progress.unlearnedDecisions.clamp(
+                      retained: (progress.learnedDecisions - progress.dueDecisions).clamp(
                         0,
                         progress.totalDecisions,
                       ),
+                      learning: progress.dueDecisions,
+                      fresh: progress.unlearnedDecisions.clamp(0, progress.totalDecisions),
                     ),
                     const SizedBox(width: 10),
                     Flexible(
@@ -913,19 +781,12 @@ class _ScopeRow extends StatelessWidget {
               child: Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 9,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
                     child: Row(
                       children: [
                         Expanded(child: label),
                         const SizedBox(width: 14),
-                        _DueCell(
-                          count: dueCount,
-                          isActive: !isPaused,
-                          isSelected: isSelected,
-                        ),
+                        _DueCell(count: dueCount, isActive: !isPaused, isSelected: isSelected),
                         if (actions != null) ...[
                           const SizedBox(width: 2),
                           SrsIconButton(
@@ -947,9 +808,7 @@ class _ScopeRow extends StatelessWidget {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: c.accent,
-                          borderRadius: const BorderRadius.horizontal(
-                            right: Radius.circular(2),
-                          ),
+                          borderRadius: const BorderRadius.horizontal(right: Radius.circular(2)),
                         ),
                       ),
                     ),
@@ -969,11 +828,7 @@ class _ScopeRow extends StatelessWidget {
 /// tabular figures and `due` is `12.5 ink3`, 5px apart. Zero due drops the numeral to `ink3` at
 /// weight 500; a paused scope only recolours it.
 class _DueCell extends StatelessWidget {
-  const _DueCell({
-    required this.count,
-    required this.isActive,
-    required this.isSelected,
-  });
+  const _DueCell({required this.count, required this.isActive, required this.isSelected});
 
   final int count;
   final bool isActive;
@@ -992,8 +847,9 @@ class _DueCell extends StatelessWidget {
       children: [
         Text(
           '$count',
-          style: SrsText.rowDue(isZero || !isActive ? quiet : c.ink)
-              .copyWith(fontWeight: isZero ? FontWeight.w500 : FontWeight.w600),
+          style: SrsText.rowDue(
+            isZero || !isActive ? quiet : c.ink,
+          ).copyWith(fontWeight: isZero ? FontWeight.w500 : FontWeight.w600),
         ),
         const SizedBox(width: 5),
         // The demo sets tabular figures on `.row-sub` for the figure, not on the word beside it.
@@ -1116,10 +972,7 @@ class StudyActionsSheet extends StatelessWidget {
         ]),
         Container(height: 1, color: c.hairline),
         group([
-          SrsSheetRow(
-            label: context.l10n.mobileReviewRenameAction,
-            onPressed: onRename,
-          ),
+          SrsSheetRow(label: context.l10n.mobileReviewRenameAction, onPressed: onRename),
           // §12 is explicit that the dialogs carry no red, and this row only opens one.
           SrsSheetRow(label: context.l10n.delete, onPressed: onDelete),
         ]),
@@ -1175,10 +1028,7 @@ class StudyActionsSheet extends StatelessWidget {
     return Stack(
       children: [
         Positioned.fill(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onDismiss,
-          ),
+          child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onDismiss),
         ),
         // Finger-tracking drag-to-dismiss, shared with the Library/scope/import
         // sheets (owner report 2026-09-29): this dialog previously had no swipe
@@ -1199,12 +1049,7 @@ class StudyActionsSheet extends StatelessWidget {
             ),
           )
         else
-          Positioned(
-            left: 8,
-            right: 8,
-            bottom: 8,
-            child: SrsSheetDismissible(child: sheet),
-          ),
+          Positioned(left: 8, right: 8, bottom: 8, child: SrsSheetDismissible(child: sheet)),
       ],
     );
   }
@@ -1215,9 +1060,7 @@ class StudyActionsSheet extends StatelessWidget {
     final a = anchor!;
     // Measured against the row's own middle, not its top: a row straddling the
     // middle opens downwards, where the space is.
-    return a.center.dy < size.height / 2
-        ? Alignment.topLeft
-        : Alignment.bottomLeft;
+    return a.center.dy < size.height / 2 ? Alignment.topLeft : Alignment.bottomLeft;
   }
 
   /// Beside the row that opened the sheet, on whichever side has room.
@@ -1243,9 +1086,7 @@ class _RenameDialogBody extends StatefulWidget {
 }
 
 class _RenameDialogBodyState extends State<_RenameDialogBody> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initial,
-  );
+  late final TextEditingController _controller = TextEditingController(text: widget.initial);
 
   @override
   void dispose() {
@@ -1266,14 +1107,8 @@ class _RenameDialogBodyState extends State<_RenameDialogBody> {
         onSubmitted: (_) => _submit(),
       ),
       actions: [
-        SrsTextButton(
-          label: context.l10n.cancel,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        SrsPillButton(
-          label: context.l10n.mobileReviewRenameAction,
-          onPressed: _submit,
-        ),
+        SrsTextButton(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        SrsPillButton(label: context.l10n.mobileReviewRenameAction, onPressed: _submit),
       ],
     );
   }
