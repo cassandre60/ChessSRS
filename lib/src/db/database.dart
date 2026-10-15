@@ -108,6 +108,19 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
         // Set unconditionally: older SQLite ignores it rather than failing, and foreign-key
         // support predates every version this app opens a database on.
         await db.rawQuery('PRAGMA foreign_keys = ON');
+
+        // Memory-mapped I/O: allow SQLite to map up to 256 MiB directly into virtual memory.
+        // When mmap_size is set, page reads bypass read() system calls and access the kernel
+        // page cache directly. Supported since SQLite 3.7.17.
+        if (version != null && version >= 307017) {
+          await db.rawQuery('PRAGMA mmap_size = 268435456'); // 256 MiB
+        }
+
+        // 64 MiB user-space page cache (negative number indicates size in kibibytes).
+        await db.rawQuery('PRAGMA cache_size = -64000');
+
+        // Store temporary tables and indices in memory rather than on disk.
+        await db.rawQuery('PRAGMA temp_store = MEMORY');
       },
       onOpen: (db) async {
         await _ensureLateSrsColumns(db);
