@@ -20,7 +20,7 @@ agent can pick up and execute top-to-bottom.
 | `PERF-FIX-37-sqlite-native-page-mmap.md` | Ready — enables native OS page mmap in SQLite kernel |
 | `PERF-FIX-38-differential-summary-tallying.md` | Ready — O(Reviewed) tallying instead of O(31k) iteration |
 | `PERF-FIX-39-pipelined-animation-overlapped-durability.md` | Ready — zero-latency move response overlapped with DB write |
-| `PERF-FIX-40-board-repaint-boundary-and-prewarm.md` | Ready — isolates board repaints & pre-warms next game data |
+| `PERF-FIX-40-board-repaint-boundary-and-prewarm.md` | Implemented |
 | `PERF-FIX-41-sub-sensory-move-pre-warming.md` | Ready — pre-calculates move resolution during physical drag |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
