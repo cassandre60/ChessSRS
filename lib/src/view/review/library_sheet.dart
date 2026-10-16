@@ -68,7 +68,7 @@ class SrsLibrarySheet extends ConsumerWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Material(color: c.surface, child: _buildContent(context, ref, c, isWide)),
+                  child: Material(color: c.surface, child: _buildContent(context, c, isWide)),
                 ),
               ),
             ),
@@ -95,7 +95,7 @@ class SrsLibrarySheet extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(22),
                   child: Material(
                     color: c.surface,
-                    child: SafeArea(top: false, child: _buildContent(context, ref, c, isWide)),
+                    child: SafeArea(top: false, child: _buildContent(context, c, isWide)),
                   ),
                 ),
               ),
@@ -115,7 +115,7 @@ class SrsLibrarySheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, SrsColors c, bool isWide) {
+  Widget _buildContent(BuildContext context, SrsColors c, bool isWide) {
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,

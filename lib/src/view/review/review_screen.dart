@@ -965,7 +965,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
       );
     }
 
-    final verdict = _verdictAnnouncement(state, isLapse: isLapse, expectedMoveSan: expectedMoveSan);
+    final verdict = _verdictAnnouncement(state, expectedMoveSan: expectedMoveSan);
     if (verdict != null) {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1031,11 +1031,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   /// On a correct answer this announces the move that was played rather than the expected one,
   /// because `expectedMoves` is a list: a transposition can make an alternative equally correct, and
   /// then the study move is not the move the player made.
-  String? _verdictAnnouncement(
-    ReviewScreenState state, {
-    required bool isLapse,
-    required String? expectedMoveSan,
-  }) {
+  String? _verdictAnnouncement(ReviewScreenState state, {required String? expectedMoveSan}) {
     // `lastStepResult` is the signal, not `isAwaitingAdvance`. A lapse does not set the latter: the
     // review is waiting for the mistake to be acknowledged, not for a Continue. The controller
     // clears `lastStepResult` on advancing, acknowledging and skipping alike, so it is exactly the
