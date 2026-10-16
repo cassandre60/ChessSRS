@@ -730,7 +730,7 @@ class ReviewSession {
               .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
               .join(' ');
           _logger.info(
-            'Prompts ${nextDecision.canonicalId} ($continuity, due=$isDue) after [$trail]',
+            'Prompts ${nextDecision.canonicalId} (due=$isDue) [${_chapters[nextDecision.chapterId]?.title}] after [$trail]',
           );
           return ReviewStepResult(
             isCorrect: true,
