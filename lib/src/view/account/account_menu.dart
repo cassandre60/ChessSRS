@@ -5,6 +5,7 @@ import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/http_network_image.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -44,6 +45,12 @@ class AccountMenuScreen extends ConsumerStatefulWidget {
 class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with WidgetsBindingObserver {
   bool _errorLoadingFlair = false;
   bool _pendingKidModeRefresh = false;
+  bool _isGeneratingStudies = false;
+  CustomStudiesPhase _gamesPhase = CustomStudiesPhase.fetchingGames;
+  int _gamesFetched = 0;
+  int _gamesDone = 0;
+  int _gamesTotal = 0;
+  String? _gamesSummary;
 
   @override
   void initState() {
@@ -62,6 +69,87 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
     if (state == AppLifecycleState.resumed && _pendingKidModeRefresh) {
       _pendingKidModeRefresh = false;
       ref.invalidate(accountProvider);
+    }
+  }
+
+  String _gamesProgressLabel() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0
+          ? 'Analysing $_gamesFetched games…'
+          : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateStudies() async {
+    setState(() {
+      _isGeneratingStudies = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (_) {
+      if (mounted) {
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingStudies = false);
+      }
     }
   }
 
@@ -148,6 +236,18 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                     ),
                   ],
                   if (user != null) ...[
+                    const SrsGroupHeader('Studies'),
+                    SrsSettingsRow(
+                      label: _isGeneratingStudies
+                          ? _gamesProgressLabel()
+                          : 'Build studies from my games',
+                      help: _gamesSummary ??
+                          'Create opening studies from your Lichess games and fix recurring '
+                              'mistakes.',
+                      control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                      enabled: isOnline && !_isGeneratingStudies,
+                      onTap: _handleGenerateStudies,
+                    ),
                     const SrsGroupHeader('Session'),
                     if (signOutState case MutationPending())
                       const SrsSettingsRow(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:chess_srs/src/import/lichess_games_study_generator.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/model/analysis/analysis_summary.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -10,6 +11,7 @@ import 'package:chess_srs/src/model/study/study_list_paginator.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:collection/collection.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:deep_pick/deep_pick.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -211,6 +213,68 @@ class StudyRepository {
       throw ClientException('Could not read study list as NDJSON: $e', url);
     }
     return refs;
+  }
+
+  /// Fetches a batch of [username]'s played games from `GET /api/games/user/:username`
+  /// as NDJSON, including moves, evaluations, and opening metadata.
+  Future<({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis})>
+  getUserGamesBatch(
+    String username, {
+    int max = 200,
+    int? untilMillis,
+    Side? color,
+  }) async {
+    final queryParameters = <String, String>{
+      'max': max.toString(),
+      if (untilMillis != null) 'until': untilMillis.toString(),
+      if (color != null) 'color': color.name,
+      'moves': 'true',
+      'evals': 'true',
+      'opening': 'true',
+      'perfType': 'ultraBullet,bullet,blitz,rapid,classical,correspondence',
+    };
+    final url = Uri(path: '/api/games/user/$username', queryParameters: queryParameters);
+    final response = await client.get(url, headers: {'Accept': 'application/x-ndjson'});
+    if (response.statusCode >= 400) {
+      throw ServerException(
+        response.statusCode,
+        'Request to $url failed with status ${response.statusCode}.',
+        url,
+        null,
+      );
+    }
+
+    final body = utf8.decode(response.bodyBytes, allowMalformed: true);
+    final rawLines = const LineSplitter()
+        .convert(body)
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    int? oldestMillis;
+    final games = <LichessPlayedGame>[];
+    for (final line in rawLines) {
+      final dynamic decoded;
+      try {
+        decoded = jsonDecode(line);
+      } on FormatException catch (e) {
+        throw ClientException('Could not read game list as NDJSON: $e', url);
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      final ts = (decoded['createdAt'] as num?)?.toInt() ??
+          (decoded['lastMoveAt'] as num?)?.toInt();
+      if (ts != null && (oldestMillis == null || ts < oldestMillis)) {
+        oldestMillis = ts;
+      }
+      final parsed = parseLichessGameJson(decoded, username: username);
+      if (parsed != null) {
+        games.add(parsed);
+      }
+    }
+    return (
+      games: games,
+      rawLineCount: rawLines.length,
+      oldestTimestampMillis: oldestMillis,
+    );
   }
 
   /// Creates one or more (if the PGN contains multiple games) chapters in the study with the given [studyId].
