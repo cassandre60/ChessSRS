@@ -2094,6 +2094,226 @@ void main() {
       );
     });
 
+    group('generateStudiesFromMyGames', () {
+      String gamesNdJson(List<Map<String, dynamic>> games) => games.map(jsonEncode).join('\n');
+
+      final sampleGames = <Map<String, dynamic>>[
+        {
+          'id': 'it1',
+          'variant': 'standard',
+          'createdAt': 1700000010000,
+          'winner': 'black',
+          'players': {
+            'white': {
+              'user': {'id': 'tester', 'name': 'tester'},
+            },
+            'black': {
+              'user': {'id': 'opp', 'name': 'opp'},
+            },
+          },
+          'opening': {'eco': 'C55', 'name': 'Italian Game: Two Knights Defense'},
+          'moves': 'e4 e5 Nf3 Nc6 Bc4 Nf6 Nc3 Nxe4',
+          'analysis': [
+            {'eval': 20},
+            {'eval': 20},
+            {'eval': 25},
+            {'eval': 20},
+            {'eval': 15},
+            {'eval': 20},
+            {
+              'eval': -95,
+              'best': 'd2d3',
+              'judgment': {'name': 'Mistake', 'comment': 'Mistake. d3 was best.'},
+            },
+          ],
+        },
+        {
+          'id': 'sic1',
+          'variant': 'standard',
+          'createdAt': 1700000005000,
+          'winner': 'white',
+          'players': {
+            'white': {
+              'user': {'id': 'opp', 'name': 'opp'},
+            },
+            'black': {
+              'user': {'id': 'tester', 'name': 'tester'},
+            },
+          },
+          'opening': {'eco': 'B50', 'name': 'Sicilian Defense: Open'},
+          'moves': 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be3 Ng4',
+          'analysis': [
+            {'eval': 25},
+            {'eval': 30},
+            {'eval': 25},
+            {'eval': 30},
+            {'eval': 25},
+            {'eval': 25},
+            {'eval': 30},
+            {'eval': 30},
+            {'eval': 35},
+            {'eval': 35},
+            {'eval': 40},
+            {
+              'eval': 190,
+              'best': 'f8g7',
+              'judgment': {'name': 'Mistake', 'comment': 'Mistake. Bg7 was best.'},
+            },
+          ],
+        },
+      ];
+
+      ProviderContainer gamesContainer(MockClient client) {
+        final container = createContainer(
+          extraOverrides: [
+            lichess_study.studyRepositoryProvider.overrideWith(
+              (ref) => lichess_study.StudyRepository(ref, client),
+            ),
+          ],
+        );
+        container.read(authControllerProvider.notifier).state = const AuthUser(
+          token: 'test-token',
+          user: LightUser(id: UserId('tester'), name: 'tester'),
+        );
+        return container;
+      }
+
+      test(
+        'creates custom studies per opening with mistake improvements',
+        // SPEC INV-013, INV-020.
+        () async {
+          final client = MockClient((request) async {
+            if (request.url.path == '/api/games/user/tester') {
+              return http.Response(
+                gamesNdJson(sampleGames),
+                200,
+                headers: {'content-type': 'application/x-ndjson'},
+              );
+            }
+            return http.Response('Not Found', 404);
+          });
+          final container = gamesContainer(client);
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          final seen = <CustomStudiesProgress>[];
+          final result = await controller.generateStudiesFromMyGames(onProgress: seen.add);
+
+          expect(result.imported, 2);
+          expect(result.updated, 0);
+          expect(result.duplicates, 0);
+          expect(result.gamesAnalyzed, 2);
+          expect(result.mistakesFixed, 2);
+          expect(seen, isNotEmpty);
+
+          final state = container.read(reviewControllerProvider).requireValue;
+          expect(
+            state.studies.map((s) => s.title),
+            containsAll(['Italian Game (White)', 'Sicilian Defense (Black)']),
+          );
+        },
+      );
+
+      test(
+        'second run over identical games skips as duplicates and updates in place on new games',
+        // SPEC INV-003, INV-004.
+        () async {
+          var gamesPayload = sampleGames;
+          final client = MockClient((request) async {
+            if (request.url.path == '/api/games/user/tester') {
+              return http.Response(
+                gamesNdJson(gamesPayload),
+                200,
+                headers: {'content-type': 'application/x-ndjson'},
+              );
+            }
+            return http.Response('Not Found', 404);
+          });
+          final container = gamesContainer(client);
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          final first = await controller.generateStudiesFromMyGames();
+          expect(first.imported, 2);
+
+          final second = await controller.generateStudiesFromMyGames();
+          expect(second.imported, 0);
+          expect(second.updated, 0);
+          expect(second.duplicates, 2);
+
+          // Add a new Italian Game variation with a mistake and re-run:
+          gamesPayload = [
+            ...sampleGames,
+            {
+              'id': 'it2',
+              'variant': 'standard',
+              'createdAt': 1700000020000,
+              'winner': 'black',
+              'players': {
+                'white': {
+                  'user': {'id': 'tester', 'name': 'tester'},
+                },
+                'black': {
+                  'user': {'id': 'opp', 'name': 'opp'},
+                },
+              },
+              'opening': {'eco': 'C54', 'name': 'Italian Game: Giuoco Piano'},
+              'moves': 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d4 exd4 Nxd4 Nxe4',
+              'analysis': [
+                {'eval': 20},
+                {'eval': 20},
+                {'eval': 25},
+                {'eval': 20},
+                {'eval': 15},
+                {'eval': 20},
+                {'eval': 20},
+                {'eval': 25},
+                {'eval': 30},
+                {'eval': 30},
+                {
+                  'eval': -140,
+                  'best': 'c3d4',
+                  'judgment': {'name': 'Mistake', 'comment': 'Mistake. cxd4 was best.'},
+                },
+              ],
+            },
+          ];
+
+          final third = await controller.generateStudiesFromMyGames();
+          expect(third.updated, 1);
+          expect(third.duplicates, 1);
+
+          final state = container.read(reviewControllerProvider).requireValue;
+          expect(state.studies.length, 2);
+        },
+      );
+
+      test(
+        'signed out refuses without calling the server',
+        // SPEC INV-011.
+        () async {
+          var called = false;
+          final client = MockClient((_) async {
+            called = true;
+            return http.Response('', 200);
+          });
+          final container = gamesContainer(client);
+          container.read(authControllerProvider.notifier).state = null;
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await expectLater(
+            controller.generateStudiesFromMyGames(),
+            throwsA(
+              isA<CustomStudiesGenerationException>().having(
+                (e) => e.message,
+                'message',
+                contains('Sign in'),
+              ),
+            ),
+          );
+          expect(called, isFalse);
+        },
+      );
+    });
+
     test('maxDailyReviews limit caps session and marks isDailyLimitReached', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);

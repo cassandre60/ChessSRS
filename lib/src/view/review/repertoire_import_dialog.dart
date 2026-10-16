@@ -83,6 +83,16 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   String _bulkCurrentName = '';
   String? _bulkSummary;
 
+  bool _isGeneratingFromGames = false;
+  CustomStudiesPhase _gamesPhase = CustomStudiesPhase.fetchingGames;
+  int _gamesFetched = 0;
+  int _gamesDone = 0;
+  int _gamesTotal = 0;
+  String _gamesCurrentName = '';
+  String? _gamesSummary;
+
+  bool get _isBusy => _isImporting || _isBulkImporting || _isGeneratingFromGames;
+
   /// Lichess 404'd a study id while signed out, so the study may be private rather than missing.
   ///
   /// Drives the inline sign-in prompt instead of an error toast. Reset as soon as the import is
@@ -296,6 +306,93 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
     } finally {
       if (mounted) {
         setState(() => _isBulkImporting = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabel() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGames() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
       }
     }
   }
@@ -527,9 +624,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                   : context.l10n.mobileReviewFetchImport,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
-                            onPressed: _isImporting || _isBulkImporting
-                                ? null
-                                : _handleLichessImport,
+                            onPressed: _isBusy ? null : _handleLichessImport,
                           ),
                         ),
                         if (!isSignedIn && !_studyMayBePrivate) ...[
@@ -553,7 +648,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                         : 'Listing your studies…')
                                   : 'Import all my studies',
                             ),
-                            onPressed: _isImporting || _isBulkImporting ? null : _handleBulkImport,
+                            onPressed: _isBusy ? null : _handleBulkImport,
                           ),
                           if (_isBulkImporting && _bulkCurrentName.isNotEmpty) ...[
                             const SizedBox(height: 6.0),
@@ -562,6 +657,30 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                           if (_bulkSummary != null) ...[
                             const SizedBox(height: 10.0),
                             Text(_bulkSummary!, style: SrsText.rowSub(c.ink2)),
+                          ],
+                          const SizedBox(height: 10.0),
+                          OutlinedButton.icon(
+                            icon: _isGeneratingFromGames
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: c.ink2),
+                                  )
+                                : const Icon(Symbols.download_rounded),
+                            label: Text(
+                              _isGeneratingFromGames
+                                  ? _gamesProgressLabel()
+                                  : 'Build studies from my games',
+                            ),
+                            onPressed: _isBusy ? null : _handleGenerateFromGames,
+                          ),
+                          if (_isGeneratingFromGames && _gamesCurrentName.isNotEmpty) ...[
+                            const SizedBox(height: 6.0),
+                            Text(_gamesCurrentName, style: SrsText.rowSub(c.ink2)),
+                          ],
+                          if (_gamesSummary != null) ...[
+                            const SizedBox(height: 10.0),
+                            Text(_gamesSummary!, style: SrsText.rowSub(c.ink2)),
                           ],
                         ],
                       ] else ...[
@@ -609,7 +728,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         OutlinedButton.icon(
                           icon: const Icon(Symbols.upload_file_rounded),
                           label: Text(context.l10n.mobileReviewPickPgnFile),
-                          onPressed: _isImporting || _isBulkImporting ? null : _pickPgnFile,
+                          onPressed: _isBusy ? null : _pickPgnFile,
                         ),
                         const SizedBox(height: 16.0),
                         SizedBox(
@@ -631,7 +750,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                   : context.l10n.mobileReviewImportStart,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
-                            onPressed: _isImporting || _isBulkImporting ? null : _handleFileImport,
+                            onPressed: _isBusy ? null : _handleFileImport,
                           ),
                         ),
                       ],
