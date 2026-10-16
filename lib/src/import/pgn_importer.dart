@@ -43,7 +43,10 @@ String computePgnHash(String pgnText, [List<PgnGame<PgnNodeData>>? games]) {
           } catch (_) {
             // An unusable FEN makes the whole chapter unimportable, so it contributes no moves
             // either; hashing it here would make this fingerprint depend on bytes the import
-            // path ignores.
+            // path ignores. `importPgn` skips the game entirely — no chapter, no separator —
+            // and this hash has to keep agreeing with computeRepertoireTreeHash over what was
+            // actually stored.
+            continue;
           }
         }
         _appendPgnNodeMoves(game.moves, buffer);
