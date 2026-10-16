@@ -347,9 +347,12 @@ class ReviewSession {
   final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
 
-  /// Canonical ids whose line-start walk already ran without reaching them.
-  /// Popped again, they prompt directly: same line twice helps nobody.
+  /// Targets whose line-start walk missed them; next pop walks their ancestry.
   final Set<String> _lineStartAttempted = {};
+
+  /// Guided node-id path, start to target, for a dedicated sideline walk.
+  /// Branch choices follow it; empty means PGN tree order.
+  List<String> _guidedNodeIds = const [];
 
   /// Canonical ids queued as never-presented introductions (INV-068).
   ///
@@ -843,7 +846,7 @@ class ReviewSession {
     if (prompt == null || repoNode == null || correct == null) return false;
     final userChild = repoNode.childForMove(correct);
     if (userChild == null || userChild.children.isEmpty) return false;
-    final nextNode = userChild.children.first;
+    final nextNode = _guidedChild(userChild.children) ?? userChild.children.first;
     final nextDecision = _decisionForNode[nextNode.id];
     if (nextDecision == null) return false;
     _dequeueDecision(nextDecision);
@@ -914,22 +917,21 @@ class ReviewSession {
     }
     final nextDecision = _dueQueue.removeAt(0);
     if (continuity == ReviewContinuity.fullLine) {
-      // Whole lines: open at the line start. A target whose walk missed it
-      // is prompted directly instead of walking the same line again.
-      if (_lineStartAttempted.remove(nextDecision.canonicalId)) {
-        _logger.info('Sideline direct prompt ${nextDecision.canonicalId}');
-      } else {
-        final start = _lineStartFor(nextDecision);
-        if (start != null) {
-          _lineStartAttempted.add(nextDecision.canonicalId);
-          _dueQueue.insert(0, nextDecision);
-          _dequeueDecision(start.decision);
-          _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
-          _logger.info(
-            'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
-          );
-          return;
-        }
+      // Whole lines: open at the line start and walk it. A target whose walk
+      // missed it gets a dedicated walk down its own ancestry — never a
+      // mid-line drop into another variation.
+      final guided = _lineStartAttempted.remove(nextDecision.canonicalId);
+      final start = _lineStartFor(nextDecision);
+      if (start != null) {
+        if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
+        if (!guided) _dueQueue.insert(0, nextDecision);
+        _dequeueDecision(start.decision);
+        _guidedNodeIds = guided ? _pathTo(start.node, nextDecision) : const [];
+        _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
+        _logger.info(
+          'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
+        );
+        return;
       }
     }
     final node = _nodesById[nextDecision.nodeId];
@@ -963,6 +965,31 @@ class ReviewSession {
       }
       return (decision: candidate, node: chain[i]);
     }
+    return null;
+  }
+
+  /// Node-id path from [from] down to [target]'s node, for guided walks.
+  List<String> _pathTo(RepertoireNode from, RepertoireDecision target) {
+    final path = <String>[target.nodeId];
+    var cursor = _parentOfNode[target.nodeId];
+    while (cursor != null && cursor.id != from.id) {
+      path.add(cursor.id);
+      cursor = _parentOfNode[cursor.id];
+    }
+    return path.reversed.toList();
+  }
+
+  /// Next guided child among [children], consuming the guide through it.
+  /// Null when none lies on the path (guide cleared, tree order resumes).
+  RepertoireNode? _guidedChild(List<RepertoireNode> children) {
+    if (_guidedNodeIds.isEmpty) return null;
+    for (final child in children) {
+      final index = _guidedNodeIds.indexOf(child.id);
+      if (index < 0) continue;
+      _guidedNodeIds = _guidedNodeIds.sublist(index + 1);
+      return child;
+    }
+    _guidedNodeIds = const [];
     return null;
   }
 
@@ -1124,9 +1151,10 @@ class ReviewSession {
       return node.children.first;
     }
 
-    // Full line walks tree order (mainline first), never steered.
+    // Full line walks tree order (mainline first), never steered; a
+    // dedicated sideline walk follows its guide instead.
     if (continuity == ReviewContinuity.fullLine) {
-      return node.children.first;
+      return _guidedChild(node.children) ?? node.children.first;
     }
 
     final dueCounts = <RepertoireNode, int>{};
@@ -1159,9 +1187,10 @@ class ReviewSession {
     DateTime now,
     Map<String, int> dueCountMemo,
   ) {
-    // Full line follows list order; never steered.
+    // Full line follows list order; a dedicated sideline walk follows
+    // its guide instead. Neither is ever steered toward queued dues.
     if (continuity == ReviewContinuity.fullLine) {
-      return opponentChild.children.first;
+      return _guidedChild(opponentChild.children) ?? opponentChild.children.first;
     }
     var best = opponentChild.children.first;
     var bestDue = -1;

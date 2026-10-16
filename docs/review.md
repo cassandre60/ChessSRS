@@ -62,11 +62,12 @@ review walks repertoire lines:
   last — even when steps are not yet due. A queued mid-line card opens at
   its line's start; branches always follow tree order (mainline first, never
   steered toward due cards), so review only ever asks lines in the order the
-  repertoire lists them. A sideline the walk bypasses is prompted directly
-  when its turn comes instead of being walked past again; acknowledging a
-  lapse continues down the same line while the failed card waits for its
-  re-test. Slower (extra prompts count toward the daily limit), but review
-  never teleports mid-line; best while learning new material.
+  repertoire lists them. A sideline missed by the first walk gets a
+  dedicated walk down its own ancestry — never a mid-line drop into another
+  variation; acknowledging a lapse continues down the same line while the
+  failed card waits for its re-test. Slower (extra prompts count toward the
+  daily limit), but review never teleports mid-line; best while learning new
+  material.
 
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 

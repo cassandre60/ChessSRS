@@ -367,6 +367,193 @@ void main() {
       // Nothing dropped: the failed card waits for its re-test.
       expect(session.remainingDueCount, 4);
     });
+    // SPEC INV-022. A sideline missed by the first walk gets a dedicated
+    // walk down its own ancestry from its line start — never a mid-line
+    // drop into another variation.
+    test('fullLine gives a missed sideline its own dedicated walk', () {
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'start',
+        fenKey: 'start',
+        children: [
+          RepertoireNode(
+            id: 'node-e4',
+            fen: 'after-e4',
+            fenKey: 'after-e4',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'after-e5',
+                fenKey: 'after-e5',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3',
+                    fen: 'after-nf3',
+                    fenKey: 'after-nf3',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'node-d4',
+            fen: 'after-d4',
+            fenKey: 'after-d4',
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+            children: [
+              RepertoireNode(
+                id: 'node-m',
+                fen: 'after-c5',
+                fenKey: 'after-c5',
+                incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-m1',
+                    fen: 'after-c3',
+                    fenKey: 'after-c3',
+                    incomingMove: RepertoireMove(from: 'c2', to: 'c3', san: 'c3'),
+                    children: [
+                      RepertoireNode(
+                        id: 'node-c6',
+                        fen: 'after-Nc6',
+                        fenKey: 'after-Nc6',
+                        incomingMove: RepertoireMove(from: 'b8', to: 'c6', san: 'Nc6'),
+                        children: [
+                          RepertoireNode(
+                            id: 'node-qe2',
+                            fen: 'after-Qe2',
+                            fenKey: 'after-Qe2',
+                            incomingMove: RepertoireMove(
+                              from: 'd1',
+                              to: 'e2',
+                              san: 'Qe2',
+                            ),
+                            children: [
+                              RepertoireNode(
+                                id: 'node-c',
+                                fen: 'after-Be7',
+                                fenKey: 'after-Be7',
+                                incomingMove: RepertoireMove(
+                                  from: 'f8',
+                                  to: 'e7',
+                                  san: 'Be7',
+                                ),
+                                children: [
+                                  RepertoireNode(
+                                    id: 'node-end',
+                                    fen: 'after-Bd3',
+                                    fenKey: 'after-Bd3',
+                                    incomingMove: RepertoireMove(
+                                      from: 'f1',
+                                      to: 'd3',
+                                      san: 'Bd3',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final study = Study(
+        id: 'study-side',
+        title: 'Sideline',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      final chapter = Chapter(
+        id: 'ch-1',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Main',
+        startingFen: root.fen,
+        root: root,
+      );
+      const decR = RepertoireDecision(
+        id: 'dec-r',
+        studyId: 'study-side',
+        chapterId: 'ch-1',
+        nodeId: 'root',
+        expectedMoves: [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ],
+      );
+      const decE = RepertoireDecision(
+        id: 'dec-e',
+        studyId: 'study-side',
+        chapterId: 'ch-1',
+        nodeId: 'node-e5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+      const decM = RepertoireDecision(
+        id: 'dec-m',
+        studyId: 'study-side',
+        chapterId: 'ch-1',
+        nodeId: 'node-m',
+        expectedMoves: [RepertoireMove(from: 'c2', to: 'c3', san: 'c3')],
+      );
+      const decN = RepertoireDecision(
+        id: 'dec-n',
+        studyId: 'study-side',
+        chapterId: 'ch-1',
+        nodeId: 'node-c6',
+        expectedMoves: [RepertoireMove(from: 'd1', to: 'e2', san: 'Qe2')],
+      );
+      const decC = RepertoireDecision(
+        id: 'dec-c',
+        studyId: 'study-side',
+        chapterId: 'ch-1',
+        nodeId: 'node-c',
+        expectedMoves: [RepertoireMove(from: 'f1', to: 'd3', san: 'Bd3')],
+      );
+      final future = baseTime.add(const Duration(days: 5));
+      final states = {
+        'dec-r': ReviewState(
+          decisionId: 'dec-r',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-e': ReviewState(decisionId: 'dec-e', nextDueAt: future, repetitionCount: 2),
+        'dec-m': ReviewState(decisionId: 'dec-m', nextDueAt: future, repetitionCount: 2),
+        'dec-n': ReviewState(decisionId: 'dec-n', nextDueAt: future, repetitionCount: 2),
+        'dec-c': ReviewState(
+          decisionId: 'dec-c',
+          nextDueAt: baseTime.subtract(const Duration(days: 5)),
+          repetitionCount: 1,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: const [decR, decE, decM, decN, decC],
+        reviewStates: states,
+        order: ReviewOrder.dueDate,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      // Opens at the line start; the user takes the mainline e4.
+      expect(session.currentPrompt?.decision.id, 'dec-r');
+      expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-e');
+      expect(session.submitMove(from: 'g1', to: 'f3').nextPrompt, isNotNull);
+      // Mainline ends at the e5 leaf having missed C: dedicated walk opens
+      // at M (root already answered) and follows C's ancestry to it.
+      expect(session.currentPrompt?.decision.id, 'dec-m');
+      expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt?.decision.id, 'dec-n');
+      expect(session.submitMove(from: 'd1', to: 'e2').nextPrompt?.decision.id, 'dec-c');
+      expect(session.submitMove(from: 'f1', to: 'd3').nextPrompt, isNull);
+      expect(session.isComplete, isTrue);
+    });
     // SPEC INV-022, INV-066. A queued mid-line card opens at its line's
     // first unanswered move: with only C due, review starts at A and walks
     // A → B → C instead of jumping straight to C.
