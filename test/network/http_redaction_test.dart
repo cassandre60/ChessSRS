@@ -1,5 +1,9 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// SPEC coverage: INV-006. The auth fallback puts email/username/code in the
+// query string because lila reads them there; this suite proves the redaction
+// keeps them out of the stored URL.
 
 import 'dart:io';
 
