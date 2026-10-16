@@ -49,6 +49,10 @@ void main() {
       final mmapResult = await db.rawQuery('PRAGMA mmap_size');
       final mmapValue = mmapResult.first.values.first! as int;
       expect(mmapValue, greaterThanOrEqualTo(0));
+      // The exact pin the loose check above cannot provide: 0 is SQLite's
+      // default, so `>= 0` passes when the pragma is never applied (#168).
+      // The loose line stays until its removal is signed off (G08).
+      expect(mmapValue, equals(268435456));
     });
   });
 }
