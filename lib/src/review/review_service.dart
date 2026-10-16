@@ -504,11 +504,12 @@ class ReviewService {
   _loadActiveStudiesAndChapters({
     List<Study>? preloadedStudies,
     bool Function(Chapter)? chapterWhere,
+    Side? side,
   }) async {
     final allStudies = preloadedStudies ?? await repository.getAllStudies();
     final activeStudies = allStudies.where((s) => s.isActive).toList();
     final activeStudyIds = activeStudies.map((s) => s.id).toList();
-    final allStudyChapters = await repository.getChaptersByStudyIds(activeStudyIds);
+    final allStudyChapters = await repository.getChaptersByStudyIds(activeStudyIds, side: side);
     final chapters = chapterWhere == null
         ? allStudyChapters
         : allStudyChapters.where(chapterWhere).toList();
@@ -592,13 +593,11 @@ class ReviewService {
           preloadedStudies?.where((s) => s.id == scope.studyId!).firstOrNull ??
           await repository.getStudy(scope.studyId!);
       targetStudies = study != null ? [study] : const [];
-      final studyChapters = await repository.getChaptersByStudy(scope.studyId!);
+      final studyChapters = await repository.getChaptersByStudy(scope.studyId!, side: scope.side);
       // A drawer names its colour when it builds this scope (INV-030): keep
       // only that side's chapters so the queue, its trees and its states
       // narrow together. Sideless scopes keep the legacy unfiltered set.
-      targetChapters = scope.side == null
-          ? studyChapters
-          : studyChapters.where((c) => c.orientation == scope.side).toList();
+      targetChapters = studyChapters;
       final chapterIds = targetChapters.map((c) => c.id).toSet();
       decisions = (await repository.getDecisionsByStudy(
         scope.studyId!,
@@ -612,9 +611,8 @@ class ReviewService {
 
       final loaded = await _loadActiveStudiesAndChapters(
         preloadedStudies: preloadedStudies,
-        chapterWhere: (c) =>
-            matchingChapterIds.contains(c.id) &&
-            (scope.side == null || c.orientation == scope.side),
+        side: scope.side,
+        chapterWhere: (c) => matchingChapterIds.contains(c.id),
       );
       final activeStudies = loaded.activeStudies;
       targetStudies = activeStudies;
@@ -633,7 +631,7 @@ class ReviewService {
       // otherwise arrive with no tree to grade against (INV-030).
       final loaded = await _loadActiveStudiesAndChapters(
         preloadedStudies: preloadedStudies,
-        chapterWhere: (c) => c.orientation == scope.side,
+        side: scope.side,
       );
       targetStudies = loaded.activeStudies;
       targetChapters = loaded.chapters;
@@ -957,9 +955,12 @@ class ReviewService {
     List<RepertoireDecision>? preloadedDecisions,
   ]) async {
     if (chapters.isEmpty) return const [];
-    final chapterIds = chapters.map((c) => c.id).toSet();
-    final allDecisions = preloadedDecisions ?? await repository.getAllDecisions();
-    return allDecisions.where((d) => chapterIds.contains(d.chapterId)).toList();
+    if (preloadedDecisions != null) {
+      final chapterIds = chapters.map((c) => c.id).toSet();
+      return preloadedDecisions.where((d) => chapterIds.contains(d.chapterId)).toList();
+    }
+    final chapterIds = chapters.map((c) => c.id).toList();
+    return await repository.getDecisionsByChapters(chapterIds);
   }
 
   Future<List<RepertoireDecision>> _getOpeningDecisions(
@@ -973,8 +974,12 @@ class ReviewService {
     final matchingChapterIds = allChapters
         .where((c) => (c.opening?.trim() ?? '') == wanted && activeStudyIds.contains(c.studyId))
         .map((c) => c.id)
-        .toSet();
-    final allDecisions = preloadedDecisions ?? await repository.getAllDecisions();
-    return allDecisions.where((d) => matchingChapterIds.contains(d.chapterId)).toList();
+        .toList();
+    if (matchingChapterIds.isEmpty) return const [];
+    if (preloadedDecisions != null) {
+      final idSet = matchingChapterIds.toSet();
+      return preloadedDecisions.where((d) => idSet.contains(d.chapterId)).toList();
+    }
+    return await repository.getDecisionsByChapters(matchingChapterIds);
   }
 }
