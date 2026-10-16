@@ -234,4 +234,56 @@ void main() {
 
     expect(await controller.flipStudyColors('no-such-study', targetSide: Side.black), isNull);
   });
+
+  test('a corrupt chapter refuses the flip instead of producing a truncated copy', () async {
+    // SPEC INV-010. Flipping exports the study and re-imports it. With an
+    // unreplayable stored move the old export silently dropped that move and
+    // every node after it, so the flip produced a counterpart with lines
+    // missing while looking successful.
+    final container = createContainer();
+    final controller = container.read(reviewControllerProvider.notifier);
+    final whiteId = await importWhite(controller);
+    final chapter = (await repo.getChaptersByStudy(whiteId)).single;
+
+    // Nf6 is not reachable from g1 after 1. e4 e6 — the kind of legacy row
+    // current imports quarantine, but which old databases can still contain.
+    // The move before it (e6, Black's reply) is legal, so simply truncating
+    // the export would leave a trainable Black line and hide the loss.
+    await repo.savePositionTree(
+      chapter.id,
+      const RepertoireNode(
+        id: 'root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'after-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'after-e6',
+                fen: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e6', san: 'e6'),
+                children: [
+                  RepertoireNode(
+                    id: 'corrupt',
+                    fen: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+                    fenKey: 'rnbqkbnr/pppp1ppp/4p3/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f6', san: 'Nf6'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final flipped = await controller.flipStudyColors(whiteId, targetSide: Side.black);
+
+    expect(flipped, isNull, reason: 'refusing beats a counterpart study with lines missing');
+  });
 }

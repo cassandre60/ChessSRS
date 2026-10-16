@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/import/pgn_exporter.dart' show PgnExportException;
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
@@ -571,7 +572,16 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
         },
         onExport: () async {
           Navigator.of(dialogContext).pop();
-          final pgn = await ref.read(reviewControllerProvider.notifier).exportStudyPgn(study.id);
+          final String? pgn;
+          try {
+            pgn = await ref.read(reviewControllerProvider.notifier).exportStudyPgn(study.id);
+          } on PgnExportException catch (e) {
+            if (context.mounted) {
+              _logger.warning('Could not export "${study.title}".', e);
+              showSnackBar(context, e.message, type: SnackBarType.error);
+            }
+            return;
+          }
           if (pgn == null || pgn.trim().isEmpty) {
             if (context.mounted) {
               showSnackBar(
