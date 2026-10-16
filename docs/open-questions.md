@@ -14,6 +14,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q4 | `getDueReviewStates` | — | **answered 2026-10-14: delete.** Done |
 | Q5 | G07 approval attribution | — | **answered 2026-10-14: one account for both, accepted.** No action |
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
+| Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 
 ---
 
@@ -185,3 +186,26 @@ test, so the instinct is to fix tests that never ran.
 `docs/**`; `test.yml`'s `push` and `pull_request` filters are identical and both
 carry them — the divergence between those two filters is a documented trap in
 `gates.yml`, so it was checked explicitly rather than assumed.
+
+---
+
+## Q7 — the lapse announcement says "study move"; the spec says "repertoire move"
+
+**Known.** INV-060 (`SPEC.md`) quotes the announcement a screen-reader user hears
+after a wrong move as `Not this move. The repertoire move is {san}.` The app ships
+`Not this move. The study move is {param}.` (`lib/l10n/app_en.arb:313`). The
+design docs disagree with each other as well: `design/docs/01-identity.md:96`
+says "study move", while `design/docs/04-screens-and-flows.md:99` says "repertoire
+move". The covering test hardcodes the shipped wording, so the suite passes
+either way and cannot surface the mismatch.
+
+**Not known.** Which word you want a screen-reader user to hear.
+
+**Needed.** A one-word decision. Then either the `app_en.arb` string changes to
+"repertoire move" (matching SPEC and `04`), or SPEC INV-060 and `04` change to
+"study move" (matching `01` and the shipped app). Either is a small, self-contained
+change; the point is that four places currently say two different things about one
+sentence.
+
+**Found.** 2026-10-16 spec-conformance audit
+(`docs/spec-conformance-audit-2026-10-16.md`, F1).
