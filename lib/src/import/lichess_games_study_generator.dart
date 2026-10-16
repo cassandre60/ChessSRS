@@ -410,13 +410,8 @@ String _classifyOpeningFamily(LichessPlayedGame game, List<_ReplayedStep> steps)
       ),
     );
   }
-  for (var i = nodes.length - 1; i >= 0; i--) {
-    final current = nodes[i];
-    if (i == nodes.length - 1) {
-      nodes[i] = current;
-    } else {
-      nodes[i] = current.copyWith(children: [nodes[i + 1]]);
-    }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
   }
   if (nodes.isNotEmpty) {
     root = root.copyWith(children: [nodes.first]);
@@ -901,7 +896,7 @@ _ResolvedUserDecision _resolveCandidateDecision(
   // user's habitual move in a known book position (ply <= 16) is off-book (< 2% weight)
   // with a losing record, replace it with the main book move.
   if (book != null && nodeStats.ply >= 3 && nodeStats.ply <= 16) {
-    final bookMoves = book.lookup(pos);
+    final bookMoves = book.movesFor(pos);
     if (bookMoves.isNotEmpty) {
       final totalWeight = bookMoves.fold<int>(0, (sum, m) => sum + m.weight);
       final match = bookMoves.where((m) => m.uci == mostPlayed.move.uci).firstOrNull;
@@ -965,7 +960,7 @@ RepertoireMove? _pickBestReplacementMove(
   }
 
   if (book != null) {
-    final bookMoves = book.lookup(nodeStats.position);
+    final bookMoves = book.movesFor(nodeStats.position);
     for (final bm in bookMoves) {
       if (bm.uci == badMoveUci) continue;
       final parsed = _parseUciMove(nodeStats.position, bm.uci);

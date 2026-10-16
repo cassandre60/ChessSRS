@@ -14,6 +14,7 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/move_feedback.dart';
 import 'package:chess_srs/src/model/engine/opening_book.dart';
+import 'package:chess_srs/src/model/engine/opponent_level.dart' show MaiaRating;
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart' show studyRepositoryProvider;
 import 'package:chess_srs/src/network/http.dart' show ServerException;
@@ -2169,7 +2170,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
     PolyglotBook? book;
     try {
-      book = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.m1900);
+      book = (await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900))?.book;
     } catch (_) {
       book = null;
     }
