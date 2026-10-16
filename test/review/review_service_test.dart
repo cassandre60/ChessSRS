@@ -193,8 +193,8 @@ void main() {
 
         // The decisions below point at c1/c2, so those chapters have to exist. Nothing enforced
         // the foreign key until now, which is how decisions could sit here pointing at nothing.
-        await repo.saveChapter(const Chapter(id: 'c1', studyId: 'active_s', sourceOrder: 0));
-        await repo.saveChapter(const Chapter(id: 'c2', studyId: 'inactive_s', sourceOrder: 0));
+        await repo.saveChapter(Chapter(id: 'c1', studyId: 'active_s', sourceOrder: 0));
+        await repo.saveChapter(Chapter(id: 'c2', studyId: 'inactive_s', sourceOrder: 0));
 
         final d1 = RepertoireDecision.create(
           studyId: 'active_s',
@@ -887,7 +887,7 @@ void main() {
             ],
           );
 
-          const chapter = Chapter(
+          final chapter = Chapter(
             id: 'ch_g',
             studyId: 's_graph',
             title: 'Line',
@@ -1015,13 +1015,7 @@ void main() {
         );
 
         await repo.saveChapter(
-          const Chapter(
-            id: 'ch_r',
-            studyId: 's_retry',
-            title: 'Line',
-            sourceOrder: 0,
-            root: rootNode,
-          ),
+          Chapter(id: 'ch_r', studyId: 's_retry', title: 'Line', sourceOrder: 0, root: rootNode),
         );
 
         final dec1 = RepertoireDecision.create(
