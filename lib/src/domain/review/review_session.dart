@@ -347,9 +347,9 @@ class ReviewSession {
   final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
 
-  /// Guided node-id path from a line start to a queued target (fullLine
-  /// only); empty means unguided line-order walking.
-  List<String> _guidedNodeIds = [];
+  /// Canonical ids whose line-start walk already ran without reaching them.
+  /// Popped again, they prompt directly: same line twice helps nobody.
+  final Set<String> _lineStartAttempted = {};
 
   /// Canonical ids queued as never-presented introductions (INV-068).
   ///
@@ -725,7 +725,6 @@ class ReviewSession {
           // Next decision along this branch.
           _dequeueDecision(nextDecision);
           _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
-          _dropGuideThrough(opponentChild.id);
           final trail = autoPlayed
               .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
               .join(' ');
@@ -844,10 +843,9 @@ class ReviewSession {
     if (prompt == null || repoNode == null || correct == null) return false;
     final userChild = repoNode.childForMove(correct);
     if (userChild == null || userChild.children.isEmpty) return false;
-    final nextNode = _guidedChild(userChild.children) ?? userChild.children.first;
+    final nextNode = userChild.children.first;
     final nextDecision = _decisionForNode[nextNode.id];
     if (nextDecision == null) return false;
-    _dropGuideThrough(nextNode.id);
     _dequeueDecision(nextDecision);
     _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
     _logger.info(
@@ -916,31 +914,32 @@ class ReviewSession {
     }
     final nextDecision = _dueQueue.removeAt(0);
     if (continuity == ReviewContinuity.fullLine) {
-      // Whole lines: a queued mid-line card opens at its line start, guided
-      // down its own variation.
-      final start = _lineStartFor(nextDecision);
-      if (start != null) {
-        _dueQueue.insert(0, nextDecision);
-        _guidedNodeIds = start.pathNodeIds;
-        _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
-        _logger.info(
-          'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
-        );
-        return;
+      // Whole lines: open at the line start. A target whose walk missed it
+      // is prompted directly instead of walking the same line again.
+      if (_lineStartAttempted.remove(nextDecision.canonicalId)) {
+        _logger.info('Sideline direct prompt ${nextDecision.canonicalId}');
+      } else {
+        final start = _lineStartFor(nextDecision);
+        if (start != null) {
+          _lineStartAttempted.add(nextDecision.canonicalId);
+          _dueQueue.insert(0, nextDecision);
+          _dequeueDecision(start.decision);
+          _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
+          _logger.info(
+            'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
+          );
+          return;
+        }
       }
     }
-    _guidedNodeIds = [];
     final node = _nodesById[nextDecision.nodeId];
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest unanswered decision on [target]'s ancestry chain, plus the
-  /// node-id path from it down to the target. Null when the target itself is
-  /// the line start. Answered positions are never re-asked as starts; in
-  /// dynamic mode locked-unreviewed ancestors are skipped too.
-  ({RepertoireDecision decision, RepertoireNode node, List<String> pathNodeIds})? _lineStartFor(
-    RepertoireDecision target,
-  ) {
+  /// Earliest unanswered decision on [target]'s ancestry chain. Null when
+  /// the target itself is the line start. Answered positions are never
+  /// re-asked as starts; in dynamic mode locked-unreviewed ancestors skip.
+  ({RepertoireDecision decision, RepertoireNode node})? _lineStartFor(RepertoireDecision target) {
     var cursor = _nodesById[target.nodeId];
     if (cursor == null) return null;
     final chain = <RepertoireNode>[];
@@ -948,7 +947,6 @@ class ReviewSession {
       chain.add(cursor);
       cursor = _parentOfNode[chain.last.id];
     }
-    RepertoireNode? startNode;
     for (var i = chain.length - 1; i >= 0; i--) {
       final candidate = _decisionForNode[chain[i].id];
       if (candidate == null) continue;
@@ -960,38 +958,12 @@ class ReviewSession {
             unlockedDecisionIds.contains(candidate.canonicalId);
         if (!unlocked && state == null) continue;
       }
-      startNode = chain[i];
-      break;
-    }
-    if (startNode == null) return null;
-    final startDecision = _decisionForNode[startNode.id]!;
-    if (startDecision.id == target.id && startDecision.canonicalId == target.canonicalId) {
-      return null;
-    }
-    final end = chain.indexWhere((n) => n.id == startNode!.id);
-    final path = chain.sublist(0, end + 1).reversed.map((n) => n.id).toList();
-    return (decision: startDecision, node: startNode, pathNodeIds: path);
-  }
-
-  /// Next guided child among [children], consuming the guide through it.
-  /// Null (clearing a stale guide) when none lies on the path.
-  RepertoireNode? _guidedChild(List<RepertoireNode> children) {
-    if (_guidedNodeIds.isEmpty) return null;
-    for (final child in children) {
-      final index = _guidedNodeIds.indexOf(child.id);
-      if (index >= 0) {
-        _guidedNodeIds = _guidedNodeIds.sublist(index + 1);
-        return child;
+      if (candidate.id == target.id && candidate.canonicalId == target.canonicalId) {
+        return null;
       }
+      return (decision: candidate, node: chain[i]);
     }
-    _guidedNodeIds = [];
     return null;
-  }
-
-  /// Drops guide links up to and including [nodeId] once it is prompted.
-  void _dropGuideThrough(String nodeId) {
-    final index = _guidedNodeIds.indexOf(nodeId);
-    if (index >= 0) _guidedNodeIds = _guidedNodeIds.sublist(index + 1);
   }
 
   ReviewPrompt _buildPrompt({required RepertoireDecision decision, RepertoireNode? node}) {
@@ -1152,10 +1124,9 @@ class ReviewSession {
       return node.children.first;
     }
 
-    // Full line walks tree order (mainline first); a guided walk follows
-    // its path instead of steering toward due material.
+    // Full line walks tree order (mainline first), never steered.
     if (continuity == ReviewContinuity.fullLine) {
-      return _guidedChild(node.children) ?? node.children.first;
+      return node.children.first;
     }
 
     final dueCounts = <RepertoireNode, int>{};
@@ -1188,9 +1159,9 @@ class ReviewSession {
     DateTime now,
     Map<String, int> dueCountMemo,
   ) {
-    // Full line follows list order; a guided walk follows its path.
+    // Full line follows list order; never steered.
     if (continuity == ReviewContinuity.fullLine) {
-      return _guidedChild(opponentChild.children) ?? opponentChild.children.first;
+      return opponentChild.children.first;
     }
     var best = opponentChild.children.first;
     var bestDue = -1;

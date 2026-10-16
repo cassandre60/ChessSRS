@@ -399,10 +399,11 @@ void main() {
       expect(session.isComplete, isTrue);
     });
 
-    // SPEC INV-022. The guided walk follows the queued card's own
-    // variation: C lives down the c5 sideline, so the opponent must play c5
-    // even though it is not the mainline order.
-    test('fullLine guides toward the queued card’s own variation', () {
+    // SPEC INV-022. Branches are never steered: the walk follows PGN tree
+    // order (mainline first) even when the queued card lives down the
+    // sideline. The bypassed sideline is not lost: its walk missed, so the
+    // next pop prompts it directly instead of walking the line again.
+    test('fullLine walks the mainline first, then prompts the bypassed sideline', () {
       const root = RepertoireNode(
         id: 'root',
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
@@ -514,9 +515,17 @@ void main() {
       expect(session.currentPrompt?.decision.id, 'dec-1');
       final result = session.submitMove(from: 'e2', to: 'e4');
       expect(result.isCorrect, isTrue);
-      // Guided down the c5 sideline toward C, not the mainline e5.
-      expect(result.autoPlayedMoves.single.move.san, 'c5');
-      expect(result.nextPrompt?.decision.id, 'dec-c5');
+      // Mainline first: e5, even though C waits down the c5 sideline.
+      expect(result.autoPlayedMoves.single.move.san, 'e5');
+      expect(result.nextPrompt?.decision.id, 'dec-e5');
+
+      // The mainline ends at the e5 leaf; the bypassed sideline C is
+      // prompted directly rather than walked past again.
+      final afterE5 = session.submitMove(from: 'g1', to: 'f3');
+      expect(afterE5.isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-c5');
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.isComplete, isTrue);
     });
 
     // SPEC INV-022. A settings flip mid-review steers the very next
