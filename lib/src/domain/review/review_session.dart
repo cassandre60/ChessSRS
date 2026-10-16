@@ -110,11 +110,14 @@ class ReviewSession {
       // is fresh rather than due. In dynamic repertoire mode, unreviewed positions
       // are only introduced if explicitly unlocked.
       final status = dueStatusOf(state, now);
+      final isLearned = state != null && state.repetitionCount > 0;
       final isUnlocked =
           !dynamicRepertoireMode ||
+          isLearned ||
           unlockedDecisionIds.contains(d.id) ||
           unlockedDecisionIds.contains(d.canonicalId);
-      if (mode == ReviewMode.practice || status.isDue || (status.isFresh && isUnlocked)) {
+      final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
+      if (mode == ReviewMode.practice || isDue || (status.isFresh && isUnlocked)) {
         // In multi-study scope, deduplicate shared canonical transpositions
         if (scope.studyId == null && scope.chapterId == null) {
           if (!queuedCanonicalIds.add(d.canonicalId)) {
@@ -745,16 +748,24 @@ class ReviewSession {
       if (nextDecision != null) {
         final decState = _reviewStates[nextDecision.canonicalId] ?? _reviewStates[nextDecision.id];
         final isDue = _isDecisionDue(nextDecision, decState, now);
+        final isLearned = decState != null && decState.repetitionCount > 0;
+        final isUnlocked =
+            !dynamicRepertoireMode ||
+            isLearned ||
+            unlockedDecisionIds.contains(nextDecision.id) ||
+            unlockedDecisionIds.contains(nextDecision.canonicalId);
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _completedDecisionIds.length >= remainingDailyQuota!;
         // Full line quizzes every step in order, even when not yet due. The
         // quota still caps prompted work — but it ends the walk instead of
-        // auto-playing the user's own moves past it.
+        // auto-playing the user's own moves past it. In dynamic mode, locked
+        // branches end the walk: unchosen moves must never be quizzed.
+        if (dynamicRepertoireMode && !isUnlocked) break;
+        if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
         final shouldPrompt =
             (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
-        if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
         if (shouldPrompt) {
           // Next decision along this branch.
           _dequeueDecision(nextDecision);
@@ -989,7 +1000,8 @@ class ReviewSession {
         final unlocked =
             unlockedDecisionIds.contains(candidate.id) ||
             unlockedDecisionIds.contains(candidate.canonicalId);
-        if (!unlocked && state == null) continue;
+        final learned = state != null && state.repetitionCount > 0;
+        if (!unlocked && !learned) continue;
       }
       if (candidate.id == target.id && candidate.canonicalId == target.canonicalId) {
         return null;
