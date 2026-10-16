@@ -2144,12 +2144,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           addedInBatch++;
         }
       }
-      if (batch.rawLineCount < requestMax ||
-          addedInBatch == 0 ||
-          batch.oldestTimestampMillis == null) {
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
         break;
       }
-      final nextUntil = batch.oldestTimestampMillis! - 1;
+      final nextUntil = oldestMillis - 1;
       if (untilMillis != null && nextUntil >= untilMillis) {
         break;
       }

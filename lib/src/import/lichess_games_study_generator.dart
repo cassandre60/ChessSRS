@@ -554,10 +554,11 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
             case MistakeSeverity.blunder:
               moveStats.blunderCount++;
           }
-          if (detected.bestMove != null && detected.bestMove!.uci != step.repertoireMove.uci) {
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
             final fixStats = nodeStats.recommendedFixes.putIfAbsent(
-              detected.bestMove!.uci,
-              () => _RecommendedFixStats(move: detected.bestMove!, severity: detected.severity),
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
             );
             fixStats.count++;
             if (detected.severity.index > fixStats.severity.index) {
@@ -590,8 +591,9 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
   for (final entry in userNodes.entries) {
     final nodeStats = entry.value;
     final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
     final mostPlayed = nodeStats.mostPlayed;
-    if (candidate.fix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
       final parsedMost = Move.parse(mostPlayed.move.uci);
       if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
         final afterMost = nodeStats.position.playUnchecked(parsedMost);
@@ -604,7 +606,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
           visited: {entry.key},
         );
         final isEarlyTrunk = nodeStats.ply <= 2;
-        final isMildMistake = candidate.fix!.severity == MistakeSeverity.inaccuracy;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
         if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
           resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
           continue;
@@ -694,8 +696,9 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
         final nextPos = pos.playUnchecked(parsed);
         final repMove = normalmoveToRepertoireMove(parsed, pos);
 
-        if (decision.fix != null) {
-          collectedFixesByKey[key] = decision.fix!;
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
         }
 
         final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
@@ -998,7 +1001,8 @@ bool _subtreeHasSeriousMistake(
   if (pos.turn == side) {
     final cand = candidateDecisions[key];
     if (cand == null) return false;
-    if (cand.fix != null && cand.fix!.severity != MistakeSeverity.inaccuracy) {
+    final candFix = cand.fix;
+    if (candFix != null && candFix.severity != MistakeSeverity.inaccuracy) {
       return true;
     }
     final nodeStats = userNodes[key];
@@ -1171,13 +1175,14 @@ int? _evalToUserCp(LichessPlyAnalysis? eval, Side userSide, {required bool isIni
     return isInitial ? 20 : null;
   }
   final sign = userSide == Side.white ? 1 : -1;
-  if (eval.mate != null) {
-    final m = eval.mate!;
-    final whiteMateScore = m > 0 ? 1000 : -1000;
+  final mate = eval.mate;
+  if (mate != null) {
+    final whiteMateScore = mate > 0 ? 1000 : -1000;
     return sign * whiteMateScore;
   }
-  if (eval.cp != null) {
-    return sign * eval.cp!;
+  final cp = eval.cp;
+  if (cp != null) {
+    return sign * cp;
   }
   return null;
 }
