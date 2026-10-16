@@ -130,12 +130,22 @@ class ReviewSession {
         // retire exactly what the load-time summary counted.
         if (status.isFresh) {
           _freshAtQueueTime.add(d.canonicalId);
+          // Scope-wide figure before the daily new-position allowance holds
+          // anything back (see [scopeFreshCount]). The allowance and the
+          // practice/no-split modes change what is queued, never what the scope
+          // contains.
+          if (isUnlocked) _scopeFreshCount++;
           if (mode == ReviewMode.srs) {
             freshBucket.add(d);
           } else {
             _unbufferedQueue.add(d);
           }
         } else {
+          // In SRS mode reaching this branch means the decision is due (the
+          // entry condition above admits nothing else); practice mode queues
+          // learned positions before their next due date too, and those are
+          // neither due nor fresh.
+          if (status.isDue) _scopeDueCount++;
           if (mode == ReviewMode.srs) {
             dueBucket.add(d);
           } else {
@@ -277,6 +287,8 @@ class ReviewSession {
   /// `initialDueCount` is how much of it the user actually owes.
   late final int _initialDueCount;
   late final int _initialQueueCount;
+  int _scopeDueCount = 0;
+  int _scopeFreshCount = 0;
 
   /// Presentation order of the due queue; the due set never depends on this.
   final ReviewOrder order;
@@ -421,6 +433,22 @@ class ReviewSession {
   /// Of [initialQueueCount], how many are genuinely due (INV-068). Practice
   /// mode reports the whole queue, having no fresh/due distinction to make.
   int get initialDueCount => _initialDueCount;
+
+  /// Due positions the scope held when this session was built, before the
+  /// daily quota trimmed the queue.
+  ///
+  /// [initialDueCount] answers "how much work did this session get"; this
+  /// answers "how much debt does the scope have" — the figure the summary
+  /// pass reports. The reuse fast path must reproduce that figure rather than
+  /// re-deriving it from a capped queue (#164): the queue is capped by today's
+  /// remaining allowance, so after any scope switch it undercounted.
+  int get scopeDueCount => _scopeDueCount;
+
+  /// Never-presented positions the scope held when this session was built,
+  /// before the daily new-position allowance held any back. See
+  /// [scopeDueCount] for why the reuse fast path needs the untrimmed figure.
+  int get scopeFreshCount => _scopeFreshCount;
+
   bool get isComplete => _currentPrompt == null && _dueQueue.isEmpty && _unbufferedQueue.isEmpty;
   Map<String, ReviewState> get reviewStates => Map.unmodifiable(_reviewStates);
 

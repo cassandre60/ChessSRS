@@ -805,6 +805,68 @@ void main() {
       },
     );
 
+    test(
+      'changeScope reuse carries the scope-wide due and fresh counts, not the quota-capped queue',
+      () async {
+        // SPEC INV-068. #164: the reuse fast path published
+        // `session.initialDueCount` — the queue after the daily quota trimmed it
+        // (and `initialQueueCount - initialDueCount` for fresh) — as the
+        // scope-wide figure, so the top bar fell from the scope's debt to the
+        // day's allowance on every changeScope/selectSide.
+        final container = createContainer();
+        final controller = container.read(reviewControllerProvider.notifier);
+        final service = container.read(reviewServiceProvider);
+
+        final importA = await controller.importPgnText(
+          pgnText: '1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 *',
+          title: 'King Pawn',
+          repertoireSide: Side.white,
+        );
+        await controller.importPgnText(
+          pgnText: '1. d4 d5 *',
+          title: 'Queen Pawn',
+          repertoireSide: Side.white,
+        );
+
+        // Two overdue positions and one still-fresh position in study A. Review
+        // scheduling would push the first two into the future, so the states are
+        // seeded directly.
+        final decisions = await repo.getDecisionsByStudy(importA.study.id);
+        expect(decisions.length, greaterThanOrEqualTo(3));
+        final past = clock.now().subtract(const Duration(days: 2));
+        for (final decision in decisions.take(2)) {
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: decision.id,
+              repetitionCount: 3,
+              stability: 1000.0,
+              nextDueAt: past,
+            ),
+          );
+        }
+
+        // One position of daily allowance, strictly fewer than the debt.
+        await container.read(studyPreferencesProvider.notifier).setMaxDailyReviews(1);
+
+        await controller.changeScope(ReviewScope.study(importA.study.id));
+
+        final state = container.read(reviewControllerProvider).requireValue;
+        final studies = await repo.getAllStudies();
+        final summary = await service.getDueSummary(
+          studies: studies,
+          scope: ReviewScope.study(importA.study.id),
+        );
+
+        expect(
+          summary.totalDueCount,
+          greaterThan(1),
+          reason: 'the cap must be smaller than the debt or this proves nothing',
+        );
+        expect(state.totalDueCount, summary.totalDueCount);
+        expect(state.totalFreshCount, summary.totalFreshCount);
+      },
+    );
+
     // SPEC INV-030: opening the active colour drawer preserves narrower scope (issue #59).
     test('selectSide on active colour preserves study and opening scope without reload', () async {
       final container = createContainer();
