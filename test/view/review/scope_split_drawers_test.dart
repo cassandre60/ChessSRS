@@ -171,6 +171,41 @@ void main() {
     );
   });
 
+  testWidgets('the row that is the scope announces itself as selected, and only it', (
+    tester,
+  ) async {
+    // #167: the drawer conveyed selection visually only. The row carried a label but no state
+    // flag, so a screen reader heard two rows with identical due counts as the same thing.
+    final sem = tester.ensureSemantics();
+    final container = await pumpDrawer(tester, Side.white);
+
+    // Scope to the Sicilian the way its own tap does, except that the tap also closes the
+    // drawer; changeScope alone leaves the row in place to be inspected.
+    await tester.runAsync(
+      () => container
+          .read(reviewControllerProvider.notifier)
+          .changeScope(const ReviewScope.opening('Sicilian Defense', side: Side.white)),
+    );
+    await pumpAsync(tester);
+
+    final selected = inDrawer(find.bySemanticsLabel(RegExp('^Sicilian Defense opening,')));
+    expect(selected, findsOneWidget);
+    expect(
+      tester.getSemantics(selected),
+      isSemantics(isSelected: true),
+      reason: 'the row that is the live scope must be announced as selected',
+    );
+    expect(
+      tester.getSemantics(inDrawer(find.bySemanticsLabel(RegExp('^White book,')))),
+      isSemantics(isSelected: false),
+      reason: 'a row that is not the scope must not claim to be selected',
+    );
+
+    // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+    // addTearDown.
+    sem.dispose();
+  });
+
   testWidgets('an opening row carries the colour too', (tester) async {
     final container = await pumpDrawer(tester, Side.white);
 

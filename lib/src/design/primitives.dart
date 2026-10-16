@@ -26,6 +26,7 @@ class SrsPressable extends StatefulWidget {
     this.radius = 999,
     this.pressScale = 1,
     this.semanticsToggled,
+    this.semanticsSelected,
     this.onLongPress,
     this.onSecondaryTap,
   });
@@ -35,6 +36,11 @@ class SrsPressable extends StatefulWidget {
   final double radius;
   final double pressScale;
   final bool? semanticsToggled;
+
+  /// The current-scope state a screen reader should announce for a row or list item, as
+  /// opposed to [semanticsToggled]'s on/off for a control. The scope drawer's rows pass it
+  /// (design/docs/03-components.md §6.3); null leaves the flag unset.
+  final bool? semanticsSelected;
 
   /// Optional secondary entry points, for the rows that keep their actions off the row body
   /// (design/docs/03-components.md §6.4: a long-press, or a secondary click on desktop).
@@ -58,6 +64,7 @@ class _SrsPressableState extends State<SrsPressable> {
       button: true,
       enabled: enabled,
       toggled: widget.semanticsToggled,
+      selected: widget.semanticsSelected,
       label: widget.semanticLabel,
       child: FocusableActionDetector(
         enabled: enabled,
