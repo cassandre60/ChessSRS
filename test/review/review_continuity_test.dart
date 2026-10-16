@@ -895,5 +895,46 @@ void main() {
       expect(afterA.isCorrect, isTrue);
       expect(afterA.nextPrompt?.decision.id, 'dec-2');
     });
+
+    // SPEC INV-022, INV-066. In dynamic repertoire mode, unlearned lapsed
+    // decisions on unchosen branches are dormant and must not be queued as due.
+    test('dynamicRepertoireMode excludes unlearned lapsed decisions on unchosen branches', () {
+      final (study, chapter, decisions) = buildLine();
+      // dec-3 is a sideline card with 0 reps and 1 lapse, past nextDueAt.
+      final reviewStates = {
+        'dec-1': ReviewState(
+          decisionId: 'dec-1',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-2': ReviewState(
+          decisionId: 'dec-2',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-3': ReviewState(
+          decisionId: 'dec-3',
+          nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+          repetitionCount: 0,
+          lapseCount: 1,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+        dynamicRepertoireMode: true,
+        unlockedDecisionIds: {'dec-1', 'dec-2'},
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      // dec-3 is dormant (not unlocked and reps=0): only dec-1 and dec-2 are queued!
+      expect(session.initialDueCount, 2);
+      expect(session.remainingDueCount, 2);
+      expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-2');
+      expect(session.submitMove(from: 'g1', to: 'f3').nextPrompt, isNull);
+      expect(session.isComplete, isTrue);
+    });
   });
 }

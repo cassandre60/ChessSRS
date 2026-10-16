@@ -258,12 +258,13 @@ class _DueTally {
     final state =
         reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
     final status = dueStatusOf(state, now);
-    final isDue = status.isDue;
     final isLearned = state != null && state.repetitionCount > 0;
     final isUnlocked =
+        !dynamicRepertoireMode ||
         isLearned ||
         unlockedDecisionIds.contains(d.id) ||
         unlockedDecisionIds.contains(d.canonicalId);
+    final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
     final isFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
 
     if (studyTotals.containsKey(d.studyId)) {
