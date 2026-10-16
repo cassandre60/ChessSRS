@@ -507,11 +507,11 @@ class ReviewService {
   }) async {
     final allStudies = preloadedStudies ?? await repository.getAllStudies();
     final activeStudies = allStudies.where((s) => s.isActive).toList();
-    final chapters = <Chapter>[];
-    for (final s in activeStudies) {
-      final studyChapters = await repository.getChaptersByStudy(s.id);
-      chapters.addAll(chapterWhere == null ? studyChapters : studyChapters.where(chapterWhere));
-    }
+    final activeStudyIds = activeStudies.map((s) => s.id).toList();
+    final allStudyChapters = await repository.getChaptersByStudyIds(activeStudyIds);
+    final chapters = chapterWhere == null
+        ? allStudyChapters
+        : allStudyChapters.where(chapterWhere).toList();
     return (allStudies: allStudies, activeStudies: activeStudies, chapters: chapters);
   }
 
@@ -563,6 +563,7 @@ class ReviewService {
     Map<String, DateTime>? preloadedExposureThrottle,
     List<RepertoireDecision>? preloadedAllDecisions,
     Map<String, String?>? preloadedChapterOpenings,
+    Set<String>? preloadedUnlockedDecisionIds,
   }) async {
     final List<Study> targetStudies;
     final List<Chapter> targetChapters;
@@ -662,9 +663,11 @@ class ReviewService {
     }
 
     final engine = ReviewEngine(scheduler: scheduler, clock: clock);
-    final unlockedIds = (decisions.isEmpty || !dynamicRepertoireMode)
-        ? const <String>{}
-        : await repository.getUnlockedDecisionIds();
+    final unlockedIds =
+        preloadedUnlockedDecisionIds ??
+        ((decisions.isEmpty || !dynamicRepertoireMode)
+            ? const <String>{}
+            : await repository.getUnlockedDecisionIds());
 
     final session = engine.createSession(
       studies: targetStudies,
@@ -878,6 +881,7 @@ class ReviewService {
       preloadedReviewStates: loadedData.reviewStates,
       preloadedExposureThrottle: loadedData.exposureThrottle,
       preloadedChapterOpenings: chapterOpenings,
+      preloadedUnlockedDecisionIds: unlockedIds,
     );
 
     return (session: session, summary: summary);
