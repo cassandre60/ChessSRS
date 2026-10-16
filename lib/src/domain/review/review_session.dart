@@ -266,7 +266,8 @@ class ReviewSession {
     _refillPrefetchBuffer();
     _advanceToNextDue();
     _logger.info(
-      'ReviewSession created: mode=$mode, scope=$scope, initialDueCount=$_initialQueueCount, '
+      'ReviewSession created: mode=$mode, scope=$scope, order=$order, continuity=$continuity, '
+      'initialDueCount=$_initialQueueCount, '
       'dueOfThose=$_initialDueCount, remainingQuota=$remainingDailyQuota',
     );
   }
@@ -513,6 +514,7 @@ class ReviewSession {
 
       _logger.info(
         'Move correct: ${expectedMatch.san ?? expectedMatch.uci} for decision ${decision.canonicalId} '
+        '${transposedStart != null ? '(transposed line) ' : ''}'
         '(reps: ${nextState.repetitionCount}, stability: ${nextState.stability.toStringAsFixed(2)})',
       );
 
@@ -733,6 +735,11 @@ class ReviewSession {
             (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
           );
           _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
+          _logger.info(
+            'Traversal prompts ${nextDecision.canonicalId} '
+            '(due=$isDue, continuity=$continuity) after auto-playing '
+            '[${autoPlayed.map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}').join(' ')}]',
+          );
           return ReviewStepResult(
             isCorrect: true,
             movePlayed: expectedMatch,
