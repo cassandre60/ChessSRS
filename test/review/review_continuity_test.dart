@@ -564,7 +564,144 @@ void main() {
       expect(session.completedCount, 1);
       expect(session.isComplete, isTrue);
     });
-    // SPEC INV-022, INV-066. A queued mid-line card opens at its line's
+    // SPEC INV-022, INV-025. A later walk re-answers its already-answered
+    // prefix with practice grading: no second SRS write, no event, no quota
+    // cost — then grades the new card normally.
+    test('fullLine rehearses answered prefixes without double-grading', () {
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'start',
+        fenKey: 'start',
+        children: [
+          RepertoireNode(
+            id: 'node-e4',
+            fen: 'after-e4',
+            fenKey: 'after-e4',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'after-e5',
+                fenKey: 'after-e5',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3',
+                    fen: 'after-nf3',
+                    fenKey: 'after-nf3',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'node-d4',
+            fen: 'after-d4',
+            fenKey: 'after-d4',
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+            children: [
+              RepertoireNode(
+                id: 'node-m',
+                fen: 'after-c5',
+                fenKey: 'after-c5',
+                incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-end',
+                    fen: 'after-c3',
+                    fenKey: 'after-c3',
+                    incomingMove: RepertoireMove(from: 'c2', to: 'c3', san: 'c3'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final study = Study(
+        id: 'study-rehearse',
+        title: 'Rehearsal',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      final chapter = Chapter(
+        id: 'ch-1',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Main',
+        startingFen: root.fen,
+        root: root,
+      );
+      const decR = RepertoireDecision(
+        id: 'dec-r',
+        studyId: 'study-rehearse',
+        chapterId: 'ch-1',
+        nodeId: 'root',
+        expectedMoves: [
+          RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ],
+      );
+      const decE = RepertoireDecision(
+        id: 'dec-e',
+        studyId: 'study-rehearse',
+        chapterId: 'ch-1',
+        nodeId: 'node-e5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+      const decM = RepertoireDecision(
+        id: 'dec-m',
+        studyId: 'study-rehearse',
+        chapterId: 'ch-1',
+        nodeId: 'node-m',
+        expectedMoves: [RepertoireMove(from: 'c2', to: 'c3', san: 'c3')],
+      );
+      final future = baseTime.add(const Duration(days: 5));
+      final states = {
+        'dec-r': ReviewState(
+          decisionId: 'dec-r',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-e': ReviewState(
+          decisionId: 'dec-e',
+          nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+          repetitionCount: 1,
+        ),
+        'dec-m': ReviewState(decisionId: 'dec-m', nextDueAt: future, repetitionCount: 2),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: const [decR, decE, decM],
+        reviewStates: states,
+        order: ReviewOrder.dueDate,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      // dec-m is not due and unqueued: the first walk misses it entirely.
+      // Queue order is dec-e, dec-r; the session opens at the line start.
+      expect(session.currentPrompt?.decision.id, 'dec-r');
+      // Walk the d4 sideline (user's choice): M is prompted, never due.
+      expect(session.submitMove(from: 'd2', to: 'd4').nextPrompt?.decision.id, 'dec-m');
+      expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt, isNotNull);
+      // The sideline ends at the c3 leaf; the bypassed mainline card E is
+      // still queued, so its walk opens at the true start: already-answered
+      // R rehearses instead of re-grading.
+      expect(session.currentPrompt?.decision.id, 'dec-r');
+      final repsBefore = session.reviewStates['dec-r']!.repetitionCount;
+      final rehearsal = session.submitMove(from: 'e2', to: 'e4');
+      expect(rehearsal.isCorrect, isTrue);
+      expect(rehearsal.event, isNull);
+      expect(session.reviewStates['dec-r']!.repetitionCount, repsBefore);
+      expect(rehearsal.nextPrompt?.decision.id, 'dec-e');
+      // And the new card grades normally.
+      final graded = session.submitMove(from: 'g1', to: 'f3');
+      expect(graded.isCorrect, isTrue);
+      expect(graded.event, isNotNull);
+      expect(session.isComplete, isTrue);
+    });
     // first unanswered move: with only C due, review starts at A and walks
     // A → B → C instead of jumping straight to C.
     test('fullLine opens a queued mid-line card at its line start', () {

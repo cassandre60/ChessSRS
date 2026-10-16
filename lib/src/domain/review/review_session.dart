@@ -470,6 +470,13 @@ class ReviewSession {
 
     final now = clock.now();
 
+    // Full-line prefix rehearsal: re-answering a position already answered
+    // this session re-walks it with practice grading (no double SRS write).
+    final isPrefixRehearsal =
+        continuity == ReviewContinuity.fullLine &&
+        mode == ReviewMode.srs &&
+        _completedDecisionIds.contains(decision.canonicalId);
+
     if (expectedMatch != null) {
       _completedDecisionIds.add(decision.canonicalId);
       // -----------------------------------------------------------------------
@@ -483,7 +490,7 @@ class ReviewSession {
       ReviewState nextState;
       ReviewEvent? event;
 
-      if (mode == ReviewMode.practice || isCorrectedFalseStart) {
+      if (mode == ReviewMode.practice || isCorrectedFalseStart || isPrefixRehearsal) {
         nextState = prevState;
         event = null;
       } else {
@@ -534,7 +541,7 @@ class ReviewSession {
       ReviewEvent? event;
       List<ReviewState> sideEffects = const [];
 
-      if (mode == ReviewMode.practice) {
+      if (mode == ReviewMode.practice || isPrefixRehearsal) {
         nextState = prevState;
         event = null;
       } else {
@@ -938,9 +945,10 @@ class ReviewSession {
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest unanswered decision on [target]'s ancestry chain. Null when
-  /// the target itself is the line start. Answered positions are never
-  /// re-asked as starts; in dynamic mode locked-unreviewed ancestors skip.
+  /// Earliest decision on [target]'s ancestry chain. Null when the target
+  /// itself is the line start. Re-answered prefix positions rehearse with
+  /// practice grading (never double-graded); in dynamic mode
+  /// locked-unreviewed ancestors skip.
   ({RepertoireDecision decision, RepertoireNode node})? _lineStartFor(RepertoireDecision target) {
     var cursor = _nodesById[target.nodeId];
     if (cursor == null) return null;
@@ -952,7 +960,6 @@ class ReviewSession {
     for (var i = chain.length - 1; i >= 0; i--) {
       final candidate = _decisionForNode[chain[i].id];
       if (candidate == null) continue;
-      if (_completedDecisionIds.contains(candidate.canonicalId)) continue;
       if (dynamicRepertoireMode) {
         final state = _reviewStates[candidate.canonicalId] ?? _reviewStates[candidate.id];
         final unlocked =
