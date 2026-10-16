@@ -804,7 +804,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
     pgnHash: '',
     createdAt: latestGameAt ?? DateTime.utc(2026),
   );
-  final pgnText = studyToPgn(study: study, chapters: chapters);
+  final pgnText = studyToPgn(study, chapters);
 
   final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
 
