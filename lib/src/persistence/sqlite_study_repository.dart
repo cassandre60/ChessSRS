@@ -1254,10 +1254,6 @@ class SqliteStudyRepository implements StudyRepository {
 
   static Chapter _chapterFromRow(Map<String, Object?> row) {
     final treeJson = row['treeJson'] as String?;
-    final root = treeJson != null && treeJson.isNotEmpty
-        ? repertoireNodeFromJson(jsonDecode(treeJson) as Map<String, dynamic>)
-        : null;
-
     final orientationStr = row['orientation'] as String?;
     final orientation = orientationStr == 'black' ? Side.black : Side.white;
 
@@ -1267,7 +1263,9 @@ class SqliteStudyRepository implements StudyRepository {
       sourceOrder: (row['sourceOrder']! as num).toInt(),
       title: row['title'] as String?,
       startingFen: row['startingFen'] as String?,
-      root: root,
+      rootResolver: treeJson != null && treeJson.isNotEmpty
+          ? () => repertoireNodeFromJson(jsonDecode(treeJson) as Map<String, dynamic>)
+          : null,
       createdAt: parseUtcIso(row['createdAt']! as String),
       opening: row['opening'] as String?,
       orientation: orientation,

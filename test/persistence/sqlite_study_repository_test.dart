@@ -608,8 +608,8 @@ void main() {
         final now = DateTime.utc(2026, 9, 16, 12);
         final studyA = Study(id: 's-a', title: 'A', createdAt: now, updatedAt: now);
         final studyB = Study(id: 's-b', title: 'B', createdAt: now, updatedAt: now);
-        const chapterA = Chapter(id: 'ch-x', studyId: 's-a', sourceOrder: 0);
-        const chapterB = Chapter(id: 'ch-y', studyId: 's-b', sourceOrder: 0);
+        final chapterA = Chapter(id: 'ch-x', studyId: 's-a', sourceOrder: 0);
+        final chapterB = Chapter(id: 'ch-y', studyId: 's-b', sourceOrder: 0);
 
         // The same position learned in two studies: a transposition across libraries.
         const decisionA = RepertoireDecision(

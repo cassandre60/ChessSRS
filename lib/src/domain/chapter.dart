@@ -14,17 +14,20 @@ import 'package:dartchess/dartchess.dart' show Side;
 /// non-standard starting position (FEN header), [startingFen] captures it.
 /// Source order ([sourceOrder]) preserves the chapter sequence from the file.
 class Chapter {
-  const Chapter({
+  Chapter({
     required this.id,
     required this.studyId,
     required this.sourceOrder,
     this.title,
     this.startingFen,
-    this.root,
+    RepertoireNode? root,
+    this.rootResolver,
     this.createdAt,
     this.opening,
     this.orientation = Side.white,
-  });
+  }) {
+    _root = root;
+  }
 
   /// Creates a new [Chapter] with a freshly-generated UUID.
   factory Chapter.create({
@@ -33,6 +36,7 @@ class Chapter {
     String? title,
     String? startingFen,
     RepertoireNode? root,
+    RepertoireNode? Function()? rootResolver,
     DateTime? createdAt,
     String? opening,
     Side orientation = Side.white,
@@ -44,6 +48,7 @@ class Chapter {
       title: title,
       startingFen: startingFen,
       root: root,
+      rootResolver: rootResolver,
       createdAt: createdAt ?? DateTime.now(),
       opening: opening,
       orientation: orientation,
@@ -62,8 +67,11 @@ class Chapter {
   /// Non-standard starting FEN (null ⇒ standard initial position).
   final String? startingFen;
 
+  RepertoireNode? _root;
+  final RepertoireNode? Function()? rootResolver;
+
   /// Root of the repertoire position tree for this chapter.
-  final RepertoireNode? root;
+  RepertoireNode? get root => _root ??= rootResolver?.call();
 
   final DateTime? createdAt;
 
@@ -77,6 +85,7 @@ class Chapter {
     String? title,
     String? startingFen,
     RepertoireNode? root,
+    RepertoireNode? Function()? rootResolver,
     String? opening,
     Side? orientation,
   }) {
@@ -86,7 +95,8 @@ class Chapter {
       sourceOrder: sourceOrder,
       title: title ?? this.title,
       startingFen: startingFen ?? this.startingFen,
-      root: root ?? this.root,
+      root: root ?? (rootResolver == null ? _root : null),
+      rootResolver: rootResolver ?? (root == null ? this.rootResolver : null),
       createdAt: createdAt,
       opening: opening ?? this.opening,
       orientation: orientation ?? this.orientation,

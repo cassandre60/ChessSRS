@@ -72,32 +72,11 @@ class ReviewSession {
        _chapters = {for (final c in chapters) c.id: c},
        _reviewStates = Map<String, ReviewState>.from(reviewStates),
        _decisionsById = {for (final d in decisions) d.id: d},
-       _decisionForNode = {for (final d in decisions) d.nodeId: d} {
-    // Index all nodes across chapter trees for O(1) lookup
-    for (final chapter in chapters) {
-      if (chapter.root != null) {
-        _indexNodes(chapter.root!, chapter.id);
-      }
-    }
-
-    // Canonical identity is shared position knowledge: two occurrences that ask the same
-    // question (same FEN, same complete accepted set) deliberately collapse to one entry here,
-    // which is what lets a transposition inherit the memory built for the position it transposed
-    // into. Occurrence identity stays separate — [RepertoireDecision.id] and [RepertoireDecision
-    // .nodeId] still address each appearance on its own, and `_decisionsById` keeps them all.
-    //
-    // `_canonicalByFenMove` stays keyed by (FEN, single move) on purpose: the graph layer uses it
-    // for position adjacency, where propagating between two questions asked at the same board is
-    // the intent. It is not the scheduling identity — that is the canonical ID above.
+       _decisionForNode = {for (final d in decisions) d.nodeId: d},
+       _chaptersList = chapters {
     for (final d in decisions) {
       _decisionsByCanonicalId[d.canonicalId] = d;
-      final node = _nodesById[d.nodeId];
-      if (node != null) {
-        _decisionsByFenKey.putIfAbsent(node.fenKey, () => []).add(d);
-        for (final m in d.expectedMoves) {
-          _canonicalByFenMove['${node.fenKey}|${m.uci}'] = d.canonicalId;
-        }
-      }
+      _decisionsByChapter.putIfAbsent(d.chapterId, () => []).add(d);
     }
 
     _coordinator =
@@ -211,6 +190,17 @@ class ReviewSession {
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
 
+      // Index chapters holding decisions in queue
+      final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
+      for (final chapter in chapters) {
+        if (neededChapterIds.contains(chapter.id)) {
+          _indexChapter(chapter);
+        }
+      }
+      if (neededChapterIds.length >= chapters.length) {
+        _allChaptersIndexed = true;
+      }
+
       // Presentation order (INV-066) applies within each bucket, so a chosen
       // order reshuffles the work without letting fresh material overtake due.
       void reorderWithinBuckets(int Function(RepertoireDecision, RepertoireDecision) compare) {
@@ -229,6 +219,7 @@ class ReviewSession {
 
       // By-line order (INV-066): same set, walking study, chapter, tree order.
       if (order == ReviewOrder.byLine) {
+        _ensureAllChaptersIndexed();
         final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
         var n = 0;
         final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
@@ -312,6 +303,10 @@ class ReviewSession {
   late final GraphAwareReviewCoordinator _coordinator;
   final Map<String, Study> _studies;
   final Map<String, Chapter> _chapters;
+  final List<Chapter> _chaptersList;
+  final Map<String, List<RepertoireDecision>> _decisionsByChapter = {};
+  final Set<String> _indexedChapterIds = {};
+  bool _allChaptersIndexed = false;
   final Map<String, ReviewState> _reviewStates;
   final Map<String, RepertoireDecision> _decisionsById;
   final Map<String, RepertoireDecision> _decisionForNode;
@@ -323,6 +318,33 @@ class ReviewSession {
   final Map<String, RepertoireNode> _parentOfNode = {};
   final Map<String, String> _canonicalByFenMove = {};
   final Map<String, int> _nodeCountCache = {};
+
+  void _indexChapter(Chapter chapter) {
+    if (!_indexedChapterIds.add(chapter.id)) return;
+    if (chapter.root != null) {
+      _indexNodes(chapter.root!, chapter.id);
+      final decisions = _decisionsByChapter[chapter.id];
+      if (decisions != null) {
+        for (final d in decisions) {
+          final node = _nodesById[d.nodeId];
+          if (node != null) {
+            _decisionsByFenKey.putIfAbsent(node.fenKey, () => []).add(d);
+            for (final m in d.expectedMoves) {
+              _canonicalByFenMove['${node.fenKey}|${m.uci}'] = d.canonicalId;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void _ensureAllChaptersIndexed() {
+    if (_allChaptersIndexed) return;
+    _allChaptersIndexed = true;
+    for (final c in _chaptersList) {
+      _indexChapter(c);
+    }
+  }
 
   final List<RepertoireDecision> _dueQueue = [];
   final List<RepertoireDecision> _unbufferedQueue = [];
@@ -953,6 +975,7 @@ class ReviewSession {
   /// Within-study scope additionally requires the target's study.
   RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
     if (transposeScope == TransposeScope.off) return null;
+    _ensureAllChaptersIndexed();
     // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
     Position position;
     try {
@@ -1161,6 +1184,7 @@ class ReviewSession {
   }
 
   List<GraphNode> _findSiblingGraphNodes(RepertoireDecision decision) {
+    _ensureAllChaptersIndexed();
     final node = _nodesById[decision.nodeId];
     if (node == null) return const [];
 

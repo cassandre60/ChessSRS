@@ -2065,7 +2065,7 @@ void main() {
           ),
         ],
       );
-      const chapterA = Chapter(
+      final chapterA = Chapter(
         id: 'chapter-a',
         studyId: 'study-collision',
         sourceOrder: 0,
@@ -2073,7 +2073,7 @@ void main() {
         startingFen: startFen,
         root: rootA,
       );
-      const chapterB = Chapter(
+      final chapterB = Chapter(
         id: 'chapter-b',
         studyId: 'study-collision',
         sourceOrder: 1,
@@ -2451,13 +2451,13 @@ void main() {
           createdAt: baseTime,
           updatedAt: baseTime,
         );
-        const chapter = Chapter(
+        final chapter = Chapter(
           id: 'ch-black',
           studyId: 's-black',
           sourceOrder: 0,
           title: 'French Defense',
           startingFen: blackToMoveFen,
-          root: RepertoireNode(
+          root: const RepertoireNode(
             id: 'node-root-black',
             fen: blackToMoveFen,
             fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
