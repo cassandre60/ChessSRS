@@ -420,6 +420,84 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  // Variant refusal
+  // ---------------------------------------------------------------------------
+  group('importPgn — variant games', () {
+    test('refuses a variant game with a typed error naming the variant', () {
+      // SPEC INV-011.
+      const pgn = '''
+[Event "Antichess sparring"]
+[Variant "Antichess"]
+
+1. e4 e5 2. Nf3 Nc6 *
+''';
+      final result = importPgn(pgn);
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('Antichess'));
+      expect(result.errors.first.chapterTitle, contains('Antichess sparring'));
+      // Refused outright: nothing of the game is stored.
+      expect(result.chapters, isEmpty);
+      expect(result.decisions, isEmpty);
+    });
+
+    test('refuses a Crazyhouse game rather than importing it without its drops', () {
+      const pgn = '''
+[Event "Crazyhouse sparring"]
+[Variant "Crazyhouse"]
+
+1. e4 d5 2. P@e5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('Crazyhouse'));
+      expect(result.chapters, isEmpty);
+    });
+
+    test('keeps standard games in the same file while refusing the variant game', () {
+      const pgn = '''
+[Event "Standard Game"]
+
+1. e4 e5 *
+
+[Event "Antichess Game"]
+[Variant "Antichess"]
+
+1. d4 d5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters, hasLength(1));
+      expect(result.chapters.first.title, equals('Standard Game'));
+      expect(result.decisions, isNotEmpty);
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('Antichess'));
+    });
+
+    test('accepts the Standard and From Position variant tags', () {
+      const pgn = '''
+[Event "Tagged Standard"]
+[Variant "Standard"]
+
+1. e4 e5 *
+''';
+      final standard = importPgn(pgn);
+      expect(standard.chapters, hasLength(1));
+      expect(standard.errors, isEmpty);
+
+      const setupPgn = '''
+[Event "Setup study"]
+[Variant "From Position"]
+[FEN "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"]
+[SetUp "1"]
+
+1. Nf3 *
+''';
+      final setup = importPgn(setupPgn);
+      expect(setup.chapters, hasLength(1));
+      expect(setup.errors, isEmpty);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Canonical identity collisions
   // ---------------------------------------------------------------------------
   group('importPgn — canonical identity', () {
