@@ -357,7 +357,7 @@ void main() {
       expect(blackIds.intersection(whiteIds), isEmpty);
     });
 
-    test('creating the opposite colour twice does not duplicate it', () async {
+    test('creating the opposite colour twice does not duplicate it or move the session', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);
 
@@ -374,6 +374,13 @@ void main() {
 
       expect(again, isNull);
       expect((await repo.getAllStudies()).length, 2);
+
+      // The no-op holds for the session too (#170): resolving the duplicate
+      // moved the session onto the Black copy, and the user never asked to
+      // leave the White drawer they were reviewing.
+      final state = container.read(reviewControllerProvider).value;
+      expect(state?.scope.studyId, white.study.id);
+      expect(state?.activeSide, Side.white);
     });
 
     test('creating the opposite colour leaves the user on what they were reviewing', () async {
