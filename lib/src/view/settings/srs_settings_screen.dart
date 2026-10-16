@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/domain/review/review_continuity.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/transpose_scope.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
@@ -267,6 +268,20 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   },
                                   value: studyPrefs.reviewOrder,
                                   onChanged: (order) => studyNotifier.setReviewOrder(order),
+                                ),
+                              ),
+                              _SettingRow(
+                                label: 'Line continuity',
+                                help:
+                                    'Due only tests what is due and auto-plays the rest. Full line tests every move in order, even when not due — slower, but lines stay coherent instead of jumping over steps.',
+                                control: SrsSegmented<ReviewContinuity>(
+                                  options: const {
+                                    ReviewContinuity.dueOnly: 'Due only',
+                                    ReviewContinuity.fullLine: 'Full line',
+                                  },
+                                  value: studyPrefs.reviewContinuity,
+                                  onChanged: (continuity) =>
+                                      studyNotifier.setReviewContinuity(continuity),
                                 ),
                               ),
                               _SettingRow(

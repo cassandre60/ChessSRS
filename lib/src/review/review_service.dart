@@ -34,6 +34,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final scheduler = ref.watch(schedulerProvider);
   final clock = ref.watch(clockProvider);
   final reviewOrder = ref.watch(studyPreferencesProvider.select((p) => p.reviewOrder));
+  final reviewContinuity = ref.watch(studyPreferencesProvider.select((p) => p.reviewContinuity));
   final transposeScope = ref.watch(studyPreferencesProvider.select((p) => p.transposeScope));
   final dynamicRepertoireMode = ref.watch(
     studyPreferencesProvider.select((p) => p.dynamicRepertoireMode),
@@ -48,6 +49,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
     scheduler: scheduler,
     clock: clock,
     reviewOrder: reviewOrder,
+    reviewContinuity: reviewContinuity,
     transposeScope: transposeScope,
     dynamicRepertoireMode: dynamicRepertoireMode,
   );
@@ -256,12 +258,13 @@ class _DueTally {
     final state =
         reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
     final status = dueStatusOf(state, now);
-    final isDue = status.isDue;
     final isLearned = state != null && state.repetitionCount > 0;
     final isUnlocked =
+        !dynamicRepertoireMode ||
         isLearned ||
         unlockedDecisionIds.contains(d.id) ||
         unlockedDecisionIds.contains(d.canonicalId);
+    final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
     final isFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
 
     if (studyTotals.containsKey(d.studyId)) {
@@ -458,6 +461,7 @@ class ReviewService {
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.reviewOrder = ReviewOrder.dueDate,
+    this.reviewContinuity = ReviewContinuity.dueOnly,
     this.transposeScope = TransposeScope.inScope,
     this.dynamicRepertoireMode = false,
   });
@@ -469,6 +473,9 @@ class ReviewService {
   /// Presentation order of the due queue. The domain default stays due-date;
   /// the product default (StudyPrefs) is by-line.
   final ReviewOrder reviewOrder;
+
+  /// In-line continuity after a correct move (user setting, default due-only).
+  final ReviewContinuity reviewContinuity;
 
   /// Whether off-line-but-book moves are accepted (INV-065).
   final TransposeScope transposeScope;
@@ -675,6 +682,7 @@ class ReviewService {
       scope: scope,
       mode: mode,
       order: reviewOrder,
+      continuity: reviewContinuity,
       transposeScope: transposeScope,
       dynamicRepertoireMode: dynamicRepertoireMode,
       unlockedDecisionIds: unlockedIds,
