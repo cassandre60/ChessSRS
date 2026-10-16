@@ -7,22 +7,30 @@ agent can pick up and execute top-to-bottom.
 
 | Brief | Status |
 |---|---|
-| `A11Y-FIX-27-review-screen-semantics.md` | In progress |
-| `POLISH-FIX-11-pgn-shape-extension-and-board-notify.md` | In progress |
-| `REFACTOR-FIX-21-pick-helpers-no-callers.md` | Ready |
-| `REFACTOR-FIX-22-dead-predicates-and-providers.md` | Ready |
-| `REFACTOR-FIX-23-enum-values-not-dead.md` | Ready — investigation, **read before deleting** |
-| `PERF-FIX-24-real-library-measurement.md` | Measured 2026-10-15 — 31k-decision findings recorded |
-| `PERF-FIX-33-slim-due-summary-decision-load.md` | Implemented |
-| `PERF-FIX-34-adaptive-review-state-loading.md` | Implemented |
-| `PERF-FIX-35-fast-utc-iso-date-parsing.md` | Implemented |
-| `PERF-FIX-36-targeted-scope-due-summary.md` | Implemented |
-| `PERF-FIX-37-sqlite-native-page-mmap.md` | Implemented |
-| `PERF-FIX-38-differential-summary-tallying.md` | Implemented |
-| `PERF-FIX-39-pipelined-animation-overlapped-durability.md` | Implemented |
-| `PERF-FIX-40-board-repaint-boundary-and-prewarm.md` | Implemented |
-| `PERF-FIX-41-sub-sensory-move-pre-warming.md` | Implemented |
-| `FEAT-REP-43-dynamic-repertoire-branch-selection.md` | Implemented |
+| `REFACTOR-FIX-23-enum-values-not-dead.md` | Investigation complete — **0 dead enum values; all are actively persisted/used** |
+| `PERF-FIX-24-real-library-measurement.md` | Measured on 31k-decision real library — durable findings recorded |
+
+### Recently Landed Briefs (Swept)
+
+| Brief | PR / Commit | Summary |
+|---|---|---|
+| `A11Y-FIX-27` | PR #75 (`bacc64e39`) | Review screen semantics: board label, continue button, figurine SAN |
+| `POLISH-FIX-11` | PR #109 (`17100cd64`) | Single shared `PgnCommentShape` to `Shape` extension |
+| `REFACTOR-FIX-21` | PR #112 (`8dfcb7c78`) | Remove dead Pick conversion helpers |
+| `REFACTOR-FIX-22` | PR #113 (`90287a940`) | Remove dead predicates and unused providers |
+| `PERF-FIX-33` | PR #142 (`a3c428781`) | Slim due summary decision load (omit JSON move parsing in tallies) |
+| `PERF-FIX-34` | PR #143 (`442751fbc`) | Adaptive review state query chunking vs single-query scan |
+| `PERF-FIX-35` | PR #144 (`13efce44c`) | Fast UTC ISO date parsing (`parseUtcIso`) |
+| `PERF-FIX-36` | PR #145 (`a6d36e2ca`) | Targeted scope due summary |
+| `PERF-FIX-37` | PR #146 (`22b7a4bf0`) | SQLite native page memory mapping (mmap) |
+| `PERF-FIX-38` | PR #151 (`34141bb64`) | Differential summary tallying |
+| `PERF-FIX-39` | PR #148 (`3488b6661`) | Pipelined animation with overlapped answer durability |
+| `PERF-FIX-40` | PR #147 (`77000334d`) | Board repaint boundary isolation |
+| `PERF-FIX-41` | PR #150 (`bc1404bc5`) | Sub-sensory move pre-warming on touch |
+| `FEAT-REP-43` | PR #156 (`584b5c383`) | Dynamic repertoire branch selection & practice mode unlocking |
+| `PERF-FIX-44` | PR #158 (`0fbf8666b`) | Batch chapter queries, fast move decoding, single-pass partitioning |
+| `PERF-FIX-45` | PR #172 (`903445155`) | Targeted decision queries and SQL-level orientation filtering |
+| `PERF-FIX-46` | PR #175 (`72e413b51`) | Lazy chapter tree deserialization and on-demand session indexing |
 
 21–23 came from a tree-wide sweep for declarations with exactly one occurrence
 across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:
@@ -30,8 +38,8 @@ across `lib/` + `test/` + `scripts/`, run 2026-10-13. It returned 72 candidates:
 blind (23 is about those), and the rest in files the reachability ratchet already
 pins as dead. The sweep is reproducible — see the command in each brief.
 
-**The queue was pruned on 2026-10-13.** It held 36 briefs; 34 were removed after
-each was verified against `origin/main`. They fall into three groups:
+**The queue was pruned on 2026-10-13 and swept on 2026-10-16.** All completed
+briefs were verified against `origin/main` before removal. They fall into three groups:
 
 - **Landed** — the work shipped in a PR, often by another agent working the same
   brief concurrently. Examples: `ARCH-FIX-06` (#87), `PERF-FIX-21` (#84),
