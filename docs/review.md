@@ -71,6 +71,17 @@ review walks repertoire lines:
   the daily limit), but review never teleports mid-line; best while learning
   new material.
 
+### Why a sideline can wait while its line repeats (owner report 2026-10-16)
+
+Branches are never steered: at every position with several repertoire
+replies, the move you play picks the line — including on dedicated walks.
+So a due sideline whose branch you never take keeps opening its line at the
+start, and you keep replaying the mainline prefix out of habit while it
+waits. Those repeats are rehearsals, not reviews: they are never graded (no
+interval, repetition, or lapse changes), log no events, and cost no quota
+(each position counts once). To meet the sideline, take its move at the
+junction once — the walk then follows it to the end.
+
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 
 In a chess repertoire, the opponent frequently has multiple branching responses at a given position.
