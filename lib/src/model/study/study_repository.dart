@@ -248,7 +248,7 @@ class StudyRepository {
     int? oldestMillis;
     final games = <LichessPlayedGame>[];
     for (final line in rawLines) {
-      final dynamic decoded;
+      final Object? decoded;
       try {
         decoded = jsonDecode(line);
       } on FormatException catch (e) {

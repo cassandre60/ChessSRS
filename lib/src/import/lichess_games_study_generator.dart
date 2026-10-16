@@ -121,10 +121,10 @@ LichessPlayedGame? parseLichessGameJson(Map<String, dynamic> json, {required Str
   final normalizedUser = username.trim().toLowerCase();
   if (normalizedUser.isEmpty) return null;
 
-  final variantRaw = json['variant'];
+  final Object? variantRaw = json['variant'];
   final variantKey = switch (variantRaw) {
     final String s => s,
-    final Map<String, dynamic> m => (m['key'] as String?) ?? 'standard',
+    final Map<String, dynamic> m => m['key'] as String? ?? 'standard',
     _ => 'standard',
   };
   final initialFen = json['initialFen'] as String?;
@@ -139,7 +139,7 @@ LichessPlayedGame? parseLichessGameJson(Map<String, dynamic> json, {required Str
   }
   if (!isStandardStart) return null;
 
-  final players = json['players'];
+  final Object? players = json['players'];
   if (players is! Map<String, dynamic>) return null;
 
   final whiteMatch = _matchesPlayer(players['white'], normalizedUser);
@@ -167,18 +167,18 @@ LichessPlayedGame? parseLichessGameJson(Map<String, dynamic> json, {required Str
 
   String? openingEco;
   String? openingName;
-  final openingRaw = json['opening'];
+  final Object? openingRaw = json['opening'];
   if (openingRaw is Map<String, dynamic>) {
     openingEco = openingRaw['eco'] as String?;
     openingName = openingRaw['name'] as String?;
   }
 
   List<LichessPlyAnalysis?>? analysis;
-  final analysisRaw = json['analysis'];
+  final Object? analysisRaw = json['analysis'];
   if (analysisRaw is List<dynamic>) {
-    analysis = analysisRaw.map((entry) {
+    analysis = analysisRaw.map((Object? entry) {
       if (entry is! Map<String, dynamic>) return null;
-      final judgmentRaw = entry['judgment'];
+      final Object? judgmentRaw = entry['judgment'];
       String? judgmentName;
       String? judgmentComment;
       if (judgmentRaw is Map<String, dynamic>) {
@@ -225,7 +225,7 @@ List<LichessPlayedGame> parseLichessGamesNdJson(String ndjson, {required String 
     final line = rawLine.trim();
     if (line.isEmpty) continue;
     try {
-      final decoded = jsonDecode(line);
+      final Object? decoded = jsonDecode(line);
       if (decoded is Map<String, dynamic>) {
         final parsed = parseLichessGameJson(decoded, username: username);
         if (parsed != null) {
@@ -241,7 +241,7 @@ List<LichessPlayedGame> parseLichessGamesNdJson(String ndjson, {required String 
 
 bool _matchesPlayer(Object? playerObj, String normalizedUsername) {
   if (playerObj is! Map<String, dynamic>) return false;
-  final userObj = playerObj['user'];
+  final Object? userObj = playerObj['user'];
   if (userObj is Map<String, dynamic>) {
     final id = (userObj['id'] as String?)?.trim().toLowerCase();
     if (id == normalizedUsername) return true;
@@ -422,7 +422,7 @@ String _classifyOpeningFamily(LichessPlayedGame game, List<_ReplayedStep> steps)
   }
 
   final firstSan = steps.first.repertoireMove.san ?? '';
-  final secondSan = steps.length > 1 ? (steps[1].repertoireMove.san ?? '') : '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
   if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
   if (firstSan == 'e4') return "King's Pawn Game";
   if (firstSan == 'd4') return "Queen's Pawn Game";
@@ -900,7 +900,7 @@ _ResolvedUserDecision _resolveCandidateDecision(
     if (bookMoves.isNotEmpty) {
       final totalWeight = bookMoves.fold<int>(0, (sum, m) => sum + m.weight);
       final match = bookMoves.where((m) => m.uci == mostPlayed.move.uci).firstOrNull;
-      final isOffBook = match == null || (totalWeight > 0 && match.weight / totalWeight < 0.02);
+      final isOffBook = match == null || totalWeight > 0 && match.weight / totalWeight < 0.02;
       final score = (mostPlayed.wins + 0.5 * mostPlayed.draws) / mostPlayed.playCount;
       if (isOffBook && score < 0.45 && mostPlayed.losses > mostPlayed.wins) {
         final topBookMove = _parseUciMove(pos, bookMoves.first.uci);

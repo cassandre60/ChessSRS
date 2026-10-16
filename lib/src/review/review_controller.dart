@@ -2170,7 +2170,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
     PolyglotBook? book;
     try {
-      book = (await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900))?.book;
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
     } catch (_) {
       book = null;
     }

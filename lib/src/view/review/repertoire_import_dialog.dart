@@ -666,7 +666,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                     height: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: c.ink2),
                                   )
-                                : const Icon(Symbols.auto_fix_high_rounded),
+                                : const Icon(Symbols.download_rounded),
                             label: Text(
                               _isGeneratingFromGames
                                   ? _gamesProgressLabel()
