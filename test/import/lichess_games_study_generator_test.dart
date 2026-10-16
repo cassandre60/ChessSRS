@@ -263,14 +263,14 @@ void main() {
       'preserves early trunk moves when an early inaccuracy precedes a deeper serious mistake',
       // SPEC INV-013, INV-067.
       () {
-        final game = LichessPlayedGame(
+        const game = LichessPlayedGame(
           id: 'scandi1',
           userSide: Side.black,
           openingEco: 'B01',
           openingName: 'Scandinavian Defense: Main Line',
           winner: Side.white,
-          moves: const ['e4', 'd5', 'exd5', 'Qxd5', 'Nc3', 'Qe6+'],
-          analysis: const [
+          moves: ['e4', 'd5', 'exd5', 'Qxd5', 'Nc3', 'Qe6+'],
+          analysis: [
             LichessPlyAnalysis(cp: 20),
             // Engine mildly dislikes 1... d5 as Inaccuracy, but the real mistake is 3... Qe6+?
             LichessPlyAnalysis(cp: 70, bestUci: 'e7e5', judgmentName: 'Inaccuracy'),
@@ -286,7 +286,7 @@ void main() {
           ],
         );
 
-        final studies = generateOpeningStudiesFromGames([game]);
+        final studies = generateOpeningStudiesFromGames(const [game]);
         expect(studies, hasLength(1));
         final scandi = studies.single;
         expect(scandi.openingFamily, 'Scandinavian Defense');
@@ -308,14 +308,14 @@ void main() {
     );
 
     test('extracts best move from variation or comment when bestUci is omitted', () {
-      final game = LichessPlayedGame(
+      const game = LichessPlayedGame(
         id: 'var1',
         userSide: Side.white,
         openingEco: 'C60',
         openingName: 'Ruy Lopez: Morphy Defense',
         winner: Side.black,
-        moves: const ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Bxc6', 'dxc6', 'Nxe5', 'Qd4'],
-        analysis: const [
+        moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Bxc6', 'dxc6', 'Nxe5', 'Qd4'],
+        analysis: [
           null,
           null,
           null,
@@ -333,7 +333,7 @@ void main() {
         ],
       );
 
-      final studies = generateOpeningStudiesFromGames([game]);
+      final studies = generateOpeningStudiesFromGames(const [game]);
       expect(studies, hasLength(1));
       expect(studies.single.mistakeFixes.single.mistakeSan, 'Nxe5');
       expect(studies.single.mistakeFixes.single.correctSan, 'O-O');

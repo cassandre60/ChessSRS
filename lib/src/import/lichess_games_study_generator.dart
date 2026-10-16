@@ -397,7 +397,7 @@ String _classifyOpeningFamily(LichessPlayedGame game, List<_ReplayedStep> steps)
     }
   }
 
-  var root = const RepertoireNode(id: 'root', fen: kInitialFEN, ply: 0);
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
   final nodes = <RepertoireNode>[];
   final depth = math.min(steps.length, 8);
   for (var i = 0; i < depth; i++) {
@@ -405,8 +405,8 @@ String _classifyOpeningFamily(LichessPlayedGame game, List<_ReplayedStep> steps)
       RepertoireNode(
         id: 'n$i',
         fen: steps[i].posAfter.fen,
-        ply: i + 1,
-        move: steps[i].repertoireMove,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
       ),
     );
   }
@@ -467,7 +467,6 @@ class _PlayedMoveStats {
   int blunderCount = 0;
 
   int get totalMistakes => inaccuracyCount + mistakeCount + blunderCount;
-  int get seriousMistakes => mistakeCount + blunderCount;
 
   MistakeSeverity get worstSeverity {
     if (blunderCount > 0) return MistakeSeverity.blunder;
@@ -586,11 +585,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
 
   final candidateDecisions = <String, _ResolvedUserDecision>{};
   for (final entry in userNodes.entries) {
-    candidateDecisions[entry.key] = _resolveCandidateDecision(
-      entry.value,
-      side: group.side,
-      book: book,
-    );
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
   }
 
   // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
@@ -714,8 +709,8 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
           RepertoireNode(
             id: 'gen-node-$nodeCounter',
             fen: nextPos.fen,
-            ply: depth + 1,
-            move: repMove,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
             comment: decision.comment,
             children: grandChildren,
           ),
@@ -772,8 +767,8 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
             RepertoireNode(
               id: 'gen-node-$nodeCounter',
               fen: nextPos.fen,
-              ply: depth + 1,
-              move: repMove,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
               children: grandChildren,
             ),
           );
@@ -789,7 +784,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
     final rootNode = RepertoireNode(
       id: 'gen-root-$nodeCounter',
       fen: kInitialFEN,
-      ply: 0,
+      fenKey: fenKey(kInitialFEN),
       children: rootChildren,
     );
 
@@ -798,7 +793,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
         id: 'gen-chapter-${chapters.length + 1}',
         studyId: studyId,
         title: entry.key,
-        orderIndex: chapters.length,
+        sourceOrder: chapters.length,
         root: rootNode,
         orientation: group.side,
         opening: group.openingFamily,
@@ -814,7 +809,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
     pgnHash: '',
     createdAt: latestGameAt ?? DateTime.utc(2026),
   );
-  final pgnText = studyToPgn(study, chapters);
+  final pgnText = studyToPgn(study: study, chapters: chapters);
 
   final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
 
@@ -832,7 +827,6 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
 
 _ResolvedUserDecision _resolveCandidateDecision(
   _UserNodeStats nodeStats, {
-  required Side side,
   required PolyglotBook? book,
 }) {
   final pos = nodeStats.position;
@@ -907,7 +901,7 @@ _ResolvedUserDecision _resolveCandidateDecision(
   // user's habitual move in a known book position (ply <= 16) is off-book (< 2% weight)
   // with a losing record, replace it with the main book move.
   if (book != null && nodeStats.ply >= 3 && nodeStats.ply <= 16) {
-    final bookMoves = book.movesFor(pos);
+    final bookMoves = book.lookup(pos);
     if (bookMoves.isNotEmpty) {
       final totalWeight = bookMoves.fold<int>(0, (sum, m) => sum + m.weight);
       final match = bookMoves.where((m) => m.uci == mostPlayed.move.uci).firstOrNull;
@@ -971,7 +965,7 @@ RepertoireMove? _pickBestReplacementMove(
   }
 
   if (book != null) {
-    final bookMoves = book.movesFor(nodeStats.position);
+    final bookMoves = book.lookup(nodeStats.position);
     for (final bm in bookMoves) {
       if (bm.uci == badMoveUci) continue;
       final parsed = _parseUciMove(nodeStats.position, bm.uci);
