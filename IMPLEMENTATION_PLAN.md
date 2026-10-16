@@ -316,6 +316,7 @@ remains a later option — never a redesign.
       3. Startup Queries: replaced 61 serial chapter queries in `_loadActiveStudiesAndChapters` with `getChaptersByStudyIds` batch query (#158); added fast-path string decoding for single expected moves, dropping `getAllDecisions` time from 195 ms to 142 ms; single-pass queue partitioning in `ReviewSession` (#158).
       4. Targeted Scope Decisions: added `getDecisionsByChapters` and SQL-level `orientation` filtering on chapters (#172), eliminating parsing of 142 opposite-side chapters and dropping whole-library White session start from 1,086 ms to 569 ms.
       5. Lazy Chapter Deserialization: added `rootResolver` to `Chapter` and on-demand session indexing in `ReviewSession` (#175), deferring `treeJson` parsing of inactive chapters.
+      6. Cold-Start Pre-warming: prewarm SQLite study repository and `reviewControllerProvider` in `AppInitializationScreen` during splash; await repository future in `ReviewController.build()` to eliminate cold-start empty state flash (#181).
 
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
