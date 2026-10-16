@@ -1530,6 +1530,34 @@ void main() {
       }
     });
 
+    test('getChaptersByStudyIds and getAllChapters batch load chapters across studies', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const s1 = Study(id: 's_ch_1', title: 'Study 1');
+        const s2 = Study(id: 's_ch_2', title: 'Study 2');
+        await repo.saveStudy(s1);
+        await repo.saveStudy(s2);
+
+        final c1 = Chapter.create(studyId: s1.id, sourceOrder: 0, title: 'Ch 1');
+        final c2 = Chapter.create(studyId: s1.id, sourceOrder: 1, title: 'Ch 2');
+        final c3 = Chapter.create(studyId: s2.id, sourceOrder: 0, title: 'Ch 3');
+        await repo.saveChapters([c1, c2, c3]);
+
+        final s1Chapters = await repo.getChaptersByStudyIds([s1.id]);
+        expect(s1Chapters.map((c) => c.id).toSet(), {c1.id, c2.id});
+
+        final bothChapters = await repo.getChaptersByStudyIds([s1.id, s2.id]);
+        expect(bothChapters.map((c) => c.id).toSet(), {c1.id, c2.id, c3.id});
+
+        final all = await repo.getAllChapters();
+        expect(all.map((c) => c.id).toSet(), containsAll({c1.id, c2.id, c3.id}));
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'saveAnswerBatch atomically commits knowledge states, legacy mirrors, and events',
       () async {

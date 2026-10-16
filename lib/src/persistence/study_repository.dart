@@ -48,6 +48,8 @@ abstract class StudyRepository {
   Future<void> saveChapters(List<Chapter> chapters);
   Future<Chapter?> getChapter(String id);
   Future<List<Chapter>> getChaptersByStudy(String studyId);
+  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds);
+  Future<List<Chapter>> getAllChapters();
   Future<Map<String, String?>> getChapterOpenings();
 
   /// Chapter id to the study it belongs to, for every chapter.

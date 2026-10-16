@@ -111,6 +111,9 @@ class ReviewSession {
     // Build initial due queue
     final now = clock.now();
     final queuedCanonicalIds = <String>{};
+    final dueBucket = <RepertoireDecision>[];
+    final freshBucket = <RepertoireDecision>[];
+
     for (final d in decisions) {
       final chapter = _chapters[d.chapterId];
       if (!scope.matches(
@@ -143,23 +146,38 @@ class ReviewSession {
         // retire exactly what the load-time summary counted.
         if (status.isFresh) {
           _freshAtQueueTime.add(d.canonicalId);
+          if (mode == ReviewMode.srs) {
+            freshBucket.add(d);
+          } else {
+            _unbufferedQueue.add(d);
+          }
+        } else {
+          if (mode == ReviewMode.srs) {
+            dueBucket.add(d);
+          } else {
+            _unbufferedQueue.add(d);
+          }
         }
-        _unbufferedQueue.add(d);
       }
     }
 
-    // Never-presented as of the queue build. Re-read per decision because a
-    // position's classification is the only thing separating the two buckets.
-    bool isFresh(RepertoireDecision d) =>
-        dueStatusOf(_reviewStates[d.canonicalId] ?? _reviewStates[d.id], now).isFresh;
+    bool isFresh(RepertoireDecision d) => _freshAtQueueTime.contains(d.canonicalId);
 
     if (mode == ReviewMode.srs) {
       // Due first, then fresh (INV-068). Two ordered buckets rather than one
       // pool sorted by date: fresh positions carry no date at all, so a date
       // sort floats them to the front and buries the recall work the user is
       // actually answerable for.
-      final dueBucket = _unbufferedQueue.where((d) => !isFresh(d)).toList();
-      final freshBucket = _unbufferedQueue.where(isFresh).toList();
+      dueBucket.sort((a, b) {
+        final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
+        final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
+        final dueA = stateA?.nextDueAt;
+        final dueB = stateB?.nextDueAt;
+        if (dueA == null && dueB == null) return 0;
+        if (dueA == null) return -1;
+        if (dueB == null) return 1;
+        return dueA.compareTo(dueB);
+      });
 
       // Introduce at most `remainingNewQuota` never-presented positions; the
       // rest stay fresh for a later day instead of counting as work.
@@ -174,23 +192,6 @@ class ReviewSession {
       }
 
       _unbufferedQueue
-        ..clear()
-        ..addAll(dueBucket)
-        ..addAll(introduced);
-
-      dueBucket.sort((a, b) {
-        final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
-        final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
-        final dueA = stateA?.nextDueAt;
-        final dueB = stateB?.nextDueAt;
-        if (dueA == null && dueB == null) return 0;
-        if (dueA == null) return -1;
-        if (dueB == null) return 1;
-        return dueA.compareTo(dueB);
-      });
-      // Re-seat the sorted due items ahead of the fresh ones.
-      _unbufferedQueue
-        ..clear()
         ..addAll(dueBucket)
         ..addAll(introduced);
 

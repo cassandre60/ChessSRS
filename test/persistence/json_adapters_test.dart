@@ -48,4 +48,40 @@ void main() {
       expect(read.when.isUtc, isTrue);
     });
   });
+
+  group('expected moves serialization', () {
+    test('decodeExpectedMoves decodes single move with fast path and round trips', () {
+      const moves = [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')];
+      final encoded = encodeExpectedMoves(moves);
+      expect(encoded, '[{"from":"e2","to":"e4","san":"e4"}]');
+
+      final decoded = decodeExpectedMoves(encoded);
+      expect(decoded.length, 1);
+      expect(decoded.first.from, 'e2');
+      expect(decoded.first.to, 'e4');
+      expect(decoded.first.san, 'e4');
+      expect(decoded.first.promotion, isNull);
+    });
+
+    test('decodeExpectedMoves decodes moves with promotions and multiple moves', () {
+      const promoMoves = [RepertoireMove(from: 'e7', to: 'e8', promotion: 'q', san: 'e8=Q')];
+      final encodedPromo = encodeExpectedMoves(promoMoves);
+      final decodedPromo = decodeExpectedMoves(encodedPromo);
+      expect(decodedPromo.length, 1);
+      expect(decodedPromo.first.from, 'e7');
+      expect(decodedPromo.first.to, 'e8');
+      expect(decodedPromo.first.promotion, 'q');
+      expect(decodedPromo.first.san, 'e8=Q');
+
+      const multiMoves = [
+        RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+        RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+      ];
+      final encodedMulti = encodeExpectedMoves(multiMoves);
+      final decodedMulti = decodeExpectedMoves(encodedMulti);
+      expect(decodedMulti.length, 2);
+      expect(decodedMulti[0].san, 'Nf3');
+      expect(decodedMulti[1].san, 'd4');
+    });
+  });
 }
