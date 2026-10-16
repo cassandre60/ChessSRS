@@ -427,35 +427,59 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<List<Chapter>> getChaptersByStudy(String studyId) async {
+  Future<List<Chapter>> getChaptersByStudy(String studyId, {Side? side}) async {
     final rows = await _db.query(
       kTableSrsChapter,
-      where: 'studyId = ?',
-      whereArgs: [studyId],
+      where: side == null ? 'studyId = ?' : 'studyId = ? AND orientation = ?',
+      whereArgs: side == null ? [studyId] : [studyId, side.name],
       orderBy: 'sourceOrder ASC',
     );
     return rows.map(_chapterFromRow).toList(growable: false);
   }
 
   @override
-  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds) async {
+  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds, {Side? side}) async {
     if (studyIds.isEmpty) return const [];
+    final sideFilter = side != null ? 'orientation = ?' : null;
+    final sideArgs = side != null ? [side.name] : const <String>[];
+
+    List<Chapter> chapters;
     if (studyIds.length > 50) {
       final idSet = studyIds.toSet();
-      final rows = await _db.query(kTableSrsChapter, orderBy: 'sourceOrder ASC');
-      return rows
+      final rows = await _db.query(
+        kTableSrsChapter,
+        where: sideFilter,
+        whereArgs: sideArgs.isEmpty ? null : sideArgs,
+        orderBy: 'sourceOrder ASC',
+      );
+      chapters = rows
           .where((r) => idSet.contains(r['studyId']! as String))
           .map(_chapterFromRow)
           .toList(growable: false);
+    } else {
+      final placeholders = List.filled(studyIds.length, '?').join(',');
+      final whereClause = sideFilter != null
+          ? 'studyId IN ($placeholders) AND $sideFilter'
+          : 'studyId IN ($placeholders)';
+      final rows = await _db.query(
+        kTableSrsChapter,
+        where: whereClause,
+        whereArgs: [...studyIds, ...sideArgs],
+        orderBy: 'sourceOrder ASC',
+      );
+      chapters = rows.map(_chapterFromRow).toList(growable: false);
     }
-    final placeholders = List.filled(studyIds.length, '?').join(',');
-    final rows = await _db.query(
-      kTableSrsChapter,
-      where: 'studyId IN ($placeholders)',
-      whereArgs: studyIds,
-      orderBy: 'sourceOrder ASC',
-    );
-    return rows.map(_chapterFromRow).toList(growable: false);
+
+    final byStudy = <String, List<Chapter>>{};
+    for (final c in chapters) {
+      byStudy.putIfAbsent(c.studyId, () => []).add(c);
+    }
+    final ordered = <Chapter>[];
+    for (final id in studyIds) {
+      final list = byStudy[id];
+      if (list != null) ordered.addAll(list);
+    }
+    return ordered;
   }
 
   @override
@@ -618,6 +642,37 @@ class SqliteStudyRepository implements StudyRepository {
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId) async {
     final rows = await _db.query(kTableSrsDecision, where: 'chapterId = ?', whereArgs: [chapterId]);
     return rows.map(_decisionFromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<RepertoireDecision>> getDecisionsByChapters(List<String> chapterIds) async {
+    if (chapterIds.isEmpty) return const [];
+    const chunkSize = 400;
+    final results = <RepertoireDecision>[];
+    for (var i = 0; i < chapterIds.length; i += chunkSize) {
+      final chunk = chapterIds.sublist(
+        i,
+        i + chunkSize > chapterIds.length ? chapterIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.query(
+        kTableSrsDecision,
+        where: 'chapterId IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      results.addAll(rows.map(_decisionFromRow));
+    }
+
+    final byChapter = <String, List<RepertoireDecision>>{};
+    for (final d in results) {
+      byChapter.putIfAbsent(d.chapterId, () => []).add(d);
+    }
+    final ordered = <RepertoireDecision>[];
+    for (final id in chapterIds) {
+      final list = byChapter[id];
+      if (list != null) ordered.addAll(list);
+    }
+    return ordered;
   }
 
   @override

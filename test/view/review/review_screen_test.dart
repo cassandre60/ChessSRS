@@ -2290,8 +2290,8 @@ class _SlowChaptersRepository extends SqliteStudyRepository {
   _SlowChaptersRepository(super.db);
 
   @override
-  Future<List<Chapter>> getChaptersByStudy(String studyId) async {
+  Future<List<Chapter>> getChaptersByStudy(String studyId, {Side? side}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    return await super.getChaptersByStudy(studyId);
+    return await super.getChaptersByStudy(studyId, side: side);
   }
 }
