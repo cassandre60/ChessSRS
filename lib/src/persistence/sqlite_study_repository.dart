@@ -438,6 +438,33 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds) async {
+    if (studyIds.isEmpty) return const [];
+    if (studyIds.length > 50) {
+      final idSet = studyIds.toSet();
+      final rows = await _db.query(kTableSrsChapter, orderBy: 'sourceOrder ASC');
+      return rows
+          .where((r) => idSet.contains(r['studyId']! as String))
+          .map(_chapterFromRow)
+          .toList(growable: false);
+    }
+    final placeholders = List.filled(studyIds.length, '?').join(',');
+    final rows = await _db.query(
+      kTableSrsChapter,
+      where: 'studyId IN ($placeholders)',
+      whereArgs: studyIds,
+      orderBy: 'sourceOrder ASC',
+    );
+    return rows.map(_chapterFromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<Chapter>> getAllChapters() async {
+    final rows = await _db.query(kTableSrsChapter, orderBy: 'sourceOrder ASC');
+    return rows.map(_chapterFromRow).toList(growable: false);
+  }
+
+  @override
   Future<Map<String, String?>> getChapterOpenings() async {
     final rows = await _db.query(kTableSrsChapter, columns: ['id', 'opening']);
     return {for (final r in rows) r['id']! as String: r['opening'] as String?};
