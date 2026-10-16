@@ -13,8 +13,10 @@
 /// The rule: a family either **leads** the name ("Petrov Defense") or **closes**
 /// it behind a category noun ("French Defence - Winawer" simplifies to "French
 /// Defence"; "Queen's Gambit Declined"). A name that merely mentions a family
-/// anywhere else matches nothing, and an unrecognised name is left to the
-/// explicit `Opening` header rather than guessed at.
+/// anywhere else matches nothing. The importer asks this question of the
+/// explicit `Opening` header too, so an import cannot recreate a hub the repair
+/// migration removed; a name this build does not recognise is kept rather than
+/// guessed at (INV-067).
 library;
 
 import 'package:chess_srs/src/domain/repertoire_node.dart';
@@ -244,14 +246,24 @@ String? detectOpeningFamilyFromFen(String fen) {
 
 /// Reads the opening family from [headers], or falls back to move/FEN tree inspection.
 ///
-/// A direct `Opening` header is authoritative and passed through the
-/// simplification only; `Event` and `ECO` are fallbacks that have to prove
-/// themselves. If headers yield nothing, [root] and [startingFen] are inspected.
+/// A direct `Opening` header is trusted through the simplification, with one
+/// check: a name that merely mentions a family is dropped by exactly the rule
+/// the repair migration applies to stored rows
+/// ([mentionsOpeningButIsNotFamily]), so an import cannot recreate a hub the
+/// repair removed. `Event` and `ECO` are fallbacks that have to prove
+/// themselves; an `Opening` header this build does not recognise is kept
+/// as-is. If headers yield nothing, [root] and [startingFen] are inspected.
 String? extractOpeningFamily(PgnHeaders headers, {RepertoireNode? root, String? startingFen}) {
-  // 1. Direct Opening header (e.g. "Sicilian Defense: Najdorf Variation")
+  // 1. Direct Opening header (e.g. "Sicilian Defense: Najdorf Variation").
+  // A header that merely mentions a family ("White vs French") is not an
+  // opening either: the one-shot repair cleared rows like it, and an import
+  // after the repair must not put the phantom hub back (INV-067).
   final opening = headers['Opening'];
   if (opening != null && opening.trim().isNotEmpty && opening != '?') {
-    return simplifyOpeningName(opening.trim());
+    final simplified = simplifyOpeningName(opening.trim());
+    if (!mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
   }
 
   // 2. Check Event header (e.g. "Sicilian Defense", "French Defence - Winawer")

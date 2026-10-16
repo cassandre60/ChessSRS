@@ -130,6 +130,29 @@ void main() {
       expect(result.chapters.first.opening, 'French Defense');
     });
 
+    test('ignores an Opening header that merely mentions an opening', () {
+      // INV-067: the repair migration clears stored rows like "White vs French"
+      // by the mentionsOpeningButIsNotFamily rule; an import after the repair
+      // must not put the phantom hub back. The header is dropped, and the move
+      // fallback then classifies the file honestly.
+      const pgn = '''
+[Opening "White vs French"]
+1. e4 e6 2. d4 d5 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, 'French Defense');
+    });
+
+    test('keeps an Opening header this build does not recognise', () {
+      // INV-067: names the classification does not know are kept, not erased.
+      const pgn = '''
+[Opening "QGD Exchange Variation"]
+1. d4 d5 2. c4 e6 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.opening, 'QGD Exchange Variation');
+    });
+
     test('falls back to move inspection when Opening header is question mark', () {
       const pgn = '''
 [Opening "?"]
