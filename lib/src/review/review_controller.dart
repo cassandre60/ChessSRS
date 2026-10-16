@@ -423,18 +423,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
-    // Wait for repository provider to be ready if needed
-    final repoAsync = ref.watch(srsStudyRepositoryProvider);
-    final repo = repoAsync.asData?.value;
-    if (repo == null) {
-      return const ReviewScreenState(
-        studies: [],
-        scope: ReviewScope.all(),
-        totalDueCount: 0,
-        totalFreshCount: 0,
-        studyDueCounts: {},
-      );
-    }
+    // Ensure repository provider is ready before building review state
+    await ref.watch(srsStudyRepositoryProvider.future);
 
     // A load superseded before it finishes has nothing to publish — the request that replaced
     // it will. Riverpod discards a build result once the notifier has moved on, so returning

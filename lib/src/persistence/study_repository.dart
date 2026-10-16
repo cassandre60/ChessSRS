@@ -47,8 +47,8 @@ abstract class StudyRepository {
   Future<void> saveChapter(Chapter chapter);
   Future<void> saveChapters(List<Chapter> chapters);
   Future<Chapter?> getChapter(String id);
-  Future<List<Chapter>> getChaptersByStudy(String studyId);
-  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds);
+  Future<List<Chapter>> getChaptersByStudy(String studyId, {Side? side});
+  Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds, {Side? side});
   Future<List<Chapter>> getAllChapters();
   Future<Map<String, String?>> getChapterOpenings();
 
@@ -89,6 +89,7 @@ abstract class StudyRepository {
   Future<void> saveDecisions(List<RepertoireDecision> decisions);
   Future<RepertoireDecision?> getDecision(String id);
   Future<List<RepertoireDecision>> getDecisionsByChapter(String chapterId);
+  Future<List<RepertoireDecision>> getDecisionsByChapters(List<String> chapterIds);
   Future<List<RepertoireDecision>> getDecisionsByStudy(String studyId);
   Future<List<RepertoireDecision>> getAllDecisions();
 

@@ -24,9 +24,9 @@ class _BackfillCountingRepository extends SqliteStudyRepository {
   int chapterFetches = 0;
 
   @override
-  Future<List<Chapter>> getChaptersByStudy(String studyId) {
+  Future<List<Chapter>> getChaptersByStudy(String studyId, {Side? side}) {
     chapterFetches++;
-    return super.getChaptersByStudy(studyId);
+    return super.getChaptersByStudy(studyId, side: side);
   }
 }
 
@@ -608,8 +608,8 @@ void main() {
         final now = DateTime.utc(2026, 9, 16, 12);
         final studyA = Study(id: 's-a', title: 'A', createdAt: now, updatedAt: now);
         final studyB = Study(id: 's-b', title: 'B', createdAt: now, updatedAt: now);
-        const chapterA = Chapter(id: 'ch-x', studyId: 's-a', sourceOrder: 0);
-        const chapterB = Chapter(id: 'ch-y', studyId: 's-b', sourceOrder: 0);
+        final chapterA = Chapter(id: 'ch-x', studyId: 's-a', sourceOrder: 0);
+        final chapterB = Chapter(id: 'ch-y', studyId: 's-b', sourceOrder: 0);
 
         // The same position learned in two studies: a transposition across libraries.
         const decisionA = RepertoireDecision(
@@ -1540,19 +1540,66 @@ void main() {
         await repo.saveStudy(s1);
         await repo.saveStudy(s2);
 
-        final c1 = Chapter.create(studyId: s1.id, sourceOrder: 0, title: 'Ch 1');
-        final c2 = Chapter.create(studyId: s1.id, sourceOrder: 1, title: 'Ch 2');
-        final c3 = Chapter.create(studyId: s2.id, sourceOrder: 0, title: 'Ch 3');
+        final c1 = Chapter.create(
+          studyId: s1.id,
+          sourceOrder: 0,
+          title: 'Ch 1',
+          orientation: Side.white,
+        );
+        final c2 = Chapter.create(
+          studyId: s1.id,
+          sourceOrder: 1,
+          title: 'Ch 2',
+          orientation: Side.black,
+        );
+        final c3 = Chapter.create(
+          studyId: s2.id,
+          sourceOrder: 0,
+          title: 'Ch 3',
+          orientation: Side.white,
+        );
         await repo.saveChapters([c1, c2, c3]);
 
         final s1Chapters = await repo.getChaptersByStudyIds([s1.id]);
         expect(s1Chapters.map((c) => c.id).toSet(), {c1.id, c2.id});
+
+        final whiteChapters = await repo.getChaptersByStudyIds([s1.id, s2.id], side: Side.white);
+        expect(whiteChapters.map((c) => c.id).toSet(), {c1.id, c3.id});
+
+        final blackChapters = await repo.getChaptersByStudyIds([s1.id, s2.id], side: Side.black);
+        expect(blackChapters.map((c) => c.id).toSet(), {c2.id});
 
         final bothChapters = await repo.getChaptersByStudyIds([s1.id, s2.id]);
         expect(bothChapters.map((c) => c.id).toSet(), {c1.id, c2.id, c3.id});
 
         final all = await repo.getAllChapters();
         expect(all.map((c) => c.id).toSet(), containsAll({c1.id, c2.id, c3.id}));
+
+        final d1 = RepertoireDecision.create(
+          studyId: s1.id,
+          chapterId: c1.id,
+          nodeId: 'n1',
+          expectedMoves: const [],
+        );
+        final d2 = RepertoireDecision.create(
+          studyId: s1.id,
+          chapterId: c2.id,
+          nodeId: 'n2',
+          expectedMoves: const [],
+        );
+        final d3 = RepertoireDecision.create(
+          studyId: s2.id,
+          chapterId: c3.id,
+          nodeId: 'n3',
+          expectedMoves: const [],
+        );
+        await repo.saveDecisions([d1, d2, d3]);
+
+        final c1Decisions = await repo.getDecisionsByChapters([c1.id]);
+        expect(c1Decisions.map((d) => d.id).toSet(), {d1.id});
+
+        final c1c3Decisions = await repo.getDecisionsByChapters([c1.id, c3.id]);
+        expect(c1c3Decisions.map((d) => d.id).toSet(), {d1.id, d3.id});
       } finally {
         await db.close();
       }
