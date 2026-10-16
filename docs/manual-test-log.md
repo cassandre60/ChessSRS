@@ -38,6 +38,23 @@ analysis board, review screen mid-session, study screen. Pay attention to color
 comments, open it in analysis, start a review session on it, and open the study
 screen. All three should show a green arrow e2→e4 and a yellow circle on e4.
 
+### 2. Partial-import toast names what was skipped (#160)
+
+**What changed.** A partial import now says what it skipped: the success toast
+gains `N problem(s) in M chapter(s): <first error message>` when the import
+result carries errors (PGN-text and Lichess paths both). Complete imports are
+unchanged.
+
+**What the tests prove.** A widget test drives the real dialog with a PGN whose
+third move is illegal and asserts the toast contains the problem count and the
+skipped move (`Bh6`). What a widget tree cannot see is whether the toast is
+legible where it actually appears.
+
+**What only you can check.** On a phone-width window, import a PGN with a bad
+move (e.g. `1. e4 e5 2. Nf3 Nc6 3. Bh6 *`) and confirm the toast is readable
+and stays on screen long enough to finish it — it is several lines longer than
+the old one-liner.
+
 ---
 
 ### 2. Scope rows announce their selection to a screen reader (#167)

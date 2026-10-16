@@ -6,7 +6,7 @@ import 'dart:math' as math;
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/import/lichess_study_importer.dart';
-import 'package:chess_srs/src/import/pgn_importer.dart' show kMaxPgnInputBytes;
+import 'package:chess_srs/src/import/pgn_importer.dart' show ImportError, kMaxPgnInputBytes;
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
@@ -184,14 +184,15 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
             type: SnackBarType.info,
           );
         } else {
+          final summary = context.l10n.mobileReviewImportedChapters(
+            result.study.title,
+            result.decisions.length.toString(),
+            result.chapters.length.toString(),
+          );
           showSnackBar(
             context,
-            context.l10n.mobileReviewImportedChapters(
-              result.study.title,
-              result.decisions.length.toString(),
-              result.chapters.length.toString(),
-            ),
-            type: SnackBarType.success,
+            result.errors.isEmpty ? summary : '$summary ${_partialImportSummary(result.errors)}',
+            type: result.errors.isEmpty ? SnackBarType.success : SnackBarType.info,
           );
         }
       }
@@ -333,13 +334,14 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
             type: SnackBarType.info,
           );
         } else {
+          final summary = context.l10n.mobileReviewImportedPlain(
+            result.study.title,
+            result.decisions.length.toString(),
+          );
           showSnackBar(
             context,
-            context.l10n.mobileReviewImportedPlain(
-              result.study.title,
-              result.decisions.length.toString(),
-            ),
-            type: SnackBarType.success,
+            result.errors.isEmpty ? summary : '$summary ${_partialImportSummary(result.errors)}',
+            type: result.errors.isEmpty ? SnackBarType.success : SnackBarType.info,
           );
         }
       }
@@ -712,4 +714,15 @@ class _PrivateStudyNotice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A one-line account of what a partial import skipped, for the success toast.
+///
+/// The first error's message carries the actionable detail (which move, which
+/// chapter); the rest are counted, not listed — a toast is not a report. Before
+/// this the errors were simply dropped, and a partial import looked identical
+/// to a complete one (#160).
+String _partialImportSummary(List<ImportError> errors) {
+  final chapters = errors.map((e) => e.chapterTitle).toSet().length;
+  return '${errors.length} problem(s) in $chapters chapter(s): ${errors.first.message}';
 }
