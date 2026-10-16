@@ -104,22 +104,27 @@ void main() {
 
     await tester.ensureVisible(find.text('Pick .pgn file from disk'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pick .pgn file from disk'));
-    await tester.pump();
+    // Tapped inside a real async window for a mechanical reason, not a stylistic one: this
+    // registers `_pickPgnFile`'s awaits in real async time. The continuation reaches a real
+    // file read, and a read started from the fake-async zone never completes — which is how
+    // this test first passed against the unfixed code. Do not "simplify" the runAsync away.
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Pick .pgn file from disk'));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    });
 
     // Dismissed while the picker is open, the way the close affordance does it.
     Navigator.of(tester.element(find.byType(RepertoireImportDialog))).pop();
     await tester.pumpAndSettle();
     expect(find.byType(RepertoireImportDialog), findsNothing);
 
-    // The picker returns after the dismissal. The file read is real IO, so it needs a real
-    // async window to complete; the pumps in between let the awaiting continuations run.
+    // The picker returns after the dismissal. Unfixed, the continuation reads the file and
+    // calls setState on the disposed State: "setState() called after dispose()". With the
+    // guard it returns before either.
     await tester.runAsync(() async {
       picked.complete(_RealFilePlatformFile(pgnFile));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
     });
-    await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pump();
 
     expect(
