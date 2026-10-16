@@ -108,6 +108,10 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   Future<void> _pickPgnFile() async {
     final picker = ref.read(pickPgnFileProvider);
     final file = await picker();
+    // The native picker outlives the dialog whenever the user closes it while the picker is
+    // still open, and it still returns a file. Without these guards the continuation ran on a
+    // disposed State: reading the file was wasted work and the setState afterwards crashed.
+    if (!mounted) return;
     if (file != null && file.path != null) {
       // Ask how big it is before reading it. Reading first is what made this an
       // OOM: the whole file lands in a String before anything decides whether
@@ -132,6 +136,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
         return;
       }
       final content = await io.File(file.path!).readAsString();
+      if (!mounted) return;
       setState(() {
         _pgnController.text = content;
         if (_titleController.text.isEmpty) {
@@ -520,7 +525,9 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                   : context.l10n.mobileReviewFetchImport,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
-                            onPressed: _isImporting ? null : _handleLichessImport,
+                            onPressed: _isImporting || _isBulkImporting
+                                ? null
+                                : _handleLichessImport,
                           ),
                         ),
                         if (!isSignedIn && !_studyMayBePrivate) ...[
@@ -600,7 +607,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                         OutlinedButton.icon(
                           icon: const Icon(Symbols.upload_file_rounded),
                           label: Text(context.l10n.mobileReviewPickPgnFile),
-                          onPressed: _isImporting ? null : _pickPgnFile,
+                          onPressed: _isImporting || _isBulkImporting ? null : _pickPgnFile,
                         ),
                         const SizedBox(height: 16.0),
                         SizedBox(
@@ -622,7 +629,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
                                   : context.l10n.mobileReviewImportStart,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5),
                             ),
-                            onPressed: _isImporting ? null : _handleFileImport,
+                            onPressed: _isImporting || _isBulkImporting ? null : _handleFileImport,
                           ),
                         ),
                       ],
