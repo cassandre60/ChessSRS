@@ -40,6 +40,28 @@ screen. All three should show a green arrow e2→e4 and a yellow circle on e4.
 
 ---
 
+### 2. Scope rows announce their selection to a screen reader (#167)
+
+**What changed.** The review scope drawer's rows carry the `selected` semantics
+flag now, so the row that is the live scope is announced as selected instead of
+being indistinguishable from a row with the same due count.
+
+**What the tests prove.** That the selected row's semantics node has
+`isSelected: true` and a non-selected row's has `false` (a widget test over the
+real drawer). What they do not prove is that a screen reader says it — a test
+can assert a semantics flag, never an announcement.
+
+**What only you can check.** With a screen reader running, open the review scope
+drawer and move through the rows: the active scope's row should be announced as
+selected, and the others should not. Nobody has heard it say that yet; the flag
+is machine-verified, the spoken announcement is not.
+
+**How to test it.** On Linux, start Orca (`orca --replace`), open the app, open
+the review scope drawer, and arrow through the rows with the keyboard. The row
+for the current scope should be read as "selected".
+
+---
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)

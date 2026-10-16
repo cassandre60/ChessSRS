@@ -721,6 +721,7 @@ class _ScopeRow extends StatelessWidget {
           onLongPress: showActions,
           onSecondaryTap: showActions,
           semanticLabel: semanticLabel,
+          semanticsSelected: isSelected,
           radius: 8,
           builder: (context, hovered, pressed) {
             final label = Column(
