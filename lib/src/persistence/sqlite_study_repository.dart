@@ -443,6 +443,7 @@ class SqliteStudyRepository implements StudyRepository {
     final sideFilter = side != null ? 'orientation = ?' : null;
     final sideArgs = side != null ? [side.name] : const <String>[];
 
+    List<Chapter> chapters;
     if (studyIds.length > 50) {
       final idSet = studyIds.toSet();
       final rows = await _db.query(
@@ -451,22 +452,34 @@ class SqliteStudyRepository implements StudyRepository {
         whereArgs: sideArgs.isEmpty ? null : sideArgs,
         orderBy: 'sourceOrder ASC',
       );
-      return rows
+      chapters = rows
           .where((r) => idSet.contains(r['studyId']! as String))
           .map(_chapterFromRow)
           .toList(growable: false);
+    } else {
+      final placeholders = List.filled(studyIds.length, '?').join(',');
+      final whereClause = sideFilter != null
+          ? 'studyId IN ($placeholders) AND $sideFilter'
+          : 'studyId IN ($placeholders)';
+      final rows = await _db.query(
+        kTableSrsChapter,
+        where: whereClause,
+        whereArgs: [...studyIds, ...sideArgs],
+        orderBy: 'sourceOrder ASC',
+      );
+      chapters = rows.map(_chapterFromRow).toList(growable: false);
     }
-    final placeholders = List.filled(studyIds.length, '?').join(',');
-    final whereClause = sideFilter != null
-        ? 'studyId IN ($placeholders) AND $sideFilter'
-        : 'studyId IN ($placeholders)';
-    final rows = await _db.query(
-      kTableSrsChapter,
-      where: whereClause,
-      whereArgs: [...studyIds, ...sideArgs],
-      orderBy: 'sourceOrder ASC',
-    );
-    return rows.map(_chapterFromRow).toList(growable: false);
+
+    final byStudy = <String, List<Chapter>>{};
+    for (final c in chapters) {
+      byStudy.putIfAbsent(c.studyId, () => []).add(c);
+    }
+    final ordered = <Chapter>[];
+    for (final id in studyIds) {
+      final list = byStudy[id];
+      if (list != null) ordered.addAll(list);
+    }
+    return ordered;
   }
 
   @override
@@ -649,7 +662,17 @@ class SqliteStudyRepository implements StudyRepository {
       );
       results.addAll(rows.map(_decisionFromRow));
     }
-    return results;
+
+    final byChapter = <String, List<RepertoireDecision>>{};
+    for (final d in results) {
+      byChapter.putIfAbsent(d.chapterId, () => []).add(d);
+    }
+    final ordered = <RepertoireDecision>[];
+    for (final id in chapterIds) {
+      final list = byChapter[id];
+      if (list != null) ordered.addAll(list);
+    }
+    return ordered;
   }
 
   @override
