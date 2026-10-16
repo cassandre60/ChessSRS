@@ -1789,7 +1789,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       _logger.info(
         'Duplicate study detected for hash ${hash.substring(0, 8)}, skipping re-import: ${existingStudy.id}',
       );
-      return _duplicateImportResult(existingStudy, switchScope: switchScope);
+      return await _duplicateImportResult(existingStudy, switchScope: switchScope);
     }
 
     // One threshold for all PGN work (see pgn_offload.dart): a file whose hash is
@@ -1838,7 +1838,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         'Duplicate study landed during save for hash ${hash.substring(0, 8)}, '
         'resolving to: ${storedWhileInFlight.id}',
       );
-      return _duplicateImportResult(storedWhileInFlight, switchScope: switchScope);
+      return await _duplicateImportResult(storedWhileInFlight, switchScope: switchScope);
     }
     if (switchScope) {
       await changeScope(ReviewScope.study(result.study.id));
