@@ -312,9 +312,7 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
 
   String _gamesProgressLabel() {
     if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
-      return _gamesFetched > 0
-          ? 'Analysing $_gamesFetched games…'
-          : 'Fetching your Lichess games…';
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
     }
     return _gamesTotal > 0
         ? 'Building study $_gamesDone of $_gamesTotal…'

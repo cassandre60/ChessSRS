@@ -2095,8 +2095,7 @@ void main() {
     });
 
     group('generateStudiesFromMyGames', () {
-      String gamesNdJson(List<Map<String, dynamic>> games) =>
-          games.map(jsonEncode).join('\n');
+      String gamesNdJson(List<Map<String, dynamic>> games) => games.map(jsonEncode).join('\n');
 
       final sampleGames = <Map<String, dynamic>>[
         {

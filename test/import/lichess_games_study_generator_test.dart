@@ -214,10 +214,7 @@ void main() {
         expect(italian.mistakeFixes, hasLength(2));
         expect(
           italian.mistakeFixes.map((f) => (f.mistakeSan, f.correctSan, f.mistakePlayCount)),
-          containsAll([
-            ('Nc3', 'd3', 2),
-            ('Nxd4', 'cxd4', 1),
-          ]),
+          containsAll([('Nc3', 'd3', 2), ('Nxd4', 'cxd4', 1)]),
         );
 
         // Verify the PGN imports cleanly and only grades the improved moves, never the mistakes.
@@ -276,11 +273,7 @@ void main() {
           analysis: const [
             LichessPlyAnalysis(cp: 20),
             // Engine mildly dislikes 1... d5 as Inaccuracy, but the real mistake is 3... Qe6+?
-            LichessPlyAnalysis(
-              cp: 70,
-              bestUci: 'e7e5',
-              judgmentName: 'Inaccuracy',
-            ),
+            LichessPlyAnalysis(cp: 70, bestUci: 'e7e5', judgmentName: 'Inaccuracy'),
             LichessPlyAnalysis(cp: 65),
             LichessPlyAnalysis(cp: 70),
             LichessPlyAnalysis(cp: 70),

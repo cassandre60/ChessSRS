@@ -117,10 +117,7 @@ class GeneratedOpeningStudy {
 /// Parses a single Lichess `/api/games/user/:username` JSON object into a [LichessPlayedGame]
 /// from [username]'s perspective, or returns `null` if the game is not a standard game played by
 /// [username] with at least one move.
-LichessPlayedGame? parseLichessGameJson(
-  Map<String, dynamic> json, {
-  required String username,
-}) {
+LichessPlayedGame? parseLichessGameJson(Map<String, dynamic> json, {required String username}) {
   final normalizedUser = username.trim().toLowerCase();
   if (normalizedUser.isEmpty) return null;
 
@@ -199,8 +196,8 @@ LichessPlayedGame? parseLichessGameJson(
     }).toList();
   }
 
-  final createdMillis = (json['createdAt'] as num?)?.toInt() ??
-      (json['lastMoveAt'] as num?)?.toInt();
+  final createdMillis =
+      (json['createdAt'] as num?)?.toInt() ?? (json['lastMoveAt'] as num?)?.toInt();
   final createdAt = createdMillis != null
       ? DateTime.fromMillisecondsSinceEpoch(createdMillis, isUtc: true)
       : null;
@@ -222,10 +219,7 @@ LichessPlayedGame? parseLichessGameJson(
 }
 
 /// Parses an NDJSON body from Lichess `/api/games/user/:username` into [LichessPlayedGame]s.
-List<LichessPlayedGame> parseLichessGamesNdJson(
-  String ndjson, {
-  required String username,
-}) {
+List<LichessPlayedGame> parseLichessGamesNdJson(String ndjson, {required String username}) {
   final games = <LichessPlayedGame>[];
   for (final rawLine in const LineSplitter().convert(ndjson)) {
     final line = rawLine.trim();
@@ -291,13 +285,7 @@ List<GeneratedOpeningStudy> generateOpeningStudiesFromGames(
       key,
       () => _OpeningGameGroup(openingFamily: openingFamily, side: game.userSide),
     );
-    group.games.add(
-      _ReplayedGame(
-        source: game,
-        variationTitle: variationTitle,
-        steps: replayed,
-      ),
-    );
+    group.games.add(_ReplayedGame(source: game, variationTitle: variationTitle, steps: replayed));
   }
 
   final studies = <GeneratedOpeningStudy>[];
@@ -345,11 +333,7 @@ class _ReplayedStep {
 }
 
 class _ReplayedGame {
-  const _ReplayedGame({
-    required this.source,
-    required this.variationTitle,
-    required this.steps,
-  });
+  const _ReplayedGame({required this.source, required this.variationTitle, required this.steps});
 
   final LichessPlayedGame source;
   final String variationTitle;
@@ -523,11 +507,7 @@ class _UserNodeStats {
 }
 
 class _ResolvedUserDecision {
-  const _ResolvedUserDecision({
-    required this.chosenMove,
-    this.fix,
-    this.comment,
-  });
+  const _ResolvedUserDecision({required this.chosenMove, this.fix, this.comment});
 
   final RepertoireMove chosenMove;
   final OpeningMistakeFix? fix;
@@ -555,11 +535,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
       if (step.posBefore.turn == group.side) {
         final nodeStats = userNodes.putIfAbsent(
           key,
-          () => _UserNodeStats(
-            fenKeyStr: key,
-            position: step.posBefore,
-            ply: step.plyIndex + 1,
-          ),
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
         );
         final moveStats = nodeStats.playedMoves.putIfAbsent(
           step.repertoireMove.uci,
@@ -658,9 +634,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
   final chapterBuckets = <String, List<_ReplayedGame>>{};
   if (byVariation.length == 1) {
     final singleEntry = byVariation.entries.first;
-    final chapterName = singleEntry.key == 'Main Lines'
-        ? group.openingFamily
-        : singleEntry.key;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
     chapterBuckets[chapterName] = singleEntry.value;
   } else {
     for (final entry in byVariation.entries) {
@@ -707,19 +681,12 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
         } else {
           final map = chapterOppMoves.putIfAbsent(key, () => {});
           final prev = map[step.repertoireMove.uci];
-          map[step.repertoireMove.uci] = (
-            move: step.repertoireMove,
-            count: (prev?.count ?? 0) + 1,
-          );
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
         }
       }
     }
 
-    List<RepertoireNode> buildChildren(
-      Position pos,
-      Set<String> visited,
-      int depth,
-    ) {
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
       if (depth >= maxPly) return const [];
       final key = fenKey(pos.fen);
       if (visited.contains(key)) return const [];
@@ -849,8 +816,7 @@ GeneratedOpeningStudy? _buildStudyForOpeningGroup(
   );
   final pgnText = studyToPgn(study, chapters);
 
-  final sortedFixes = collectedFixesByKey.values.toList()
-    ..sort((a, b) => a.ply.compareTo(b.ply));
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
 
   return GeneratedOpeningStudy(
     title: studyTitle,
@@ -906,10 +872,11 @@ _ResolvedUserDecision _resolveCandidateDecision(
 
   // 2. If the user's most-played move was clean, check if they also played a secondary
   // mistake move in this exact position; keeping their main move corrects that mistake.
-  final secondaryMistakes = nodeStats.playedMoves.values
-      .where((m) => m.move.uci != mostPlayed.move.uci && m.totalMistakes > 0)
-      .toList()
-    ..sort((a, b) => b.totalMistakes.compareTo(a.totalMistakes));
+  final secondaryMistakes =
+      nodeStats.playedMoves.values
+          .where((m) => m.move.uci != mostPlayed.move.uci && m.totalMistakes > 0)
+          .toList()
+        ..sort((a, b) => b.totalMistakes.compareTo(a.totalMistakes));
   if (secondaryMistakes.isNotEmpty) {
     final bad = secondaryMistakes.first;
     final severity = bad.worstSeverity;
@@ -944,8 +911,7 @@ _ResolvedUserDecision _resolveCandidateDecision(
     if (bookMoves.isNotEmpty) {
       final totalWeight = bookMoves.fold<int>(0, (sum, m) => sum + m.weight);
       final match = bookMoves.where((m) => m.uci == mostPlayed.move.uci).firstOrNull;
-      final isOffBook =
-          match == null || (totalWeight > 0 && match.weight / totalWeight < 0.02);
+      final isOffBook = match == null || (totalWeight > 0 && match.weight / totalWeight < 0.02);
       final score = (mostPlayed.wins + 0.5 * mostPlayed.draws) / mostPlayed.playCount;
       if (isOffBook && score < 0.45 && mostPlayed.losses > mostPlayed.wins) {
         final topBookMove = _parseUciMove(pos, bookMoves.first.uci);
@@ -985,9 +951,7 @@ RepertoireMove? _pickBestReplacementMove(
   required String badMoveUci,
   required PolyglotBook? book,
 }) {
-  final fixes = nodeStats.recommendedFixes.values
-      .where((f) => f.move.uci != badMoveUci)
-      .toList()
+  final fixes = nodeStats.recommendedFixes.values.where((f) => f.move.uci != badMoveUci).toList()
     ..sort((a, b) {
       final countCmp = b.count.compareTo(a.count);
       if (countCmp != 0) return countCmp;
@@ -997,10 +961,11 @@ RepertoireMove? _pickBestReplacementMove(
     return fixes.first.move;
   }
 
-  final cleanAlternates = nodeStats.playedMoves.values
-      .where((m) => m.move.uci != badMoveUci && m.totalMistakes == 0)
-      .toList()
-    ..sort((a, b) => b.playCount.compareTo(a.playCount));
+  final cleanAlternates =
+      nodeStats.playedMoves.values
+          .where((m) => m.move.uci != badMoveUci && m.totalMistakes == 0)
+          .toList()
+        ..sort((a, b) => b.playCount.compareTo(a.playCount));
   if (cleanAlternates.isNotEmpty) {
     return cleanAlternates.first.move;
   }

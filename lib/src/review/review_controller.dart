@@ -84,10 +84,7 @@ class CustomStudiesGenerationException extends FormatException {
 }
 
 /// Phase of [ReviewController.generateStudiesFromMyGames].
-enum CustomStudiesPhase {
-  fetchingGames,
-  buildingStudies,
-}
+enum CustomStudiesPhase { fetchingGames, buildingStudies }
 
 /// Progress of [ReviewController.generateStudiesFromMyGames].
 typedef CustomStudiesProgress = ({
@@ -2116,11 +2113,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             : 'Fetched ${allGames.length} games…',
       ));
 
-      final ({
-        List<LichessPlayedGame> games,
-        int rawLineCount,
-        int? oldestTimestampMillis,
-      }) batch;
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
       try {
         batch = await studyRepo.getUserGamesBatch(
           username,

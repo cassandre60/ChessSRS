@@ -218,12 +218,7 @@ class StudyRepository {
   /// Fetches a batch of [username]'s played games from `GET /api/games/user/:username`
   /// as NDJSON, including moves, evaluations, and opening metadata.
   Future<({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis})>
-  getUserGamesBatch(
-    String username, {
-    int max = 200,
-    int? untilMillis,
-    Side? color,
-  }) async {
+  getUserGamesBatch(String username, {int max = 200, int? untilMillis, Side? color}) async {
     final queryParameters = <String, String>{
       'max': max.toString(),
       if (untilMillis != null) 'until': untilMillis.toString(),
@@ -260,8 +255,8 @@ class StudyRepository {
         throw ClientException('Could not read game list as NDJSON: $e', url);
       }
       if (decoded is! Map<String, dynamic>) continue;
-      final ts = (decoded['createdAt'] as num?)?.toInt() ??
-          (decoded['lastMoveAt'] as num?)?.toInt();
+      final ts =
+          (decoded['createdAt'] as num?)?.toInt() ?? (decoded['lastMoveAt'] as num?)?.toInt();
       if (ts != null && (oldestMillis == null || ts < oldestMillis)) {
         oldestMillis = ts;
       }
@@ -270,11 +265,7 @@ class StudyRepository {
         games.add(parsed);
       }
     }
-    return (
-      games: games,
-      rawLineCount: rawLines.length,
-      oldestTimestampMillis: oldestMillis,
-    );
+    return (games: games, rawLineCount: rawLines.length, oldestTimestampMillis: oldestMillis);
   }
 
   /// Creates one or more (if the PGN contains multiple games) chapters in the study with the given [studyId].

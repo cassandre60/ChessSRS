@@ -74,9 +74,7 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
 
   String _gamesProgressLabel() {
     if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
-      return _gamesFetched > 0
-          ? 'Analysing $_gamesFetched games…'
-          : 'Fetching your Lichess games…';
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
     }
     return _gamesTotal > 0
         ? 'Building study $_gamesDone of $_gamesTotal…'
@@ -241,7 +239,8 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                       label: _isGeneratingStudies
                           ? _gamesProgressLabel()
                           : 'Build studies from my games',
-                      help: _gamesSummary ??
+                      help:
+                          _gamesSummary ??
                           'Create opening studies from your Lichess games and fix recurring '
                               'mistakes.',
                       control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
