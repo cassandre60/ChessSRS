@@ -454,6 +454,28 @@ void main() {
       expect((await repo.getAllStudies()).length, 2);
     });
 
+    test('creating the opposite colour twice does not move the session', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'King Pawn',
+        repertoireSide: Side.white,
+      );
+      await controller.createStudyInSide(white.study.id, Side.black);
+
+      // The second run resolves the duplicate onto the existing Black copy; the
+      // user never asked to leave the White drawer they were reviewing (#170),
+      // and the queue they were part-way through must survive the tap.
+      final again = await controller.createStudyInSide(white.study.id, Side.black);
+
+      expect(again, isNull);
+      final state = container.read(reviewControllerProvider).value;
+      expect(state?.scope.studyId, white.study.id);
+      expect(state?.activeSide, Side.white);
+    });
+
     test('creating the opposite colour leaves the user on what they were reviewing', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);

@@ -706,13 +706,15 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       throw StateError('that study has no moves to copy');
     }
     final result = await importPgnText(pgnText: pgn, title: source.title, repertoireSide: side);
-    if (result.isDuplicate) return null;
-    // `importPgnText` leaves the session on what it just created; put the user's
-    // own scope back, exactly as it was, so the copy is a background addition
-    // and a study they were part-way through stays part-way through.
+    // `importPgnText` leaves the session on what it just created — or, on a
+    // duplicate, on the existing counterpart it resolved to. Either way, put the
+    // user's own scope back, exactly as it was, so the copy is a background
+    // addition and a study they were part-way through stays part-way through.
+    // A duplicate is then a no-op in every sense, session included (#170).
     if (before != null) {
       await changeScope(before);
     }
+    if (result.isDuplicate) return null;
     return result.study;
   }
 
