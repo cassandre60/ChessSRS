@@ -558,8 +558,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         preloadedStudies: studies,
       );
       summary = DueCountsSummary(
-        totalDueCount: session.initialDueCount,
-        totalFreshCount: session.initialQueueCount - session.initialDueCount,
+        // #164: these must be the figures the summary pass would report for the
+        // scope, not the queue's own length. The queue is capped by today's
+        // remaining daily/new allowances; publishing its length here made the
+        // top bar fall from the scope's due debt to the day's allowance on
+        // every changeScope/selectSide.
+        totalDueCount: session.scopeDueCount,
+        totalFreshCount: session.scopeFreshCount,
         studyDueCounts: currentState.studyDueCounts,
         openingDueCounts: currentState.openingDueCounts,
         studyProgress: currentState.studyProgress,
