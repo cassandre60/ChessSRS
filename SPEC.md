@@ -61,14 +61,26 @@ identities (`canonicalStateId`, difficulty, orientation, `pgnHash`).
   `test/persistence/sqlite_study_repository_test.dart`,
   `test/persistence/canonical_rekey_migration_test.dart`.
 
-### INV-006 Authentication secrets never travel in URLs or logs
-Email login code, email, and username are sent in the POST body, never as
-query parameters, so they cannot land in proxy logs or the `http_log` table.
-- Oracle: repository tests asserting request construction.
-- Gates: auth suite.
-- Tier: T0. History: PR #94 (query-string leak into 7-day log table).
+### INV-006 Authentication secrets never reach durable logs
+Email login code, email, and username are sent in the POST body. The
+mobile-code endpoints additionally retry with those values in the query string
+when a body-only request is rejected (404/400), because lila reads them there;
+that retry is the only URL-bearing path. Whichever transport carries them, the
+values are redacted on the way into storage: the `http_log` row stores
+`redactUriForLogging(request.url)`, which blanks `email`, `username`, and
+`code`, so no secret is readable in the 7-day log tables.
+- Oracle: repository tests asserting request construction, plus redaction tests
+  asserting the secret parameters are stripped from a stored URL and that no
+  request URL reaches a log or the `http_log` row unredacted.
+- Gates: auth suite, network suite.
+- Tier: T0. History: PR #94 moved the values out of the query string to keep
+  them out of the 7-day `http_log` table; PR #123 restored a query-string
+  fallback because lila reads these endpoints from the query string; #10 (H4)
+  added `redactUriForLogging` and applied it at the `http_log` write, so the
+  fallback still cannot reach storage.
 - Covering: `test/model/auth/auth_repository_test.dart`,
-  `test/view/auth/email_login_screen_test.dart`.
+  `test/view/auth/email_login_screen_test.dart`,
+  `test/network/http_redaction_test.dart`.
 
 ### INV-007 The startup session check only ever clears its own session
 The `/api/token/test` result is fenced on controller generation and session
@@ -457,3 +469,4 @@ total. Practice mode is exempt and still surfaces fresh positions.
 | 2026-10-05 | INV-030 | Amended: `white()`/`black()` side scopes aggregate by chapter orientation | (owner, on merge) |
 | 2026-10-05 | INV-067 | Added: an opening hub is a family name, not a title that mentions one (spurious hubs) | (owner, on merge) |
 | 2026-10-15 | INV-068 | Added: due requires a prior presentation; fresh is introduced under its own cap | (owner, on merge) |
+| 2026-10-16 | INV-006 | Amended: secrets are body-first with a redacted query-string fallback on the mobile-code endpoints; the guard is redaction at the `http_log` write, not "never a URL" (PR #94 → PR #123 + H4) | (owner, on approval) |
