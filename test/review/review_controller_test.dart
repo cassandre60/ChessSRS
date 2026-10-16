@@ -244,6 +244,32 @@ void main() {
       expect(state.boardPosition, isNull);
     });
 
+    // SPEC INV-032: controller does not emit placeholder empty state while repository is loading.
+    test(
+      'remains in loading state while repository initializes and does not flash empty state',
+      () async {
+        final repoCompleter = Completer<StudyRepository>();
+        final container = ProviderContainer(
+          overrides: [
+            srsStudyRepositoryProvider.overrideWith((ref) => repoCompleter.future),
+            clockProvider.overrideWithValue(clock),
+            soundServiceProvider.overrideWithValue(FakeSoundService()),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final stateAsync = container.read(reviewControllerProvider);
+        expect(stateAsync.isLoading, isTrue);
+        expect(stateAsync.hasValue, isFalse);
+
+        repoCompleter.complete(repo);
+        final finalState = await container.read(reviewControllerProvider.future);
+
+        expect(finalState.studies, isEmpty);
+        expect(finalState.hasStudies, isFalse);
+      },
+    );
+
     test('imports PGN, initializes session with due prompt and board orientation', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);

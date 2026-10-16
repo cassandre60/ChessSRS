@@ -13,7 +13,9 @@ import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/log/app_log_service.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/persistence/sqlite_study_repository.dart';
 import 'package:chess_srs/src/quick_actions.dart';
+import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/shared_pgn_service.dart';
 import 'package:chess_srs/src/tab_navigation.dart';
 import 'package:chess_srs/src/utils/screen.dart';
@@ -29,6 +31,11 @@ class AppInitializationScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Eagerly prewarm SQLite study repository and the default review session
+    // during native splash, so the initial review board is ready immediately upon presentation.
+    ref.listen(srsStudyRepositoryProvider, (_, _) {});
+    ref.listen(reviewControllerProvider, (_, _) {});
+
     ref.listen<AsyncValue<PreloadedData>>(preloadedDataProvider, (_, state) {
       if (state.hasValue || state.hasError) {
         FlutterNativeSplash.remove();
