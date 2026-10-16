@@ -1195,8 +1195,7 @@ NormalMove? _parseUciMove(Position pos, String? rawUci) {
   final parsed = Move.parse(trimmed);
   if (parsed is NormalMove) {
     if (pos.isLegal(parsed)) {
-      final normalized = pos.normalizeMove(parsed);
-      return normalized is NormalMove ? normalized : parsed;
+      return parsed;
     }
     if (pos.board.roleAt(parsed.from) == Role.king) {
       if (trimmed == 'e1g1' || trimmed == 'e8g8') {
