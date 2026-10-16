@@ -287,18 +287,9 @@ class ReviewSession {
   /// Presentation order of the due queue; the due set never depends on this.
   final ReviewOrder order;
 
-  /// In-line continuity after a correct move (user setting).
-  ///
-  /// [ReviewContinuity.dueOnly] quizzes only due positions and auto-plays the
-  /// rest. [ReviewContinuity.fullLine] quizzes every position along the
-  /// walked line in tree order, even when not yet due, and picks branches
-  /// deterministically (mainline first) instead of steering toward due
-  /// material — so a line never jumps over an unasked middle step.
-  ///
-  /// Mutable so a settings flip applies to the live session without a
-  /// rebuild (which would drop in-memory retests); the controller assigns it
-  /// directly. Only future traversals are affected — the queued set never
-  /// changes.
+  /// In-line continuity (user setting): due-only quizzes just due
+  /// positions; full-line plays every line whole, start to end. Mutable so a
+  /// settings flip reaches the live session (the queued set never changes).
   ReviewContinuity continuity;
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
@@ -356,11 +347,8 @@ class ReviewSession {
   final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
 
-  /// Guided node-id path from a line start to a queued target (fullLine only).
-  ///
-  /// Set when a queued mid-line card opens at its line's start; every branch
-  /// choice then follows this path until the target is prompted. Empty means
-  /// unguided line-order walking.
+  /// Guided node-id path from a line start to a queued target (fullLine
+  /// only); empty means unguided line-order walking.
   List<String> _guidedNodeIds = [];
 
   /// Canonical ids queued as never-presented introductions (INV-068).
@@ -729,25 +717,20 @@ class ReviewSession {
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _completedDecisionIds.length >= remainingDailyQuota!;
-        // Full-line continuity quizzes every step of the walked line in order,
-        // even when not yet due, so a line never jumps over an unasked middle
-        // step. The quota still caps prompted work: exhausted means auto-play.
+        // Full line quizzes every step in order, even when not yet due; the
+        // quota still caps prompted work (exhausted means auto-play).
         final shouldPrompt =
             (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
         if (shouldPrompt) {
-          // Found the next decision along this branch!
-          _dueQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-          );
-          _unbufferedQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-          );
+          // Next decision along this branch.
+          _dequeueDecision(nextDecision);
           _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
           _dropGuideThrough(opponentChild.id);
+          final trail = autoPlayed
+              .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
+              .join(' ');
           _logger.info(
-            'Traversal prompts ${nextDecision.canonicalId} '
-            '(due=$isDue, continuity=$continuity) after auto-playing '
-            '[${autoPlayed.map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}').join(' ')}]',
+            'Prompts ${nextDecision.canonicalId} ($continuity, due=$isDue) after [$trail]',
           );
           return ReviewStepResult(
             isCorrect: true,
@@ -844,22 +827,16 @@ class ReviewSession {
     );
   }
 
-  /// Advance to the next due item after acknowledging an incorrect answer.
-  ///
-  /// In full-line mode the line is not abandoned: review continues with the
-  /// next decision down the same line (the failed card is already requeued
-  /// for its re-test), so a lapse never teleports into another line.
+  /// Advance after acknowledging an incorrect answer. In full-line mode the
+  /// line is not abandoned: review continues below (the failed card is
+  /// already requeued), so a lapse never teleports into another line.
   void continueAfterIncorrect() {
     if (continuity == ReviewContinuity.fullLine && _advanceWithinLine()) return;
     _advanceToNextDue();
   }
 
-  /// Prompts the next decision down the current line after a lapse.
-  ///
-  /// Plays the expected move and the deterministic opponent reply forward to
-  /// the next user-turn decision. False when the line ends here (or the
-  /// prompt has no playable continuation), in which case the caller falls
-  /// back to the queue.
+  /// Prompts the next decision below the current line after a lapse. False
+  /// when the line ends here (caller falls back to the queue).
   bool _advanceWithinLine() {
     final prompt = _currentPrompt;
     final repoNode = prompt?.currentNode;
@@ -871,18 +848,20 @@ class ReviewSession {
     final nextDecision = _decisionForNode[nextNode.id];
     if (nextDecision == null) return false;
     _dropGuideThrough(nextNode.id);
-    _dueQueue.removeWhere(
-      (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-    );
-    _unbufferedQueue.removeWhere(
-      (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-    );
+    _dequeueDecision(nextDecision);
     _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
     _logger.info(
-      'Full-line lapse continue at ${nextDecision.canonicalId} '
-      '(${prompt.decision.canonicalId} requeued for re-test)',
+      'Lapse continue at ${nextDecision.canonicalId} (${prompt.decision.canonicalId} requeued)',
     );
     return true;
+  }
+
+  /// Pulls [decision] from both queue buffers once it is prompted elsewhere.
+  void _dequeueDecision(RepertoireDecision decision) {
+    _dueQueue.removeWhere((d) => d.id == decision.id || d.canonicalId == decision.canonicalId);
+    _unbufferedQueue.removeWhere(
+      (d) => d.id == decision.id || d.canonicalId == decision.canonicalId,
+    );
   }
 
   /// Skip the current prompt, moving it to the back of the queue.
@@ -937,18 +916,15 @@ class ReviewSession {
     }
     final nextDecision = _dueQueue.removeAt(0);
     if (continuity == ReviewContinuity.fullLine) {
-      // Whole lines, start to end: a queued mid-line card opens at its
-      // line's first unanswered move instead of jumping straight to it. The
-      // queued card stays up front and the guide steers every branch toward
-      // it, so the walk reaches it along its own variation.
+      // Whole lines: a queued mid-line card opens at its line start, guided
+      // down its own variation.
       final start = _lineStartFor(nextDecision);
       if (start != null) {
         _dueQueue.insert(0, nextDecision);
         _guidedNodeIds = start.pathNodeIds;
         _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
         _logger.info(
-          'Full-line start at ${start.decision.canonicalId} for queued '
-          '${nextDecision.canonicalId}',
+          'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
         );
         return;
       }
@@ -958,13 +934,10 @@ class ReviewSession {
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest unanswered decision on [target]'s ancestry chain (same chapter
-  /// tree), with the node-id path from it down to the target.
-  ///
-  /// Null when the target itself is the line start (or no ancestor carries a
-  /// decision). Answered positions are never re-asked as line starts; in
-  /// dynamic repertoire mode locked-unreviewed ancestors are skipped too, so
-  /// whole-line walking never leaks dormant branches.
+  /// Earliest unanswered decision on [target]'s ancestry chain, plus the
+  /// node-id path from it down to the target. Null when the target itself is
+  /// the line start. Answered positions are never re-asked as starts; in
+  /// dynamic mode locked-unreviewed ancestors are skipped too.
   ({RepertoireDecision decision, RepertoireNode node, List<String> pathNodeIds})? _lineStartFor(
     RepertoireDecision target,
   ) {
@@ -1001,11 +974,7 @@ class ReviewSession {
   }
 
   /// Next guided child among [children], consuming the guide through it.
-  ///
-  /// Null when no child lies on the guided path (or no guide is active),
-  /// clearing a stale guide so traversal falls back to line order. A user
-  /// who leaves the guided variation simply starts a new line; the queued
-  /// target stays queued and guides again when popped.
+  /// Null (clearing a stale guide) when none lies on the path.
   RepertoireNode? _guidedChild(List<RepertoireNode> children) {
     if (_guidedNodeIds.isEmpty) return null;
     for (final child in children) {
@@ -1183,9 +1152,8 @@ class ReviewSession {
       return node.children.first;
     }
 
-    // Full-line continuity walks each line in tree order (mainline first) so
-    // consecutive positions stay in the same line instead of steering toward
-    // whichever branch holds due material. A guided walk follows its path.
+    // Full line walks tree order (mainline first); a guided walk follows
+    // its path instead of steering toward due material.
     if (continuity == ReviewContinuity.fullLine) {
       return _guidedChild(node.children) ?? node.children.first;
     }
@@ -1220,9 +1188,7 @@ class ReviewSession {
     DateTime now,
     Map<String, int> dueCountMemo,
   ) {
-    // Full-line continuity follows list order (mainline first) so the walked
-    // line stays predictable instead of veering toward due-dense variations.
-    // A guided walk follows its path.
+    // Full line follows list order; a guided walk follows its path.
     if (continuity == ReviewContinuity.fullLine) {
       return _guidedChild(opponentChild.children) ?? opponentChild.children.first;
     }
