@@ -50,6 +50,38 @@ not:
 
 A previously auto-played decision must become testable again when its SRS state becomes due, even after a very long interval.
 
+### Line continuity setting
+
+`Line continuity` (Review & SRS settings, default Due only) governs how
+review walks repertoire lines:
+
+- **Due only**: only due positions are tested; known moves auto-play, the
+  opponent steers toward due material, and acknowledging a lapse moves on to
+  the next queued card. Fastest; best for large mature repertoires.
+- **Full line**: every line is played whole, from its first move to its
+  last — even when steps are not yet due. A queued mid-line card opens at
+  its line's start; branches always follow tree order (mainline first, never
+  steered toward due cards), so review only ever asks lines in the order the
+  repertoire lists them. A sideline missed by the first walk gets a
+  dedicated walk down its own ancestry — never a mid-line drop into another
+  variation; acknowledging a lapse continues down the same line while the
+  failed card waits for its re-test. Your own moves are only ever played by
+  you: when the daily quota is met mid-line, the session ends there instead
+  of auto-playing your remaining moves. Slower (extra prompts count toward
+  the daily limit), but review never teleports mid-line; best while learning
+  new material.
+
+### Why a sideline can wait while its line repeats (owner report 2026-10-16)
+
+Branches are never steered: at every position with several repertoire
+replies, the move you play picks the line — including on dedicated walks.
+So a due sideline whose branch you never take keeps opening its line at the
+start, and you keep replaying the mainline prefix out of habit while it
+waits. Those repeats are rehearsals, not reviews: they are never graded (no
+interval, repetition, or lapse changes), log no events, and cost no quota
+(each position counts once). To meet the sideline, take its move at the
+junction once — the walk then follows it to the end.
+
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 
 In a chess repertoire, the opponent frequently has multiple branching responses at a given position.

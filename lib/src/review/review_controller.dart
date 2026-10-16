@@ -410,18 +410,21 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
-    // Wait for repository provider to be ready if needed
-    final repoAsync = ref.watch(srsStudyRepositoryProvider);
-    final repo = repoAsync.asData?.value;
-    if (repo == null) {
-      return const ReviewScreenState(
-        studies: [],
-        scope: ReviewScope.all(),
-        totalDueCount: 0,
-        totalFreshCount: 0,
-        studyDueCounts: {},
+    // Line continuity needs no session rebuild (which would drop in-memory
+    // retests): it only steers future traversals, so push it into the live
+    // session. Without this the flip sits inert until the next load.
+    ref.listen(studyPreferencesProvider.select((p) => p.reviewContinuity), (previous, next) {
+      _logger.info(
+        'Review continuity preference changed to $next (was $previous); '
+        'live session present: ${state.value?.session != null}',
       );
-    }
+      if (previous != null && previous != next) {
+        state.value?.session?.continuity = next;
+      }
+    });
+
+    // Ensure repository provider is ready before building review state
+    await ref.watch(srsStudyRepositoryProvider.future);
 
     // A load superseded before it finishes has nothing to publish — the request that replaced
     // it will. Riverpod discards a build result once the notifier has moved on, so returning

@@ -13,6 +13,7 @@ import 'package:chess_srs/src/domain/repertoire_decision.dart';
 import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/review/due_status.dart';
+import 'package:chess_srs/src/domain/review/review_continuity.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_prompt.dart';
@@ -55,6 +56,7 @@ class ReviewSession {
     this.scope = const ReviewScope.all(),
     this.mode = ReviewMode.srs,
     this.order = ReviewOrder.dueDate,
+    this.continuity = ReviewContinuity.dueOnly,
     this.transposeScope = TransposeScope.inScope,
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
@@ -108,11 +110,14 @@ class ReviewSession {
       // is fresh rather than due. In dynamic repertoire mode, unreviewed positions
       // are only introduced if explicitly unlocked.
       final status = dueStatusOf(state, now);
+      final isLearned = state != null && state.repetitionCount > 0;
       final isUnlocked =
           !dynamicRepertoireMode ||
+          isLearned ||
           unlockedDecisionIds.contains(d.id) ||
           unlockedDecisionIds.contains(d.canonicalId);
-      if (mode == ReviewMode.practice || status.isDue || (status.isFresh && isUnlocked)) {
+      final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
+      if (mode == ReviewMode.practice || isDue || (status.isFresh && isUnlocked)) {
         // In multi-study scope, deduplicate shared canonical transpositions
         if (scope.studyId == null && scope.chapterId == null) {
           if (!queuedCanonicalIds.add(d.canonicalId)) {
@@ -256,7 +261,8 @@ class ReviewSession {
     _refillPrefetchBuffer();
     _advanceToNextDue();
     _logger.info(
-      'ReviewSession created: mode=$mode, scope=$scope, initialDueCount=$_initialQueueCount, '
+      'ReviewSession created: mode=$mode, scope=$scope, order=$order, continuity=$continuity, '
+      'initialDueCount=$_initialQueueCount, '
       'dueOfThose=$_initialDueCount, remainingQuota=$remainingDailyQuota',
     );
   }
@@ -274,6 +280,11 @@ class ReviewSession {
 
   /// Presentation order of the due queue; the due set never depends on this.
   final ReviewOrder order;
+
+  /// In-line continuity (user setting): due-only quizzes just due
+  /// positions; full-line plays every line whole, start to end. Mutable so a
+  /// settings flip reaches the live session (the queued set never changes).
+  ReviewContinuity continuity;
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
   final TransposeScope transposeScope;
@@ -360,6 +371,13 @@ class ReviewSession {
   /// handler promises them, so the quota cut keeps these and drops the rest (review-3 C2).
   final Set<String> _pendingRetest = {};
   ReviewPrompt? _currentPrompt;
+
+  /// Targets whose line-start walk missed them; next pop walks their ancestry.
+  final Set<String> _lineStartAttempted = {};
+
+  /// Guided node-id path, start to target, for a dedicated sideline walk.
+  /// Branch choices follow it; empty means PGN tree order.
+  List<String> _guidedNodeIds = const [];
 
   /// Canonical ids queued as never-presented introductions (INV-068).
   ///
@@ -477,6 +495,13 @@ class ReviewSession {
 
     final now = clock.now();
 
+    // Full-line prefix rehearsal: re-answering a position already answered
+    // this session re-walks it with practice grading (no double SRS write).
+    final isPrefixRehearsal =
+        continuity == ReviewContinuity.fullLine &&
+        mode == ReviewMode.srs &&
+        _completedDecisionIds.contains(decision.canonicalId);
+
     if (expectedMatch != null) {
       _completedDecisionIds.add(decision.canonicalId);
       // -----------------------------------------------------------------------
@@ -490,7 +515,7 @@ class ReviewSession {
       ReviewState nextState;
       ReviewEvent? event;
 
-      if (mode == ReviewMode.practice || isCorrectedFalseStart) {
+      if (mode == ReviewMode.practice || isCorrectedFalseStart || isPrefixRehearsal) {
         nextState = prevState;
         event = null;
       } else {
@@ -520,6 +545,7 @@ class ReviewSession {
 
       _logger.info(
         'Move correct: ${expectedMatch.san ?? expectedMatch.uci} for decision ${decision.canonicalId} '
+        '${transposedStart != null ? '(transposed line) ' : ''}'
         '(reps: ${nextState.repetitionCount}, stability: ${nextState.stability.toStringAsFixed(2)})',
       );
 
@@ -540,7 +566,7 @@ class ReviewSession {
       ReviewEvent? event;
       List<ReviewState> sideEffects = const [];
 
-      if (mode == ReviewMode.practice) {
+      if (mode == ReviewMode.practice || isPrefixRehearsal) {
         nextState = prevState;
         event = null;
       } else {
@@ -722,19 +748,32 @@ class ReviewSession {
       if (nextDecision != null) {
         final decState = _reviewStates[nextDecision.canonicalId] ?? _reviewStates[nextDecision.id];
         final isDue = _isDecisionDue(nextDecision, decState, now);
+        final isLearned = decState != null && decState.repetitionCount > 0;
+        final isUnlocked =
+            !dynamicRepertoireMode ||
+            isLearned ||
+            unlockedDecisionIds.contains(nextDecision.id) ||
+            unlockedDecisionIds.contains(nextDecision.canonicalId);
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _completedDecisionIds.length >= remainingDailyQuota!;
-        if (isDue && !isQuotaExhausted) {
-          // Found next due decision along this branch!
-          _dueQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-          );
-          _unbufferedQueue.removeWhere(
-            (d) => d.id == nextDecision.id || d.canonicalId == nextDecision.canonicalId,
-          );
+        // Full line quizzes every step in order, even when not yet due. The
+        // quota still caps prompted work — but it ends the walk instead of
+        // auto-playing the user's own moves past it. In dynamic mode, locked
+        // branches end the walk: unchosen moves must never be quizzed.
+        if (dynamicRepertoireMode && !isUnlocked) break;
+        if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
+        final shouldPrompt =
+            (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
+        if (shouldPrompt) {
+          // Next decision along this branch.
+          _dequeueDecision(nextDecision);
           _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
+          final trail = autoPlayed
+              .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
+              .join(' ');
+          _logger.info('Prompts ${nextDecision.canonicalId} (due=$isDue) after [$trail]');
           return ReviewStepResult(
             isCorrect: true,
             movePlayed: expectedMatch,
@@ -830,9 +869,40 @@ class ReviewSession {
     );
   }
 
-  /// Advance to the next due item after acknowledging an incorrect answer.
+  /// Advance after acknowledging an incorrect answer. In full-line mode the
+  /// line is not abandoned: review continues below (the failed card is
+  /// already requeued), so a lapse never teleports into another line.
   void continueAfterIncorrect() {
+    if (continuity == ReviewContinuity.fullLine && _advanceWithinLine()) return;
     _advanceToNextDue();
+  }
+
+  /// Prompts the next decision below the current line after a lapse. False
+  /// when the line ends here (caller falls back to the queue).
+  bool _advanceWithinLine() {
+    final prompt = _currentPrompt;
+    final repoNode = prompt?.currentNode;
+    final correct = prompt?.expectedMoves.firstOrNull;
+    if (prompt == null || repoNode == null || correct == null) return false;
+    final userChild = repoNode.childForMove(correct);
+    if (userChild == null || userChild.children.isEmpty) return false;
+    final nextNode = _guidedChild(userChild.children) ?? userChild.children.first;
+    final nextDecision = _decisionForNode[nextNode.id];
+    if (nextDecision == null) return false;
+    _dequeueDecision(nextDecision);
+    _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
+    _logger.info(
+      'Lapse continue at ${nextDecision.canonicalId} (${prompt.decision.canonicalId} requeued)',
+    );
+    return true;
+  }
+
+  /// Pulls [decision] from both queue buffers once it is prompted elsewhere.
+  void _dequeueDecision(RepertoireDecision decision) {
+    _dueQueue.removeWhere((d) => d.id == decision.id || d.canonicalId == decision.canonicalId);
+    _unbufferedQueue.removeWhere(
+      (d) => d.id == decision.id || d.canonicalId == decision.canonicalId,
+    );
   }
 
   /// Skip the current prompt, moving it to the back of the queue.
@@ -886,8 +956,74 @@ class ReviewSession {
       return;
     }
     final nextDecision = _dueQueue.removeAt(0);
+    if (continuity == ReviewContinuity.fullLine) {
+      // Whole lines: open at the line start and walk it. A target whose walk
+      // missed it gets a dedicated walk down its own ancestry — never a
+      // mid-line drop into another variation.
+      final guided = _lineStartAttempted.remove(nextDecision.canonicalId);
+      final start = _lineStartFor(nextDecision);
+      if (start != null) {
+        if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
+        if (!guided) _dueQueue.insert(0, nextDecision);
+        _dequeueDecision(start.decision);
+        _guidedNodeIds = guided ? start.path : const [];
+        _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
+        _logger.info(
+          'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
+        );
+        return;
+      }
+    }
     final node = _nodesById[nextDecision.nodeId];
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
+  }
+
+  /// Earliest decision on [target]'s ancestry chain, plus the node-id path
+  /// from it down to the target for dedicated walks. Null when the target
+  /// itself is the line start. Re-answered prefixes rehearse with practice
+  /// grading; in dynamic mode locked-unreviewed ancestors skip.
+  ({RepertoireDecision decision, RepertoireNode node, List<String> path})? _lineStartFor(
+    RepertoireDecision target,
+  ) {
+    var cursor = _nodesById[target.nodeId];
+    if (cursor == null) return null;
+    final chain = <RepertoireNode>[];
+    while (cursor != null) {
+      chain.add(cursor);
+      cursor = _parentOfNode[chain.last.id];
+    }
+    for (var i = chain.length - 1; i >= 0; i--) {
+      final candidate = _decisionForNode[chain[i].id];
+      if (candidate == null) continue;
+      if (dynamicRepertoireMode) {
+        final state = _reviewStates[candidate.canonicalId] ?? _reviewStates[candidate.id];
+        final unlocked =
+            unlockedDecisionIds.contains(candidate.id) ||
+            unlockedDecisionIds.contains(candidate.canonicalId);
+        final learned = state != null && state.repetitionCount > 0;
+        if (!unlocked && !learned) continue;
+      }
+      if (candidate.id == target.id && candidate.canonicalId == target.canonicalId) {
+        return null;
+      }
+      final path = chain.sublist(0, i + 1).reversed.map((n) => n.id).toList();
+      return (decision: candidate, node: chain[i], path: path);
+    }
+    return null;
+  }
+
+  /// Next guided child among [children], consuming the guide through it.
+  /// Null when none lies on the path (guide cleared, tree order resumes).
+  RepertoireNode? _guidedChild(List<RepertoireNode> children) {
+    if (_guidedNodeIds.isEmpty) return null;
+    for (final child in children) {
+      final index = _guidedNodeIds.indexOf(child.id);
+      if (index < 0) continue;
+      _guidedNodeIds = _guidedNodeIds.sublist(index + 1);
+      return child;
+    }
+    _guidedNodeIds = const [];
+    return null;
   }
 
   ReviewPrompt _buildPrompt({required RepertoireDecision decision, RepertoireNode? node}) {
@@ -1049,6 +1185,12 @@ class ReviewSession {
       return node.children.first;
     }
 
+    // Full line walks tree order (mainline first), never steered; a
+    // dedicated sideline walk follows its guide instead.
+    if (continuity == ReviewContinuity.fullLine) {
+      return _guidedChild(node.children) ?? node.children.first;
+    }
+
     final dueCounts = <RepertoireNode, int>{};
     for (final child in node.children) {
       dueCounts[child] = _countDueDecisionsInSubtree(child, now, dueCountMemo);
@@ -1079,6 +1221,11 @@ class ReviewSession {
     DateTime now,
     Map<String, int> dueCountMemo,
   ) {
+    // Full line follows list order; a dedicated sideline walk follows
+    // its guide instead. Neither is ever steered toward queued dues.
+    if (continuity == ReviewContinuity.fullLine) {
+      return _guidedChild(opponentChild.children) ?? opponentChild.children.first;
+    }
     var best = opponentChild.children.first;
     var bestDue = -1;
     for (final child in opponentChild.children) {

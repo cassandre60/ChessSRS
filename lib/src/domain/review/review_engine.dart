@@ -10,6 +10,7 @@ import 'package:chess_srs/src/domain/chapter.dart';
 import 'package:chess_srs/src/domain/clock.dart';
 import 'package:chess_srs/src/domain/graph_aware_review_coordinator.dart';
 import 'package:chess_srs/src/domain/repertoire_decision.dart';
+import 'package:chess_srs/src/domain/review/review_continuity.dart';
 import 'package:chess_srs/src/domain/review/review_mode.dart';
 import 'package:chess_srs/src/domain/review/review_order.dart';
 import 'package:chess_srs/src/domain/review/review_scope.dart';
@@ -39,6 +40,7 @@ class ReviewEngine {
     ReviewScope scope = const ReviewScope.all(),
     ReviewMode mode = ReviewMode.srs,
     ReviewOrder order = ReviewOrder.dueDate,
+    ReviewContinuity continuity = ReviewContinuity.dueOnly,
     TransposeScope transposeScope = TransposeScope.inScope,
     int? prefetchBatchSize = kDefaultPrefetchBatchSize,
     int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
@@ -58,6 +60,7 @@ class ReviewEngine {
       scope: scope,
       mode: mode,
       order: order,
+      continuity: continuity,
       transposeScope: transposeScope,
       dynamicRepertoireMode: dynamicRepertoireMode,
       unlockedDecisionIds: unlockedDecisionIds,

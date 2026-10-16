@@ -25,7 +25,7 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
 1. User opens the application.
 2. The app immediately presents the chessboard on the first due position across all active imported studies.
 3. User recalls and makes their prepared move on the board. (Crucial: move comments and annotations are strictly hidden during recall to prevent move spoilers).
-4. If correct: subtle positive feedback, automatic traversal through already-learned opponent/user continuations, and stopping at the next due decision. Any explanatory move comment is revealed post-move.
+4. If correct: subtle positive feedback, automatic traversal through already-learned opponent/user continuations, and stopping at the next due decision. Any explanatory move comment is revealed post-move. (With `Line continuity` set to Full line instead: every line is played whole from its first move to its last, even when steps are not yet due, and a lapse acknowledged without retry continues down the same line.)
 5. If incorrect: non-blocking feedback indicating the expected repertoire continuation with an on-board arrow, recording a lapse, and keeping the board interactive so the user can immediately reguess and play the correct move.
 6. User reviews as long as they wish; when all items are up to date, a calm idle state is displayed with options to explore moves or start pre-match rehearsal.
 
