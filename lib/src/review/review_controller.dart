@@ -410,6 +410,15 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
+    // Line continuity needs no session rebuild (which would drop in-memory
+    // retests): it only steers future traversals, so push it into the live
+    // session. Without this the flip sits inert until the next load.
+    ref.listen(studyPreferencesProvider.select((p) => p.reviewContinuity), (previous, next) {
+      if (previous != null && previous != next) {
+        state.value?.session?.continuity = next;
+      }
+    });
+
     // Wait for repository provider to be ready if needed
     final repoAsync = ref.watch(srsStudyRepositoryProvider);
     final repo = repoAsync.asData?.value;

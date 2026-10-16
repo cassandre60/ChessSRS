@@ -289,5 +289,30 @@ void main() {
       const prefs = StudyPrefs.defaults;
       expect(StudyPrefs.fromJson(prefs.toJson()), prefs);
     });
+
+    // SPEC INV-022. A settings flip mid-review steers the very next
+    // traversal: no rebuild, no lost progress, no stale behavior.
+    test('assigning continuity steers the next traversal without a rebuild', () {
+      final (study, chapter, decisions) = buildLine();
+      final reviewStates = {
+        'dec-2': ReviewState(
+          decisionId: 'dec-2',
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+          repetitionCount: 2,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+      );
+      expect(session.continuity, ReviewContinuity.dueOnly);
+
+      session.continuity = ReviewContinuity.fullLine;
+      final afterA = session.submitMove(from: 'e2', to: 'e4');
+      expect(afterA.isCorrect, isTrue);
+      expect(afterA.nextPrompt?.decision.id, 'dec-2');
+    });
   });
 }

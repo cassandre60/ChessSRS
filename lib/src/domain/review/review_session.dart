@@ -292,7 +292,12 @@ class ReviewSession {
   /// walked line in tree order, even when not yet due, and picks branches
   /// deterministically (mainline first) instead of steering toward due
   /// material — so a line never jumps over an unasked middle step.
-  final ReviewContinuity continuity;
+  ///
+  /// Mutable so a settings flip applies to the live session without a
+  /// rebuild (which would drop in-memory retests); the controller assigns it
+  /// directly. Only future traversals are affected — the queued set never
+  /// changes.
+  ReviewContinuity continuity;
 
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
   final TransposeScope transposeScope;
