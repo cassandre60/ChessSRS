@@ -3,6 +3,8 @@
 // SPEC coverage: INV-010, INV-014.
 
 import 'package:chess_srs/src/domain/chapter.dart';
+import 'package:chess_srs/src/domain/repertoire_move.dart';
+import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:dartchess/dartchess.dart';
@@ -180,6 +182,101 @@ void main() {
       final chapter = Chapter.create(studyId: 'study-1', sourceOrder: 0);
       final exported = chapterToPgn(chapter);
       expect(exported, contains('[Event "Untitled Study"]'));
+    });
+
+    test('an unreplayable stored move refuses the export instead of truncating the line', () {
+      // SPEC INV-010. a4 is not legal from the position after 1. e4 (a3 is empty),
+      // yet the row is stored. The old exporter dropped it and every node after it,
+      // silently returning a PGN that re-imports with the line cut short.
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'after-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'corrupt',
+                fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+                fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+                incomingMove: RepertoireMove(from: 'a3', to: 'a4', san: 'a4'),
+              ),
+            ],
+          ),
+        ],
+      );
+      final chapter = Chapter.create(
+        studyId: 'study-1',
+        sourceOrder: 0,
+        title: 'Corrupt line',
+        root: root,
+      );
+
+      // Asserted by behaviour rather than by the exception type so this test
+      // still compiles (and therefore still fails, rather than erroring) on the
+      // pre-fix commit, which has no PgnExportException.
+      Object? thrown;
+      try {
+        chapterToPgn(chapter);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(
+        thrown,
+        isNotNull,
+        reason: 'an unreplayable move must refuse the export, not truncate the line',
+      );
+      expect(thrown.toString(), contains('cannot be replayed'));
+    });
+
+    test('an unparseable starting FEN refuses the export with a typed error', () {
+      // SPEC INV-010. The old exporter let dartchess's raw parse error escape:
+      // the export failed with a message naming nothing, and no caller could
+      // tell it apart from any other failure.
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'not-a-fen',
+        fenKey: 'not-a-fen',
+        children: [
+          RepertoireNode(
+            id: 'after-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ),
+        ],
+      );
+      final chapter = Chapter.create(
+        studyId: 'study-1',
+        sourceOrder: 0,
+        title: 'Broken FEN',
+        startingFen: 'not-a-fen',
+        root: root,
+      );
+
+      // Asserted by behaviour rather than by the exception type so this test
+      // still compiles (and therefore still fails, rather than erroring) on the
+      // pre-fix commit, which has no PgnExportException.
+      Object? thrown;
+      try {
+        chapterToPgn(chapter);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(
+        thrown,
+        isNotNull,
+        reason: 'a stored FEN that cannot be parsed must become a named refusal',
+      );
+      expect(
+        thrown.toString(),
+        contains('Broken FEN'),
+        reason: 'the refusal must name the chapter, not surface a raw parse error',
+      );
     });
   });
 }

@@ -1032,7 +1032,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     }
 
-    final pgn = studyToPgn(study, chapters);
+    final String pgn;
+    try {
+      pgn = studyToPgn(study, chapters);
+    } on PgnExportException catch (e) {
+      _logger.warning('Cannot flip study $studyId to $targetSide: $e');
+      return null;
+    }
     try {
       return await importPgnText(
         pgnText: pgn,

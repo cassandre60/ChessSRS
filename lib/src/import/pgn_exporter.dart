@@ -6,8 +6,31 @@ import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/repertoire_node.dart';
 import 'package:chess_srs/src/domain/study.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:logging/logging.dart';
+
+final _logger = Logger('PgnExporter');
+
+/// Thrown when a chapter cannot be exported faithfully.
+///
+/// Export used to truncate silently at the first unreplayable move — dropping
+/// it and its whole continuation from the file — and to fail with a raw
+/// dartchess error when a stored starting FEN was unparseable. Both now refuse
+/// with a message that names the chapter: a PGN that re-imports with lines
+/// missing is worse than a refused export (#166).
+class PgnExportException implements Exception {
+  const PgnExportException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'PgnExportException: $message';
+}
 
 /// Exports a [Chapter] to standard PGN string format.
+///
+/// Throws [PgnExportException] when the chapter cannot be replayed faithfully:
+/// an unparseable starting FEN, or a stored move that is not legal in the
+/// position it claims to follow.
 String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   final buffer = StringBuffer();
 
@@ -44,11 +67,7 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
   buffer.writeln();
 
   if (chapter.root != null && chapter.root!.children.isNotEmpty) {
-    final Position startPos = chapter.startingFen != null
-        ? Chess.fromSetup(Setup.parseFen(chapter.startingFen!))
-        : Chess.initial;
-
-    _writeNodeMoves(buffer, chapter.root!, position: startPos);
+    _writeNodeMoves(buffer, chapter.root!, position: _startingPosition(chapter));
   }
 
   buffer.writeln('*');
@@ -58,6 +77,10 @@ String chapterToPgn(Chapter chapter, {String? studyTitle}) {
 }
 
 /// Exports all chapters in a [Study] to a multi-game PGN string.
+///
+/// Throws [PgnExportException] if any chapter cannot be replayed faithfully;
+/// the first failing chapter refuses the whole export rather than shipping a
+/// file with that chapter's moves missing.
 String studyToPgn(Study study, List<Chapter> chapters) {
   if (chapters.isEmpty) {
     return chapterToPgn(
@@ -120,16 +143,12 @@ void _writeNodeMoves(
         }
 
         final varNextPos = _playMove(position, varMove);
-        if (varNextPos != null) {
-          _writeNodeMoves(varBuffer, variation, position: varNextPos, forceMoveNumber: false);
-        }
+        _writeNodeMoves(varBuffer, variation, position: varNextPos, forceMoveNumber: false);
         buffer.write('(${varBuffer.toString().trim()}) ');
       }
     }
 
-    if (nextPos != null) {
-      _writeNodeMoves(buffer, mainline, position: nextPos, forceMoveNumber: variations.isNotEmpty);
-    }
+    _writeNodeMoves(buffer, mainline, position: nextPos, forceMoveNumber: variations.isNotEmpty);
   } else {
     // Root node: recurse through children
     for (var i = 0; i < node.children.length; i++) {
@@ -144,14 +163,43 @@ void _writeNodeMoves(
   }
 }
 
-Position? _playMove(Position pos, RepertoireMove move) {
+/// The chapter's starting position.
+///
+/// Refuses the export when the stored FEN cannot be parsed, instead of taking
+/// the whole export down with a raw dartchess error that names nothing.
+Position _startingPosition(Chapter chapter) {
+  final fen = chapter.startingFen;
+  if (fen == null || fen.isEmpty) return Chess.initial;
+  try {
+    return Chess.fromSetup(Setup.parseFen(fen));
+  } catch (e) {
+    final title = chapter.title ?? 'Untitled';
+    _logger.warning('Refusing to export "$title": unparseable starting FEN "$fen".', e);
+    throw PgnExportException(
+      'Chapter "$title" has an unparseable starting position ("$fen"); '
+      'refusing to export rather than dropping its moves.',
+    );
+  }
+}
+
+/// Plays [move] on [pos], refusing the export when the stored move is illegal.
+///
+/// Silently skipping was the old behaviour: the rest of the line vanished from
+/// the file with no log and no error, so an exported PGN could re-import with
+/// everything after the unreplayable move gone (#166).
+Position _playMove(Position pos, RepertoireMove move) {
   try {
     final from = Square.fromName(move.from);
     final to = Square.fromName(move.to);
     final promotion = move.promotion != null ? Role.fromChar(move.promotion!) : null;
     return pos.play(NormalMove(from: from, to: to, promotion: promotion));
-  } catch (_) {
-    return null;
+  } catch (e) {
+    final label = move.san ?? '${move.from}${move.to}${move.promotion ?? ''}';
+    _logger.warning('Refusing to export: "$label" does not replay at ${pos.fen}.', e);
+    throw PgnExportException(
+      'Move "$label" cannot be replayed against the stored position; '
+      'refusing to export rather than truncating the line.',
+    );
   }
 }
 
