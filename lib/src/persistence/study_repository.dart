@@ -13,7 +13,15 @@ typedef TallyDecision = ({String id, String studyId, String chapterId, String ca
 /// decisions, and spaced repetition review states.
 abstract class StudyRepository {
   // Bulk import
-  Future<void> saveImportResult(ImportResult result);
+
+  /// Persists a completed import.
+  ///
+  /// Returns null when the import was written. When two imports of the same material are in
+  /// flight together, both clear the controller's pre-write duplicate check before either
+  /// commits; the loser is skipped here, and this returns the study the winner stored so the
+  /// caller resolves to the import that actually happened rather than to an id that was never
+  /// persisted (INV-003).
+  Future<Study?> saveImportResult(ImportResult result);
 
   // Studies
   Future<void> saveStudy(Study study);

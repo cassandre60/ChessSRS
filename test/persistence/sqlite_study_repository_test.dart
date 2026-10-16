@@ -781,6 +781,75 @@ void main() {
       }
     });
 
+    test('a mixed-side import landing in flight does not duplicate the study (INV-003)', () async {
+      // SPEC INV-003. The in-flight re-check filtered on the first chapter's orientation, which
+      // no stored mixed-side study can satisfy: importing the same mixed file twice stored it
+      // twice. Like getStudyByPgnHash, a mixed import carries no side to filter on.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const hash = 'mixed-file-twice';
+        final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+
+        ImportResult build(String studyId) {
+          final white = Chapter.create(
+            studyId: studyId,
+            sourceOrder: 0,
+            title: 'White',
+            orientation: Side.white,
+          );
+          final black = Chapter.create(
+            studyId: studyId,
+            sourceOrder: 1,
+            title: 'Black',
+            orientation: Side.black,
+          );
+          return ImportResult(
+            study: Study(
+              id: studyId,
+              title: 'Both sides',
+              pgnHash: hash,
+              createdAt: now,
+              updatedAt: now,
+            ),
+            chapters: [white, black],
+            decisions: [
+              RepertoireDecision(
+                id: 'dec-$studyId-1',
+                studyId: studyId,
+                chapterId: white.id,
+                nodeId: 'node-1',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+              RepertoireDecision(
+                id: 'dec-$studyId-2',
+                studyId: studyId,
+                chapterId: black.id,
+                nodeId: 'node-2',
+                expectedMoves: const [RepertoireMove(from: 'e7', to: 'e5', san: 'e5')],
+              ),
+            ],
+            errors: const [],
+          );
+        }
+
+        await repo.saveImportResult(build('import-a'));
+        await repo.saveImportResult(build('import-b'));
+
+        final withHash = (await repo.getAllStudies()).where((s) => s.pgnHash == hash).toList();
+        expect(
+          withHash,
+          hasLength(1),
+          reason:
+              'a mixed-side file must be stored once; a re-check keyed off the first '
+              'chapter alone lets the same file land twice',
+        );
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'a failed mirror write rolls back the canonical state instead of leaving it torn',
       () async {

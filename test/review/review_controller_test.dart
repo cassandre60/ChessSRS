@@ -45,6 +45,20 @@ class _RecordingSoundService extends FakeSoundService {
       recorded.add(Sound.capture);
 }
 
+/// A repository whose pgnHash lookup never matches, so the controller's pre-write duplicate
+/// check cannot short-circuit an import.
+///
+/// Two imports of one file are *supposed* to both clear that check before either writes — it is
+/// the repository's in-flight re-check that catches the loser. Leaving that window to scheduler
+/// timing would make the test pass or fail depending on the interleaving, so it is opened
+/// deterministically instead, in the same spirit as [GatedStudyRepository].
+class _PrecheckMissRepository extends SqliteStudyRepository {
+  _PrecheckMissRepository(super.db);
+
+  @override
+  Future<Study?> getStudyByPgnHash(String pgnHash, {Side? forSide}) async => null;
+}
+
 void main() {
   setUpAll(() {
     TestLichessBinding.ensureInitialized();
@@ -231,6 +245,44 @@ void main() {
       expect(first.isDuplicate, isFalse);
       expect(second.isDuplicate, isTrue);
       expect(second.study.id, equals(first.study.id));
+    });
+
+    test('a duplicate import landing in flight resolves to the stored study (INV-003)', () async {
+      // SPEC INV-003. Two imports of one file both clear the pre-write check before either
+      // commits — that is the window the repository's in-flight re-check exists for. When it
+      // skips the loser, the controller must resolve to the study that was actually stored:
+      // the loser's own id was never persisted, and pointing the scope at it would open an
+      // empty repertoire. The lookup is doctored to open that window deterministically.
+      final doctored = _PrecheckMissRepository(db);
+      final container = createContainer(repository: doctored);
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final results = await Future.wait([
+        controller.importPgnText(pgnText: '1. e4 e5 *', switchScope: true),
+        controller.importPgnText(pgnText: '1. e4 e5 *', switchScope: true),
+      ]);
+
+      final stored = (await doctored.getAllStudies()).single;
+      final duplicates = results.where((r) => r.isDuplicate).toList();
+      expect(
+        duplicates,
+        hasLength(1),
+        reason:
+            'exactly one of the two racing imports must be reported as the duplicate '
+            'that actually landed',
+      );
+      expect(
+        duplicates.single.study.id,
+        stored.id,
+        reason:
+            'the duplicate must resolve to the stored study, not to the id of the import '
+            'that was skipped',
+      );
+      expect(
+        container.read(reviewControllerProvider).value!.scope.studyId,
+        stored.id,
+        reason: 'the scope must land on a study that exists',
+      );
     });
 
     test('initializes with empty repository: 0 studies, no prompt', () async {

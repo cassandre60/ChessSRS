@@ -42,7 +42,7 @@ class SqliteStudyRepository implements StudyRepository {
   Completer<void>? _importInFlight;
 
   @override
-  Future<void> saveImportResult(ImportResult result) async {
+  Future<Study?> saveImportResult(ImportResult result) async {
     // Imports are serialised. The duplicate check that decides whether an import happens at
     // all lives in the controller, above this layer, so two imports that start together both ask
     // "already imported?" before either writes and both see no match. Serialising the writes lets
@@ -68,33 +68,31 @@ class SqliteStudyRepository implements StudyRepository {
       // The orientation check is not optional. The same tree imported as White and as Black is two
       // studies that share a pgnHash on purpose — different questions, different SRS memory — so
       // matching on the hash alone would silently drop the second repertoire. This mirrors
-      // getStudyByPgnHash's forSide filter.
+      // getStudyByPgnHash's forSide filter, derived from the import itself: a side-scoped import
+      // carries that side on every chapter, and there is no side to filter on for a mixed one.
+      // Keying the filter off the first chapter alone missed a stored mixed-side study, so the
+      // same file landed twice (INV-003).
       final hash = result.study.pgnHash;
       if (hash != null) {
-        final orientation = result.chapters.isEmpty ? null : result.chapters.first.orientation;
-        final existing = orientation == null
-            ? await _db.query(
-                kTableSrsStudy,
-                columns: ['id'],
-                where: 'pgnHash = ?',
-                whereArgs: [hash],
-                limit: 1,
-              )
+        final orientations = {for (final c in result.chapters) c.orientation};
+        final onlySide = orientations.length == 1 ? orientations.first : null;
+        final existing = onlySide == null
+            ? await _db.query(kTableSrsStudy, where: 'pgnHash = ?', whereArgs: [hash], limit: 1)
             : await _db.query(
                 kTableSrsStudy,
-                columns: ['id'],
                 where:
                     'pgnHash = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsChapter c '
                     'WHERE c.studyId = $kTableSrsStudy.id AND c.orientation != ?)',
-                whereArgs: [hash, orientation.name],
+                whereArgs: [hash, onlySide.name],
                 limit: 1,
               );
         if (existing.isNotEmpty) {
+          final stored = _studyFromRow(existing.first);
           _logger.info(
             'Skipping import of "${result.study.title}": already stored as '
-            '${existing.first['id']} while this one was in flight.',
+            '${stored.id} while this one was in flight.',
           );
-          return;
+          return stored;
         }
       }
 
@@ -139,6 +137,7 @@ class SqliteStudyRepository implements StudyRepository {
         _importInFlight = null;
       }
     }
+    return null;
   }
 
   // ---------------------------------------------------------------------------

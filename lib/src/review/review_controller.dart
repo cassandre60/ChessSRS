@@ -1789,16 +1789,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       _logger.info(
         'Duplicate study detected for hash ${hash.substring(0, 8)}, skipping re-import: ${existingStudy.id}',
       );
-      if (switchScope) {
-        await changeScope(ReviewScope.study(existingStudy.id));
-      }
-      return ImportResult(
-        study: existingStudy,
-        chapters: const [],
-        decisions: const [],
-        errors: const [],
-        isDuplicate: true,
-      );
+      return _duplicateImportResult(existingStudy, switchScope: switchScope);
     }
 
     // One threshold for all PGN work (see pgn_offload.dart): a file whose hash is
@@ -1837,11 +1828,40 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       throw FormatException('Nothing to import — $reason');
     }
 
-    await _repository.saveImportResult(result);
+    // The write re-checks for a duplicate that committed while this import was parsing (two
+    // imports both clear the check above before either writes). The loser must resolve exactly
+    // like the pre-check above — to the study that was actually stored, not to its own id, which
+    // was never persisted (INV-003).
+    final storedWhileInFlight = await _repository.saveImportResult(result);
+    if (storedWhileInFlight != null) {
+      _logger.info(
+        'Duplicate study landed during save for hash ${hash.substring(0, 8)}, '
+        'resolving to: ${storedWhileInFlight.id}',
+      );
+      return _duplicateImportResult(storedWhileInFlight, switchScope: switchScope);
+    }
     if (switchScope) {
       await changeScope(ReviewScope.study(result.study.id));
     }
     return result;
+  }
+
+  /// Resolves an import whose material is already stored, optionally moving the scope onto the
+  /// study that holds it (INV-003).
+  ///
+  /// Shared by the pre-write duplicate check and the in-flight skip so both answer identically:
+  /// a duplicate carries no chapters, no decisions, and the *stored* study's identity.
+  Future<ImportResult> _duplicateImportResult(Study existing, {required bool switchScope}) async {
+    if (switchScope) {
+      await changeScope(ReviewScope.study(existing.id));
+    }
+    return ImportResult(
+      study: existing,
+      chapters: const [],
+      decisions: const [],
+      errors: const [],
+      isDuplicate: true,
+    );
   }
 
   /// Imports a study directly from Lichess given its URL or 8-character study ID.
