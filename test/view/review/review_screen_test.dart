@@ -1520,6 +1520,47 @@ void main() {
       );
     });
 
+    testWidgets('RepertoireImportDialog reports the moves a partial import skipped', (
+      tester,
+    ) async {
+      // SPEC INV-011: the import succeeds with the moves up to the illegal one;
+      // Bh6 is not reachable from the position after 2...Nc6.
+      const pgn = '1. e4 e5 2. Nf3 Nc6 3. Bh6 *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpAsync(tester);
+
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpAsync(tester);
+      await tester.tap(find.text('Import PGN'));
+      await pumpAsync(tester);
+
+      await tester.tap(find.text('PGN Text / File'));
+      await pumpAsync(tester);
+
+      await tester.enterText(find.widgetWithText(TextField, 'PGN text'), pgn);
+      await tester.tap(find.text('Import and Start Review'));
+      await pumpAsync(tester, 600);
+
+      // The import succeeded, but the toast must say what was skipped: a user
+      // who is told only "Imported" believes the repertoire is complete.
+      expect(find.byType(RepertoireImportDialog), findsNothing);
+      expect(find.textContaining('problem'), findsOneWidget);
+      expect(find.textContaining('Bh6'), findsOneWidget);
+    });
+
     testWidgets('RepertoireImportDialog imports study from Lichess URL', (tester) async {
       final mockClient = MockClient((request) async {
         if (request.url.path == '/api/study/m1AbCd2E.pgn') {
