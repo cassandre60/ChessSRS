@@ -1292,6 +1292,13 @@ void main() {
         // The bar used to read "94 due" while tens of thousands were due,
         // because the figure was min(totalDue, remainingQuota) under the word
         // "due". Now that due means something, the clamp has to go.
+        //
+        // The two identical getDueSummary calls below were tautological — a
+        // reintroduced clamp would move both together — so the figure is also
+        // read through the session path that carries the day's remaining
+        // quotas: with the allowance spent, a clamp drags that one to 0. That
+        // is the call that can fail (INV-068). The duplicate pair stays until
+        // its removal is signed off (G08, #168).
         final (db, repo, dir) = await seedFreshImport(count: 5, dbFile: 'c.db');
         final service = ReviewService(repository: repo, clock: clock);
 
@@ -1311,9 +1318,15 @@ void main() {
           final studies = await repo.getAllStudies();
           final uncapped = await service.getDueSummary(studies: studies);
           final capped = await service.getDueSummary(studies: studies);
+          final spent = await service.loadSessionAndSummary(
+            studies: studies,
+            remainingDailyQuota: 0,
+            remainingNewQuota: 0,
+          );
 
           expect(uncapped.totalDueCount, 5);
           expect(capped.totalDueCount, 5);
+          expect(spent.summary.totalDueCount, 5);
         } finally {
           await db.close();
           dir.deleteSync(recursive: true);
