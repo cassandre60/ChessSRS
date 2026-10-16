@@ -628,6 +628,38 @@ void main() {
       });
     });
 
+    test('the two hash functions agree when a chapter has an unusable FEN', () {
+      // A game whose FEN cannot be built is quarantined: importPgn skips it without
+      // creating a chapter, so the stored tree holds only the readable game. The
+      // file-level hash must skip those same bytes — moves and separator — or a
+      // backfilled study can never match the file it came from (#165).
+      const pgn = '''
+[Event "Kept"]
+1. e4 e5 *
+
+[Event "Quarantined"]
+[FEN "not a fen"]
+1. d4 d5 *
+''';
+      final result = importPgn(pgn, studyTitle: 'Partially quarantined');
+
+      expect(result.errors, hasLength(1), reason: 'the unusable FEN must be reported');
+      expect(result.chapters, hasLength(1), reason: 'only the readable game becomes a chapter');
+      expect(
+        computeRepertoireTreeHash(result.chapters),
+        equals(computePgnHash(pgn)),
+        reason: 'the stored chapters and the file must fingerprint identically',
+      );
+    });
+
+    test('an unusable FEN does not collide with the same moves without it', () {
+      // Hashing the quarantined game's moves without the FEN that makes them
+      // unreachable gave a malformed file and a plain file with the same moves one
+      // fingerprint, so one could be answered as "already imported" of the other.
+      const malformed = '[FEN "not a fen"]\n1. e4 e5 *';
+      expect(computePgnHash(malformed), isNot(equals(computePgnHash('1. e4 e5 *'))));
+    });
+
     test(
       'a backfilled study is still recognised as a duplicate of the file it came from',
       () async {
