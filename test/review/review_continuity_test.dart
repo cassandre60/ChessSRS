@@ -290,6 +290,235 @@ void main() {
       expect(StudyPrefs.fromJson(prefs.toJson()), prefs);
     });
 
+    // SPEC INV-021, INV-022. Acknowledging a lapse mid-line does not
+    // abandon the line: review continues with the next decision down the
+    // same line while the failed card waits for its re-test. Due-only pops
+    // the next queue card here, which is a different line.
+    test('fullLine continueAfterIncorrect stays in the same line', () {
+      final (study, chapter, decisions) = buildLine();
+      const zRoot = RepertoireNode(
+        id: 'node-z-root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'node-z-d4',
+            fen: 'rnbqkbnr/ppp1pppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+            fenKey: 'rnbqkbnr/ppp1pppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+          ),
+        ],
+      );
+      final chapterZ = Chapter(
+        id: 'chapter-z',
+        studyId: study.id,
+        sourceOrder: 1,
+        title: 'Other line',
+        startingFen: zRoot.fen,
+        root: zRoot,
+        createdAt: baseTime,
+      );
+      const decZ = RepertoireDecision(
+        id: 'dec-z',
+        studyId: 'study-line',
+        chapterId: 'chapter-z',
+        nodeId: 'node-z-root',
+        expectedMoves: [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+      );
+      final allDecisions = [...decisions, decZ];
+      final reviewStates = {
+        'dec-1': ReviewState(
+          decisionId: 'dec-1',
+          nextDueAt: baseTime.subtract(const Duration(days: 5)),
+          repetitionCount: 1,
+        ),
+        'dec-z': ReviewState(
+          decisionId: 'dec-z',
+          nextDueAt: baseTime.subtract(const Duration(days: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-2': ReviewState(
+          decisionId: 'dec-2',
+          nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+          repetitionCount: 1,
+        ),
+        'dec-3': ReviewState(
+          decisionId: 'dec-3',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter, chapterZ],
+        decisions: allDecisions,
+        reviewStates: reviewStates,
+        order: ReviewOrder.dueDate,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      final lapse = session.submitMove(from: 'd2', to: 'd4');
+      expect(lapse.isCorrect, isFalse);
+
+      session.continueAfterIncorrect();
+      // Next decision down the same line — not dec-z from the other chapter.
+      expect(session.currentPrompt?.decision.id, 'dec-2');
+      // Nothing dropped: the failed card waits for its re-test.
+      expect(session.remainingDueCount, 4);
+    });
+    // SPEC INV-022, INV-066. A queued mid-line card opens at its line's
+    // first unanswered move: with only C due, review starts at A and walks
+    // A → B → C instead of jumping straight to C.
+    test('fullLine opens a queued mid-line card at its line start', () {
+      final (study, chapter, decisions) = buildLine();
+      final future = baseTime.add(const Duration(days: 5));
+      final reviewStates = {
+        'dec-1': ReviewState(decisionId: 'dec-1', nextDueAt: future, repetitionCount: 2),
+        'dec-2': ReviewState(decisionId: 'dec-2', nextDueAt: future, repetitionCount: 2),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: reviewStates,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      // Only C was queued, but the session opens at the line start.
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final seen = <String>[session.currentPrompt!.nodeId];
+      for (var i = 0; i < 4 && session.currentPrompt != null; i++) {
+        final prompt = session.currentPrompt!;
+        final move = prompt.expectedMoves.first;
+        session.submitMove(from: move.from, to: move.to, promotion: move.promotion);
+        if (session.currentPrompt != null) seen.add(session.currentPrompt!.nodeId);
+      }
+      expect(seen, ['node-root', 'node-e5', 'node-nc6']);
+      expect(session.isComplete, isTrue);
+    });
+
+    // SPEC INV-022. The guided walk follows the queued card's own
+    // variation: C lives down the c5 sideline, so the opponent must play c5
+    // even though it is not the mainline order.
+    test('fullLine guides toward the queued card’s own variation', () {
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'node-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3-e5',
+                    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+              RepertoireNode(
+                id: 'node-c5',
+                fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+                fenKey: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3-c5',
+                    fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final study = Study(
+        id: 'study-branches',
+        title: 'Branches',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      final chapter = Chapter(
+        id: 'ch-1',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Main',
+        startingFen: root.fen,
+        root: root,
+      );
+      const dec1 = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 'study-branches',
+        chapterId: 'ch-1',
+        nodeId: 'root',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+      const decE5 = RepertoireDecision(
+        id: 'dec-e5',
+        studyId: 'study-branches',
+        chapterId: 'ch-1',
+        nodeId: 'node-e5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+      const decC5 = RepertoireDecision(
+        id: 'dec-c5',
+        studyId: 'study-branches',
+        chapterId: 'ch-1',
+        nodeId: 'node-c5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+
+      // C (sideline) is most overdue, so due-date order pops it first even
+      // though the line starts at dec-1.
+      final states = {
+        'dec-1': ReviewState(
+          decisionId: 'dec-1',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-e5': ReviewState(
+          decisionId: 'dec-e5',
+          nextDueAt: baseTime.add(const Duration(days: 5)),
+          repetitionCount: 2,
+        ),
+        'dec-c5': ReviewState(
+          decisionId: 'dec-c5',
+          nextDueAt: baseTime.subtract(const Duration(days: 5)),
+          repetitionCount: 1,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: const [dec1, decE5, decC5],
+        reviewStates: states,
+        order: ReviewOrder.dueDate,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      // Opens at the line start, not at C.
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      // Guided down the c5 sideline toward C, not the mainline e5.
+      expect(result.autoPlayedMoves.single.move.san, 'c5');
+      expect(result.nextPrompt?.decision.id, 'dec-c5');
+    });
+
     // SPEC INV-022. A settings flip mid-review steers the very next
     // traversal: no rebuild, no lost progress, no stale behavior.
     test('assigning continuity steers the next traversal without a rebuild', () {

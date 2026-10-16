@@ -52,16 +52,19 @@ A previously auto-played decision must become testable again when its SRS state 
 
 ### Line continuity setting
 
-`Line continuity` (Review & SRS settings, default Due only) governs what
-"traverse" does after a correct move:
+`Line continuity` (Review & SRS settings, default Due only) governs how
+review walks repertoire lines:
 
-- **Due only**: only due positions are tested; known moves auto-play and the
-  opponent steers toward due material. Fastest; best for large mature
-  repertoires.
-- **Full line**: every position along the walked line is tested in tree order
-  (mainline first), even when not yet due — so a line never jumps over an
-  unasked middle step. Slower (extra prompts count toward the daily limit),
-  but lines stay coherent; best while learning new material.
+- **Due only**: only due positions are tested; known moves auto-play, the
+  opponent steers toward due material, and acknowledging a lapse moves on to
+  the next queued card. Fastest; best for large mature repertoires.
+- **Full line**: every line is played whole, from its first move to its
+  last — even when steps are not yet due. A queued mid-line card opens at
+  its line's start and the walk is guided down that card's own variation;
+  branches follow tree order (mainline first); acknowledging a lapse
+  continues down the same line while the failed card waits for its re-test.
+  Slower (extra prompts count toward the daily limit), but review never
+  teleports mid-line; best while learning new material.
 
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 
