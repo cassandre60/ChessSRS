@@ -310,6 +310,13 @@ remains a later option — never a redesign.
       1. Switching colour cost dismiss plus retap. The drawer's search header now carries the same square pair (extracted as shared `SrsColourSwitch`, top bar unchanged visually); tapping the other square switches the drawer's content in place and follows with the scope switch behind it.
       2. Same-side taps no-op; search text survives the switch. Test pins the one-tap switch with scope following (INV-030).
 
+- [x] **R24: Review path scale jump and performance optimizations** *(done: 2026-10-16)*
+      1. Scale Jump: with bulk import growing the owner's database to 61 studies, 309 chapters, and 31,182 decisions, review session startup and due tallies were measured on the real 35 MiB database (`PERF-FIX-24`).
+      2. Tally & Date Optimization: added `getTallyDecisions` to omit decoding JSON expected moves for 31k decisions (#142); adaptive query chunking (#143); `parseUtcIso` for allocation-free date parsing (#144); SQLite native page mmap (#146); differential tallying (#151); board repaint boundary isolation (#147); and sub-sensory move prewarming (#150).
+      3. Startup Queries: replaced 61 serial chapter queries in `_loadActiveStudiesAndChapters` with `getChaptersByStudyIds` batch query (#158); added fast-path string decoding for single expected moves, dropping `getAllDecisions` time from 195 ms to 142 ms; single-pass queue partitioning in `ReviewSession` (#158).
+      4. Targeted Scope Decisions: added `getDecisionsByChapters` and SQL-level `orientation` filtering on chapters (#172), eliminating parsing of 142 opposite-side chapters and dropping whole-library White session start from 1,086 ms to 569 ms.
+      5. Lazy Chapter Deserialization: added `rootResolver` to `Chapter` and on-demand session indexing in `ReviewSession` (#175), deferring `treeJson` parsing of inactive chapters.
+
 ### Future Horizon Tasks & Backlog
 - [x] **F-AUTHTOKEN: Cover the startup token check** *(done: 2026-09-28)*
       1. **The task turned out not to be test coverage.** Reading the code first found that two implementations of the same `/api/token/test` call already existed: the one in `preloaded_data.dart`, and `AuthController.checkToken`, which `http.dart` already calls on every 401. The second was fenced on both the controller's generation and the token's identity; the first was not, and it called `authStorage.delete()` directly.
