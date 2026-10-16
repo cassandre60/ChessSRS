@@ -414,6 +414,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // retests): it only steers future traversals, so push it into the live
     // session. Without this the flip sits inert until the next load.
     ref.listen(studyPreferencesProvider.select((p) => p.reviewContinuity), (previous, next) {
+      _logger.info(
+        'Review continuity preference changed to $next (was $previous); '
+        'live session present: ${state.value?.session != null}',
+      );
       if (previous != null && previous != next) {
         state.value?.session?.continuity = next;
       }
