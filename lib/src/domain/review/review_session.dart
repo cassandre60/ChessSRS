@@ -955,7 +955,7 @@ class ReviewSession {
         if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
         if (!guided) _dueQueue.insert(0, nextDecision);
         _dequeueDecision(start.decision);
-        _guidedNodeIds = guided ? _pathTo(start.node, nextDecision) : const [];
+        _guidedNodeIds = guided ? start.path : const [];
         _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
         _logger.info(
           'Line start ${start.decision.canonicalId} for queued ${nextDecision.canonicalId}',
@@ -967,11 +967,13 @@ class ReviewSession {
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest decision on [target]'s ancestry chain. Null when the target
-  /// itself is the line start. Re-answered prefix positions rehearse with
-  /// practice grading (never double-graded); in dynamic mode
-  /// locked-unreviewed ancestors skip.
-  ({RepertoireDecision decision, RepertoireNode node})? _lineStartFor(RepertoireDecision target) {
+  /// Earliest decision on [target]'s ancestry chain, plus the node-id path
+  /// from it down to the target for dedicated walks. Null when the target
+  /// itself is the line start. Re-answered prefixes rehearse with practice
+  /// grading; in dynamic mode locked-unreviewed ancestors skip.
+  ({RepertoireDecision decision, RepertoireNode node, List<String> path})? _lineStartFor(
+    RepertoireDecision target,
+  ) {
     var cursor = _nodesById[target.nodeId];
     if (cursor == null) return null;
     final chain = <RepertoireNode>[];
@@ -992,20 +994,10 @@ class ReviewSession {
       if (candidate.id == target.id && candidate.canonicalId == target.canonicalId) {
         return null;
       }
-      return (decision: candidate, node: chain[i]);
+      final path = chain.sublist(0, i + 1).reversed.map((n) => n.id).toList();
+      return (decision: candidate, node: chain[i], path: path);
     }
     return null;
-  }
-
-  /// Node-id path from [from] down to [target]'s node, for guided walks.
-  List<String> _pathTo(RepertoireNode from, RepertoireDecision target) {
-    final path = <String>[target.nodeId];
-    var cursor = _parentOfNode[target.nodeId];
-    while (cursor != null && cursor.id != from.id) {
-      path.add(cursor.id);
-      cursor = _parentOfNode[cursor.id];
-    }
-    return path.reversed.toList();
   }
 
   /// Next guided child among [children], consuming the guide through it.
