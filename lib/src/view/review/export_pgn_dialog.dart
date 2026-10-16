@@ -170,9 +170,9 @@ class ExportPgnDialog extends StatelessWidget {
           label: Text(context.l10n.mobileReviewCopyAction),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: pgnText));
-            try {
-              showSnackBar(context, context.l10n.mobileReviewPgnCopiedClipboard);
-            } catch (_) {}
+            // showSnackBar already guards its own context use (feedback.dart); catching here
+            // would only swallow programming errors.
+            showSnackBar(context, context.l10n.mobileReviewPgnCopiedClipboard);
             Navigator.of(context).pop();
           },
         ),

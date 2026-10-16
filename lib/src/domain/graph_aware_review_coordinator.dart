@@ -228,9 +228,6 @@ class GraphAwareReviewCoordinator {
     // Depth counts from 1 at the immediate child, which takes the full λ0:
     // exp(-(1 - 1)/τ) = 1. Entering at depth 1 with exp(-depth/τ) delivered
     // only 51.3% of the documented haircut at every depth (review-2 C2).
-    // Depth counts from 1 at the immediate child, which takes the full λ0:
-    // exp(-(1 - 1)/τ) = 1. Entering at depth 1 with exp(-depth/τ) delivered
-    // only 51.3% of the documented haircut at every depth (review-2 C2).
     //
     // A tau of 0 makes this 0/0 at depth 1, and a negative tau makes it explode past 1. Either
     // way the result is a decay outside [0, 1], and _pullDueForward rounds it into a Duration —

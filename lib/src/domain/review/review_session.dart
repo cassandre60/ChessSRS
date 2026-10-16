@@ -481,7 +481,8 @@ class ReviewSession {
       _completedDecisionIds.add(decision.canonicalId);
       // -----------------------------------------------------------------------
       // CORRECT MOVE
-      // -----------------------------------------------------------------------      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
+      // -----------------------------------------------------------------------
+      // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
       // the re-test as a success too would tick repetitionCount up and push the due date out.
       // The re-test landing also clears the lapse's pending marker (review-3 C2).
       final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
