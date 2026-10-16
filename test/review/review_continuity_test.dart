@@ -535,9 +535,11 @@ void main() {
       expect(session.currentPrompt?.decision.id, 'dec-r');
       expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-e');
       expect(session.submitMove(from: 'g1', to: 'f3').nextPrompt, isNotNull);
-      // Mainline ends at the e5 leaf having missed C: dedicated walk opens
-      // at M (root already answered) and follows C's ancestry to it.
-      expect(session.currentPrompt?.decision.id, 'dec-m');
+      // Mainline ends at the e5 leaf having missed C: dedicated walk
+      // re-opens at the true start (practice prefix), then the user takes
+      // the d4 sideline and the guide follows C's ancestry to it.
+      expect(session.currentPrompt?.decision.id, 'dec-r');
+      expect(session.submitMove(from: 'd2', to: 'd4').nextPrompt?.decision.id, 'dec-m');
       expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt?.decision.id, 'dec-n');
       expect(session.submitMove(from: 'd1', to: 'e2').nextPrompt?.decision.id, 'dec-c');
       expect(session.submitMove(from: 'f1', to: 'd3').nextPrompt, isNull);
@@ -853,11 +855,18 @@ void main() {
       expect(result.autoPlayedMoves.single.move.san, 'e5');
       expect(result.nextPrompt?.decision.id, 'dec-e5');
 
-      // The mainline ends at the e5 leaf; the bypassed sideline C is
-      // prompted directly rather than walked past again.
+      // The mainline ends at the e5 leaf having missed C: the dedicated
+      // walk re-opens at the true start (practice prefix for answered R),
+      // then follows C's ancestry down the sideline.
       final afterE5 = session.submitMove(from: 'g1', to: 'f3');
       expect(afterE5.isCorrect, isTrue);
-      expect(session.currentPrompt?.decision.id, 'dec-c5');
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      final repsBefore = session.reviewStates['dec-1']!.repetitionCount;
+      final rehearsal = session.submitMove(from: 'e2', to: 'e4');
+      expect(rehearsal.isCorrect, isTrue);
+      expect(rehearsal.event, isNull);
+      expect(session.reviewStates['dec-1']!.repetitionCount, repsBefore);
+      expect(rehearsal.nextPrompt?.decision.id, 'dec-c5');
       expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
       expect(session.isComplete, isTrue);
     });
