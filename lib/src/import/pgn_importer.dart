@@ -181,6 +181,15 @@ class ImportResult {
 /// file larger than this bound, never smaller.
 const int kMaxPgnInputBytes = 10 * 1024 * 1024;
 
+/// PGN `Variant` tags that describe standard chess play.
+///
+/// Lichess writes `Standard` for ordinary games and `From Position` for setup
+/// studies; anything else (Crazyhouse, Antichess, Chess960, ...) changes the
+/// rules of the game — drops, mandatory captures, castling — and the stored
+/// repertoire cannot represent those parts. Such games are refused with a typed
+/// error rather than imported with the variant's moves silently missing (#161).
+const _supportedVariantTags = {'standard', 'chess', 'from position'};
+
 /// Derives a 4-field FEN position key from a full 6-field FEN.
 ///
 /// The key is: `<placement> <turn> <castling> <ep>`
@@ -279,6 +288,25 @@ ImportResult importPgn(
 
     // Derive a human-readable chapter title from PGN headers.
     final chapterTitle = _chapterTitle(headers, i);
+
+    // Refuse non-standard variants outright (INV-011): replaying them as chess
+    // silently drops every drop move and its continuation, saving an incomplete
+    // line as if it were complete (#161).
+    final variant = headers['Variant']?.trim();
+    if (variant != null &&
+        variant.isNotEmpty &&
+        !_supportedVariantTags.contains(variant.toLowerCase())) {
+      errors.add(
+        ImportError(
+          chapterTitle: chapterTitle,
+          moveIndex: -1,
+          message:
+              'Unsupported variant "$variant": this trainer replays standard chess only. '
+              'The game was skipped instead of importing an incomplete line.',
+        ),
+      );
+      continue; // skip this chapter
+    }
 
     // Resolve starting position.
     Position startPosition;
