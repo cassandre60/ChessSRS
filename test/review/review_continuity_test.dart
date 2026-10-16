@@ -426,38 +426,27 @@ void main() {
                             id: 'node-qe2',
                             fen: 'after-Qe2',
                             fenKey: 'after-Qe2',
-                            incomingMove: RepertoireMove(
-                              from: 'd1',
-                              to: 'e2',
-                              san: 'Qe2',
-                            ),
+                            incomingMove: RepertoireMove(from: 'd1', to: 'e2', san: 'Qe2'),
                             children: [
                               RepertoireNode(
                                 id: 'node-c',
                                 fen: 'after-Be7',
                                 fenKey: 'after-Be7',
-                                incomingMove: RepertoireMove(
-                                  from: 'f8',
-                                  to: 'e7',
-                                  san: 'Be7',
-                                ),
+                                incomingMove: RepertoireMove(from: 'f8', to: 'e7', san: 'Be7'),
                                 children: [
                                   RepertoireNode(
                                     id: 'node-end',
                                     fen: 'after-Bd3',
                                     fenKey: 'after-Bd3',
-                                    incomingMove: RepertoireMove(
-                                      from: 'f1',
-                                      to: 'd3',
-                                      san: 'Bd3',
-                                    ),
+                                    incomingMove: RepertoireMove(from: 'f1', to: 'd3', san: 'Bd3'),
                                   ),
                                 ],
                               ),
                             ],
                           ),
                         ],
-                      ),                    ],
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -552,6 +541,27 @@ void main() {
       expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt?.decision.id, 'dec-n');
       expect(session.submitMove(from: 'd1', to: 'e2').nextPrompt?.decision.id, 'dec-c');
       expect(session.submitMove(from: 'f1', to: 'd3').nextPrompt, isNull);
+      expect(session.isComplete, isTrue);
+    });
+    // SPEC INV-022, INV-031. Quota ends a full-line walk instead of
+    // auto-playing the user's own moves past it: no auto-played move is
+    // ever the user's, and the session concludes with the quota met.
+    test('fullLine ends the walk at quota instead of auto-playing user moves', () {
+      final (study, chapter, decisions) = buildLine();
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        continuity: ReviewContinuity.fullLine,
+        remainingDailyQuota: 1,
+      );
+
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      expect(result.autoPlayedMoves.every((m) => !m.isUserMove), isTrue);
+      expect(session.completedCount, 1);
       expect(session.isComplete, isTrue);
     });
     // SPEC INV-022, INV-066. A queued mid-line card opens at its line's

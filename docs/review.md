@@ -65,9 +65,11 @@ review walks repertoire lines:
   repertoire lists them. A sideline missed by the first walk gets a
   dedicated walk down its own ancestry — never a mid-line drop into another
   variation; acknowledging a lapse continues down the same line while the
-  failed card waits for its re-test. Slower (extra prompts count toward the
-  daily limit), but review never teleports mid-line; best while learning new
-  material.
+  failed card waits for its re-test. Your own moves are only ever played by
+  you: when the daily quota is met mid-line, the session ends there instead
+  of auto-playing your remaining moves. Slower (extra prompts count toward
+  the daily limit), but review never teleports mid-line; best while learning
+  new material.
 
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 

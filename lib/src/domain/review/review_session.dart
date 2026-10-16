@@ -720,10 +720,12 @@ class ReviewSession {
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _completedDecisionIds.length >= remainingDailyQuota!;
-        // Full line quizzes every step in order, even when not yet due; the
-        // quota still caps prompted work (exhausted means auto-play).
+        // Full line quizzes every step in order, even when not yet due. The
+        // quota still caps prompted work — but it ends the walk instead of
+        // auto-playing the user's own moves past it.
         final shouldPrompt =
             (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
+        if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
         if (shouldPrompt) {
           // Next decision along this branch.
           _dequeueDecision(nextDecision);
@@ -731,9 +733,7 @@ class ReviewSession {
           final trail = autoPlayed
               .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
               .join(' ');
-          _logger.info(
-            'Prompts ${nextDecision.canonicalId} (due=$isDue) [${_chapters[nextDecision.chapterId]?.title}] after [$trail]',
-          );
+          _logger.info('Prompts ${nextDecision.canonicalId} (due=$isDue) after [$trail]');
           return ReviewStepResult(
             isCorrect: true,
             movePlayed: expectedMatch,
