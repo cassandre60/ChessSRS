@@ -55,7 +55,7 @@ void main() {
   // property it guarded is not: each destination must still be reachable from a live surface.
   // Asserted against the source, because the routing lives in the openers rather than in a
   // screen we can mount — and a mount-based version would pass even if every opener were deleted.
-  test('the destinations the sheet gave up are still reachable from live surfaces', () {
+  test('the destinations the sheet gave up still have openers in the source', () {
     final actions = File('lib/src/view/analysis/analysis_actions.dart').readAsStringSync();
     expect(
       actions,
