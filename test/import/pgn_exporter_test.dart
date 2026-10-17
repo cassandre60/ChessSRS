@@ -41,6 +41,40 @@ void main() {
       expect(parsed.length, 1);
     });
 
+    test('a comment on a mainline move survives export and re-import', () {
+      // SPEC INV-014. The exporter writes {comments} so user notes are not lost
+      // when a study is exported; nothing asserted they came back.
+      const pgn = '1. e4 {Best by test} e5 2. Nf3 Nc6 *';
+      final original = importPgn(pgn, studyTitle: 'Notes');
+      expect(original.chapters.first.root?.children.first.comment, 'Best by test');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      expect(exported, contains('{Best by test}'));
+
+      final reimported = importPgn(exported, studyTitle: 'Notes');
+      expect(reimported.chapters.first.root?.children.first.comment, 'Best by test');
+    });
+
+    test('a comment inside a variation survives export and re-import', () {
+      // SPEC INV-014. Variation branches carry their own comments; a dropped one
+      // is silent data loss for the reader who wrote it.
+      const pgn = '1. e4 e5 2. Nf3 (2. Nc3 {Anti-Sicilian} Nc6) Nc6 *';
+      final original = importPgn(pgn, studyTitle: 'Notes');
+      final variation = original.chapters.first.root!.children.first.children.first.children
+          .where((n) => n.incomingMove?.san == 'Nc3')
+          .first;
+      expect(variation.comment, 'Anti-Sicilian');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      expect(exported, contains('{Anti-Sicilian}'));
+
+      final reimported = importPgn(exported, studyTitle: 'Notes');
+      final reVariation = reimported.chapters.first.root!.children.first.children.first.children
+          .where((n) => n.incomingMove?.san == 'Nc3')
+          .first;
+      expect(reVariation.comment, 'Anti-Sicilian');
+    });
+
     test('custom starting FEN is preserved in SetUp and FEN headers', () {
       const fen = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
       const pgn = '[FEN "$fen"]\n[SetUp "1"]\n\n2. Nf3 d6 *';
@@ -54,6 +88,29 @@ void main() {
       final parsed = PgnGame.parseMultiGamePgn(exported);
       expect(parsed.length, 1);
       expect(parsed.first.headers['SetUp'], '1');
+    });
+
+    test('a chapter starting from a black-to-move FEN exports and re-imports', () {
+      // SPEC INV-014. A position chapter can start with Black to move; the
+      // exporter must carry the first black move through without shifting the
+      // line or the move numbering (fullmove 1 here, so any numbering must be
+      // the 1... form).
+      const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      const pgn = '[FEN "$fen"]\n[SetUp "1"]\n\n1... c5 2. Nf3 *';
+      final original = importPgn(pgn, studyTitle: 'Black to move');
+      expect(original.errors, isEmpty);
+      expect(original.chapters.first.startingFen, fen);
+
+      final exported = studyToPgn(original.study, original.chapters);
+      expect(exported, contains('[FEN "$fen"]'));
+
+      final reimported = importPgn(exported, studyTitle: 'Black to move');
+      expect(reimported.errors, isEmpty);
+      final reimportedRoot = reimported.chapters.first.root!;
+      expect(reimportedRoot.children.map((n) => n.incomingMove?.san).toList(), ['c5']);
+      expect(reimportedRoot.children.first.children.map((n) => n.incomingMove?.san).toList(), [
+        'Nf3',
+      ]);
     });
 
     test('multi-chapter study serializes all chapters in source order', () {
@@ -139,6 +196,28 @@ void main() {
         reimported.chapters.first.title,
         'Italian Game',
         reason: 'the chapter title is what the exporter wrote and the user named',
+      );
+    });
+
+    test('a Game-prefixed title survives re-import via its Chapter tag', () {
+      // SPEC INV-014. Names like "Game 5" are the auto-generated default for
+      // imported games, and the exporter deliberately writes the study title to
+      // [Event] for them (a bare "Game 5" event says nothing). The [Chapter] tag
+      // is the only place the real title exists in the file, so dropping it
+      // silently renames the chapter to the study title on re-import.
+      const pgn = '[Event "Game 5"]\n1. e4 e5 *';
+      final original = importPgn(pgn, studyTitle: 'My Study');
+      expect(original.chapters.first.title, 'Game 5');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      expect(exported, contains('[Event "My Study"]'));
+      expect(exported, contains('[Chapter "Game 5"]'));
+
+      final reimported = importPgn(exported, studyTitle: 'My Study');
+      expect(
+        reimported.chapters.first.title,
+        'Game 5',
+        reason: 'the Chapter tag is what carries the title when Event cannot',
       );
     });
 
