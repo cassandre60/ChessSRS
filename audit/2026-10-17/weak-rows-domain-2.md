@@ -1,0 +1,100 @@
+# Weak rows — w2-domain/persistence/import/gates, part 2 of 2 (verbatim digest continuation)
+
+## Grade 2, one line each (part 2: auth/user/explorer/game/log/app/gates + the importer analog)
+
+- model/auth/auth_repository_test.dart:165 — signIn success — misses auth-header/signature boundary.
+- auth:210 — cancel exception — misses discrimination beyond exception type.
+- auth:222 — rethrows non-cancel — misses wrapped-exception shapes.
+- auth:269 — 429 rate limit — misses message/context detail.
+- auth:280 — 500 ServerException — misses 4xx/5xx boundary at other codes.
+- auth:366 — 404 invalid code — misses code-expiry variants.
+- auth:377 — 429 on exchange — misses message detail.
+- auth:458 — state param — misses state generation/entropy.
+- model/user/user_repository_test.dart:42 — getUser full — misses perfs/profile/bio field mapping.
+- user:150 — perf full — misses streak/worst-loss detail fields.
+- user:463 — activity — misses per-interval field mapping.
+- model/explorer/opening_explorer_repository_test.dart:15 — masters parse — misses totals/per-move fields.
+- explorer:97 — lichess parse — misses recentGames field level.
+- explorer:167 — player parse — misses queuePosition/multi-page stream.
+- model/game/game_repository_test.dart:15 — recent games — misses status/clock/fen/player fields.
+- game_repository:43 — byIds — misses request body construction.
+- model/game/material_diff_test.dart:84 — horde empty — misses partial-material weird FENs.
+- material_diff:100 — crazyhouse empty — same.
+- model/board_editor/board_editor_controller_test.dart:38 — illegal initial FEN via params — misses piece-map equality on that path.
+- board_editor_controller:62 — antichess no castling — misses per-right schema.
+- test/app_links_service_test.dart:117 — empty path — misses query-only links.
+- app_links:180 — bare /editor — misses default-orientation interplay.
+- app_links:232 — color=black — misses color ignored with valid FEN.
+- app_links:266 — gameid finished — misses non-mocked repo path shape.
+- app_links:314 — /black suffix — misses color-ignored variants (/white).
+- app_links:336 — imported → analysis — misses ply cursor for imports.
+- app_links:407 — /@/user — misses flair-bearing user route.
+- app_links:429 — invalid user snackbar — misses exception→message mapping variants.
+- app_links:450 — /tv null — misses per-channel handling.
+- app_links:468 — linkify first-party — misses path-sensitive routing.
+- app_test.dart:15 — App loads — misses route content beyond ReviewScreen mount.
+- app_test:34 — no bottom navigation — misses look-alike nav widgets.
+- app_test:48 — language support — misses locale-specific content (mount assert commented out).
+- gates/domain_boundary_test.dart:70 — INV-041 clock — misses a new clock-sensitive file not on the hand-maintained list.
+- gates/domain_boundary:85 — INV-042 no I/O — misses alias/conditional-import I/O.
+- reachability/enforcement_matrix_test.dart:84 — matrix row floor — misses per-invariant drift inside the >=10 floor.
+- model/settings/preferences_storage_test.dart:96 — SEVERE log — misses exact phrasing/order (analog substitution for the absent persistence path).
+- prefs_storage:131 — missing prefs defaults — misses corrupt-vs-missing distinction detail (analog).
+- persistence/opening_name_repair_migration_test.dart:22 — mention not family — misses containers beyond the two names.
+- opening_name_repair:30 — real families kept — misses boundary name outside the 5.
+- opening_name_repair:69 — unknown left alone — misses other unrecognised spellings.
+- opening_name_repair:172 — chapter keeps title/tree — misses other preserved columns.
+- import/pgn_importer_test.dart:23 — fenKey 4 fields — misses exotic castling-order FEN keys.
+- pgn_importer:28 — fenKey initial — redundant with :23.
+- pgn_importer:49 — whitespace-only — misses error-classification parity with :41.
+- pgn_importer:91 — one chapter — misses count regression in 1-chapter inputs.
+- pgn_importer:97 — Opening header family — misses colon-truncation nuance (:943 covers).
+- pgn_importer:106 — Event header family — misses multi-Event files.
+- pgn_importer:156 — '?' fallback — misses '?' alongside valid Opening.
+- pgn_importer:165 — FEN fallback — misses FEN-only chapter with no moves.
+- pgn_importer:191 — ECO fallback — misses short ECO (:957 covers).
+- pgn_importer:211 — root fenKey — misses drift on custom starts (:363 covers).
+- pgn_importer:244 — UCI coords — misses promotion coordinate encoding.
+- pgn_importer:253 — startingFen null — misses custom-chapter default path.
+- pgn_importer:273 — two chapters — misses >2 counts.
+- pgn_importer:278 — sourceOrder — misses non-adjacent ordering.
+- pgn_importer:284 — titles from Event — misses title fallback when Event absent.
+- pgn_importer:290 — independent trees — misses deep-tree independence.
+- pgn_importer:313 — mainline first child — misses equal-SAN tiebreak.
+- pgn_importer:319 — variation second child — misses deeper ordering.
+- pgn_importer:325 — variation subtree — misses multi-move variation.
+- pgn_importer:333 — deeper variation — misses nested-RAV variation.
+- pgn_importer:363 — root fenKey normalized — misses canon beyond the ep example.
+- pgn_importer:369 — moves legal from position — misses illegal-move reporting.
+- pgn_importer:475 — allowed variant tags — misses allowed-list completeness.
+- pgn_importer:547 — distinct positions distinct ids — misses side-scoped cross-position collision.
+- pgn_importer:565 — decisions auto white — misses ambiguous-orientation decision set.
+- pgn_importer:589 — white side decisions — misses multi-move decision counts.
+- pgn_importer:596 — black side decisions — same.
+- pgn_importer:603 — nodeId matches tree — misses non-root nodeId anchoring.
+- pgn_importer:610 — expectedMoves match children — misses count>1 sets.
+- pgn_importer:617 — variations → extra decisions — misses deeper variation counts.
+- pgn_importer:625 — empty tree no decisions — misses custom-FEN position-only case.
+- pgn_importer:670 — hash differs — misses sha256 collision class.
+- pgn_importer:676 — pgnHash attached — misses explicit-hash-arg path.
+- pgn_importer:803 — isolate parity — misses isolate error propagation.
+- pgn_importer:878 — empty file error — misses message parity.
+- pgn_importer:909 — real repertoire clean — misses error-free path under complex input.
+- model/log/http_log_paginator_test.dart:78 — later next works — misses cursor semantics beyond terminal page (analog for absent storage test).
+- model/log/log_diagnostics_test.dart:28 — engine/session logs — misses log content beyond presence (analog).
+- log_diagnostics:99 — importer logs — misses heuristic branches beyond the one asserted.
+- log_diagnostics:172 — repo perf logs — misses timing-threshold behavior.
+- model/analysis/forecast_test.dart:44 — single-ply no collide — misses beyond the two listed pairs (analog for absent analysis_state test).
+- forecast:56 — odd divergence collides — misses reversed ply order.
+- forecast:59 — even ply no collide — misses multi-line entangled states.
+- forecast:72 — extension candidate — misses multi-line extension.
+- forecast:75 — divergent candidate — misses near-divergence boundary.
+- forecast:78 — empty not candidate — misses empty-guard interplay.
+- forecast:88 — single-ply not candidate — misses onMyTurn toggle behavior.
+- forecast:91 — double-ply candidate — misses multi-branch double-ply.
+- model/game/offline_computer_game_test.dart:28 — legacy stockfish read — misses older-schema drift (analog for absent state test).
+- offline_computer_game:49 — engine naming — misses name-format details.
+
+TOP5 (walker): sound_service:50 (grade 0), game_repository:70 (heavy payload, id+eco only), pgn_importer:650 (guard-vacuous), user_repository:408/426 with :16/:104 (empty/length-only JSON contracts), auth_repository:240 (toothless throwsA; HM app_test:26).
+
+NOTES (walker): absent board-layer names (board_helpers, board_grouping, board_flip, chess960) have no module in this fork (castling equivalence is pinned in entities_test L79); no study_task/hotline/gamebook symbols exist; test_helpers has no own test. Architecture-gate verdict: domain_boundary would catch plain violations (its L101 regex self-check guards the checker) with two escapes (hand-maintained clock file list; substring-only I/O scan misses aliased/conditional imports); reachability genuinely strong (ratchet + anti-rot + anti-vacuity + export-barrel checks; file-level by design); enforcement_matrix would catch renamed/deleted targets and gutting, coarse at a 10/13 floor.
