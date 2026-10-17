@@ -99,6 +99,11 @@ void main() {
       expect(s2.repetitionCount, equals(0));
       expect(s2.lapseCount, equals(1));
       expect(s2.nextDueAt, equals(t1.add(const Duration(days: 1))));
+      // The lapse branch also resets stability to firstInterval
+      // (scheduler.dart SimpleScheduler.case incorrect). Without this the
+      // pre-lapse stability could leak into the recovery interval: the
+      // recovery test below would still pass.
+      expect(s2.stability, const Duration(days: 1).inMilliseconds.toDouble());
     });
 
     test('a lapsed item recovers correctly after a correct recall', () {
