@@ -399,6 +399,44 @@ void main() {
       },
     );
 
+    test('ReviewMode.practice walks multi-move lines and auto-plays responses', () {
+      final (study, chapter, decisions) = buildTestRepertoire();
+      final engine = ReviewEngine(clock: clock);
+
+      final practiceSession = engine.createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: decisions,
+        reviewStates: const {},
+        mode: ReviewMode.practice,
+      );
+
+      expect(practiceSession.currentPrompt?.decision.id, 'dec-1');
+      expect(practiceSession.currentPrompt?.currentNode, isNotNull);
+
+      // Play 1. e4
+      final result1 = practiceSession.submitMove(from: 'e2', to: 'e4');
+      expect(result1.isCorrect, isTrue);
+      expect(result1.autoPlayedMoves, hasLength(1));
+      expect(result1.autoPlayedMoves.first.move.san, 'e5');
+      expect(result1.nextPrompt?.decision.id, 'dec-2');
+      expect(result1.nextPrompt?.currentNode, isNotNull);
+
+      // Play 2. Nf3
+      final result2 = practiceSession.submitMove(from: 'g1', to: 'f3');
+      expect(result2.isCorrect, isTrue);
+      expect(result2.autoPlayedMoves, hasLength(1));
+      expect(result2.autoPlayedMoves.first.move.san, 'Nc6');
+      expect(result2.nextPrompt?.decision.id, 'dec-3');
+      expect(result2.nextPrompt?.currentNode, isNotNull);
+
+      // Play 3. Bc4
+      final result3 = practiceSession.submitMove(from: 'f1', to: 'c4');
+      expect(result3.isCorrect, isTrue);
+      expect(result3.nextPrompt, isNull);
+      expect(practiceSession.isComplete, isTrue);
+    });
+
     test(
       'due-aware opponent selection: plays branch with due moves over branch with no due moves',
       () {

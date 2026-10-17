@@ -360,7 +360,7 @@ class _NothingDueView extends ConsumerWidget {
     // used to read as "Nothing due." over a bar showing thousands — when the
     // truth was that the user had simply not started. Name the other state
     // rather than letting an unstarted library look finished (INV-068).
-    final hasFreshMaterial = fresh > 0;
+    final hasFreshMaterial = state.totalFreshCount > 0;
     final displayTitle = state.isDailyLimitReached
         ? context.l10n.mobileReviewDailyLimitReached
         : hasFreshMaterial
@@ -435,7 +435,9 @@ class _NothingDueView extends ConsumerWidget {
                           )
                         else if (hasFreshMaterial)
                           Text(
-                            context.l10n.mobileReviewFreshOnlySubtext(fresh.toString()),
+                            context.l10n.mobileReviewFreshOnlySubtext(
+                              state.totalFreshCount.toString(),
+                            ),
                             style: TextStyle(fontFamily: SrsText.ui, fontSize: 18, color: c.ink2),
                           )
                         else if (state.timeUntilNextReview != null)

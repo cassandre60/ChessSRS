@@ -265,7 +265,8 @@ class _DueTally {
         unlockedDecisionIds.contains(d.id) ||
         unlockedDecisionIds.contains(d.canonicalId);
     final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
-    final isFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
+    final isFresh = status.isFresh;
+    final isQueueFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
 
     if (studyTotals.containsKey(d.studyId)) {
       studyTotals[d.studyId] = (studyTotals[d.studyId] ?? 0) + 1;
@@ -373,7 +374,7 @@ class _DueTally {
 
     if (!countable) return;
     if (isDue) totalDueCount++;
-    if (isFresh) totalFreshCount++;
+    if (isQueueFresh) totalFreshCount++;
   }
 
   DueCountsSummary toSummary() {

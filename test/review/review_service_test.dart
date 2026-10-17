@@ -380,6 +380,9 @@ void main() {
           );
           expect(dynSummary.totalDueCount, 0);
           expect(dynSummary.totalFreshCount, 0);
+          final prog = dynSummary.studyProgress[study.id];
+          expect(prog?.scheduledDecisions, 1);
+          expect(prog?.freshDecisions, 1);
 
           // When 3.e5 is unlocked into the active repertoire: it becomes fresh (new)
           await repo.unlockDecisions([decE5.id]);
@@ -389,6 +392,9 @@ void main() {
           );
           expect(unlockedSummary.totalDueCount, 0);
           expect(unlockedSummary.totalFreshCount, 1);
+          final unlockedProg = unlockedSummary.studyProgress[study.id];
+          expect(unlockedProg?.scheduledDecisions, 1);
+          expect(unlockedProg?.freshDecisions, 1);
         } finally {
           await db.close();
         }
