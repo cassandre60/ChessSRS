@@ -2,7 +2,10 @@
 
 Per-test audit of the suite at `a71a19096`. Read-only audit: no `flutter test`
 run for the audit itself (targeted machine heat), all strength claims from
-reading plus the machine screens committed alongside.
+reading plus the machine screens committed alongside. **Full per-test coverage
+completed in the second phase**: every one of the 182 files is attributed to a
+walker in `coverage.md`; the first commit's chapters hold the SRS core, the
+appended files hold the rest.
 
 ## Files
 
@@ -14,6 +17,9 @@ reading plus the machine screens committed alongside.
 | `periphery-timing.md` | sound/engine/socket/perf breadth pass + density list |
 | `verify.md` | what the audit itself ran: screens, gates, metrics — with the numbers |
 | `findings.md` | top 13 findings + dedup against 2026-10-16 audit and work ledger |
+| `coverage.md` | machine-built ledger: all 182 files / 1855 declarations, each attributed to its walker |
+| `rest-of-suite.md` | the completing pass: walker sessions, totals, new whole-test defects, timing addendum |
+| `weak-rows-{review,net,widgets,domain-1,domain-2,design,catchup}.md` | every grade 0/1 row verbatim + every grade 2 row one-lined, per walker (grade 3 rows counted per file) |
 
 Machine scripts (committed): `scripts/audit_2026-10/extract_tests.py`,
 `smell_tests.py`. Provenance gap recorded as an issue: the autonomous
@@ -30,9 +36,14 @@ IN_PROGRESS with the same numbers as this report's screens.
    duplicate/identical names. 298 raw flags; manual adjudication dropped the
    false-positive classes (most "bad-name" hits are legitimately-named error
    tests; real signal classes: vacuous, wall-clock, try-catch).
-3. Per-test read of the flagged tests plus representative samples per area,
-   concentrated on the SRS core (scheduler, coordinator, controller,
-   persistence, import). Areas only breadth-walked are stated in each chapter.
+3. Two-phase per-test walk. Phase 1: flagged tests plus full files of the SRS
+   core (scheduler, coordinator, controller, persistence, import) — committed
+   with the first commit. Phase 2: the remaining 174 files walked
+   test-by-test by dedicated read-only walker sessions, finishing with two
+   catch-up walkers and the author's walk of the last three files; the
+   completed attribution is `coverage.md` (182 files / 1855 declarations, zero
+   unattributed). Results beyond the wave-1 chapters: `rest-of-suite.md` +
+   `weak-rows-*.md`.
 4. Cross-check external evidence: `docs/AUTONOMOUS_WORK_LEDGER.md` rows,
    `docs/spec-conformance-audit-2026-10-16.md` F1-F6 (not re-opened), and
    `.gates/mutants.json` validity.
@@ -53,3 +64,9 @@ IN_PROGRESS with the same numbers as this report's screens.
 6. Pipeline hygiene: spec trace 44/44 clean; ratchet floor stale (1509 vs 1858);
    one inconsistent `.gates/mutants.json` entry; Stream-1 mutation evidence
    uncommitted.
+7. Full-walk addendum (phase 2): two new test-defect classes worth an issue —
+   a tautological scroll-axis guard (`log_screens_no_horizontal_scroll_test:52`,
+   passes for every direction) and the screenshot harness contradicting its own
+   header (no flutter_test_config.dart, so enabled runs DO compare goldens);
+   plus whole-file strengths worth keeping (engine_test 33/33, chess_clock,
+   email_login 25/25, account_preferences 11/12, startup_token_check 5/5).

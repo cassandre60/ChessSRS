@@ -75,6 +75,13 @@ in CI-visible tests — standing caveat docs/manual-test-log.md documents.
 ## Not verified
 
 - No `flutter test` for the audit itself (explicit user instruction or
-  machine heat): all strength claims are from READ + MUTANT/SHELL作品展.
-- Engine/socket/NNUE directories were not per-line walked; the timing-class
-  findings about them are from `rg` counts + per-file reads of the two worst files only.
+  machine heat): all strength claims are from READ + MUTANT/SHELL evidence.
+- Walker grade rows are transcribed digests from read-only walker sessions,
+  not independently re-derived line-by-line by the author; spot-re-verified
+  against source before committing: log_screens tautology (:52), screenshot
+  golden comparator vs header (matchesGoldenFile :253, no
+  flutter_test_config.dart, 120 committed PNGs), pgn_offload FLUTTER_TEST
+  short-circuit (:15/:26), sound_service completes-only (:28/:50),
+  engine_gauge text-only (:13), user_repository length-only (:408/:426),
+  srs_toast tone loop never passing `type:` (:138 — overruling the design
+  walker's 6/6 histogram). No test was executed to confirm any grade.

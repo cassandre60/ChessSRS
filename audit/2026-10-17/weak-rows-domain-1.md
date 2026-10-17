@@ -1,0 +1,126 @@
+# Weak rows — w2-domain/persistence/import/gates, part 1 of 2 (verbatim digest)
+
+Walker scope: domain leftovers, persistence leftovers, import leftovers, model/common, and the root/gates files. Grade 3 rows are counted per file in coverage.md. (The walker's first reply had a tally slip; the row-derived histogram is 0:1 / 1:34 / 2:174 / 3:164 over 373 tests.)
+
+## Grade 0/1 verbatim
+
+- sound_service_test.dart:50 "does not play sound when disabled" — 0: ignoring isSoundEnabled behaves identically; both branches only assert completes.
+- sound_service_test.dart:28 "can play when enabled without crashing" — 1: "completes" only; cannot tell audible from silent.
+- entities_test.dart:10 "Study.create generates unique ID/timestamps" — 1: create() boilerplate.
+- entities_test:19 "Two Study.create calls different IDs" — 1: uniqueness only.
+- entities_test:25 "copyWith updates specified fields" — 1: 2-field spot check.
+- entities_test:32 "equality is by value" — 1: two identical consts.
+- entities_test:41 "Chapter.create generates a unique ID" — 1: constructor smoke.
+- entities_test:54 "startingFen preserved" — 1: pass-through.
+- entities_test:62 "uci encodes from/to" — 1: trivial getter.
+- entities_test:67 "uci includes promotion" — 1: trivial getter.
+- entities_test:111 "different moves are not equal" — 1: negative boilerplate.
+- entities_test:122 "root node has no incomingMove" — 1: type-shape check.
+- entities_test:128 "addChild appends child" — 1: minimal tree op.
+- entities_test:149 "childForMove returns correct child" — 1: nonnull only, identity unverified.
+- entities_test:176 "create generates a unique ID" — 1: smoke.
+- repertoire_progress_test:42 "equality and hashCode" — 1: equality smoke.
+- review_scope_test:62 "side scope is aggregate" — 1: pure getter.
+- node_test:109 "add child" — 1: one append, nothing else.
+- node_test:126 "nodeAt" — 1: one path lookup.
+- node_test:141 "branchAt from root" — 1: minimal.
+- node_test:673 "isUserAdded false when param false" — 1: trivial param-off.
+- auth_repository_test.dart:240 "throws when no access token" — 1: throwsA(isA<Exception>()) is toothless.
+- auth_repository_test:388 "throws when body holds no token" — 1: loose Exception matcher.
+- user_repository_test.dart:16 "getUser minimal" — 1: type+id only; most mapping unasserted.
+- user_repository_test:104 "getPerfStats minimal" — 1: rating only; stat block blind.
+- user_repository_test:408 "getUsersStatuses minimal" — 1: empty-list only (author spot-check confirmed: `isA<IList>()` + isEmpty only).
+- user_repository_test:426 "getUsersStatuses full" — 1: length 3 only, per-item fields blind.
+- game_repository_test.dart:70 "game with clocks" — 1: 38 clocks/50 moves parsed, asserts id+eco only.
+- game_repository_test:133 "threeCheck game" — 1: big analysis JSON, asserts variant only.
+- app_test.dart:26 "system theme defaults to light" — 1: brightness-only assertion.
+- pgn_importer_test.dart:200 "study title is set" — 1: single pass-through field.
+- pgn_importer_test:205 "chapter root has no incoming move" — 1: single property.
+- pgn_importer_test:650 "chapters have independent root instances" — 1: `if (chapters.length >= 2)` guard = vacuous on broken import.
+- log_diagnostics_test.dart:144 "ChessFsrsScheduler emits diagnostic logs" — 1: log string + trivial repetitionCount==1.
+- forecast_test.dart:82 "single-ply lines are candidates" — 1: single-flag case.
+
+## Grade 2, one line each (part 1: domain + node/uci)
+
+- domain/chess_fsrs_scheduler_test.dart:33 — difficulty lapse/mean-revert — misses magnitude/ordering changes in fsrsNextDifficulty.
+- chess_fsrs:71 — stability power-law growth — misses a wrong-but-positive exponent.
+- chess_fsrs:85 — lapse regresses — misses magnitude-only retunes.
+- chess_fsrs:214 — tournament tighter intervals — misses still-tighter-but-wrong math.
+- chess_fsrs:233 — preview monotone — misses wrong-but-monotone ladder values.
+- chess_fsrs:273 — params unequal — misses ==/hashCode drifting in lockstep.
+- chess_fsrs:282 — params equal — misses added field with symmetric ==/hashCode.
+- domain/due_status_test.dart:20 — no state fresh — misses classifier drift beyond the null branch.
+- due_status:28 — past → due — misses near-boundary handling other than exact-now.
+- due_status:40 — ahead → scheduled — misses drift in other classification branches.
+- due_status:48 — no date presented → due — misses interactions with other state fields.
+- due_status:57 — lapsed due — misses swap of lapse vs repetition checks.
+- due_status:75 — partitions sum — misses all-zero-getters vacuity.
+- due_status:87 — fresh import all fresh — misses fraction side effects.
+- domain/entities_test.dart:49 — startingFen null default — misses other constructor defaults.
+- entities:72 — matches ignores san — misses promotion field never probed in matches.
+- entities:105 — equality ignores san — misses == drift on other fields.
+- entities:139 — multiple children RAV — misses ordering/dup beyond count=2.
+- entities:157 — childForMove null unknown — misses matches() changes confined to edge formats.
+- entities:166 — immutability after addChild — misses mutation of fields not re-read.
+- entities:186 — accepts true — misses accepts drift on promotion/castling edges.
+- entities:200 — accepts false — misses accept-regression on promoted-encoded moves.
+- entities:210 — expectedMoves unmodifiable — misses mutable leakage in sibling lists.
+- domain/position_knowledge_state_test.dart:11 — canonicalKey deterministic — misses exact-digest pinning.
+- position_knowledge:22 — key differs FEN/move — misses third-axis combinations.
+- position_knowledge:33 — position key deterministic — misses digest pinning.
+- position_knowledge:76 — differs by side — misses side×move interplay.
+- position_knowledge:85 — single-move unique — misses other same-move positions.
+- position_knowledge:98 — cold defaults/due — misses due nuance at other instants.
+- position_knowledge:111 — toReviewState — misses coinciding-value field remap.
+- domain/repertoire_progress_test.dart:9 — fractions/percentages — misses rounding drift at other values.
+- repertoire_progress:31 — operator+ — misses a lost field that cancels numerically.
+- domain/review_scope_test.dart:11 — side scope matches — misses aggregate/study interplay.
+- review_scope:25 — scopes don't filter side — misses a future scope kind.
+- review_scope:53 — distinct scopes — misses hashCode collision shape.
+- review_scope:68 — scopes carry colour — misses deeper side leak in one scope.
+- review_scope:104 — whitespace trimmed — misses inner-space normalization.
+- review_scope:116 — different openings don't match — misses null-family handling nuance.
+- review_scope:122 — Defence variants — misses other spelling pairs.
+- persistence/canonical_rekey_migration_test.dart:257 — skips never-reviewed — misses decision-B remap (row not re-read).
+- canonical_rekey:457 — no canonical id left alone — misses guard-branch side effects.
+- persistence/json_adapters_test.dart:10 — UTC round trip — misses local-time drift in rarely-used fields.
+- json_adapters:32 — event when UTC — misses result/oldState echo mutations.
+- json_adapters:66 — promotions round trip — misses exact encoder key order.
+- import/chapter_orientation_test.dart:11 — explicit header — misses casing beyond listed values.
+- chapter_orientation:34 — white keywords — misses 'vs Black'-class phrasings.
+- chapter_orientation:46 — repertoire keyword in player — misses priority vs title-keyword.
+- chapter_orientation:65 — defaults white — misses throw-on-no-clue case.
+- chapter_orientation:72 — auto-orientation e2e — misses exact decision counts/ordering.
+- import/opening_name_test.dart:12 — mention not family — misses containers beyond listed names.
+- opening_name:18 — real families kept — misses boundary families outside the 5.
+- opening_name:55 — unknown left alone — misses erase-on-unknown in other shapes.
+- opening_name:128 — detectFromFen — misses non-listed families.
+- model/common/node_test.dart:46 — nodesOn — misses paths beyond length 1.
+- node:55 — branchesOn simple — misses view divergence in rarer shapes.
+- node:85 — mainline — misses ply/clock fields.
+- node:95 — isOnMainline — misses deep paths.
+- node:117 — prepend child — misses duplicate-add semantics.
+- node:132 — nodeAtOrNull — misses deeper-path nulls.
+- node:147 — branchAt from branch — misses deep path arithmetic.
+- node:154 — updateAt — misses copy-vs-identity nuance.
+- node:183 — updateAll — misses sideline nodes.
+- node:228 — addNodeAt prepend — misses prepend path arithmetic.
+- node:260 — addNodesAt — misses insert positions beyond chain.
+- node:323 — deleteAt — misses subtree effects beyond count.
+- node:331 — deleteAt root element — misses path-state invalidation.
+- node:582 — makeLinePgn from root — duplicate of mainline case, no new shape.
+- node:643 — makeLinePgn empty — misses FEN-tag emission in empty case.
+- node:655 — isUserAdded mainline extend — misses flag on other caller shapes.
+- node:664 — isUserAdded sideline — misses deeper trees.
+- node:682 — inside sideline false — misses flag×prepend mixing.
+- node:692 — prepend=true mainline — misses willBeMainline conflict resolution.
+- node:708 — replace=true mainline — misses replace on non-mainline.
+- node:724 — prepend true not mainline — misses flag-priority variants.
+- node:741 — ViewNode mainline — misses edge shapes in child enumeration.
+- model/common/uci_test.dart:23 — size — misses non-ASCII path bytes.
+- uci:29 — head — misses malformed paths.
+- uci:35 — tail — misses multi-byte pairs.
+- uci:42 — penultimate — misses long paths.
+- uci:48 — last — misses malformed paths.
+- uci:54 — operator[] — misses aliasing/bounds beyond asserted throws.
+- uci:86 — contains — misses equal-prefix pair disambiguation.
