@@ -204,61 +204,71 @@ class ReviewSession {
         );
         _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
       }
+    }
 
-      // Index chapters holding decisions in queue
-      final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
-      for (final chapter in chapters) {
-        if (neededChapterIds.contains(chapter.id)) {
-          _indexChapter(chapter);
-        }
+    // Index chapters holding decisions in queue (both SRS and practice mode)
+    final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
+    for (final chapter in chapters) {
+      if (neededChapterIds.contains(chapter.id)) {
+        _indexChapter(chapter);
       }
-      if (neededChapterIds.length >= chapters.length) {
-        _allChaptersIndexed = true;
+    }
+    if (neededChapterIds.length >= chapters.length) {
+      _allChaptersIndexed = true;
+    }
+
+    // Presentation order (INV-066) applies within each bucket, so a chosen
+    // order reshuffles the work without letting fresh material overtake due.
+    void reorderWithinBuckets(int Function(RepertoireDecision, RepertoireDecision) compare) {
+      final dueCount = _unbufferedQueue.where((d) => !isFresh(d)).length;
+      if (dueCount >= _unbufferedQueue.length) {
+        _unbufferedQueue.sort(compare);
+        return;
+      }
+      final due = _unbufferedQueue.sublist(0, dueCount)..sort(compare);
+      final fresh = _unbufferedQueue.sublist(dueCount)..sort(compare);
+      _unbufferedQueue
+        ..clear()
+        ..addAll(due)
+        ..addAll(fresh);
+    }
+
+    // By-line order (INV-066): same set, walking study, chapter, tree order.
+    if (order == ReviewOrder.byLine) {
+      _ensureAllChaptersIndexed();
+      final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
+      var n = 0;
+      final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
+      int compareDecisions(RepertoireDecision a, RepertoireDecision b) {
+        var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
+        if (c != 0) return c;
+        c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
+          _chapters[b.chapterId]?.sourceOrder ?? 0,
+        );
+        if (c != 0) return c;
+        return (nodeOrder[a.nodeId] ?? 0).compareTo(nodeOrder[b.nodeId] ?? 0);
       }
 
-      // Presentation order (INV-066) applies within each bucket, so a chosen
-      // order reshuffles the work without letting fresh material overtake due.
-      void reorderWithinBuckets(int Function(RepertoireDecision, RepertoireDecision) compare) {
-        final dueCount = _unbufferedQueue.where((d) => !isFresh(d)).length;
-        if (dueCount >= _unbufferedQueue.length) {
-          _unbufferedQueue.sort(compare);
-          return;
-        }
-        final due = _unbufferedQueue.sublist(0, dueCount)..sort(compare);
-        final fresh = _unbufferedQueue.sublist(dueCount)..sort(compare);
-        _unbufferedQueue
-          ..clear()
-          ..addAll(due)
-          ..addAll(fresh);
+      if (mode == ReviewMode.srs) {
+        reorderWithinBuckets(compareDecisions);
+      } else {
+        _unbufferedQueue.sort(compareDecisions);
       }
+    }
 
-      // By-line order (INV-066): same set, walking study, chapter, tree order.
-      if (order == ReviewOrder.byLine) {
-        _ensureAllChaptersIndexed();
-        final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
-        var n = 0;
-        final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
-        reorderWithinBuckets((a, b) {
-          var c = (studyIndex[a.studyId] ?? 0).compareTo(studyIndex[b.studyId] ?? 0);
-          if (c != 0) return c;
-          c = (_chapters[a.chapterId]?.sourceOrder ?? 0).compareTo(
-            _chapters[b.chapterId]?.sourceOrder ?? 0,
-          );
-          if (c != 0) return c;
-          return (nodeOrder[a.nodeId] ?? 0).compareTo(nodeOrder[b.nodeId] ?? 0);
-        });
-      }
-
-      // Random order: same set, shuffled with the session Random. Each bucket is
-      // drawn independently and due is re-seated first, so shuffling reshuffles
-      // the work without letting fresh material overtake recall work.
-      if (order == ReviewOrder.random) {
+    // Random order: same set, shuffled with the session Random. Each bucket is
+    // drawn independently and due is re-seated first, so shuffling reshuffles
+    // the work without letting fresh material overtake recall work.
+    if (order == ReviewOrder.random) {
+      if (mode == ReviewMode.srs) {
         final due = _unbufferedQueue.where((d) => !isFresh(d)).toList()..shuffle(_random);
         final fresh = _unbufferedQueue.where(isFresh).toList()..shuffle(_random);
         _unbufferedQueue
           ..clear()
           ..addAll(due)
           ..addAll(fresh);
+      } else {
+        _unbufferedQueue.shuffle(_random);
       }
     }
 
@@ -791,7 +801,7 @@ class ReviewSession {
         // quota still caps prompted work — but it ends the walk instead of
         // auto-playing the user's own moves past it. In dynamic mode, locked
         // branches end the walk: unchosen moves must never be quizzed.
-        if (dynamicRepertoireMode && !isUnlocked) break;
+        if (mode == ReviewMode.srs && dynamicRepertoireMode && !isUnlocked) break;
         if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
         final shouldPrompt =
             (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
@@ -1024,7 +1034,7 @@ class ReviewSession {
     for (var i = chain.length - 1; i >= 0; i--) {
       final candidate = _decisionForNode[chain[i].id];
       if (candidate == null) continue;
-      if (dynamicRepertoireMode) {
+      if (mode == ReviewMode.srs && dynamicRepertoireMode) {
         final state = _reviewStates[candidate.canonicalId] ?? _reviewStates[candidate.id];
         final unlocked =
             unlockedDecisionIds.contains(candidate.id) ||
