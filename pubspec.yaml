@@ -2,7 +2,12 @@ name: chess_srs
 description: ChessSRS - local-first chess repertoire trainer (Lichess Mobile fork)
 publish_to: "none"
 
-version: 1.4.0+7 # Keep in step with the release tag; the About screen reads this.
+# This is the DEVELOPMENT version, not the released one. A release stamps its
+# tag into the artifacts it builds (--build-name/--build-number), so the About
+# screen and Android's versionName/versionCode come from the tag, never from
+# here. Bumping this per release is what let v1.5.0-v1.6.2 ship claiming to be
+# v1.4.0. Bump it only when a local build should read differently.
+version: 1.6.3+8
 
 environment:
   sdk: ^3.12.2
