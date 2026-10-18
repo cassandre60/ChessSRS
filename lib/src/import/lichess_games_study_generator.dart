@@ -1232,3 +1232,3507 @@ NormalMove? _parseBestFromComment(Position pos, String? comment) {
   final parsed = pos.parseSan(san);
   return parsed is NormalMove ? parsed : null;
 }
+
+LichessPlayedGame? _parseLichessGameJsonW1_1(
+  Map<String, dynamic> json, {
+  required String username,
+}) {
+  final normalizedUser = username.trim().toLowerCase();
+  if (normalizedUser.isEmpty) return null;
+
+  final Object? variantRaw = json['variant'];
+  final variantKey = switch (variantRaw) {
+    final String s => s,
+    final Map<String, dynamic> m => m['key'] as String? ?? 'standard',
+    _ => 'standard',
+  };
+  final initialFen = json['initialFen'] as String?;
+  final isStandardStart =
+      initialFen == null ||
+      initialFen.isEmpty ||
+      initialFen == 'startpos' ||
+      initialFen == kInitialFEN ||
+      initialFen.startsWith(kInitialBoardFEN);
+  if (variantKey != 'standard' && variantKey != 'chess' && variantKey != 'fromPosition') {
+    return null;
+  }
+  if (!isStandardStart) return null;
+
+  final Object? players = json['players'];
+  if (players is! Map<String, dynamic>) return null;
+
+  final whiteMatch = _matchesPlayer(players['white'], normalizedUser);
+  final blackMatch = _matchesPlayer(players['black'], normalizedUser);
+  final Side userSide;
+  if (whiteMatch) {
+    userSide = Side.white;
+  } else if (blackMatch) {
+    userSide = Side.black;
+  } else {
+    return null;
+  }
+
+  final movesStr = (json['moves'] as String?)?.trim() ?? '';
+  if (movesStr.isEmpty) return null;
+  final moves = movesStr.split(RegExp(r'\s+')).where((m) => m.isNotEmpty).toList();
+  if (moves.isEmpty) return null;
+
+  final winnerRaw = json['winner'] as String?;
+  final Side? winner = switch (winnerRaw) {
+    'white' => Side.white,
+    'black' => Side.black,
+    _ => null,
+  };
+
+  String? openingEco;
+  String? openingName;
+  final Object? openingRaw = json['opening'];
+  if (openingRaw is Map<String, dynamic>) {
+    openingEco = openingRaw['eco'] as String?;
+    openingName = openingRaw['name'] as String?;
+  }
+
+  List<LichessPlyAnalysis?>? analysis;
+  final Object? analysisRaw = json['analysis'];
+  if (analysisRaw is List<dynamic>) {
+    analysis = analysisRaw.map((Object? entry) {
+      if (entry is! Map<String, dynamic>) return null;
+      final Object? judgmentRaw = entry['judgment'];
+      String? judgmentName;
+      String? judgmentComment;
+      if (judgmentRaw is Map<String, dynamic>) {
+        judgmentName = judgmentRaw['name'] as String?;
+        judgmentComment = judgmentRaw['comment'] as String?;
+      }
+      return LichessPlyAnalysis(
+        cp: (entry['eval'] as num?)?.toInt(),
+        mate: (entry['mate'] as num?)?.toInt(),
+        bestUci: entry['best'] as String?,
+        variation: entry['variation'] as String?,
+        judgmentName: judgmentName,
+        judgmentComment: judgmentComment,
+      );
+    }).toList();
+  }
+
+  final createdMillis =
+      (json['createdAt'] as num?)?.toInt() ?? (json['lastMoveAt'] as num?)?.toInt();
+  final createdAt = createdMillis != null
+      ? DateTime.fromMillisecondsSinceEpoch(createdMillis, isUtc: true)
+      : null;
+
+  final id = (json['id'] as String?)?.trim() ?? '';
+
+  return LichessPlayedGame(
+    id: id.isEmpty ? '${createdMillis ?? moves.hashCode}' : id,
+    userSide: userSide,
+    moves: moves,
+    winner: winner,
+    openingEco: openingEco,
+    openingName: openingName,
+    analysis: analysis,
+    createdAt: createdAt,
+    variant: variantKey,
+    initialFen: initialFen,
+  );
+}
+
+List<LichessPlayedGame> _parseLichessGamesNdJsonW2_1(String ndjson, {required String username}) {
+  final games = <LichessPlayedGame>[];
+  for (final rawLine in const LineSplitter().convert(ndjson)) {
+    final line = rawLine.trim();
+    if (line.isEmpty) continue;
+    try {
+      final Object? decoded = jsonDecode(line);
+      if (decoded is Map<String, dynamic>) {
+        final parsed = parseLichessGameJson(decoded, username: username);
+        if (parsed != null) {
+          games.add(parsed);
+        }
+      }
+    } catch (_) {
+      // Skip malformed NDJSON lines without aborting the batch.
+    }
+  }
+  return games;
+}
+
+List<LichessPlayedGame> _parseLichessGamesNdJsonW2_2(String ndjson, {required String username}) {
+  final games = <LichessPlayedGame>[];
+  for (final rawLine in const LineSplitter().convert(ndjson)) {
+    final line = rawLine.trim();
+    if (line.isEmpty) continue;
+    try {
+      final Object? decoded = jsonDecode(line);
+      if (decoded is Map<String, dynamic>) {
+        final parsed = parseLichessGameJson(decoded, username: username);
+        if (parsed != null) {
+          games.add(parsed);
+        }
+      }
+    } catch (_) {
+      // Skip malformed NDJSON lines without aborting the batch.
+    }
+  }
+  return games;
+}
+
+bool _matchesPlayerW3_1(Object? playerObj, String normalizedUsername) {
+  if (playerObj is! Map<String, dynamic>) return false;
+  final Object? userObj = playerObj['user'];
+  if (userObj is Map<String, dynamic>) {
+    final id = (userObj['id'] as String?)?.trim().toLowerCase();
+    if (id == normalizedUsername) return true;
+    final name = (userObj['name'] as String?)?.trim().toLowerCase();
+    if (name == normalizedUsername) return true;
+  }
+  final directId = (playerObj['id'] as String?)?.trim().toLowerCase();
+  if (directId == normalizedUsername) return true;
+  final directName = (playerObj['name'] as String?)?.trim().toLowerCase();
+  return directName == normalizedUsername;
+}
+
+bool _matchesPlayerW3_2(Object? playerObj, String normalizedUsername) {
+  if (playerObj is! Map<String, dynamic>) return false;
+  final Object? userObj = playerObj['user'];
+  if (userObj is Map<String, dynamic>) {
+    final id = (userObj['id'] as String?)?.trim().toLowerCase();
+    if (id == normalizedUsername) return true;
+    final name = (userObj['name'] as String?)?.trim().toLowerCase();
+    if (name == normalizedUsername) return true;
+  }
+  final directId = (playerObj['id'] as String?)?.trim().toLowerCase();
+  if (directId == normalizedUsername) return true;
+  final directName = (playerObj['name'] as String?)?.trim().toLowerCase();
+  return directName == normalizedUsername;
+}
+
+bool _matchesPlayerW3_3(Object? playerObj, String normalizedUsername) {
+  if (playerObj is! Map<String, dynamic>) return false;
+  final Object? userObj = playerObj['user'];
+  if (userObj is Map<String, dynamic>) {
+    final id = (userObj['id'] as String?)?.trim().toLowerCase();
+    if (id == normalizedUsername) return true;
+    final name = (userObj['name'] as String?)?.trim().toLowerCase();
+    if (name == normalizedUsername) return true;
+  }
+  final directId = (playerObj['id'] as String?)?.trim().toLowerCase();
+  if (directId == normalizedUsername) return true;
+  final directName = (playerObj['name'] as String?)?.trim().toLowerCase();
+  return directName == normalizedUsername;
+}
+
+List<GeneratedOpeningStudy> _generateOpeningStudiesFromGamesW4_1(
+  List<LichessPlayedGame> games, {
+  Side? sideFilter,
+  PolyglotBook? book,
+  int maxPly = 24,
+  int maxOpponentBranches = 4,
+}) {
+  final grouped = <String, _OpeningGameGroup>{};
+
+  for (final game in games) {
+    if (sideFilter != null && game.userSide != sideFilter) continue;
+    final replayed = _replayGameSteps(game, maxPly: maxPly);
+    if (replayed.isEmpty) continue;
+
+    final hasUserMove = replayed.any((s) => s.posBefore.turn == game.userSide);
+    if (!hasUserMove) continue;
+
+    final openingFamily = _classifyOpeningFamily(game, replayed);
+    final variationTitle = _extractVariationTitle(game.openingName, openingFamily);
+    final key = '${game.userSide.name}::$openingFamily';
+
+    final group = grouped.putIfAbsent(
+      key,
+      () => _OpeningGameGroup(openingFamily: openingFamily, side: game.userSide),
+    );
+    group.games.add(_ReplayedGame(source: game, variationTitle: variationTitle, steps: replayed));
+  }
+
+  final studies = <GeneratedOpeningStudy>[];
+  for (final group in grouped.values) {
+    final generated = _buildStudyForOpeningGroup(
+      group,
+      book: book,
+      maxPly: maxPly,
+      maxOpponentBranches: maxOpponentBranches,
+    );
+    if (generated != null) {
+      studies.add(generated);
+    }
+  }
+
+  studies.sort((a, b) {
+    final fixCompare = b.mistakeFixes.length.compareTo(a.mistakeFixes.length);
+    if (fixCompare != 0) return fixCompare;
+    final countCompare = b.gameCount.compareTo(a.gameCount);
+    if (countCompare != 0) return countCompare;
+    return a.title.compareTo(b.title);
+  });
+
+  return studies;
+}
+
+List<GeneratedOpeningStudy> _generateOpeningStudiesFromGamesW4_2(
+  List<LichessPlayedGame> games, {
+  Side? sideFilter,
+  PolyglotBook? book,
+  int maxPly = 24,
+  int maxOpponentBranches = 4,
+}) {
+  final grouped = <String, _OpeningGameGroup>{};
+
+  for (final game in games) {
+    if (sideFilter != null && game.userSide != sideFilter) continue;
+    final replayed = _replayGameSteps(game, maxPly: maxPly);
+    if (replayed.isEmpty) continue;
+
+    final hasUserMove = replayed.any((s) => s.posBefore.turn == game.userSide);
+    if (!hasUserMove) continue;
+
+    final openingFamily = _classifyOpeningFamily(game, replayed);
+    final variationTitle = _extractVariationTitle(game.openingName, openingFamily);
+    final key = '${game.userSide.name}::$openingFamily';
+
+    final group = grouped.putIfAbsent(
+      key,
+      () => _OpeningGameGroup(openingFamily: openingFamily, side: game.userSide),
+    );
+    group.games.add(_ReplayedGame(source: game, variationTitle: variationTitle, steps: replayed));
+  }
+
+  final studies = <GeneratedOpeningStudy>[];
+  for (final group in grouped.values) {
+    final generated = _buildStudyForOpeningGroup(
+      group,
+      book: book,
+      maxPly: maxPly,
+      maxOpponentBranches: maxOpponentBranches,
+    );
+    if (generated != null) {
+      studies.add(generated);
+    }
+  }
+
+  studies.sort((a, b) {
+    final fixCompare = b.mistakeFixes.length.compareTo(a.mistakeFixes.length);
+    if (fixCompare != 0) return fixCompare;
+    final countCompare = b.gameCount.compareTo(a.gameCount);
+    if (countCompare != 0) return countCompare;
+    return a.title.compareTo(b.title);
+  });
+
+  return studies;
+}
+
+List<GeneratedOpeningStudy> _generateOpeningStudiesFromGamesW4_3(
+  List<LichessPlayedGame> games, {
+  Side? sideFilter,
+  PolyglotBook? book,
+  int maxPly = 24,
+  int maxOpponentBranches = 4,
+}) {
+  final grouped = <String, _OpeningGameGroup>{};
+
+  for (final game in games) {
+    if (sideFilter != null && game.userSide != sideFilter) continue;
+    final replayed = _replayGameSteps(game, maxPly: maxPly);
+    if (replayed.isEmpty) continue;
+
+    final hasUserMove = replayed.any((s) => s.posBefore.turn == game.userSide);
+    if (!hasUserMove) continue;
+
+    final openingFamily = _classifyOpeningFamily(game, replayed);
+    final variationTitle = _extractVariationTitle(game.openingName, openingFamily);
+    final key = '${game.userSide.name}::$openingFamily';
+
+    final group = grouped.putIfAbsent(
+      key,
+      () => _OpeningGameGroup(openingFamily: openingFamily, side: game.userSide),
+    );
+    group.games.add(_ReplayedGame(source: game, variationTitle: variationTitle, steps: replayed));
+  }
+
+  final studies = <GeneratedOpeningStudy>[];
+  for (final group in grouped.values) {
+    final generated = _buildStudyForOpeningGroup(
+      group,
+      book: book,
+      maxPly: maxPly,
+      maxOpponentBranches: maxOpponentBranches,
+    );
+    if (generated != null) {
+      studies.add(generated);
+    }
+  }
+
+  studies.sort((a, b) {
+    final fixCompare = b.mistakeFixes.length.compareTo(a.mistakeFixes.length);
+    if (fixCompare != 0) return fixCompare;
+    final countCompare = b.gameCount.compareTo(a.gameCount);
+    if (countCompare != 0) return countCompare;
+    return a.title.compareTo(b.title);
+  });
+
+  return studies;
+}
+
+List<GeneratedOpeningStudy> _generateOpeningStudiesFromGamesW4_4(
+  List<LichessPlayedGame> games, {
+  Side? sideFilter,
+  PolyglotBook? book,
+  int maxPly = 24,
+  int maxOpponentBranches = 4,
+}) {
+  final grouped = <String, _OpeningGameGroup>{};
+
+  for (final game in games) {
+    if (sideFilter != null && game.userSide != sideFilter) continue;
+    final replayed = _replayGameSteps(game, maxPly: maxPly);
+    if (replayed.isEmpty) continue;
+
+    final hasUserMove = replayed.any((s) => s.posBefore.turn == game.userSide);
+    if (!hasUserMove) continue;
+
+    final openingFamily = _classifyOpeningFamily(game, replayed);
+    final variationTitle = _extractVariationTitle(game.openingName, openingFamily);
+    final key = '${game.userSide.name}::$openingFamily';
+
+    final group = grouped.putIfAbsent(
+      key,
+      () => _OpeningGameGroup(openingFamily: openingFamily, side: game.userSide),
+    );
+    group.games.add(_ReplayedGame(source: game, variationTitle: variationTitle, steps: replayed));
+  }
+
+  final studies = <GeneratedOpeningStudy>[];
+  for (final group in grouped.values) {
+    final generated = _buildStudyForOpeningGroup(
+      group,
+      book: book,
+      maxPly: maxPly,
+      maxOpponentBranches: maxOpponentBranches,
+    );
+    if (generated != null) {
+      studies.add(generated);
+    }
+  }
+
+  studies.sort((a, b) {
+    final fixCompare = b.mistakeFixes.length.compareTo(a.mistakeFixes.length);
+    if (fixCompare != 0) return fixCompare;
+    final countCompare = b.gameCount.compareTo(a.gameCount);
+    if (countCompare != 0) return countCompare;
+    return a.title.compareTo(b.title);
+  });
+
+  return studies;
+}
+
+List<_ReplayedStep> _replayGameStepsW5_1(LichessPlayedGame game, {required int maxPly}) {
+  final steps = <_ReplayedStep>[];
+  Position pos = Chess.initial;
+  final limit = math.min(game.moves.length, maxPly);
+
+  for (var i = 0; i < limit; i++) {
+    final san = game.moves[i];
+    final parsed = pos.parseSan(san);
+    if (parsed is! NormalMove) break;
+
+    final repMove = normalmoveToRepertoireMove(parsed, pos);
+    final nextPos = pos.playUnchecked(parsed);
+    final evalBefore = i > 0 ? game.analysis?.elementAtOrNull(i - 1) : null;
+    final evalAfter = game.analysis?.elementAtOrNull(i);
+
+    steps.add(
+      _ReplayedStep(
+        plyIndex: i,
+        posBefore: pos,
+        repertoireMove: repMove,
+        posAfter: nextPos,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
+      ),
+    );
+    pos = nextPos;
+  }
+
+  return steps;
+}
+
+List<_ReplayedStep> _replayGameStepsW5_2(LichessPlayedGame game, {required int maxPly}) {
+  final steps = <_ReplayedStep>[];
+  Position pos = Chess.initial;
+  final limit = math.min(game.moves.length, maxPly);
+
+  for (var i = 0; i < limit; i++) {
+    final san = game.moves[i];
+    final parsed = pos.parseSan(san);
+    if (parsed is! NormalMove) break;
+
+    final repMove = normalmoveToRepertoireMove(parsed, pos);
+    final nextPos = pos.playUnchecked(parsed);
+    final evalBefore = i > 0 ? game.analysis?.elementAtOrNull(i - 1) : null;
+    final evalAfter = game.analysis?.elementAtOrNull(i);
+
+    steps.add(
+      _ReplayedStep(
+        plyIndex: i,
+        posBefore: pos,
+        repertoireMove: repMove,
+        posAfter: nextPos,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
+      ),
+    );
+    pos = nextPos;
+  }
+
+  return steps;
+}
+
+List<_ReplayedStep> _replayGameStepsW5_3(LichessPlayedGame game, {required int maxPly}) {
+  final steps = <_ReplayedStep>[];
+  Position pos = Chess.initial;
+  final limit = math.min(game.moves.length, maxPly);
+
+  for (var i = 0; i < limit; i++) {
+    final san = game.moves[i];
+    final parsed = pos.parseSan(san);
+    if (parsed is! NormalMove) break;
+
+    final repMove = normalmoveToRepertoireMove(parsed, pos);
+    final nextPos = pos.playUnchecked(parsed);
+    final evalBefore = i > 0 ? game.analysis?.elementAtOrNull(i - 1) : null;
+    final evalAfter = game.analysis?.elementAtOrNull(i);
+
+    steps.add(
+      _ReplayedStep(
+        plyIndex: i,
+        posBefore: pos,
+        repertoireMove: repMove,
+        posAfter: nextPos,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
+      ),
+    );
+    pos = nextPos;
+  }
+
+  return steps;
+}
+
+List<_ReplayedStep> _replayGameStepsW5_4(LichessPlayedGame game, {required int maxPly}) {
+  final steps = <_ReplayedStep>[];
+  Position pos = Chess.initial;
+  final limit = math.min(game.moves.length, maxPly);
+
+  for (var i = 0; i < limit; i++) {
+    final san = game.moves[i];
+    final parsed = pos.parseSan(san);
+    if (parsed is! NormalMove) break;
+
+    final repMove = normalmoveToRepertoireMove(parsed, pos);
+    final nextPos = pos.playUnchecked(parsed);
+    final evalBefore = i > 0 ? game.analysis?.elementAtOrNull(i - 1) : null;
+    final evalAfter = game.analysis?.elementAtOrNull(i);
+
+    steps.add(
+      _ReplayedStep(
+        plyIndex: i,
+        posBefore: pos,
+        repertoireMove: repMove,
+        posAfter: nextPos,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
+      ),
+    );
+    pos = nextPos;
+  }
+
+  return steps;
+}
+
+List<_ReplayedStep> _replayGameStepsW5_5(LichessPlayedGame game, {required int maxPly}) {
+  final steps = <_ReplayedStep>[];
+  Position pos = Chess.initial;
+  final limit = math.min(game.moves.length, maxPly);
+
+  for (var i = 0; i < limit; i++) {
+    final san = game.moves[i];
+    final parsed = pos.parseSan(san);
+    if (parsed is! NormalMove) break;
+
+    final repMove = normalmoveToRepertoireMove(parsed, pos);
+    final nextPos = pos.playUnchecked(parsed);
+    final evalBefore = i > 0 ? game.analysis?.elementAtOrNull(i - 1) : null;
+    final evalAfter = game.analysis?.elementAtOrNull(i);
+
+    steps.add(
+      _ReplayedStep(
+        plyIndex: i,
+        posBefore: pos,
+        repertoireMove: repMove,
+        posAfter: nextPos,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
+      ),
+    );
+    pos = nextPos;
+  }
+
+  return steps;
+}
+
+String _classifyOpeningFamilyW6_1(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _classifyOpeningFamilyW6_2(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _classifyOpeningFamilyW6_3(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _classifyOpeningFamilyW6_4(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _classifyOpeningFamilyW6_5(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _classifyOpeningFamilyW6_6(LichessPlayedGame game, List<_ReplayedStep> steps) {
+  final rawName = game.openingName?.trim();
+  if (rawName != null && rawName.isNotEmpty) {
+    final simplified = simplifyOpeningName(rawName);
+    if (simplified.isNotEmpty && !mentionsOpeningButIsNotFamily(simplified)) {
+      return simplified;
+    }
+  }
+
+  final rawEco = game.openingEco?.trim().toUpperCase();
+  if (rawEco != null && rawEco.isNotEmpty) {
+    final fromEco = ecoToOpeningFamily(rawEco);
+    if (fromEco != null && !mentionsOpeningButIsNotFamily(fromEco)) {
+      return fromEco;
+    }
+  }
+
+  var root = RepertoireNode(id: 'root', fen: kInitialFEN, fenKey: fenKey(kInitialFEN));
+  final nodes = <RepertoireNode>[];
+  final depth = math.min(steps.length, 8);
+  for (var i = 0; i < depth; i++) {
+    nodes.add(
+      RepertoireNode(
+        id: 'n$i',
+        fen: steps[i].posAfter.fen,
+        fenKey: fenKey(steps[i].posAfter.fen),
+        incomingMove: steps[i].repertoireMove,
+      ),
+    );
+  }
+  for (var i = nodes.length - 2; i >= 0; i--) {
+    nodes[i] = nodes[i].copyWith(children: [nodes[i + 1]]);
+  }
+  if (nodes.isNotEmpty) {
+    root = root.copyWith(children: [nodes.first]);
+  }
+  final fromMoves = detectOpeningFamilyFromMoves(root);
+  if (fromMoves != null && !mentionsOpeningButIsNotFamily(fromMoves)) {
+    return fromMoves;
+  }
+
+  final firstSan = steps.first.repertoireMove.san ?? '';
+  final secondSan = steps.length > 1 ? steps[1].repertoireMove.san ?? '' : '';
+  if (firstSan == 'e4' && secondSan == 'e5') return 'Open Game';
+  if (firstSan == 'e4') return "King's Pawn Game";
+  if (firstSan == 'd4') return "Queen's Pawn Game";
+  if (firstSan == 'c4') return 'English Opening';
+  if (firstSan == 'Nf3') return 'Réti Opening';
+  return 'Flank Opening';
+}
+
+String _extractVariationTitleW7_1(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_2(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_3(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_4(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_5(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_6(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+String _extractVariationTitleW7_7(String? rawOpeningName, String openingFamily) {
+  if (rawOpeningName == null || rawOpeningName.trim().isEmpty) {
+    return 'Main Lines';
+  }
+  final colonIdx = rawOpeningName.indexOf(':');
+  if (colonIdx >= 0 && colonIdx + 1 < rawOpeningName.length) {
+    final sub = rawOpeningName.substring(colonIdx + 1).trim();
+    final commaIdx = sub.indexOf(',');
+    final cleaned = (commaIdx > 0 ? sub.substring(0, commaIdx) : sub).trim();
+    if (cleaned.isNotEmpty) return cleaned;
+  }
+  final trimmed = rawOpeningName.trim();
+  if (trimmed.toLowerCase() != openingFamily.toLowerCase()) {
+    return trimmed;
+  }
+  return 'Main Lines';
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_1(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_2(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_3(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_4(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_5(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_6(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_7(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
+
+GeneratedOpeningStudy? _buildStudyForOpeningGroupW8_8(
+  _OpeningGameGroup group, {
+  required PolyglotBook? book,
+  required int maxPly,
+  required int maxOpponentBranches,
+}) {
+  final userNodes = <String, _UserNodeStats>{};
+  final allOppMovesByKey = <String, Map<String, ({RepertoireMove move, int count})>>{};
+  DateTime? latestGameAt;
+
+  for (final game in group.games) {
+    final createdAt = game.source.createdAt;
+    if (createdAt != null && (latestGameAt == null || createdAt.isAfter(latestGameAt))) {
+      latestGameAt = createdAt;
+    }
+
+    for (final step in game.steps) {
+      final key = fenKey(step.posBefore.fen);
+      if (step.posBefore.turn == group.side) {
+        final nodeStats = userNodes.putIfAbsent(
+          key,
+          () => _UserNodeStats(fenKeyStr: key, position: step.posBefore, ply: step.plyIndex + 1),
+        );
+        final moveStats = nodeStats.playedMoves.putIfAbsent(
+          step.repertoireMove.uci,
+          () => _PlayedMoveStats(move: step.repertoireMove),
+        );
+        moveStats.playCount++;
+        if (game.source.winner == group.side) {
+          moveStats.wins++;
+        } else if (game.source.winner == null) {
+          moveStats.draws++;
+        } else {
+          moveStats.losses++;
+        }
+
+        final detected = _detectStepMistake(step, group.side);
+        if (detected != null) {
+          switch (detected.severity) {
+            case MistakeSeverity.inaccuracy:
+              moveStats.inaccuracyCount++;
+            case MistakeSeverity.mistake:
+              moveStats.mistakeCount++;
+            case MistakeSeverity.blunder:
+              moveStats.blunderCount++;
+          }
+          final bestMove = detected.bestMove;
+          if (bestMove != null && bestMove.uci != step.repertoireMove.uci) {
+            final fixStats = nodeStats.recommendedFixes.putIfAbsent(
+              bestMove.uci,
+              () => _RecommendedFixStats(move: bestMove, severity: detected.severity),
+            );
+            fixStats.count++;
+            if (detected.severity.index > fixStats.severity.index) {
+              fixStats.severity = detected.severity;
+            }
+          }
+        }
+      } else {
+        final oppMap = allOppMovesByKey.putIfAbsent(key, () => {});
+        final prev = oppMap[step.repertoireMove.uci];
+        oppMap[step.repertoireMove.uci] = (
+          move: step.repertoireMove,
+          count: (prev?.count ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  if (userNodes.isEmpty) return null;
+
+  final candidateDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    candidateDecisions[entry.key] = _resolveCandidateDecision(entry.value, book: book);
+  }
+
+  // Protect trunk moves when an early move was only a mild inaccuracy (or isolated
+  // mistake) and continuing down the player's actual move reaches a deeper serious
+  // mistake in the same line.
+  final resolvedDecisions = <String, _ResolvedUserDecision>{};
+  for (final entry in userNodes.entries) {
+    final nodeStats = entry.value;
+    final candidate = candidateDecisions[entry.key]!;
+    final candidateFix = candidate.fix;
+    final mostPlayed = nodeStats.mostPlayed;
+    if (candidateFix != null && candidate.chosenMove.uci != mostPlayed.move.uci) {
+      final parsedMost = Move.parse(mostPlayed.move.uci);
+      if (parsedMost is NormalMove && nodeStats.position.isLegal(parsedMost)) {
+        final afterMost = nodeStats.position.playUnchecked(parsedMost);
+        final hasDeeperSeriousFix = _subtreeHasSeriousMistake(
+          afterMost,
+          side: group.side,
+          userNodes: userNodes,
+          allOppMovesByKey: allOppMovesByKey,
+          candidateDecisions: candidateDecisions,
+          visited: {entry.key},
+        );
+        final isEarlyTrunk = nodeStats.ply <= 2;
+        final isMildMistake = candidateFix.severity == MistakeSeverity.inaccuracy;
+        if (hasDeeperSeriousFix && (isEarlyTrunk || isMildMistake)) {
+          resolvedDecisions[entry.key] = _ResolvedUserDecision(chosenMove: mostPlayed.move);
+          continue;
+        }
+      }
+    }
+    resolvedDecisions[entry.key] = candidate;
+  }
+
+  // Partition games into chapters by sub-variation, keeping variations with mistakes
+  // or multiple games as dedicated chapters and merging singletons into Main Lines.
+  final byVariation = <String, List<_ReplayedGame>>{};
+  for (final game in group.games) {
+    byVariation.putIfAbsent(game.variationTitle, () => []).add(game);
+  }
+
+  final chapterBuckets = <String, List<_ReplayedGame>>{};
+  if (byVariation.length == 1) {
+    final singleEntry = byVariation.entries.first;
+    final chapterName = singleEntry.key == 'Main Lines' ? group.openingFamily : singleEntry.key;
+    chapterBuckets[chapterName] = singleEntry.value;
+  } else {
+    for (final entry in byVariation.entries) {
+      final hasFix = _gamesInBucketTouchFix(
+        entry.value,
+        side: group.side,
+        resolvedDecisions: resolvedDecisions,
+      );
+      if (hasFix || entry.value.length >= 2 || entry.key == 'Main Lines') {
+        chapterBuckets[entry.key] = [...?chapterBuckets[entry.key], ...entry.value];
+      } else {
+        chapterBuckets['Main Lines'] = [...?chapterBuckets['Main Lines'], ...entry.value];
+      }
+    }
+  }
+
+  final sortedChapterEntries = chapterBuckets.entries.toList()
+    ..sort((a, b) {
+      final aFixes = _countFixesInBucket(a.value, group.side, resolvedDecisions);
+      final bFixes = _countFixesInBucket(b.value, group.side, resolvedDecisions);
+      final fixCmp = bFixes.compareTo(aFixes);
+      if (fixCmp != 0) return fixCmp;
+      return b.value.length.compareTo(a.value.length);
+    });
+
+  final studyId = 'generated-${group.side.name}-${group.openingFamily.hashCode}';
+  final sideLabel = group.side == Side.white ? 'White' : 'Black';
+  final studyTitle = '${group.openingFamily} ($sideLabel)';
+
+  final chapters = <Chapter>[];
+  final collectedFixesByKey = <String, OpeningMistakeFix>{};
+  var nodeCounter = 0;
+
+  for (var idx = 0; idx < sortedChapterEntries.length && idx < 10; idx++) {
+    final entry = sortedChapterEntries[idx];
+    final chapterOppMoves = <String, Map<String, ({RepertoireMove move, int count})>>{};
+    final chapterUserKeys = <String>{};
+
+    for (final game in entry.value) {
+      for (final step in game.steps) {
+        final key = fenKey(step.posBefore.fen);
+        if (step.posBefore.turn == group.side) {
+          chapterUserKeys.add(key);
+        } else {
+          final map = chapterOppMoves.putIfAbsent(key, () => {});
+          final prev = map[step.repertoireMove.uci];
+          map[step.repertoireMove.uci] = (move: step.repertoireMove, count: (prev?.count ?? 0) + 1);
+        }
+      }
+    }
+
+    List<RepertoireNode> buildChildren(Position pos, Set<String> visited, int depth) {
+      if (depth >= maxPly) return const [];
+      final key = fenKey(pos.fen);
+      if (visited.contains(key)) return const [];
+      final nextVisited = {...visited, key};
+
+      if (pos.turn == group.side) {
+        if (!chapterUserKeys.contains(key) && !userNodes.containsKey(key)) {
+          return const [];
+        }
+        final decision = resolvedDecisions[key];
+        if (decision == null) return const [];
+
+        final parsed = _parseUciMove(pos, decision.chosenMove.uci);
+        if (parsed == null) return const [];
+        final nextPos = pos.playUnchecked(parsed);
+        final repMove = normalmoveToRepertoireMove(parsed, pos);
+
+        final decisionFix = decision.fix;
+        if (decisionFix != null) {
+          collectedFixesByKey[key] = decisionFix;
+        }
+
+        final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+        nodeCounter++;
+        return [
+          RepertoireNode(
+            id: 'gen-node-$nodeCounter',
+            fen: nextPos.fen,
+            fenKey: fenKey(nextPos.fen),
+            incomingMove: repMove,
+            comment: decision.comment,
+            children: grandChildren,
+          ),
+        ];
+      } else {
+        final oppMap = chapterOppMoves[key] ?? allOppMovesByKey[key];
+        if (oppMap == null || oppMap.isEmpty) return const [];
+
+        final candidates = oppMap.values.toList();
+        candidates.sort((a, b) {
+          final aHasFix = _oppMoveLeadsToFix(
+            pos,
+            a.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          final bHasFix = _oppMoveLeadsToFix(
+            pos,
+            b.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (aHasFix != bHasFix) return bHasFix ? 1 : -1;
+          return b.count.compareTo(a.count);
+        });
+
+        final children = <RepertoireNode>[];
+        for (final cand in candidates) {
+          final leadsToFix = _oppMoveLeadsToFix(
+            pos,
+            cand.move.uci,
+            side: group.side,
+            resolvedDecisions: resolvedDecisions,
+            oppMovesByKey: chapterOppMoves,
+            visited: nextVisited,
+          );
+          if (children.length >= maxOpponentBranches && !leadsToFix) {
+            continue;
+          }
+          final parsed = _parseUciMove(pos, cand.move.uci);
+          if (parsed == null) continue;
+          final nextPos = pos.playUnchecked(parsed);
+          final repMove = normalmoveToRepertoireMove(parsed, pos);
+          final grandChildren = buildChildren(nextPos, nextVisited, depth + 1);
+          // Trim trailing opponent moves so every line ends on a user decision.
+          if (grandChildren.isEmpty) continue;
+
+          nodeCounter++;
+          children.add(
+            RepertoireNode(
+              id: 'gen-node-$nodeCounter',
+              fen: nextPos.fen,
+              fenKey: fenKey(nextPos.fen),
+              incomingMove: repMove,
+              children: grandChildren,
+            ),
+          );
+        }
+        return children;
+      }
+    }
+
+    final rootChildren = buildChildren(Chess.initial, const {}, 0);
+    if (rootChildren.isEmpty) continue;
+
+    nodeCounter++;
+    final rootNode = RepertoireNode(
+      id: 'gen-root-$nodeCounter',
+      fen: kInitialFEN,
+      fenKey: fenKey(kInitialFEN),
+      children: rootChildren,
+    );
+
+    chapters.add(
+      Chapter(
+        id: 'gen-chapter-${chapters.length + 1}',
+        studyId: studyId,
+        title: entry.key,
+        sourceOrder: chapters.length,
+        root: rootNode,
+        orientation: group.side,
+        opening: group.openingFamily,
+      ),
+    );
+  }
+
+  if (chapters.isEmpty) return null;
+
+  final study = Study(
+    id: studyId,
+    title: studyTitle,
+    pgnHash: '',
+    createdAt: latestGameAt ?? DateTime.utc(2026),
+  );
+  final pgnText = studyToPgn(study, chapters);
+
+  final sortedFixes = collectedFixesByKey.values.toList()..sort((a, b) => a.ply.compareTo(b.ply));
+
+  return GeneratedOpeningStudy(
+    title: studyTitle,
+    openingFamily: group.openingFamily,
+    side: group.side,
+    pgnText: pgnText,
+    gameCount: group.games.length,
+    mistakeFixes: sortedFixes,
+    chapterCount: chapters.length,
+    latestGameAt: latestGameAt,
+  );
+}
