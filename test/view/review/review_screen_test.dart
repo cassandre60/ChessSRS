@@ -338,7 +338,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Play incorrect move: e2 -> e4 instead of d2 -> d4
       await playMove(tester, 'e2', 'e4');
@@ -399,7 +399,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Prompt state shows no escape hatch: the button must not leak a way out of recall.
       expect(find.text('Open in analysis'), findsNothing);
@@ -412,8 +412,7 @@ void main() {
       expect(find.text('Open in analysis'), findsOneWidget);
 
       await tester.tap(find.text('Open in analysis'));
-      await pumpAsync(tester, 200);
-      await tester.pump(const Duration(milliseconds: 500));
+      await pumpUntilFound(tester, find.byType(AnalysisScreen));
 
       // Analysis opens at the drilled decision point: the lapse happened on move 1, so
       // boardPosition is still the start position (the wrong e4 never became state).
@@ -453,7 +452,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Skip'));
 
       // Prompt state still says Skip: recall has not failed yet.
       expect(find.text('Skip'), findsOneWidget);
@@ -509,7 +508,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // While the question is open there is no verdict to announce.
       expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
@@ -524,13 +523,13 @@ void main() {
 
       // Past it, the next question is open and the verdict is gone rather than lingering.
       await tester.tap(find.widgetWithText(SrsPillButton, 'Continue'));
-      await pumpAsync(tester, 400);
+      await pumpUntilGone(tester, find.bySemanticsLabel(RegExp('Correct')));
       expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
 
       // A wrong move, announced with the study move. The study's second move is Nf3, so
       // d4 is the mistake here and Nf3 is what should have been played.
       await playMove(tester, 'd2', 'd4');
-      await pumpAsync(tester, 100);
+      await pumpUntilFound(tester, find.bySemanticsLabel('Not this move. The study move is Nf3.'));
       expect(find.bySemanticsLabel('Not this move. The study move is Nf3.'), findsOneWidget);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
@@ -566,7 +565,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // The board's own semantics node, not the meta text above it: both speak of the same
       // chapter, so this must be read off the Chessboard's node specifically.
@@ -607,7 +606,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Play the correct move; the note pauses advancement and the overlay goes up.
       await playMove(tester, 'e2', 'e4');
@@ -655,7 +654,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // A wrong move puts the study move in the answer slot. The notation line carries the same
       // SAN through the same widget, so one node is the minimum, not exactly one.
