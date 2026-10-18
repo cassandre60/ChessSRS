@@ -45,11 +45,28 @@ void main() {
       );
     }
 
-    // No scrollable in the tree runs on the horizontal axis.
+    // The design forbids horizontal *layout* scrolling. Flutter's own text-field caret
+    // scrolling is horizontal and is not a layout scrollable, so Scrollables inside an
+    // EditableText/TextField are excluded; the rest must be vertical — listed positively,
+    // because the old anyOf(isNot(right), isNot(left)) was true for every axis direction
+    // and could not fail on a reintroduced horizontal scrollable.
+    bool isTextFieldScrollable(Element element) {
+      var insideField = false;
+      element.visitAncestorElements((ancestor) {
+        if (ancestor.widget is TextField || ancestor.widget is EditableText) {
+          insideField = true;
+          return false;
+        }
+        return true;
+      });
+      return insideField;
+    }
+
     for (final element in find.byType(Scrollable).evaluate()) {
+      if (isTextFieldScrollable(element)) continue;
       expect(
         (element.widget as Scrollable).axisDirection,
-        anyOf(isNot(AxisDirection.right), isNot(AxisDirection.left)),
+        anyOf(AxisDirection.up, AxisDirection.down),
         reason: 'a horizontal scrollable was reintroduced',
       );
     }

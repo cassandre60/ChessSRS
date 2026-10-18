@@ -2086,5 +2086,370 @@ void main() {
         }
       },
     );
+
+    test('an unknown hash does not claim the first unhashed study during backfill', () async {
+      // SPEC INV-003. The backfill walks unhashed rows and may only claim a
+      // match when the computed hash equals the queried one; claiming the
+      // first unhashed row unconditionally would hand an import the wrong
+      // study.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final result = importPgn(
+          '[Orientation "white"]\n\n1. e4 *',
+          studyTitle: 'Book',
+          repertoireSide: Side.white,
+        );
+        expect(result.errors, isEmpty);
+        await repo.saveStudy(result.study);
+        for (final chapter in result.chapters) {
+          await repo.saveChapter(chapter);
+        }
+        // Pretend the study was stored before the pgnHash column existed.
+        await db.update(kTableSrsStudy, {'pgnHash': null});
+
+        expect(await repo.getStudyByPgnHash('sha256-not-a-study-hash'), isNull);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('the backfill side filter rejects an unhashed study of the other side', () async {
+      // SPEC INV-003. The batching test checks the side filter only after the
+      // white call has already backfilled every hash, so the unhashed branch
+      // that decides the match was never exercised.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final result = importPgn(
+          '[Orientation "white"]\n\n1. e4 *',
+          studyTitle: 'Book',
+          repertoireSide: Side.white,
+        );
+        expect(result.errors, isEmpty);
+        await repo.saveStudy(result.study);
+        for (final chapter in result.chapters) {
+          await repo.saveChapter(chapter);
+        }
+        final targetHash = computeRepertoireTreeHash(result.chapters);
+        // Pretend the study was stored before the pgnHash column existed.
+        await db.update(kTableSrsStudy, {'pgnHash': null});
+
+        expect(await repo.getStudyByPgnHash(targetHash, forSide: Side.black), isNull);
+        // The same hash with the matching side still finds it.
+        expect(
+          (await repo.getStudyByPgnHash(targetHash, forSide: Side.white))?.id,
+          result.study.id,
+        );
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('a linked remote study round-trips through getStudyByRemoteId', () async {
+      // No SPEC invariant covers remote-link metadata; this pins the read path
+      // review_controller's linked-study update depends on.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_remote', title: 'Linked Study');
+        await repo.saveStudy(study);
+        final linkedAt = DateTime.utc(2026, 1, 2, 3, 4, 5);
+        await repo.updateStudyRemoteRef(
+          studyId: 's_remote',
+          remoteStudyId: 'lich-abc',
+          remoteUpdatedAt: linkedAt,
+        );
+
+        final found = await repo.getStudyByRemoteId('lich-abc');
+        expect(found, isNotNull);
+        expect(found!.study.id, 's_remote');
+        expect(found.study.title, 'Linked Study');
+        expect(found.remoteUpdatedAt, linkedAt);
+        expect(await repo.getStudyByRemoteId('lich-missing'), isNull);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('a side-filtered chapter batch beyond 50 ids applies the side filter', () async {
+      // SPEC INV-051. The >50-id path reads chapters with a bare side filter
+      // and matches study ids in memory; the side arguments must still be
+      // passed through, or the query binds a placeholder to nothing.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final whiteImport = importPgn(
+          '[Orientation "white"]\n\n1. e4 *',
+          studyTitle: 'White book',
+          repertoireSide: Side.white,
+        );
+        final blackImport = importPgn(
+          '[Orientation "black"]\n\n1. d4 d5 *',
+          studyTitle: 'Black book',
+          repertoireSide: Side.black,
+        );
+        for (final result in [whiteImport, blackImport]) {
+          expect(result.errors, isEmpty);
+          await repo.saveStudy(result.study);
+          for (final chapter in result.chapters) {
+            await repo.saveChapter(chapter);
+          }
+        }
+        final studyIds = [
+          whiteImport.study.id,
+          blackImport.study.id,
+          for (var i = 0; i < 49; i++) 'missing-study-$i',
+        ];
+
+        final blackChapters = await repo.getChaptersByStudyIds(studyIds, side: Side.black);
+        expect(blackChapters.map((c) => c.studyId).toSet(), {blackImport.study.id});
+
+        final whiteChapters = await repo.getChaptersByStudyIds(studyIds, side: Side.white);
+        expect(whiteChapters.map((c) => c.studyId).toSet(), {whiteImport.study.id});
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('getReviewState follows the canonical redirect of a legacy decision', () async {
+      // SPEC INV-016. A decision whose review progress only exists under its
+      // canonical state id must resolve to that state; the direct row is
+      // absent here because the knowledge state predates the decision (so the
+      // per-occurrence mirror never wrote one for this decision id).
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_legacy', title: 'Legacy Study');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_legacy', sourceOrder: 0);
+        await repo.saveChapter(ch);
+
+        final now = DateTime.utc(2026, 9, 18, 12);
+        await repo.savePositionKnowledgeState(
+          PositionKnowledgeState(
+            canonicalId: 'canon_legacy_1',
+            firstReviewedAt: now,
+            lastReviewedAt: now,
+            nextDueAt: now.add(const Duration(days: 3)),
+            repetitionCount: 4,
+            lapseCount: 1,
+            stability: 259200000.0,
+            difficulty: 4.8,
+            latencyEmaMs: 1420.5,
+            latencySampleCount: 5,
+            lastExposedAt: now.subtract(const Duration(hours: 5)),
+          ),
+        );
+        await repo.saveDecision(
+          RepertoireDecision(
+            id: 'dec_legacy_1',
+            studyId: 's_legacy',
+            chapterId: ch.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            canonicalStateId: 'canon_legacy_1',
+          ),
+        );
+
+        final loaded = await repo.getReviewState('dec_legacy_1');
+        expect(loaded, isNotNull);
+        expect(loaded!.decisionId, 'dec_legacy_1');
+        expect(loaded.repetitionCount, 4);
+        expect(loaded.nextDueAt, now.add(const Duration(days: 3)));
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('getReviewEvents widens a legacy decision to its canonical event history', () async {
+      // SPEC INV-016. Events keyed by the canonical id belong to this
+      // decision's history; reading only the decision key would lose them.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_legacy_events', title: 'Legacy Events');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_legacy_events', sourceOrder: 0);
+        await repo.saveChapter(ch);
+        await repo.saveDecision(
+          RepertoireDecision(
+            id: 'dec_legacy_2',
+            studyId: 's_legacy_events',
+            chapterId: ch.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            canonicalStateId: 'canon_legacy_2',
+          ),
+        );
+
+        final reviewedAt = DateTime.utc(2026, 9, 18, 13);
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'canon_legacy_2',
+            when: reviewedAt,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'canon_legacy_2'),
+            newState: const ReviewState(decisionId: 'canon_legacy_2', repetitionCount: 1),
+          ),
+        );
+
+        final events = await repo.getReviewEvents('dec_legacy_2');
+        expect(events, hasLength(1));
+        expect(events.single.decisionId, 'canon_legacy_2');
+        expect(events.single.when, reviewedAt);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('review-state reads at exactly the 400-id chunk boundary return the matches', () async {
+      // SPEC INV-051. The chunk loop must stop at the boundary: an inclusive
+      // loop condition issues a second query with an empty IN () list, which
+      // SQLite rejects.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        await repo.saveReviewStates([
+          const ReviewState(decisionId: 'dec_boundary', repetitionCount: 3),
+        ]);
+        final ids = ['dec_boundary', for (var i = 0; i < 399; i++) 'missing-review-$i'];
+
+        final loaded = await repo.getReviewStatesByIds(ids);
+        expect(loaded, hasLength(1));
+        expect(loaded.single.decisionId, 'dec_boundary');
+        expect(loaded.single.repetitionCount, 3);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('chapter and canonical-state reads at the 400-id boundary return the matches', () async {
+      // SPEC INV-051. Same boundary for getDecisionsByChapters and
+      // getKnowledgeStatesByCanonicalIds, which run their own 400-item loops.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_boundary_read', title: 'Boundary Reads');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_boundary_read', sourceOrder: 0);
+        await repo.saveChapter(ch);
+        await repo.saveDecision(
+          RepertoireDecision(
+            id: 'dec_boundary_read',
+            studyId: 's_boundary_read',
+            chapterId: ch.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            canonicalStateId: 'canon_boundary_read',
+          ),
+        );
+
+        final chapterIds = [ch.id, for (var i = 0; i < 399; i++) 'missing-chapter-$i'];
+        final decisions = await repo.getDecisionsByChapters(chapterIds);
+        expect(decisions.map((d) => d.id), contains('dec_boundary_read'));
+
+        final now = DateTime.utc(2026, 9, 18, 12);
+        await repo.savePositionKnowledgeState(
+          PositionKnowledgeState(
+            canonicalId: 'canon_boundary',
+            firstReviewedAt: now,
+            lastReviewedAt: now,
+            nextDueAt: now.add(const Duration(days: 3)),
+            repetitionCount: 4,
+            lapseCount: 1,
+            stability: 259200000.0,
+            difficulty: 4.8,
+            latencyEmaMs: 1420.5,
+            latencySampleCount: 5,
+            lastExposedAt: now.subtract(const Duration(hours: 5)),
+          ),
+        );
+        final canonicalIds = [
+          'canon_boundary',
+          for (var i = 0; i < 399; i++) 'missing-canonical-$i',
+        ];
+        final states = await repo.getKnowledgeStatesByCanonicalIds(canonicalIds);
+        expect(states.map((s) => s.canonicalId), contains('canon_boundary'));
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('deleteStudy with exactly 400 decisions completes and removes them', () async {
+      // SPEC INV-051. A study whose decision count is an exact multiple of the
+      // 400-item chunk must not trip the chunk loop's boundary in either the
+      // per-decision cleanup or the canonical-state cleanup.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_bulk_delete', title: 'Bulk Delete');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_bulk_delete', sourceOrder: 0);
+        await repo.saveChapter(ch);
+        await repo.saveDecisions([
+          for (var i = 0; i < 400; i++)
+            RepertoireDecision(
+              id: 'dec_bulk_$i',
+              studyId: 's_bulk_delete',
+              chapterId: ch.id,
+              nodeId: 'n$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              canonicalStateId: 'canon_bulk_$i',
+            ),
+        ]);
+        expect((await repo.getDecisionsByChapters([ch.id])).length, 400);
+
+        await repo.deleteStudy('s_bulk_delete');
+
+        expect(await repo.getStudy('s_bulk_delete'), isNull);
+        expect(await repo.getDecisionsByChapters([ch.id]), isEmpty);
+      } finally {
+        await db.close();
+      }
+    });
+
+    test('lockDecisions with exactly 400 ids completes and removes the rows', () async {
+      // SPEC INV-051. The delete loop's boundary: 400 ids must lock in one
+      // chunk instead of issuing an empty second delete.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        const study = Study(id: 's_bulk_lock', title: 'Bulk Lock');
+        await repo.saveStudy(study);
+        final ch = Chapter.create(studyId: 's_bulk_lock', sourceOrder: 0);
+        await repo.saveChapter(ch);
+        await repo.saveDecisions([
+          for (var i = 0; i < 2; i++)
+            RepertoireDecision(
+              id: 'dec_lock_$i',
+              studyId: 's_bulk_lock',
+              chapterId: ch.id,
+              nodeId: 'n$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              canonicalStateId: 'canon_lock_$i',
+            ),
+        ]);
+        await repo.unlockDecisions(['dec_lock_0', 'dec_lock_1']);
+        expect(await repo.getUnlockedDecisionIds(), hasLength(2));
+
+        final ids = ['dec_lock_0', 'dec_lock_1', for (var i = 0; i < 398; i++) 'missing-lock-$i'];
+        await repo.lockDecisions(ids);
+
+        expect(await repo.getUnlockedDecisionIds(), isEmpty);
+      } finally {
+        await db.close();
+      }
+    });
   });
 }
