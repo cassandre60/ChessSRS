@@ -25,14 +25,17 @@ Future<void> settleToast(WidgetTester tester) async {
 void main() {
   setUpAll(TestLichessBinding.ensureInitialized);
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {SnackBarType type = SnackBarType.info}) async {
     await tester.pumpWidget(
       await makeTestProviderScopeApp(
         tester,
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
-              child: SrsTextButton(label: 'Act', onPressed: () => showSnackBar(context, 'Saved')),
+              child: SrsTextButton(
+                label: 'Act',
+                onPressed: () => showSnackBar(context, 'Saved', type: type),
+              ),
             ),
           ),
         ),
@@ -139,11 +142,35 @@ void main() {
     // The 53 call sites pass error/success/info and the design specifies no difference, so
     // this is deliberate rather than an oversight. If a tone ever gains a look, this is the
     // test that should be changed with it.
+    final c = SrsColors.light(SrsAccent.ultramarine);
     for (final type in SnackBarType.values) {
-      await open(tester);
+      // `type` really reaches the toast: the loop used to call open() three times without ever
+      // passing the type, so every iteration asked for the same info toast. Passing it is what
+      // gives the assertion below teeth.
+      await open(tester, type: type);
       await tester.tap(find.text('Act'));
-      await tester.pump(const Duration(milliseconds: 200));
+      await settleToast(tester);
       expect(find.text('Saved'), findsOneWidget, reason: '$type must still show');
+
+      // One design appearance for every tone: an ink pill with ground text. A tone that grew its
+      // own tint (say a red pill for error) fails here -- precisely the difference this test
+      // exists to guard.
+      final decoration =
+          tester
+                  .widget<Container>(
+                    find.ancestor(of: find.text('Saved'), matching: find.byType(Container)).first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(decoration.color, c.ink, reason: '$type must use the one ink pill, not a tinted one');
+      expect(decoration.borderRadius, BorderRadius.circular(999));
+
+      final text = tester.widget<Text>(find.text('Saved'));
+      expect(text.style?.color, c.ground, reason: '$type must keep ground text on ink');
+      expect(text.style?.fontSize, 14);
+      expect(text.style?.fontWeight, FontWeight.w500);
+      expect(text.maxLines, 1);
+
       await tester.pump(const Duration(milliseconds: 2400));
     }
   });
