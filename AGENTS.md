@@ -347,27 +347,59 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
 8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
 
-## 11. Releases: when to cut one (agent decides, owner doesn't)
+## 11. Releases: the agent decides, the owner does not
 
-The release workflow (`.github/workflows/release.yml`) is the executable
-truth. Tags (`git tag vX.Y.Z && git push origin vX.Y.Z`) trigger automatic
-build + publish (see `docs/releases.md` for full policy). The agent
-evaluates after every merged green batch and cuts a release when ALL hold:
+Cutting a release is one command:
 
-- Something the owner can feel changed (feature, fix, copy). Gate/CI/
-  refactor/test-only/docs-only deltas ride silently.
-- The work's PR went in green (T1 + Unit tests) with evidence intact.
-- Nothing known-broken is pending; no unverified claims in release notes.
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
 
-Not worth releasing: invisible delta, same batch already tagged, or red tree.
+Everything after it is GitHub's (`.github/workflows/release.yml`), and the tag
+is the only version ledger: each build is stamped with it, so there is nothing
+to bump in `pubspec.yaml`, no PR to open and no label to add (see
+`docs/releases.md`).
 
-Versioning: patch (`x.y.Z`) fixes/copy, minor (`x.Y.0`) features/settings.
-Major stays `0` until owner declares otherwise. Watch Release workflow
-to green; report download link. Tags publish — never push casually,
-never move/delete a published tag.
+After each merged green batch the agent makes **one** decision and states it
+in its report to the owner.
+
+**Release it** when something the owner can feel changed:
+
+- a feature, or a fix for a defect they hit or would have hit;
+- visible copy, a settings change, anything that alters what a screen shows;
+- a performance change they would notice.
+
+**Do not release** when the delta is invisible from outside the app:
+
+- `test/**`, `redteam/**`, `scripts/gates/**`, `.gates/**`, gate or CI config;
+- documentation, including this file;
+- refactors with no behavioural difference, and dependency bumps with no
+  user-visible effect;
+- ratchet baselines, metrics, and other bookkeeping.
+
+Judge the **outcome**, not the PR title: a PR labelled `refactor` that fixes a
+crash is a release, and one labelled `feat` that only adds tests is not.
+
+This is a judgement rather than a rule because compute is the constraint: each
+release runs a Linux build and two Android release builds, ~10-20 minutes of
+runner time, and a download page identical to the last one is worse than no
+page at all. Between v1.6.2 and v1.6.3, 17 merges landed and **none** of them
+was worth a release; cutting one per merge would have been noise.
+
+Then: tag, `gh run watch` the Release workflow to green, report the download
+link, record the version. Never tag a red tree, never move or delete a
+published tag, and never bundle unreviewed work into a release to save a build.
+
+**The nightly build is not a release.** `.github/workflows/nightly.yml` builds
+only when `main` has moved and something shipped changed since the last tag,
+publishes nothing, and exists so the owner can try today's `main` without a tag
+being cut. Its decision logic and tests are in
+`.github/scripts/nightly-decide*.sh`.
+
+Versioning: patch (`x.y.Z`) fixes and copy, minor (`x.Y.0`) features and
+settings. Major stays `0` until the owner declares otherwise.
 
 ## Lessons Learned
-
 ### Where the open threads live (2026-10-14)
 
 Start here before asking what is outstanding. This section is the map; the files
