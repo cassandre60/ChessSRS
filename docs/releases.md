@@ -11,7 +11,7 @@ A tag on `main` builds every artifact and publishes a (pre-)release with
 generated notes. Manual dispatch (Actions tab → Release → Run workflow)
 builds the same artifacts without publishing, for proof. `main` only merges
 green PRs, so a tag is already tested — the release workflow ships, it does
-not re-test.
+not re-test. `AGENTS.md` §11 is the policy for *whether* to cut one.
 
 ## What ships per tag
 
@@ -34,16 +34,40 @@ not re-test.
 
 ## Pipeline dry-run (no tag, no publish)
 
-Validate the entire release pipeline locally without creating a tag or
-publishing:
+Validate the release pipeline without creating a tag or publishing: run the
+workflow by hand from the Actions tab (**Actions → Release → Run workflow**)
+or:
 
 ```bash
-gh workflow run Release -f dry_run=true
+gh workflow run Release
 ```
 
-This runs the Linux and Android build jobs exactly as a real release would,
-but skips artifact upload and the `gh release create` step. Use it to
-verify that the pipeline passes before cutting a real tag.
+This builds the Linux and Android jobs exactly as a real release would. The
+publish job is gated on the run being a tag push (`refs/tags/v…`), so a manual
+run stops after building — you download the artifacts from that run. The
+artifacts are stamped with the version in `pubspec.yaml`, since there is no tag
+to take one from.
+
+## The tag is the only version ledger
+
+Each build is stamped with `--build-name`/`--build-number`, so the version the
+owner sees is derived from the tag, not from `pubspec.yaml`:
+
+| Where | What carries the version |
+|---|---|
+| About screen, account menu (Linux) | `data/flutter_assets/version.json`, generated from `--build-name` |
+| Android | `versionName`/`versionCode`, generated from `--build-name`/`--build-number` |
+
+Both build jobs assert that their own artifact reports the expected version, so
+a stamping regression fails the release instead of shipping. `versionCode`
+comes from the workflow run number, which rises on every run — Play Store
+uploads require a strictly increasing `versionCode`.
+
+The logic lives in `.github/scripts/` and is covered by
+`release-version-test.sh`, which the `Tests` job runs on every PR.
+
+`pubspec.yaml` therefore holds the **development** version and is deliberately
+*not* bumped per release.
 
 ## Local release builds
 
