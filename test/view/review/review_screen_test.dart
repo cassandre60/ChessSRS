@@ -1668,7 +1668,7 @@ void main() {
       final app = await makeTestProviderScopeApp(tester, home: const ReviewScreen());
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byTooltip('Settings'));
 
       expect(find.byTooltip('Settings'), findsOneWidget);
       await tester.tap(find.byTooltip('Settings'));
@@ -1710,11 +1710,11 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open White drawer
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('French Defense Repertoire')));
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
@@ -1744,10 +1744,10 @@ void main() {
 
       // Close drawer and open Black drawer
       Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
-      await pumpAsync(tester, 250);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
 
       await tester.tap(find.byTooltip('Black repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Sicilian Dragon Repertoire')));
 
       expect(inDrawer('Sicilian Dragon Repertoire'), findsOneWidget);
       expect(inDrawer('French Defense Repertoire'), findsNothing);
@@ -1776,10 +1776,10 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       await tester.tap(find.byTooltip('Black repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Sicilian Lines')));
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
@@ -1788,18 +1788,18 @@ void main() {
       expect(inDrawer('Sicilian Lines'), findsOneWidget);
 
       await tester.tap(inDrawer('Studies'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.text('Sicilian Lines')));
 
       expect(inDrawer('Sicilian Lines'), findsNothing);
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
 
       await tester.tap(inDrawer('Openings'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.text('Sicilian Defense')));
 
       expect(inDrawer('Sicilian Defense'), findsNothing);
 
       await tester.tap(inDrawer('Openings'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Sicilian Defense')));
 
       expect(inDrawer('Sicilian Defense'), findsOneWidget);
     });
@@ -1827,23 +1827,23 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('King Pawn Lines')));
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
       await tester.tap(inDrawer('Studies'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.text('King Pawn Lines')));
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
       // Dismiss drawer and reopen; reopening must keep the collapse.
       Navigator.of(tester.element(find.byType(ReviewScopeDrawer))).pop();
-      await pumpAsync(tester, 250);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(ReviewScopeDrawer));
 
       expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       expect(inDrawer('King Pawn Lines'), findsNothing);
@@ -1876,11 +1876,11 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       Future<void> openWhiteDrawer() async {
         await tester.tap(find.byTooltip('White repertoire'));
-        await pumpAsync(tester);
+        await pumpAsyncUntil(tester, () => tester.any(find.byType(ReviewScopeDrawer)));
         expect(find.byType(ReviewScopeDrawer), findsOneWidget);
       }
 
@@ -1890,7 +1890,7 @@ void main() {
       // Tapping scopes and pops; reopen directly (no scope reset), the way the Nothing-due
       // screen's button does, so the drawer opens onto the settled study scope.
       await tester.tap(inDrawer('Open'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
       ReviewScopeDrawer.show(tester.element(find.byType(ReviewScreen)), Side.white);
       await pumpAsync(tester);
 
@@ -1928,16 +1928,16 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('King Pawn Lines')));
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
       await tester.tap(inDrawer('Studies'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.text('King Pawn Lines')));
       expect(inDrawer('King Pawn Lines'), findsNothing);
 
       await tester.enterText(find.widgetWithText(TextField, 'Search'), 'King Pawn');
@@ -1969,29 +1969,29 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       final element = tester.element(find.byType(ReviewScreen));
       final container = ProviderScope.containerOf(element);
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
-      await pumpAsync(tester);
+      await tester.pump();
 
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('King Pawn Lines')));
 
       final drawer = find.byType(ReviewScopeDrawer);
       Finder inDrawer(String text) => find.descendant(of: drawer, matching: find.text(text));
 
       // With the master switch off, tapping a header does nothing.
       await tester.tap(inDrawer('Studies'));
-      await pumpAsync(tester);
+      await tester.pump();
       expect(inDrawer('King Pawn Lines'), findsOneWidget);
 
       // Switching it back on restores collapsing without losing the state.
       await container.read(studyPreferencesProvider.notifier).toggleCollapsibleScopeGroups();
-      await pumpAsync(tester);
+      await tester.pump();
       await tester.tap(inDrawer('Studies'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.text('King Pawn Lines')));
       expect(inDrawer('King Pawn Lines'), findsNothing);
     });
 
@@ -2031,13 +2031,13 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
         // Set maxDailyReviews to 1 in preferences
         final element = tester.element(find.byType(ReviewScreen));
         final container = ProviderScope.containerOf(element);
         await container.read(studyPreferencesProvider.notifier).setMaxDailyReviews(1);
-        await pumpAsync(tester);
+        await pumpAsyncUntil(tester, () => tester.any(find.text('Daily limit reached.')));
 
         // Daily limit reached view is now shown!
         expect(find.text('Daily limit reached.'), findsOneWidget);
@@ -2087,7 +2087,7 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
         expect(find.byType(SrsReviewLayout), findsOneWidget);
         expect(find.byType(Chessboard), findsOneWidget);
@@ -2158,7 +2158,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Finish the White queue: 1. e4 (opponent ...e5 auto-played), then 2. Nf3.
       await playMove(tester, 'e2', 'e4');
@@ -2170,7 +2170,7 @@ void main() {
       expect(find.text('Review Black — 1 due'), findsOneWidget);
 
       await tester.tap(find.text('Review Black — 1 due'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Black to play')));
 
       // Now reviewing Black: board oriented Black, no drawer opened.
       expect(find.text('Black to play'), findsOneWidget);
@@ -2200,7 +2200,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       await playMove(tester, 'e2', 'e4');
       await pumpAsync(tester, 700);
@@ -2253,7 +2253,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       await playMove(tester, 'e2', 'e4');
       await pumpAsync(tester, 700);
@@ -2265,11 +2265,14 @@ void main() {
 
       // Narrow to the White study the way the user does: square → drawer → row.
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('White book')));
       await tester.tap(
         find.descendant(of: find.byType(ReviewScopeDrawer), matching: find.text('White book')),
       );
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () {
+        return tester.any(find.text('Nothing due.')) &&
+            !tester.any(find.textContaining('Review Black'));
+      });
 
       expect(find.text('Nothing due.'), findsOneWidget);
       expect(find.textContaining('Review Black'), findsNothing);
@@ -2317,11 +2320,14 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
       await container.read(studyPreferencesProvider.notifier).setMaxDailyReviews(1);
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () {
+        return tester.any(find.text('Daily limit reached.')) &&
+            tester.any(find.textContaining('White and Black combined'));
+      });
 
       expect(find.text('Daily limit reached.'), findsOneWidget);
       expect(find.textContaining('White and Black combined'), findsOneWidget);
