@@ -150,3 +150,14 @@ jobs:
 
       - name: Run unit tests
         run: flutter test
+
+      # Release stamping decides what version the owner sees in the About
+      # Release stamping decides what version the owner sees in the About
+      # screen; the nightly decides whether a build happens at all. Both fail
+      # silently when they are wrong, so their logic is tested on every PR
+      # rather than only when a release happens.
+      - name: Test release version stamping
+        run: bash .github/scripts/release-version-test.sh
+
+      - name: Test the nightly build decision
+        run: bash .github/scripts/nightly-decide-test.sh
