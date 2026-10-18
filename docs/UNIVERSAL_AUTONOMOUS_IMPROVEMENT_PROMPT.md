@@ -1,6 +1,12 @@
 # Universal Autonomous Engineering Framework & Agent Prompt
 *A Reusable, Stack-Agnostic Blueprint for Recursive Repository Improvement Without Fake Work*
 
+> **Note for ChessSRS agents:** This is a generic template. The
+> ChessSRS-specific catalogue is `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md`,
+> which is subordinate to `AGENTS.md §10` and `IMPLEMENTATION_PLAN.md`.
+> Where this template and the catalogue differ, the catalogue wins inside
+> this repository.
+
 ---
 
 ## Part 1: Philosophy & The Anti-Degeneration Model
@@ -29,10 +35,13 @@ Any agent operating under this framework must strictly observe these four laws:
 │    No bugfix or test is accepted unless backed by an automated test that    │
 │    mechanically FAILS on unmodified `main` before the fix is applied.       │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ 2. GIT SHA-BASED IDEMPOTENCY (DEDUPLICATION)                                │
+│ 2. CONTENT-HASH IDEMPOTENCY (DEDUPLICATION)                                  │
 │    Audits, mutations, and verifications are anchored to the target file's   │
-│    Git commit SHA. If a file has not changed in git since its last audit,   │
-│    re-auditing it is strictly FORBIDDEN.                                    │
+│    content hash (`git hash-object` / `git rev-parse HEAD:<path>`), not      │
+│    commit identity. `git log -- <file>` is the last commit touching the     │
+│    file, not its bytes — a revert or cherry-pick can give the same commit   │
+│    hash for different content. If the content hash has not changed since     │
+│    the last audit, re-auditing is strictly FORBIDDEN.                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ 3. WORKTREE ISOLATION                                                       │
 │    Every task runs in an isolated git worktree branched from `origin/main`. │
@@ -42,7 +51,8 @@ Any agent operating under this framework must strictly observe these four laws:
 │ 4. LOCAL RESOURCE PROTECTION                                                │
 │    Never run wide workspace test suites locally (e.g. `pytest`, `npm test`, │
 │    `cargo test` over the entire repository). Run single targeted test files │
-│    with path filters. Delegate full regressions to CI runners.             │
+│    with path filters (`--plain-name` for one test). Delegate full           │
+│    regressions to CI runners.                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,7 +68,7 @@ Any agent operating under this framework must strictly observe these four laws:
   - Arithmetic: `+ 1` $\leftrightarrow$ `- 1`, boundary offset shifts
 - **Verification:** Run the matching test file for each mutation.
   - *Killed:* Test fails $\rightarrow$ existing suite verified.
-  - *Survived:* All tests pass $\rightarrow$ **A proven blindspot exists in the test suite.**
+  - *Survived:* All tests pass $\rightarrow$ **A proven blindspot exists in the test suite** — but triage first: regex-based engines produce equivalent mutants and noise.
 - **Output:** File a bug/gap report with the exact mutant diff and write a test that kills it.
 
 ### Stream B: Adversarial Test Suite Audit (The 3 Sins)
@@ -69,11 +79,11 @@ Inspect existing test files and eliminate the three deadly test smells:
 
 ### Stream C: Property-Based Fuzzing & Model Checking
 - Write generative tests running 10,000+ randomized iterations to verify mathematical state machine properties:
-  - **Round-Trip Idempotence:** `deserialize(serialize(x)) == x` for all random valid domain structures.
+  - **Round-Trip Idempotence:** `deserialize(serialize(x)) == x` for all random valid domain structures — or structural equivalence when literal string identity is false due to normalization (e.g. PGN whitespace).
   - **Monotonicity:** Invariants where input increases must strictly yield non-decreasing outputs (e.g., scoring, rate-limiting, scheduling).
   - **Boundary Invariants:** Quota limits, balances, and retries never produce negative values, deadlocks, or uncaught exceptions.
 
-### Stream D: Data Durability & Migration Archaeology
+### Stream D: Data Durability & Migration Archeology
 - Ensure database schema migrations (SQL, ORM, document stores) preserve all historical user data.
 - Construct fixture databases from schema version $v_1$ through $v_{N-1}$ and verify migrations upgrade cleanly to $v_N$ with zero data loss and zero orphaned rows.
 
@@ -86,18 +96,20 @@ Every repository operating under this framework maintains `docs/AUTONOMOUS_WORK_
 ```markdown
 # Autonomous Work Ledger
 
-| Date | Stream | Target File / Module | Target SHA | Status | PR / Issue | Summary / Outcome | Re-Audit Trigger |
+| Date | Stream | Target File / Module | Content Hash | Status | PR / Issue | Summary / Outcome | Re-Audit Trigger |
 |---|---|---|---|---|---|---|---|
 | YYYY-MM-DD | Stream A (Mutation) | `src/auth/token_service.ts` | `a1b2c3d` | COMPLETED | PR #42 | Evaluated 25 mutants: 23 killed, 2 test gaps fixed | Any modification to `token_service.ts` |
 ```
 
+Content hash is `git hash-object <file>` / `git rev-parse HEAD:<file>` — the hash of the file's bytes, not `git log -- <file>`.
+
 ### The Invalidation Rule:
 When an agent is looking for work:
 1. It queries candidate target files in priority order.
-2. It compares the file's current Git commit SHA (`git log -n 1 --pretty=format:%h -- <file>`) against the ledger.
-3. If the SHA matches and status is `COMPLETED`, **the file is skipped**.
-4. If the file is modified (SHA changed) or absent from the ledger, **it is selected**.
-5. When the agent opens a PR, it appends its completed row to the ledger.
+2. It compares the file's current content hash (`git hash-object <file>` or `git rev-parse HEAD:<file>`) against the ledger's `Content Hash`.
+3. If the hash matches and status is `COMPLETED`, **the file is skipped**.
+4. If the file is modified (hash changed) or absent from the ledger, **it is selected**.
+5. When the agent opens a PR, it appends its completed row to the ledger (rebase if another agent appended first — `git pull --rebase origin/main`).
 
 ---
 
@@ -112,19 +124,19 @@ You are operating as an autonomous software engineer. Your objective is to mecha
 
 ## Core Directives & Laws:
 1. THE FAIL-TO-PASS INVARIANT: Never write a bugfix or test unless you first prove the test FAILS on `origin/main` before applying your fix. If a test passes on current code, it has zero signal value.
-2. STRICT DEDUPLICATION: Inspect `docs/AUTONOMOUS_WORK_LEDGER.md`. If a file/module is marked COMPLETED at its current Git commit SHA (`git log -n 1 --pretty=format:%h -- <file>`), do NOT re-audit it. Check `gh pr list` to ensure no active PR is already modifying your target.
-3. WORKTREE ISOLATION: Always create and work inside a dedicated git worktree (`git worktree add ../<repo>-<task> -b <type>/<task> origin/main`). Never run destructive git commands (`git reset --hard`) in shared trees. Stage files strictly BY NAME.
-4. RESOURCE BUDGET: Never run full workspace test suites locally. Run targeted test files with explicit filters. Let CI handle full regressions.
+2. STRICT DEDUPLICATION: Inspect `docs/AUTONOMOUS_WORK_LEDGER.md`. If a file/module is marked COMPLETED at its current content hash (`git hash-object <file>` / `git rev-parse HEAD:<file>`), do NOT re-audit it. Check `gh pr list` to ensure no active PR is already modifying your target, and re-check immediately before pushing.
+3. WORKTREE ISOLATION: Always create and work inside a dedicated git worktree (`git worktree add ../<repo>-<task> -b <type>/<task> origin/main` — branch from `origin/main`, not local `main`). Never run destructive git commands (`git reset --hard`) in shared trees. Stage files strictly BY NAME.
+4. RESOURCE BUDGET: Never run full workspace test suites locally. Run targeted test files with explicit filters (`--plain-name` for one test). Let CI handle full regressions. Run `flutter analyze` only on touched files after the last edit.
 5. NO FAKE WORK: Do not perform cosmetic refactors, variable renames, import reorganizations, or write tests that assert trivialities or circular mocks.
 
 ## Execution Cycle:
-Step 1: Consult `docs/AUTONOMOUS_WORK_LEDGER.md` (or run your ledger CLI). Pick the highest-priority target file that has never been audited or whose Git SHA has changed.
+Step 1: Consult `docs/AUTONOMOUS_WORK_LEDGER.md` (or run your ledger CLI). Pick the highest-priority target file that has never been audited or whose content hash has changed.
 Step 2: Execute an adversarial verification pass:
-  - Option A (Mutation Testing): Invert semantic operators (relational, boolean, null checks, boundaries) in the target file. Run targeted tests. If any mutant survives, you have found a real test gap.
+  - Option A (Mutation Testing): Invert semantic operators (relational, boolean, null checks, boundaries) in the target file. Run targeted tests. If any mutant survives (after triaging equivalent mutants), you have found a real test gap.
   - Option B (Adversarial Test Audit): Inspect tests covering the target. Check for vacuous assertions, circular mocks, or wall-clock timing sleeps.
-Step 3: In your isolated worktree, write a minimal reproduction test proving the gap/bug fails on unmodified code.
+Step 3: In your isolated worktree, write a minimal reproduction test proving the gap/bug fails on unmodified code (one test via `--plain-name`, not the whole file).
 Step 4: Implement the minimal production fix or test hardening. Verify the targeted test now passes cleanly.
-Step 5: Verify formatters and linters pass on touched files. Ensure zero test weakening.
-Step 6: Append your completed entry (Date, Stream, File, SHA, Outcome) to `docs/AUTONOMOUS_WORK_LEDGER.md`.
+Step 5: Verify formatters and linters pass on touched files. Run `./scripts/gates.sh t1` AFTER committing (diff-based gates read `origin/main...HEAD` and see nothing while uncommitted). Ensure zero test weakening (G08).
+Step 6: Append your completed entry (Date, Stream, File, Content Hash, Outcome) to `docs/AUTONOMOUS_WORK_LEDGER.md`.
 Step 7: Push your branch and open a GitHub PR with the reproduction evidence attached.
 ```
