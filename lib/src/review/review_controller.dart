@@ -16,6 +16,7 @@ import 'package:chess_srs/src/network/http.dart' show ServerException;
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' show ClientException;
 import 'package:logging/logging.dart';
@@ -364,6 +365,18 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   Position? _prewarmedCandidatePosition;
   bool? _prewarmedIsCapture;
   bool? _prewarmedIsCheck;
+
+  @visibleForTesting
+  Move? get prewarmedCandidateMove => _prewarmedCandidateMove;
+
+  @visibleForTesting
+  Position? get prewarmedCandidatePosition => _prewarmedCandidatePosition;
+
+  @visibleForTesting
+  bool? get prewarmedIsCapture => _prewarmedIsCapture;
+
+  @visibleForTesting
+  bool? get prewarmedIsCheck => _prewarmedIsCheck;
 
   /// Bumped by every request that establishes a review session.
   ///

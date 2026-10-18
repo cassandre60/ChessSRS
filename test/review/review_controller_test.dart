@@ -2189,15 +2189,24 @@ void main() {
 
         // Touching an unrelated square (e.g. a2) does not prewarm the e2e4 candidate
         controller.prewarmMoveCandidate(Square.a2);
+        expect(controller.prewarmedCandidateMove, isNull);
+        expect(controller.prewarmedCandidatePosition, isNull);
 
         // Touching origin square of expected move (e2 for e2e4) prewarms candidate
         controller.prewarmMoveCandidate(Square.e2);
+        final expectedMove = Move.parse('e2e4');
+        expect(controller.prewarmedCandidateMove, equals(expectedMove));
+        expect(controller.prewarmedCandidatePosition, equals(Chess.initial.play(expectedMove!)));
+        expect(controller.prewarmedIsCapture, isFalse);
+        expect(controller.prewarmedIsCheck, isFalse);
 
         const move = NormalMove(from: Square.e2, to: Square.e4);
         final step = await controller.onUserMove(move);
 
         expect(step, isNotNull);
         expect(step!.isCorrect, isTrue);
+        expect(controller.prewarmedCandidateMove, isNull);
+        expect(controller.prewarmedCandidatePosition, isNull);
       },
     );
 

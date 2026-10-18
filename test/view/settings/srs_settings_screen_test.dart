@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/domain/review/transpose_scope.dart';
+import 'package:chess_srs/src/model/settings/general_preferences.dart';
+import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -37,11 +41,16 @@ void main() {
     return find.descendant(of: find.byWidget(row.widget), matching: find.text(option));
   }
 
+  Finder settingSwitch(String semanticLabel) {
+    return find.byWidgetPredicate((w) => w is SrsSwitch && w.semanticLabel == semanticLabel);
+  }
+
   testWidgets('SrsSettingsScreen renders Diagram layout and updates preferences', (tester) async {
     final app = await makeTestProviderScopeApp(tester, home: const SrsSettingsScreen());
 
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(tester.element(find.byType(SrsSettingsScreen)));
 
     // Verify title and back button
     expect(find.text('Settings'), findsOneWidget);
@@ -67,6 +76,7 @@ void main() {
     // Tap 50 daily limit
     await tester.tap(settingOption(tester, 'Daily limit', '50'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).maxDailyReviews, 50);
 
     // New positions per day (INV-068): the introduction allowance beside the daily limit.
     expect(find.text('New positions per day'), findsOneWidget);
@@ -74,47 +84,57 @@ void main() {
     expect(find.text('20'), findsOneWidget);
     await tester.tap(settingOption(tester, 'New positions per day', '10'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).maxNewPerDay, 10);
     await tester.tap(settingOption(tester, 'New positions per day', '20'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).maxNewPerDay, 20);
     expect(tester.takeException(), isNull);
 
     // Tap 95% retention
     expect(find.text('95%'), findsOneWidget);
     await tester.tap(find.text('95%'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).targetRetention, 0.95);
 
-    // Toggle notes. Scrolled to rather than assumed present: the settings list is long and
-    // which rows a ListView has built depends on the height of the rows above them, so
-    // `ensureVisible` on a not-yet-built row throws instead of scrolling to it.
-    await tester.scrollUntilVisible(find.text('Show notes after a move'), 200);
-    await tester.tap(find.text('Show notes after a move'));
+    // Toggle notes.
+    final notesBefore = container.read(studyPreferencesProvider).showPgnComments;
+    await tester.scrollUntilVisible(settingSwitch('Show notes after a move'), 200);
+    await tester.tap(settingSwitch('Show notes after a move'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).showPgnComments, !notesBefore);
 
     // Collapsible list groups: same row-tap pattern, gates the drawer collapse switch.
-    await tester.scrollUntilVisible(find.text('Collapsible list groups'), 200);
-    await tester.tap(find.text('Collapsible list groups'));
+    final collapsibleBefore = container.read(studyPreferencesProvider).collapsibleScopeGroups;
+    await tester.scrollUntilVisible(settingSwitch('Collapsible list groups'), 200);
+    await tester.tap(settingSwitch('Collapsible list groups'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).collapsibleScopeGroups, !collapsibleBefore);
 
     // Transposed moves: the P-TRANSPOSE three-way scope (default In scope).
     await tester.scrollUntilVisible(find.text('Transposed moves'), 200);
     expect(find.text('Transposed moves'), findsOneWidget);
     await tester.tap(find.text('Within study'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).transposeScope, TransposeScope.withinStudy);
 
     // Toggle arrows -- the design's label for the row that gates showAnnotations.
-    await tester.scrollUntilVisible(find.text('Show arrows and circles'), 200);
-    await tester.tap(find.text('Show arrows and circles'));
+    final arrowsBefore = container.read(studyPreferencesProvider).showAnnotations;
+    await tester.scrollUntilVisible(settingSwitch('Show arrows and circles'), 200);
+    await tester.tap(settingSwitch('Show arrows and circles'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).showAnnotations, !arrowsBefore);
 
     // Toggle theme to Dark
     await tester.ensureVisible(find.text('Dark'));
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
+    expect(container.read(generalPreferencesProvider).themeMode, BackgroundThemeMode.dark);
 
     // Select violet accent dot
     await tester.ensureVisible(find.bySemanticsLabel('violet'));
     await tester.tap(find.bySemanticsLabel('violet'));
     await tester.pumpAndSettle();
+    expect(container.read(srsAccentProvider), SrsAccent.violet);
 
     // Verify navigation links to legacy settings — Board & pieces and Sound sub-screens
     // are now inlined; only Chess engine remains a nav row.
@@ -143,11 +163,14 @@ void main() {
     await tester.ensureVisible(find.text('Simple'));
     await tester.tap(find.text('Simple'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).schedulerType, SchedulerType.simple);
 
     // Toggle diagnostics
-    await tester.ensureVisible(find.text('Review Diagnostics HUD'));
-    await tester.tap(find.text('Review Diagnostics HUD'));
+    final diagBefore = container.read(studyPreferencesProvider).srsDiagnostics;
+    await tester.ensureVisible(settingSwitch('Review Diagnostics HUD'));
+    await tester.tap(settingSwitch('Review Diagnostics HUD'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).srsDiagnostics, !diagBefore);
   });
 
   testWidgets('phone settings keep small controls inline and disclose help on demand', (
