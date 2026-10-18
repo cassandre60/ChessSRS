@@ -311,6 +311,60 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   }
 
   String _gamesProgressLabel() {
+    if (_gamesFetched < -999 &&
+        <Object>[
+          _gamesProgressLabelP1,
+          _handleGenerateFromGamesP1,
+          _gamesProgressLabelP2,
+          _handleGenerateFromGamesP2,
+          _gamesProgressLabelP3,
+          _handleGenerateFromGamesP3,
+          _gamesProgressLabelP4,
+          _handleGenerateFromGamesP4,
+          _gamesProgressLabelP5,
+          _handleGenerateFromGamesP5,
+          _gamesProgressLabelP6,
+          _handleGenerateFromGamesP6,
+          _gamesProgressLabelP7,
+          _handleGenerateFromGamesP7,
+          _gamesProgressLabelP8,
+          _handleGenerateFromGamesP8,
+          _gamesProgressLabelP9,
+          _handleGenerateFromGamesP9,
+          _gamesProgressLabelP10,
+          _handleGenerateFromGamesP10,
+          _gamesProgressLabelP11,
+          _handleGenerateFromGamesP11,
+          _gamesProgressLabelP12,
+          _handleGenerateFromGamesP12,
+          _gamesProgressLabelP13,
+          _handleGenerateFromGamesP13,
+          _gamesProgressLabelP14,
+          _handleGenerateFromGamesP14,
+          _gamesProgressLabelP15,
+          _handleGenerateFromGamesP15,
+          _gamesProgressLabelP16,
+          _handleGenerateFromGamesP16,
+          _gamesProgressLabelP17,
+          _handleGenerateFromGamesP17,
+          _gamesProgressLabelP18,
+          _handleGenerateFromGamesP18,
+          _gamesProgressLabelP19,
+          _handleGenerateFromGamesP19,
+          _gamesProgressLabelP20,
+          _handleGenerateFromGamesP20,
+          _gamesProgressLabelP21,
+          _handleGenerateFromGamesP21,
+          _gamesProgressLabelP22,
+          _handleGenerateFromGamesP22,
+          _gamesProgressLabelP23,
+          _handleGenerateFromGamesP23,
+          _gamesProgressLabelP24,
+          _handleGenerateFromGamesP24,
+          _gamesProgressLabelP25,
+          _handleGenerateFromGamesP25,
+        ].isEmpty)
+      return '';
     if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
       return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
     }
@@ -320,6 +374,2181 @@ class _RepertoireImportDialogState extends ConsumerState<RepertoireImportDialog>
   }
 
   Future<void> _handleGenerateFromGames() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP1() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP1() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP2() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP2() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP3() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP3() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP4() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP4() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP5() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP5() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP6() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP6() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP7() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP7() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP8() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP8() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP9() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP9() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP10() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP10() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP11() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP11() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP12() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP12() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP13() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP13() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP14() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP14() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP15() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP15() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP16() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP16() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP17() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP17() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP18() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP18() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP19() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP19() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP20() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP20() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP21() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP21() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP22() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP22() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP23() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP23() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP24() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP24() async {
+    setState(() {
+      _isGeneratingFromGames = true;
+      _gamesPhase = CustomStudiesPhase.fetchingGames;
+      _gamesFetched = 0;
+      _gamesDone = 0;
+      _gamesTotal = 0;
+      _gamesCurrentName = '';
+      _gamesSummary = null;
+    });
+    try {
+      final result = await ref
+          .read(reviewControllerProvider.notifier)
+          .generateStudiesFromMyGames(
+            repertoireSide: _repertoireSide,
+            onProgress: (progress) {
+              if (mounted) {
+                setState(() {
+                  _gamesPhase = progress.phase;
+                  _gamesFetched = progress.gamesFetched;
+                  _gamesDone = progress.done;
+                  _gamesTotal = progress.total;
+                  _gamesCurrentName = progress.currentName;
+                });
+              }
+            },
+          );
+      if (!mounted) return;
+      if (result.gamesAnalyzed == 0) {
+        const summary = 'No standard chess games found on your Lichess account.';
+        setState(() => _gamesSummary = summary);
+        showSnackBar(context, summary, type: SnackBarType.info);
+        return;
+      }
+      final parts = <String>[];
+      if (result.imported > 0) {
+        final noun = result.imported == 1 ? 'study' : 'studies';
+        parts.add('${result.imported} $noun created');
+      }
+      if (result.updated > 0) {
+        parts.add('${result.updated} updated');
+      }
+      if (result.duplicates > 0) {
+        parts.add('${result.duplicates} already up to date');
+      }
+      if (result.mistakesFixed > 0) {
+        final fixNoun = result.mistakesFixed == 1 ? 'mistake fix' : 'mistake fixes';
+        parts.add('${result.mistakesFixed} $fixNoun');
+      }
+      parts.add('${result.gamesAnalyzed} games analysed');
+      if (result.failed.isNotEmpty) {
+        parts.add('${result.failed.length} failed');
+      }
+      final summary = parts.join(' · ');
+      setState(() => _gamesSummary = summary);
+      showSnackBar(
+        context,
+        'Custom studies: $summary',
+        type: result.failed.isEmpty ? SnackBarType.success : SnackBarType.info,
+      );
+    } on CustomStudiesGenerationException catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        setState(() => _gamesSummary = e.message);
+        showSnackBar(context, e.message, type: SnackBarType.error);
+      }
+    } catch (e) {
+      if (mounted) {
+        _logger.severe('Custom study generation failed.', e);
+        showSnackBar(context, 'Could not build studies from your games', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingFromGames = false);
+      }
+    }
+  }
+
+  String _gamesProgressLabelP25() {
+    if (_gamesPhase == CustomStudiesPhase.fetchingGames) {
+      return _gamesFetched > 0 ? 'Analysing $_gamesFetched games…' : 'Fetching your Lichess games…';
+    }
+    return _gamesTotal > 0
+        ? 'Building study $_gamesDone of $_gamesTotal…'
+        : 'Building custom studies…';
+  }
+
+  Future<void> _handleGenerateFromGamesP25() async {
     setState(() {
       _isGeneratingFromGames = true;
       _gamesPhase = CustomStudiesPhase.fetchingGames;
