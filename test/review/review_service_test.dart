@@ -42,7 +42,7 @@ void main() {
 
     test('incremental persistence: moves save state and event without rewriting trees', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
-      final repo = SqliteStudyRepository(db);
+      final repo = _TreeWriteRecordingRepository(db);
 
       try {
         final study = Study(id: 's1', title: 'Service Study', createdAt: now, updatedAt: now);
@@ -88,9 +88,23 @@ void main() {
         final session = await service.startSession();
         expect(session.currentPrompt?.decision.id, 'd1');
 
+        // SPEC INV-002. An answer writes the review state and the event, nothing else.
+        // Snapshot the tree content and clear the record of the seeding writes, so the
+        // assertions below cover exactly the submitMove call.
+        final treeBefore = await repo.getPositionTree('c1');
+        final decisionsBefore = await repo.getAllDecisions();
+        repo.treeWrites.clear();
+
         // Submit correct move
         final result = await service.submitMove(from: 'e2', to: 'e4');
         expect(result.isCorrect, isTrue);
+
+        // SPEC INV-002. The answer is one persisted batch, no study/chapter/decision
+        // row writer ran, and the tree blob and decisions are what they were.
+        expect(repo.answerBatchWrites, 1, reason: 'the answer is persisted in a single batch');
+        expect(repo.treeWrites, isEmpty, reason: 'answering a move rewrote the study tree');
+        expect(await repo.getPositionTree('c1'), treeBefore);
+        expect(await repo.getAllDecisions(), decisionsBefore);
 
         // Verify that ReviewState is persisted in DB
         final persistedState = await repo.getReviewState('d1');
@@ -1399,5 +1413,103 @@ class _QueryCountRepository extends SqliteStudyRepository {
   Future<List<RepertoireDecision>> getAllDecisions() {
     allDecisionsReads++;
     return super.getAllDecisions();
+  }
+}
+
+/// A [SqliteStudyRepository] that records calls to the methods that write the
+/// study tree — the study, chapter and decision rows — so a test can pin that
+/// answering a move never invokes them (INV-002).
+class _TreeWriteRecordingRepository extends SqliteStudyRepository {
+  _TreeWriteRecordingRepository(super.db);
+
+  /// Tree-writer calls recorded so far, e.g. `saveChapter(c1)`.
+  final List<String> treeWrites = [];
+
+  /// Answer batches persisted, tracked so the empty-writes assertion cannot
+  /// pass vacuously: a run that persisted nothing is a broken test, not a
+  /// write-scope pass.
+  int answerBatchWrites = 0;
+
+  @override
+  Future<void> saveStudy(Study study) {
+    treeWrites.add('saveStudy(${study.id})');
+    return super.saveStudy(study);
+  }
+
+  @override
+  Future<void> updateStudyActive(String studyId, bool isActive) {
+    treeWrites.add('updateStudyActive($studyId)');
+    return super.updateStudyActive(studyId, isActive);
+  }
+
+  @override
+  Future<void> updateStudyTitle(String studyId, String newTitle) {
+    treeWrites.add('updateStudyTitle($studyId)');
+    return super.updateStudyTitle(studyId, newTitle);
+  }
+
+  @override
+  Future<void> updateStudyRemoteRef({
+    required String studyId,
+    required String remoteStudyId,
+    required DateTime remoteUpdatedAt,
+  }) {
+    treeWrites.add('updateStudyRemoteRef($studyId)');
+    return super.updateStudyRemoteRef(
+      studyId: studyId,
+      remoteStudyId: remoteStudyId,
+      remoteUpdatedAt: remoteUpdatedAt,
+    );
+  }
+
+  @override
+  Future<void> deleteStudy(String id) {
+    treeWrites.add('deleteStudy($id)');
+    return super.deleteStudy(id);
+  }
+
+  @override
+  Future<void> saveChapter(Chapter chapter) {
+    treeWrites.add('saveChapter(${chapter.id})');
+    return super.saveChapter(chapter);
+  }
+
+  @override
+  Future<void> saveChapters(List<Chapter> chapters) {
+    treeWrites.add('saveChapters(${chapters.length})');
+    return super.saveChapters(chapters);
+  }
+
+  @override
+  Future<void> deleteChapter(String id) {
+    treeWrites.add('deleteChapter($id)');
+    return super.deleteChapter(id);
+  }
+
+  @override
+  Future<void> savePositionTree(String chapterId, RepertoireNode root) {
+    treeWrites.add('savePositionTree($chapterId)');
+    return super.savePositionTree(chapterId, root);
+  }
+
+  @override
+  Future<void> saveDecision(RepertoireDecision decision) {
+    treeWrites.add('saveDecision(${decision.id})');
+    return super.saveDecision(decision);
+  }
+
+  @override
+  Future<void> saveDecisions(List<RepertoireDecision> decisions) {
+    treeWrites.add('saveDecisions(${decisions.length})');
+    return super.saveDecisions(decisions);
+  }
+
+  @override
+  Future<void> saveAnswerBatch({
+    required List<PositionKnowledgeState> knowledgeStates,
+    ReviewEvent? event,
+  }) {
+    answerBatchWrites++;
+    return super.saveAnswerBatch(knowledgeStates: knowledgeStates, event: event);
   }
 }
