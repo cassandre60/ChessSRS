@@ -151,14 +151,17 @@ Coordinate autonomous agents using Git and GitHub Issues/PRs as the decoupled me
 
 ## 6. Execution Plan & Next Steps
 
-1. **Phase 1: Harness & Tooling Setup**
-   - Deploy `scripts/autonomous/mutation_engine.py`: A lightweight, AST/token-based Dart mutation test runner that iterates over target domain files, mutates them, runs the targeted test, and logs surviving mutants.
-   - Deploy `scripts/autonomous/orchestrator.py`: CLI harness to spawn breaker/builder sessions in git worktrees.
-2. **Phase 2: Seed Queue from Known Specification Holes**
+> **Authority:** `IMPLEMENTATION_PLAN.md` owns the work queue; this section is an index into it, not a second queue. `AUTONOMOUS_IMPROVEMENT_CATALOG.md` (subordinate to `AGENTS.md \u00a710`) owns the execution protocol. Streams 1\u20132 are active now; property fuzzing and migration archaeology are planned per `GATES_PLAN.md` rows 9\u201311.
+
+1. **Phase 1: Harness & Tooling Setup \u2014 Done**
+   - `scripts/autonomous/mutation_engine.py`: Regex-based Dart mutation runner (not AST-based \u2014 every survivor needs human triage; uncompilable excluded from kill rate; `shell=False` via `shlex`).
+   - `scripts/autonomous/ledger.py`: Content-hash deduplication (`git hash-object` / `git rev-parse HEAD:<path>`) with merge-contention guidance.
+   - `scripts/autonomous/orchestrator.py`: Worktree lifecycle + `./scripts/gates.sh t1` after commit (branch from `origin/main`, discard `lib/l10n` churn).
+2. **Phase 2: Seed Queue from Known Specification Holes (Active \u2014 Streams 1 & 2; F3/F5 planned)**
    - Tackle confirmed findings from `docs/spec-conformance-audit-2026-10-16.md`:
-     - **F2:** Rewrite `INV-002` test to verify tree JSON is genuinely untouched on answer save.
-     - **F3:** Fill missing migration coverage for schemas v6–v11 and v14–v15.
-     - **F4:** Fix `INV-051` chunking test so it tests SQLite parameter limits with >400 chunk boundaries.
-     - **F5:** Trace and eliminate the origin of orphaned `srs_review_state` rows.
-3. **Phase 3: Continuous Mutation & Fuzzing Pipeline**
-   - Run the Breaker against `lib/src/domain/` to surface genuine logic blindspots.
+     - **F2:** Rewrite `INV-002` test to verify tree JSON is genuinely untouched on answer save. *(Active \u2014 Stream 2.)*
+     - **F3:** Fill missing migration coverage for schemas v6\u2013v11 and v14\u2013v15. *(Planned \u2014 Stream 4, needs fixture harness; `GATES_PLAN.md` row 10.)*
+     - **F4:** Fix `INV-051` chunking test so it tests SQLite parameter limits with >400 chunk boundaries. *(Active \u2014 Stream 2.)*
+     - **F5:** Trace and eliminate the origin of orphaned `srs_review_state` rows. *(Planned \u2014 Stream 4.)*
+3. **Phase 3: Continuous Mutation Testing (Active \u2014 Stream 1)**
+   - Run the breaker against `lib/src/domain/` (catalogue Stream 1 priority order). Property fuzzing, migration archaeology, perf budgets, and a11y remain planned until their `GATES_PLAN.md` promotion criteria are met.
