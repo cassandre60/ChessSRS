@@ -65,7 +65,7 @@ a second work queue — it is a convenience index into plan-owned work.
 
 - [x] `test/view/offline_computer/offline_computer_game_screen_test.dart:1353` (Eliminate blocking `sleep()` with fake clock/pump)
 - [x] `test/review/review_service_test.dart:43` (Harden `INV-002`: verify chapter tree table is genuinely not rewritten)
-- [ ] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits) — parked 2026-10-18: SQLite here allows 250000 bound variables and the app's DB layer exposes no per-connection limit, so exceeding it is impractical; needs a different oracle.
+- [ ] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits) — oracle proposed in #232: record the bound-argument count of every delete the cleanup issues and require ≤401, since this SQLite's 250000-variable limit cannot be tripped by row count. Tick when #232 merges.
 
 ### Stream 4: SQLite Migration & Data Preservation Targets
 
