@@ -74,6 +74,28 @@ else
   bad "build number" "got: $(tr '\n' ' ' <"$WORK/out")"
 fi
 
+resolve tag v1.6.3 46
+if stamped 'tag=v1.6.3'; then
+  ok "a tag push names its files after the tag"
+else
+  bad "file tag on a tag push" "got: $(tr '\n' ' ' <"$WORK/out")"
+fi
+
+# The defect this case exists for: GITHUB_REF_NAME is a BRANCH name on a manual
+# dispatch, so naming a tarball after it wrote to dist/<owner>/<branch>/… — a
+# directory that does not exist — and failed the whole dry run.
+resolve branch fix/release-version-truth 47
+if stamped 'tag=build-47'; then
+  ok "a manual dispatch names its files build-<run>, never the branch"
+else
+  bad "file tag on a dispatch" "got: $(tr '\n' ' ' <"$WORK/out")"
+fi
+if grep -q '[^A-Za-z0-9._=-]' "$WORK/out"; then
+  bad "unsafe characters in the file name" "$(tr '\n' ' ' <"$WORK/out")"
+else
+  ok "the file name is safe to use as a path"
+fi
+
 VERSION_JSON="build/linux/x64/release/bundle/data/flutter_assets/version.json"
 mkdir -p "$(dirname "$VERSION_JSON")"
 

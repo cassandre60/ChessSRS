@@ -76,7 +76,10 @@ jobs:
 
       - name: Package Linux formats (tarball, deb, AppImage)
         run: |
-          TAG="${GITHUB_REF_NAME:-manual}"
+          # The file-safe name from the resolve step, never GITHUB_REF_NAME: on
+          # a manual dispatch that is a branch name, and its slashes made the
+          # tarball path a directory that does not exist, failing the dry run.
+          TAG="${{ steps.version.outputs.tag }}"
           mkdir -p dist
 
           # 1. Standard portable tarball
