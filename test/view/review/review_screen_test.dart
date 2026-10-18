@@ -140,7 +140,7 @@ void main() {
           },
         );
         await tester.pumpWidget(app);
-        await pumpAsync(tester, 500);
+        await pumpUntilFound(tester, find.text('Bring your study.'));
       }
 
       await pumpNoStudies(const Size(900, 800));
@@ -175,11 +175,11 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Choose file'));
 
       await tester.tap(find.text('Choose file').first);
       await tester.pump();
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(RepertoireImportDialog));
 
       expect(find.byType(RepertoireImportDialog), findsOneWidget);
     });
@@ -213,17 +213,17 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Choose file'));
 
       // First tap opens the dialog from the empty state.
       await tester.tap(find.text('Choose file').first);
       await tester.pump();
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Pick .pgn file from disk'));
 
       // The dialog's own file button is the code path that reads a picked file.
       await tester.tap(find.text('Pick .pgn file from disk'));
       await tester.pump();
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.textContaining('too large'));
 
       expect(
         find.textContaining('too large'),
@@ -261,7 +261,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Board is rendered with Chessboard and top bar shows colour squares
       expect(find.byType(Chessboard), findsOneWidget);
@@ -306,7 +306,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(BoardWidget));
 
       final repaintBoundaryFinder = find.ancestor(
         of: find.byType(BoardWidget),
