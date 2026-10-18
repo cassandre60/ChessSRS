@@ -150,3 +150,9 @@ jobs:
 
       - name: Run unit tests
         run: flutter test
+
+      # Release stamping decides what version the owner sees in the About
+      # screen. It shipped wrong three times in a row without anything turning
+      # red, so its logic is tested here rather than only on a release.
+      - name: Test release version stamping
+        run: bash .github/scripts/release-version-test.sh

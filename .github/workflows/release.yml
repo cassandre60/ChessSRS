@@ -15,6 +15,13 @@ name: Release
 #
 # Safety: main only merges green PRs (branch protection), so a tag on main
 # is already tested — this workflow does not re-run the suite, it ships.
+#
+# The tag is the only version ledger. Each build is stamped with
+# --build-name/--build-number, which is what ends up in the About screen
+# (linux: flutter_assets/version.json; android: versionName/versionCode) and
+# what the Play Store reads for versionCode. pubspec.yaml is therefore NOT
+# bumped per release and must never be treated as the released version: when
+# it was, v1.5.0 through v1.6.2 shipped telling the owner they were v1.4.0.
 
 on:
   push:
@@ -52,8 +59,20 @@ jobs:
       - name: Code generation
         run: dart run build_runner build
 
+      - name: 🏷️ Resolve the version to stamp into the build
+        id: version
+        run: bash .github/scripts/release-version.sh
+
       - name: Build Linux release
-        run: flutter build linux --release
+        run: |
+          flutter build linux --release \
+            --build-name="${{ steps.version.outputs.version }}" \
+            --build-number="${{ steps.version.outputs.build_number }}"
+
+      - name: 🧾 Check the bundle reports this release's version
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: bash .github/scripts/verify-linux-version.sh
 
       - name: Package Linux formats (tarball, deb, AppImage)
         run: |
@@ -124,11 +143,27 @@ jobs:
               > android/key.properties
           fi
 
+      - name: 🏷️ Resolve the version to stamp into the build
+        id: version
+        run: bash .github/scripts/release-version.sh
+
       - name: Build release app bundle
-        run: flutter build appbundle --release
+        run: |
+          flutter build appbundle --release \
+            --build-name="${{ steps.version.outputs.version }}" \
+            --build-number="${{ steps.version.outputs.build_number }}"
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --build-name="${{ steps.version.outputs.version }}" \
+            --build-number="${{ steps.version.outputs.build_number }}"
+
+      - name: 🧾 Check the APK reports this release's version
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+          EXPECTED_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: bash .github/scripts/verify-android-version.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6.0.0
