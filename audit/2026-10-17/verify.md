@@ -36,12 +36,33 @@ recorded in the PR body.
   ratchet never fails until the count drops 25% below today, which is the
   drift-detection value it was written for. Suggests re-baselining discipline
   gap, not a product bug.
+  *(Figure corrected 2026-10-18: 349 deletions = 18.8% of 1858, not 25% — the
+  tolerance is 0, so the floor trips only when the strict count falls below
+  1509, i.e. after deleting the entire stale-by margin. The floor was
+  tightened to the measured 2026-10-18 state in #209.)*
 - `.gates/mutants.json` entry #2 (`occurrence: 2`) matches the exact identical
   string only ONCE per file (both `notification` occurrences use the same
   textual match string; the occurrences diverge elsewhere) — the runner reports
   it as SURVIVED "no numeric change" though it changed the second scheduler.
   Every other mutant in the file is valid. Fix: use a uniqueness-anchored
   longer match or occurrence counts.
+  **Superseded 2026-10-18 by live mutant runs** (see PRs #210 and #211): this
+  write-up is wrong in its mechanics. The find string of entries #1/#2 — the
+  two byte-identical `_clamp` ternaries (SimpleScheduler and
+  EaseScalingScheduler) — occurs **exactly twice** in scheduler.dart, so
+  nothing was "matched only once"; the runner's occurrence targeting applied
+  correctly and did mutate the second `_clamp`; and the quoted "no numeric
+  change" phrasing does not exist in the runner's output. The verified defects
+  instead: (a) the `>`-vs-`>=` clamp mutants are **semantically equivalent**
+  at whole-millisecond granularity (both branches return equal-valued
+  Durations at equality), so no test could ever kill them and the notes'
+  kill-claims were false data; (b) `interval is capped at maximumInterval`
+  accepted the drop-the-cap mutant because a broken-cap pump ends on an
+  overflowed negative interval (~−13.5M days) satisfying `<= 30` — fixed in
+  #210 by pinning exact cap equality; (c) the remaining four entries' claims
+  verified true — 6/6 killed on the corrected referee file in #211. Entry
+  #2's existence as a finding unit is itself dissolved: both clamp entries
+  needed replacement, not occurrence-targeting changes.
 
 ## Wall-sleep inventory (rg, straight)
 
