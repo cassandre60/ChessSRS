@@ -1,6 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:ui' show Tristate;
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +46,30 @@ void main() {
 
       expect(find.text('Library'), findsOneWidget);
       expect(find.byType(SrsPageHead), findsOneWidget);
+
+      // With no trailing widget the head's Row holds only the back control: no Spacer was added
+      // to reserve the slot. A head that always laid out the trailing row would show up here.
+      expect(
+        find.descendant(of: find.byType(SrsPageHead), matching: find.byType(Spacer)),
+        findsNothing,
+      );
+
+      // SPEC INV-062. The back control keeps its 44px-class touch target even when disabled.
+      expect(
+        tester.getSize(find.bySemanticsLabel('Back to Library')).height,
+        greaterThanOrEqualTo(SrsLayout.minTouchTarget),
+      );
+
+      // A null onBack disables the control rather than leaving it silently tappable: the
+      // pressable announces itself disabled and its GestureDetector is built without an onTap.
+      final back = tester.getSemantics(find.bySemanticsLabel('Back to Library'));
+      expect(back.flagsCollection.isButton, isTrue);
+      expect(back.flagsCollection.isEnabled == Tristate.isFalse, isTrue);
+
+      // Tapping the disabled control is inert: nothing fires and nothing throws.
+      await tester.tap(find.bySemanticsLabel('Back to Library'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     });
   });
 }
