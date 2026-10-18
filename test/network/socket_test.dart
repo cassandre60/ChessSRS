@@ -590,7 +590,7 @@ void main() {
       });
     });
 
-    test('does not reconnect when closed while a connection attempt is in flight', () async {
+    test('does not reconnect when closed while a connection attempt is in flight', () {
       int numConnectionAttempts = 0;
 
       // Simulates a server that never accepts the connection: each attempt fails after a delay,
@@ -604,21 +604,34 @@ void main() {
       );
 
       final socketClient = makeTestSocketClient(fakeChannelFactory: fakeChannelFactory);
-      socketClient.connect();
 
-      // Close while the first attempt is still awaiting the channel creation.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      await socketClient.close();
+      fakeAsync((async) {
+        socketClient.connect();
 
-      // Long enough for the in-flight attempt to fail and for a reconnect to have been scheduled
-      // (autoReconnectDelay is 100ms) and fired.
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+        // Close while the first attempt is still awaiting the channel creation.
+        async.elapse(const Duration(milliseconds: 49));
+        expect(numConnectionAttempts, 0, reason: 'the attempt is still awaiting channel creation');
+        socketClient.close();
+        async.elapse(Duration.zero);
 
-      expect(numConnectionAttempts, 1);
-      expect(socketClient.isActive, false);
+        // Long enough for the in-flight attempt to fail at the factory delay's exact edge and for
+        // a reconnect to have been scheduled (autoReconnectDelay is 100ms) — and not fired.
+        async.elapse(const Duration(milliseconds: 51));
+        expect(numConnectionAttempts, 1, reason: 'the in-flight attempt still fails and counts');
+
+        async.elapse(const Duration(milliseconds: 99));
+        expect(socketClient.isActive, isFalse, reason: 'nothing pends for a closed client');
+        async.elapse(const Duration(milliseconds: 1));
+        expect(
+          numConnectionAttempts,
+          1,
+          reason: 'close during the in-flight attempt cancels reconnection',
+        );
+        expect(socketClient.isActive, isFalse);
+      });
     });
 
-    test('discards a connection that succeeds after the client was closed', () async {
+    test('discards a connection that succeeds after the client was closed', () {
       final Map<int, FakeWebSocketChannel> channels = {};
       int numConnectionAttempts = 0;
 
@@ -633,18 +646,35 @@ void main() {
       );
 
       final socketClient = makeTestSocketClient(fakeChannelFactory: fakeChannelFactory);
-      socketClient.connect();
 
-      // Close while the connection attempt is still awaiting the channel creation.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      await socketClient.close();
+      fakeAsync((async) {
+        socketClient.connect();
 
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        // Close while the connection attempt is still awaiting the channel creation.
+        async.elapse(const Duration(milliseconds: 49));
+        socketClient.close();
+        async.elapse(Duration.zero);
 
-      // The channel created by the stale attempt must not be adopted, and must be closed.
-      expect(channels[1]!.closeCode, isNotNull);
-      expect(socketClient.isConnected, false);
-      expect(socketClient.nbConnectionSuccess, 0);
+        // The channel created by the stale attempt must not be adopted, and must be closed.
+        async.elapse(const Duration(milliseconds: 50));
+        async.elapse(Duration.zero);
+        expect(channels[1], isNull, reason: 'creation happens exactly at the factory delay edge');
+        async.elapse(const Duration(milliseconds: 1));
+        async.elapse(Duration.zero);
+        expect(channels[1], isNotNull);
+        expect(
+          channels[1]!.closeCode,
+          isNotNull,
+          reason: 'the stale channel is closed, not adopted',
+        );
+        expect(socketClient.isConnected, false);
+        expect(socketClient.nbConnectionSuccess, 0, reason: 'a stale success is not a success');
+
+        // A client closed mid-attempt stays closed: no late reconnect may surface.
+        async.elapse(const Duration(milliseconds: 100));
+        expect(numConnectionAttempts, 1, reason: 'close during the attempt cancels reconnection');
+        expect(socketClient.isActive, isFalse);
+      });
     });
 
     test('retries at full speed during the grace period, then backs off', () {
