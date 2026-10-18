@@ -1418,12 +1418,12 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer: before any reviews, both positions are fresh — never
       // presented, so they sit in the new segment, not the learning one (INV-068).
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('2 positions'));
 
       // The sub line is `{n} positions` (design/docs/01-identity.md); the learned state rides on
       // the memory mini-bar beside it, not in the text.
@@ -1447,7 +1447,7 @@ void main() {
           matching: find.text('Progress Test Study'),
         ),
       );
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
 
       // Play 1. e4 (first move)
       await playMove(tester, 'e2', 'e4');
@@ -1455,7 +1455,7 @@ void main() {
 
       // Play 2. Nf3 (second move)
       await playMove(tester, 'g1', 'f3');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       // Nothing due view: shows memory bar and next review time
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -1464,7 +1464,7 @@ void main() {
 
       // Open drawer again: both positions have moved to retained
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('2 positions'));
 
       expect(find.text('2 positions'), findsOneWidget);
       expect(drawerBars().first.learning, 0);
@@ -1497,25 +1497,25 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer and click Import PGN
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Import PGN')));
 
       await tester.tap(find.text('Import PGN'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(RepertoireImportDialog));
 
       expect(find.byType(RepertoireImportDialog), findsOneWidget);
 
       // Switch to PGN Text / File tab
       await tester.tap(find.text('PGN Text / File'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.widgetWithText(TextField, 'PGN text')));
 
       // Enter same PGN into PGN text field
       await tester.enterText(find.widgetWithText(TextField, 'PGN text'), pgn);
       await tester.tap(find.text('Import and Start Review'));
-      await pumpAsync(tester, 600);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(RepertoireImportDialog)));
 
       // Dialog is dismissed and info snackbar is shown
       expect(find.byType(RepertoireImportDialog), findsNothing);
@@ -1545,19 +1545,19 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Bring your study.'));
 
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Import PGN')));
       await tester.tap(find.text('Import PGN'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(RepertoireImportDialog));
 
       await tester.tap(find.text('PGN Text / File'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.widgetWithText(TextField, 'PGN text')));
 
       await tester.enterText(find.widgetWithText(TextField, 'PGN text'), pgn);
       await tester.tap(find.text('Import and Start Review'));
-      await pumpAsync(tester, 600);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(RepertoireImportDialog)));
 
       // The import succeeded, but the toast must say what was skipped: a user
       // who is told only "Imported" believes the repertoire is complete.
@@ -1598,14 +1598,14 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Bring your study.'));
 
       // Open drawer and click Import PGN
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Import PGN')));
 
       await tester.tap(find.text('Import PGN'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(RepertoireImportDialog));
 
       expect(find.byType(RepertoireImportDialog), findsOneWidget);
 
@@ -1615,7 +1615,7 @@ void main() {
         'https://lichess.org/study/m1AbCd2E',
       );
       await tester.tap(find.text('Fetch & Import from Lichess'));
-      await pumpAsync(tester, 600);
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(RepertoireImportDialog)));
 
       // Dialog is dismissed and success snackbar is shown
       expect(find.byType(RepertoireImportDialog), findsNothing);
@@ -1647,7 +1647,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Vanilla mode: calm diagnostics strip is NOT rendered
       expect(find.textContaining('expected'), findsNothing);
@@ -1656,7 +1656,7 @@ void main() {
       final element = tester.element(find.byType(ReviewScreen));
       final container = ProviderScope.containerOf(element);
       await container.read(studyPreferencesProvider.notifier).toggleSrsDiagnostics();
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.textContaining('expected'));
 
       // Diagnostics HUD is now rendered with live metrics (calm sentence case)
       expect(find.textContaining('expected'), findsOneWidget);
