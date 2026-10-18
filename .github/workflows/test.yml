@@ -152,17 +152,12 @@ jobs:
         run: flutter test
 
       # Release stamping decides what version the owner sees in the About
-      # screen, and the nightly decides whether a build happens at all. Both
-      # fail silently when they are wrong, so their logic is tested on every
-      # PR rather than only when a release happens.
-      #
-      # Guarded on the script existing because the two landed in separate PRs
-      # and either may merge first; without the guard, whichever merges second
-      # fails CI on a missing file.
+      # Release stamping decides what version the owner sees in the About
+      # screen; the nightly decides whether a build happens at all. Both fail
+      # silently when they are wrong, so their logic is tested on every PR
+      # rather than only when a release happens.
       - name: Test release version stamping
-        if: hashFiles('.github/scripts/release-version-test.sh') != ''
         run: bash .github/scripts/release-version-test.sh
 
       - name: Test the nightly build decision
-        if: hashFiles('.github/scripts/nightly-decide-test.sh') != ''
         run: bash .github/scripts/nightly-decide-test.sh
