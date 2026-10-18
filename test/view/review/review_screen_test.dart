@@ -1175,22 +1175,20 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        // Slow chapter load delays the initial state too; settle twice.
-        await pumpAsync(tester, 600);
-        await pumpAsync(tester, 600);
+        // The slow chapter load delays the initial state; the sheet opens below only once
+        // its content is on screen.
+        await pumpAsyncUntil(tester, () => tester.any(find.byType(Chessboard)));
 
         // Open drawer and study options sheet
         await tester.tap(find.byTooltip('White repertoire'));
-        await pumpAsync(tester, 600);
+        await pumpAsyncUntil(tester, () => tester.any(find.text('King Pawn')));
         await tester.longPress(find.text('King Pawn'));
-        await pumpAsync(tester, 600);
+        await pumpAsyncUntil(tester, () => tester.any(find.text('Analyze')));
 
-        // Tap Analyze: pops both sheets, loads chapters, then must navigate.
+        // Tap Analyze: pops both sheets, loads chapters, then must navigate. The load can
+        // outlast the dismiss animation, so this waits on the destination, not on time.
         await tester.tap(find.text('Analyze'));
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 500));
-        await pumpAsync(tester, 600);
-        await tester.pump(const Duration(milliseconds: 500));
+        await pumpAsyncUntil(tester, () => tester.any(find.byType(StudyScreen)));
 
         expect(find.byType(StudyScreen), findsOneWidget);
       },
@@ -1221,7 +1219,7 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(BoardWidget));
 
         // Before move: no shapes or comment
         expect(find.text('Attacks the center'), findsNothing);
@@ -1246,7 +1244,7 @@ void main() {
 
         // Tap Continue button
         await tester.tap(find.widgetWithText(SrsPillButton, 'Continue'));
-        await pumpAsync(tester, 700);
+        await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
         // Queue advances (session caught up)
         expect(find.text('Nothing due.'), findsOneWidget);
@@ -1278,7 +1276,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
@@ -1289,7 +1287,7 @@ void main() {
 
       // Tap on the chessboard
       await tester.tap(find.byType(Chessboard));
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       // Successfully advanced to completion
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -1324,17 +1322,15 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
         await playMove(tester, 'e2', 'e4');
-        await pumpAsync(tester, 100);
+        await pumpUntilFound(tester, find.text('Keyboard advance'));
 
         expect(find.text('Keyboard advance'), findsOneWidget);
 
         await tester.sendKeyEvent(key, physicalKey: physical);
-        await pumpAsync(tester, 700);
-
-        expect(find.text('Nothing due.'), findsOneWidget);
+        await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
       });
     }
 
@@ -1363,7 +1359,7 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
         // Play correct move: e2 -> e4
         await playMove(tester, 'e2', 'e4');
