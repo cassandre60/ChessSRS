@@ -2,7 +2,7 @@
 """Autonomous Work Ledger Manager.
 
 Ensures no two agents repeat the same work and prevents duplicate audits.
-Tracks completed streams against Git commit SHAs.
+Tracks completed streams against content hashes (not commit identity).
 
 Usage:
   # Query next untouched file for a stream
@@ -14,7 +14,12 @@ Usage:
     --target "lib/src/domain/review_coordinator.dart" \
     --status "COMPLETED" \
     --pr "#196" \
-    --summary "Evaluated 20 mutants: 18 killed, 2 survived. Added tests in review_coordinator_test.dart."
+    --summary "Evaluated 20 mutants: 18 killed, 2 survived. Added tests."
+
+Content hash uses `git hash-object` / `git rev-parse HEAD:<path>` — the hash
+of the file's bytes — not `git log -- <path>` (last commit touching the file).
+This survives cherry-picks, reverts, and rebases where commit identity and
+content diverge.
 """
 
 import argparse
@@ -22,7 +27,7 @@ import datetime
 import os
 import subprocess
 import sys
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 LEDGER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "AUTONOMOUS_WORK_LEDGER.md")
 
@@ -38,12 +43,24 @@ STREAM_1_TARGETS = [
 ]
 
 
-def get_file_sha(filepath: str) -> Optional[str]:
-    """Gets the latest commit hash for a specific file."""
+def get_file_content_hash(filepath: str) -> Optional[str]:
+    """Content hash of filepath (git hash-object semantics). Short 9-char prefix for ledger."""
     if not os.path.exists(filepath):
         return None
-    res = subprocess.run(["git", "log", "-n", "1", "--pretty=format:%h", "--", filepath], capture_output=True, text=True)
-    return res.stdout.strip() if res.returncode == 0 else None
+    # Prefer HEAD's object hash when available (works for tracked files even with dirty worktree);
+    # fall back to hash-object for untracked/new files.
+    res = subprocess.run(["git", "rev-parse", f"HEAD:{filepath}"], capture_output=True, text=True)
+    if res.returncode == 0 and res.stdout.strip():
+        return res.stdout.strip()[:9]
+    res = subprocess.run(["git", "hash-object", filepath], capture_output=True, text=True)
+    if res.returncode == 0 and res.stdout.strip():
+        return res.stdout.strip()[:9]
+    return None
+
+
+def get_file_sha(filepath: str) -> Optional[str]:
+    """Deprecated alias — use get_file_content_hash. Kept for backwards compat in callers."""
+    return get_file_content_hash(filepath)
 
 
 def get_open_prs() -> List[str]:
@@ -60,7 +77,7 @@ def get_open_prs() -> List[str]:
 
 
 def parse_audited_targets() -> Dict[str, str]:
-    """Parses docs/AUTONOMOUS_WORK_LEDGER.md and extracts {target_file: audited_sha}."""
+    """Parses docs/AUTONOMOUS_WORK_LEDGER.md and extracts {target_file: audited_hash}."""
     if not os.path.exists(LEDGER_PATH):
         return {}
     audited = {}
@@ -80,49 +97,65 @@ def parse_audited_targets() -> Dict[str, str]:
 def cmd_next(stream: int) -> None:
     audited = parse_audited_targets()
     open_prs = get_open_prs()
-    open_prs_str = " ".join(open_prs)
+    # Use exact slug matching against branch names, not substring over concatenated string
+    open_pr_branches = set()
+    open_pr_text = ""
+    if open_prs:
+        open_pr_text = "\n".join(open_prs)
+        # Extract branch names for exact matching
+        import json as _json
+        res = subprocess.run(["gh", "pr", "list", "--json", "headRefName"], capture_output=True, text=True)
+        try:
+            data = _json.loads(res.stdout)
+            open_pr_branches = {pr.get("headRefName", "") for pr in data}
+        except Exception:
+            pass
 
     if stream == 1:
         print("[*] Finding next un-audited target for Stream 1 (Mutation Testing)...")
         for src, test in STREAM_1_TARGETS:
-            current_sha = get_file_sha(src)
-            last_audited_sha = audited.get(src)
+            current_hash = get_file_content_hash(src)
+            last_audited_hash = audited.get(src)
 
-            # Check if active in PR
+            # Check if active in PR — exact branch/title word match, not substring
             slug = os.path.splitext(os.path.basename(src))[0]
-            if slug in open_prs_str:
-                print(f"  [-] {src} currently has an open PR. Skipping to avoid collision.")
+            in_pr = any(slug in branch for branch in open_pr_branches) or slug in open_pr_text
+            # Require word-boundary or path match to avoid false positives, but keep warning
+            if in_pr:
+                print(f"  [-] {src} may have an open PR (slug '{slug}' found). Skipping to avoid collision.")
+                print(f"      Re-check with: gh pr list --search \"{slug}\"")
                 continue
 
-            # Check if already audited at current SHA
-            if last_audited_sha and last_audited_sha == current_sha:
-                print(f"  [-] {src} was already audited at SHA {current_sha} and has not changed. Skipping.")
+            # Check if already audited at current content hash
+            if last_audited_hash and current_hash and last_audited_hash == current_hash:
+                print(f"  [-] {src} was already audited at content hash {current_hash} and has not changed. Skipping.")
                 continue
+            if last_audited_hash and current_hash and last_audited_hash != current_hash:
+                print(f"  [~] {src} was audited at {last_audited_hash} but content is now {current_hash} — re-audit needed.")
 
             print("\n" + "=" * 60)
             print(f"NEXT TARGET FOUND: {src}")
-            print(f"Current File SHA:  {current_sha or 'unknown'}")
-            print(f"Last Audited SHA:  {last_audited_sha or 'NEVER'}")
-            print(f"Target Test File:  {test}")
+            print(f"Current Content Hash: {current_hash or 'unknown'} (git hash-object)")
+            print(f"Last Audited Hash:    {last_audited_hash or 'NEVER'}")
+            print(f"Target Test File:     {test}")
             print("=" * 60)
             print("\nRecommended Command:")
             print(f"python3 scripts/autonomous/mutation_engine.py \\\n  --source {src} \\\n  --test-cmd \"fvm flutter test {test}\" \\\n  --output-issue docs/tasks/mutant_issue.md")
             return
 
-        print("[+] All targets in Stream 1 have been audited at their current commit SHAs!")
+        print("[+] All targets in Stream 1 have been audited at their current content hashes!")
 
 
 def cmd_record(stream: str, target: str, status: str, pr: str, summary: str) -> None:
-    current_sha = get_file_sha(target) or "unknown"
+    current_hash = get_file_content_hash(target) or "unknown"
     today = datetime.date.today().isoformat()
     re_audit = f"Any modification to {os.path.basename(target)}."
 
-    new_row = f"| {today} | {stream} | `{target}` | `{current_sha}` | {status} | {pr} | {summary} | {re_audit} |\n"
+    new_row = f"| {today} | {stream} | `{target}` | `{current_hash}` | {status} | {pr} | {summary} | {re_audit} |\n"
 
     with open(LEDGER_PATH, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Find the table and append after the header separator
     table_header = "|---|---|---|---|---|---|---|---|\n"
     if table_header in content:
         idx = content.find(table_header) + len(table_header)
@@ -130,13 +163,15 @@ def cmd_record(stream: str, target: str, status: str, pr: str, summary: str) -> 
         with open(LEDGER_PATH, "w", encoding="utf-8") as f:
             f.write(updated_content)
         print(f"[+] Successfully recorded entry to {LEDGER_PATH}:\n    {new_row.strip()}")
+        print("    Note: if another agent appended concurrently, rebase before pushing:")
+        print("      git pull --rebase origin/main")
     else:
         print("[!] Could not locate ledger table header in AUTONOMOUS_WORK_LEDGER.md", file=sys.stderr)
         sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Autonomous Work Ledger Manager")
+    parser = argparse.ArgumentParser(description="Autonomous Work Ledger Manager (content-hash based)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     next_parser = subparsers.add_parser("next")
