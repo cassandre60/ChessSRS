@@ -268,17 +268,21 @@ Future<void> pumpUntilGone(
 /// flows, pace-driven overlays — combine both instruments: each sweep grants the poll's
 /// `runAsync` to real work as well as the pump advances, so they land whenever everything
 /// fits (CPU contention) and beyond the fixed window, not never.
+/// Every call performs at least [minSweeps] sweeps before the condition may satisfy the
+/// loop — even when it already holds at entry. This mirrors [pumpAsync]'s unconditional
+/// small clock advance and matters before an interaction: a finder can match a drawer or
+/// dialog row that is still mid-slide (the animation advances only on pump durations, and
+/// `pumpUntil`'s zero-duration frames do not move it), and a tap or long-press against
+/// such a row misses its hit test.
 Future<void> pumpAsyncUntil(
   WidgetTester tester,
   bool Function() condition, {
   Duration timeout = const Duration(seconds: 5),
   Duration interval = const Duration(milliseconds: 50),
-}) async {
+  int minSweeps = 1,
+}) {
   final deadline = DateTime.now().add(timeout);
-  while (!condition()) {
-    if (DateTime.now().isAfter(deadline)) {
-      throw StateError('pumpAsyncUntil timed out after $timeout');
-    }
+  Future<void> sweep() async {
     await tester.runAsync(() async {
       await Future<void>.delayed(interval);
     });
@@ -286,6 +290,19 @@ Future<void> pumpAsyncUntil(
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 300));
   }
+
+  Future<void> loop() async {
+    var sweeps = 0;
+    while (sweeps < minSweeps || !condition()) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw StateError('pumpAsyncUntil timed out after $timeout');
+      }
+      await sweep();
+      sweeps++;
+    }
+  }
+
+  return loop();
 }
 
 /// Legacy pumpAsync for backwards compatibility — prefer pumpUntil/pumpUntilFound.

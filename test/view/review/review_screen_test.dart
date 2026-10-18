@@ -692,21 +692,20 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('King Pawn Repertoire')));
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
       // itself, so the sheet opens from a long-press rather than from a permanent `…`.
       await tester.longPress(find.text('King Pawn Repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Analyze')));
 
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
-      await pumpAsync(tester, 200);
-      await tester.pump(const Duration(milliseconds: 500));
+      await pumpUntilFound(tester, find.byType(StudyScreen));
 
       // StudyScreen is now opened
       expect(find.byType(StudyScreen), findsOneWidget);
@@ -742,21 +741,20 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Multi Chapter Repertoire')));
 
       // Open study options sheet. design/docs/03-components.md §6.4 keeps row actions off the row
       // itself, so the sheet opens from a long-press rather than from a permanent `…`.
       await tester.longPress(find.text('Multi Chapter Repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Analyze')));
 
       // Tap Analyze
       await tester.tap(find.text('Analyze'));
-      await pumpAsync(tester, 200);
-      await tester.pump(const Duration(milliseconds: 500));
+      await pumpUntilFound(tester, find.byType(StudyScreen));
 
       // StudyScreen is now opened
       expect(find.byType(StudyScreen), findsOneWidget);
@@ -787,7 +785,7 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
         // Verify comment is NOT shown before guessing (anti-spoiler)
         expect(find.text('Best by test'), findsNothing);
@@ -826,7 +824,7 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(BoardWidget));
 
         // Before guessing: BoardWidget has NO shapes (anti-spoiler)
         var board = tester.widget<BoardWidget>(find.byType(BoardWidget));
@@ -878,13 +876,13 @@ void main() {
         );
 
         await tester.pumpWidget(app);
-        await pumpAsync(tester);
+        await pumpUntilFound(tester, find.byType(BoardWidget));
 
         // Disable annotations via studyPreferencesProvider
         final element = tester.element(find.byType(ReviewScreen));
         final container = ProviderScope.containerOf(element);
         await container.read(studyPreferencesProvider.notifier).toggleAnnotations();
-        await pumpAsync(tester);
+        await tester.pump();
 
         // Play incorrect move: d2 -> d4 instead of e2 -> e4
         await playMove(tester, 'd2', 'd4');
@@ -929,29 +927,29 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Active Study')));
 
       // Suspending is a row action, so it lives in the actions sheet (design/docs/03-components.md
       // §6.4) rather than on the row. The row itself reports the paused state as `Paused`.
       expect(find.text('Paused'), findsNothing);
       await tester.longPress(find.text('Active Study'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Pause')));
       expect(find.text('Pause'), findsOneWidget);
       await tester.tap(find.text('Pause'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Paused'));
 
       expect(find.text('Paused'), findsOneWidget);
 
       // And it can be put back into the pool.
       await tester.longPress(find.text('Active Study'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Resume'));
       expect(find.text('Resume'), findsOneWidget);
       await tester.tap(find.text('Resume'));
-      await pumpAsync(tester);
+      await pumpUntilGone(tester, find.text('Paused'));
 
       expect(find.text('Paused'), findsNothing);
     });
@@ -985,7 +983,7 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Nothing due.'));
 
       // Initially 0 items due -> shows Nothing due view
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -1039,11 +1037,11 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open Black drawer
       await tester.tap(find.byTooltip('Black repertoire'));
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.text('Openings'));
 
       // Verify the Openings section exists
       expect(find.text('Openings'), findsOneWidget);
@@ -1052,11 +1050,14 @@ void main() {
 
       // Tap 'Sicilian Defense' hub
       await tester.tap(find.text('Sicilian Defense'));
-      await pumpAsync(tester);
-
-      // Verify scope changed to 'Sicilian Defense'
       final element = tester.element(find.byType(ReviewScreen));
       final container = ProviderScope.containerOf(element);
+      await pumpAsyncUntil(tester, () {
+        return container.read(reviewControllerProvider).value?.scope.openingFamily ==
+            'Sicilian Defense';
+      });
+
+      // Verify scope changed to 'Sicilian Defense'
       expect(
         container.read(reviewControllerProvider).value?.scope.openingFamily,
         'Sicilian Defense',
@@ -1086,19 +1087,19 @@ void main() {
       );
 
       await tester.pumpWidget(app);
-      await pumpAsync(tester);
+      await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Open drawer
       await tester.tap(find.byTooltip('White repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Old Title')));
 
       // Open study options sheet (long-press: see the note at the first occurrence above)
       await tester.longPress(find.text('Old Title'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Rename')));
 
       // Tap Rename
       await tester.tap(find.text('Rename'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.byType(SrsDialog)));
 
       // Enter new title in dialog
       await tester.enterText(
@@ -1106,17 +1107,25 @@ void main() {
         'Renamed Repertoire',
       );
       await tester.tap(find.widgetWithText(SrsPillButton, 'Rename'));
-      await pumpAsync(tester);
+      // The entered text is still on screen inside the dialog's field while the dialog fades
+      // out, so pair the title's presence with the dialog's absence: otherwise the wait
+      // releases with the drawer row not yet rebuilt (or not yet pressable).
+      await pumpAsyncUntil(tester, () {
+        return tester.any(find.text('Renamed Repertoire')) && !tester.any(find.byType(SrsDialog));
+      });
 
       // Verify study title updated in drawer
       expect(find.text('Renamed Repertoire'), findsOneWidget);
 
       // Open study actions sheet again to delete
       await tester.longPress(find.text('Renamed Repertoire'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Delete')));
 
       await tester.tap(find.text('Delete'));
-      await pumpAsync(tester);
+      await pumpAsyncUntil(
+        tester,
+        () => tester.any(find.textContaining('positions? This cannot be undone.')),
+      );
 
       // §12 names the item and its position count, and forbids red. The count is fixture
       // data, so what is pinned here is the format rather than the number.
@@ -1133,7 +1142,6 @@ void main() {
 
       // Tap Delete in confirmation dialog
       await tester.tap(find.widgetWithText(SrsPillButton, 'Delete'));
-      await pumpAsync(tester);
 
       // Study is deleted -> empty state. The delete reloads the summary off the DB, so wait
       // on the state rather than a fixed delay.
