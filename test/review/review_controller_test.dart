@@ -2173,31 +2173,43 @@ void main() {
     );
 
     // SPEC INV-050. A graded move settles within one frame.
-    // Drag pre-warming pre-calculates candidate position and audio feedback during touch down.
+    // Drag pre-warming pre-calculates the candidate position during touch down, and the
+    // correct-advance path consumes that pre-calculated position when the played move matches the
+    // prewarmed candidate. This asserts the *mechanism's output*, not just that a plain move
+    // grades correct: a prewarm that caches the wrong board (e.g. the pre-move position instead
+    // of the played one) leaves the wrong position on screen once the line ends.
     test(
-      'prewarmMoveCandidate pre-calculates move position and feedback cues on origin square touch',
+      'prewarmMoveCandidate caches the candidate position the advance later consumes on the board',
       () async {
         final container = createContainer();
         final controller = container.read(reviewControllerProvider.notifier);
 
-        const pgn = '''
-[Event "Italian Game"]
-1. e4 e5 2. Nf3 Nc6 *
-''';
+        // A one-move line, so the graded move is the last one and the board it settles on is the
+        // one the advance took from the prewarm rather than a later prompt's FEN.
+        await controller.importPgnText(
+          pgnText: '1. e4 *',
+          title: 'Single Move Study',
+          repertoireSide: Side.white,
+        );
 
-        await controller.importPgnText(pgnText: pgn, title: 'Italian', repertoireSide: Side.white);
-
-        // Touching an unrelated square (e.g. a2) does not prewarm the e2e4 candidate
+        // Touching an unrelated square (e.g. a2) does not prewarm the e2e4 candidate; touching the
+        // origin square of the expected move (e2 for e2e4) does.
         controller.prewarmMoveCandidate(Square.a2);
-
-        // Touching origin square of expected move (e2 for e2e4) prewarms candidate
         controller.prewarmMoveCandidate(Square.e2);
 
-        const move = NormalMove(from: Square.e2, to: Square.e4);
-        final step = await controller.onUserMove(move);
+        final boardBefore = container.read(reviewControllerProvider).requireValue.boardPosition!;
+        final expected = boardBefore.play(const NormalMove(from: Square.e2, to: Square.e4));
+
+        final step = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
 
         expect(step, isNotNull);
         expect(step!.isCorrect, isTrue);
+        expect(
+          container.read(reviewControllerProvider).requireValue.boardPosition!.fen,
+          expected.fen,
+          reason:
+              'the board settles on the pre-calculated candidate position, not the pre-move one',
+        );
       },
     );
 
