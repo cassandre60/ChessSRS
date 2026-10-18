@@ -30,6 +30,7 @@
 | 2026-10-16 | Stream 2 (Spec Audit) | Full Repertoire SRS core (`44 invariants`) | `bad86151f` | COMPLETED | #191, #192 | Verified 44/44 invariants. Identified open findings F1–F5 in `docs/spec-conformance-audit-2026-10-16.md`. | Major architectural change or new spec version. |
 | 2026-10-17 | Stream 1 (Mutation) | `lib/src/domain/scheduler.dart` | `a71a19096` | IN_PROGRESS | Issue draft | Evaluated 10 mutants: 6 killed, 4 survived. Found stability zero fallback gap & equality test gap. | Any modification to `scheduler.dart`. |
 | 2026-10-17 | Stream 2 (Smell Audit) | Full Test Suite (`1855 declarations`) | `a71a19096` | IN_PROGRESS | `scripts/audit_2026-10/` | Screened 1855 tests with `smell_tests.py`; flagged 298 declarations (vacuous assertions, blocking sleeps). | Any new test additions without linter coverage. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/graph_aware_review_coordinator.dart` | `b11aeacc6fa00d5e8c4b55aa62535fcee465a794` | COMPLETED (full-window re-audit) | #222 | 34 candidates post-filter: 20 killed, 1 survived (equivalent: remainingMs > 0 -> >= 0), 13 uncompilable (null-promotion noise), 0 timeouts. Kill rate 95.2% (20/21 killable). Engine fixed: generic-angle exclusion, timeout bucket, shard windowing (--start/--skip-m). No real gaps; no tests added. | Any modification to graph_aware_review_coordinator.dart or mutation_engine.py. |
 
 > **Note on existing rows:** Hashes recorded before 2026-10-18 used
 > `git log -- <file>` (commit hash). They remain valid as "last audited
