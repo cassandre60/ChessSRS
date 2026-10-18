@@ -76,20 +76,28 @@ jobs:
 
       - name: Package Linux formats (tarball, deb, AppImage)
         run: |
-          # The file-safe name from the resolve step, never GITHUB_REF_NAME: on
-          # a manual dispatch that is a branch name, and its slashes made the
-          # tarball path a directory that does not exist, failing the dry run.
+          # Two different names, on purpose.
+          #
+          # TAG names a FILE. It is never GITHUB_REF_NAME, because on a manual
+          # dispatch that is a branch name and its slashes made the tarball path
+          # a directory that does not exist, failing the dry run.
+          #
+          # VERSION names a PACKAGE. build_deb.sh writes it into the Debian
+          # control file's Version field, which dpkg-deb rejects unless it
+          # starts with a digit — 'build-17' is a fine filename and an invalid
+          # package version.
           TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
           mkdir -p dist
 
           # 1. Standard portable tarball
           tar -czf "dist/chesssrs-${TAG}-linux-x64.tar.gz" -C build/linux/x64/release bundle
 
           # 2. Native Debian / Ubuntu package
-          bash packaging/linux/build_deb.sh build/linux/x64/release/bundle "${TAG}" dist
+          bash packaging/linux/build_deb.sh build/linux/x64/release/bundle "${VERSION}" dist
 
           # 3. Standalone AppImage
-          bash packaging/linux/build_appimage.sh build/linux/x64/release/bundle "${TAG}" dist
+          bash packaging/linux/build_appimage.sh build/linux/x64/release/bundle "${VERSION}" dist
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v6.0.0

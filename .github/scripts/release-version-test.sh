@@ -96,6 +96,20 @@ else
   ok "the file name is safe to use as a path"
 fi
 
+# `version` goes into the Debian control file, which dpkg-deb rejects unless it
+# starts with a digit: 'build-17' is a fine filename and an invalid package
+# version. This is the check for the two names not being interchangeable.
+for ref in "tag v1.6.3" "branch main"; do
+  # shellcheck disable=SC2086 # deliberate split into two arguments
+  set -- $ref
+  resolve "$1" "$2" 48
+  if grep -qx 'version=[0-9][0-9.]*' "$WORK/out"; then
+    ok "version is Debian-safe on a $1 run ($(sed -n 's/^version=//p' "$WORK/out"))"
+  else
+    bad "debian version on a $1 run" "got: $(tr '\n' ' ' <"$WORK/out")"
+  fi
+done
+
 VERSION_JSON="build/linux/x64/release/bundle/data/flutter_assets/version.json"
 mkdir -p "$(dirname "$VERSION_JSON")"
 
