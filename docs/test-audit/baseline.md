@@ -1,5 +1,8 @@
 # Baseline scoreboard — ChessSRS test audit (2026-10-18)
 
+> **Status: Read-only evidence. Do not dispatch agents from this directory.**  
+> For work queue, streams, and dispatch order, use `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` (catalog) and `docs/AUTONOMOUS_WORK_LEDGER.md` (ledger). The eight files that were briefly in `docs/tasks/TEST-0*` have been removed — they were a duplicate queue.
+
 Branch: `test-audit` (off `main` at `a9fbfe0fb`). Measurements taken on the
 developer's machine (Arch Linux, Dart 3.13.5, Flutter 3.47.3) and from GitHub
 Actions history. Every number below states its source; numbers prefixed with
