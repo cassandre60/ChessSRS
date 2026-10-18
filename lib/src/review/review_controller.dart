@@ -2261,6 +2261,17706 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     );
   }
 
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP1({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP2({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP3({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP4({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP5({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP6({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP7({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP8({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP9({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP10({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP11({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP12({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP13({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP14({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP15({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP16({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP17({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP18({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP19({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP20({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP21({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP22({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP23({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP24({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP25({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP26({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP27({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP28({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP29({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP30({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP31({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP32({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP33({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP34({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP35({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP36({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP37({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP38({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP39({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP40({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP41({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP42({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP43({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP44({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP45({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP46({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP47({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP48({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP49({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP50({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP51({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP52({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP53({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP54({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP55({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP56({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP57({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP58({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP59({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP60({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP61({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP62({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP63({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP64({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP65({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP66({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP67({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP68({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP69({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP70({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP71({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP72({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP73({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP74({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP75({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP76({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP77({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP78({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP79({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP80({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP81({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP82({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP83({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP84({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP85({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP86({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP87({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP88({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP89({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP90({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP91({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP92({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP93({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP94({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP95({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP96({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP97({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP98({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP99({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
+  Future<CustomStudiesResult> generateStudiesFromMyGamesPubP100({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    var imported = 0;
+    var updated = 0;
+    var duplicates = 0;
+    var mistakesFixed = 0;
+    final failed = <BulkImportFailure>[];
+    final normalizedUser = username.trim().toLowerCase();
+
+    for (var i = 0; i < generated.length; i++) {
+      final item = generated[i];
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i,
+        total: generated.length,
+        currentName: item.title,
+      ));
+      try {
+        final remoteId =
+            'lichess-games:$normalizedUser:${item.side.name}:${item.openingFamily.toLowerCase()}';
+        final previousLinked = await _repository.getStudyByRemoteId(remoteId);
+        final result = await importPgnText(
+          pgnText: item.pgnText,
+          title: item.title,
+          repertoireSide: item.side,
+          switchScope: false,
+        );
+        final updatedAt = item.latestGameAt ?? DateTime.now().toUtc();
+        if (result.isDuplicate) {
+          duplicates++;
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        } else {
+          if (previousLinked != null && previousLinked.study.id != result.study.id) {
+            await _repository.deleteStudy(previousLinked.study.id);
+            updated++;
+          } else {
+            imported++;
+          }
+          await _repository.updateStudyRemoteRef(
+            studyId: result.study.id,
+            remoteStudyId: remoteId,
+            remoteUpdatedAt: updatedAt,
+          );
+        }
+        mistakesFixed += item.mistakeFixes.length;
+      } on FormatException catch (e) {
+        _logger.warning('Custom study generation skipped "${item.title}": ${e.message}');
+        failed.add((name: item.title, reason: e.message));
+      } catch (e) {
+        _logger.warning('Custom study generation failed for "${item.title}": $e');
+        failed.add((name: item.title, reason: e.toString()));
+      }
+      onProgress?.call((
+        phase: CustomStudiesPhase.buildingStudies,
+        gamesFetched: allGames.length,
+        done: i + 1,
+        total: generated.length,
+        currentName: item.title,
+      ));
+    }
+
+    await reload();
+    _logger.info(
+      'Custom studies done: $imported imported, $updated updated, $duplicates unchanged, '
+      '$mistakesFixed mistake fixes across ${allGames.length} games',
+    );
+    return (
+      imported: imported,
+      updated: updated,
+      duplicates: duplicates,
+      gamesAnalyzed: allGames.length,
+      mistakesFixed: mistakesFixed,
+      generatedStudies: generated,
+      failed: failed,
+    );
+  }
+
   String? _resolveComment(ReviewPrompt? prompt, RepertoireMove? expectedMove) {
     if (prompt == null) return null;
     final child = expectedMove != null && prompt.currentNode != null
