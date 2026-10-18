@@ -2261,6 +2261,6598 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     );
   }
 
+  Future<List<LichessPlayedGame>> generateStudiesSecBP1({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP2({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP3({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP4({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP5({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP6({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP7({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP8({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP9({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP10({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP11({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP12({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP13({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP14({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP15({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP16({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP17({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP18({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP19({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP20({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP21({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP22({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP23({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP24({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP25({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP26({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP27({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP28({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP29({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP30({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP31({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<List<LichessPlayedGame>> generateStudiesSecBP32({
+    Side? repertoireSide,
+    int maxGames = 1000,
+    int pageSize = 200,
+    void Function(CustomStudiesProgress progress)? onProgress,
+  }) async {
+    final username = ref.read(authControllerProvider)?.user.id.value;
+    if (username == null || username.isEmpty) {
+      throw const CustomStudiesGenerationException(
+        'Sign in to generate studies from your Lichess games.',
+      );
+    }
+
+    final studyRepo = ref.read(studyRepositoryProvider);
+    final allGames = <LichessPlayedGame>[];
+    final seenIds = <String>{};
+    int? untilMillis;
+
+    while (allGames.length < maxGames) {
+      final requestMax = math.min(pageSize, maxGames - allGames.length);
+      onProgress?.call((
+        phase: CustomStudiesPhase.fetchingGames,
+        gamesFetched: allGames.length,
+        done: 0,
+        total: 0,
+        currentName: allGames.isEmpty
+            ? 'Fetching your Lichess games…'
+            : 'Fetched ${allGames.length} games…',
+      ));
+
+      final ({List<LichessPlayedGame> games, int rawLineCount, int? oldestTimestampMillis}) batch;
+      try {
+        batch = await studyRepo.getUserGamesBatch(
+          username,
+          max: requestMax,
+          untilMillis: untilMillis,
+          color: repertoireSide,
+        );
+      } on ServerException catch (e) {
+        if (e.statusCode == 401 || e.statusCode == 403) {
+          throw CustomStudiesGenerationException(
+            'Lichess refused access to your games (${e.statusCode}). Sign out and sign back in, '
+            'then retry.',
+          );
+        }
+        throw CustomStudiesGenerationException(
+          'Could not load your Lichess games (status ${e.statusCode}). '
+          'Check your connection and retry.',
+        );
+      } on ClientException catch (e) {
+        throw CustomStudiesGenerationException('Could not read your Lichess games: ${e.message}');
+      }
+
+      var addedInBatch = 0;
+      for (final game in batch.games) {
+        if (seenIds.add(game.id)) {
+          allGames.add(game);
+          addedInBatch++;
+        }
+      }
+      final oldestMillis = batch.oldestTimestampMillis;
+      if (batch.rawLineCount < requestMax || addedInBatch == 0 || oldestMillis == null) {
+        break;
+      }
+      final nextUntil = oldestMillis - 1;
+      if (untilMillis != null && nextUntil >= untilMillis) {
+        break;
+      }
+      untilMillis = nextUntil;
+    }
+
+    return allGames;
+  }
+
+  Future<Object> generateStudiesSecCP1(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP2(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP3(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP4(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP5(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP6(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP7(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP8(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP9(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP10(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP11(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP12(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP13(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP14(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP15(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP16(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP17(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP18(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP19(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP20(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP21(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP22(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP23(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP24(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP25(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP26(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP27(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP28(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP29(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP30(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP31(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP32(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP33(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP34(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP35(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP36(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP37(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP38(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP39(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP40(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP41(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP42(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP43(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP44(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP45(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP46(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP47(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP48(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP49(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP50(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP51(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP52(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP53(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP54(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP55(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP56(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP57(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP58(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP59(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP60(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP61(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP62(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP63(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP64(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP65(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP66(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP67(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP68(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP69(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP70(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP71(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP72(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP73(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP74(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP75(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP76(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP77(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP78(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP79(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP80(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP81(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP82(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP83(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP84(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP85(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP86(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP87(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP88(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP89(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP90(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP91(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP92(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP93(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP94(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP95(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP96(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP97(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP98(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP99(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP100(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP101(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP102(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP103(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP104(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP105(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP106(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP107(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP108(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP109(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP110(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP111(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP112(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP113(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP114(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP115(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP116(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP117(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP118(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP119(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP120(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP121(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP122(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP123(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP124(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP125(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP126(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP127(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
+  Future<Object> generateStudiesSecCP128(
+    List<LichessPlayedGame> allGames,
+    Side? repertoireSide,
+  ) async {
+    if (allGames.isEmpty) {
+      return (
+        imported: 0,
+        updated: 0,
+        duplicates: 0,
+        gamesAnalyzed: 0,
+        mistakesFixed: 0,
+        generatedStudies: const [],
+        failed: const [],
+      );
+    }
+
+    PolyglotBook? book;
+    try {
+      final maiaBook = await ref.read(maiaBookServiceProvider).bookFor(MaiaRating.maia1900);
+      book = maiaBook?.book;
+    } catch (_) {
+      book = null;
+    }
+
+    final generated = generateOpeningStudiesFromGames(
+      allGames,
+      sideFilter: repertoireSide,
+      book: book,
+    );
+
+    return generated;
+  }
+
   String? _resolveComment(ReviewPrompt? prompt, RepertoireMove? expectedMove) {
     if (prompt == null) return null;
     final child = expectedMove != null && prompt.currentNode != null
