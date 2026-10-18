@@ -20,6 +20,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../binding.dart';
 import '../test_container.dart';
+import '../test_helpers.dart';
 import '../utils/fake_connectivity.dart';
 import 'fake_http_client_factory.dart';
 import 'fake_websocket_channel.dart';
@@ -1459,7 +1460,7 @@ void main() {
         const Duration(seconds: 1),
         onTimeout: () => fail('the socket did not reconnect when the device came back online'),
       );
-      await Future<void>.delayed(kFakeWebSocketConnectionLag * 4);
+      await waitUntil(() => pool.currentClient.isConnected);
       expect(pool.currentClient.isConnected, isTrue);
 
       pool.currentClient.close();
@@ -1728,7 +1729,7 @@ void main() {
           const Duration(seconds: 1),
           onTimeout: () => fail('the socket did not reconnect when the device came back online'),
         );
-        await Future<void>.delayed(kFakeWebSocketConnectionLag * 4);
+        await waitUntil(() => pool.currentClient.isConnected);
         expect(pool.currentClient.isConnected, isTrue);
 
         pool.currentClient.close();
@@ -1754,7 +1755,7 @@ void main() {
       offline = false;
       FakeConnectivity.controller.add([ConnectivityResult.wifi]);
       await pumpEventQueue();
-      await Future<void>.delayed(kFakeWebSocketConnectionLag * 4);
+      await waitUntil(() => container.read(isDeviceOnlineProvider));
 
       expect(container.read(isDeviceOnlineProvider), isTrue);
       expect(
@@ -1851,7 +1852,9 @@ void main() {
       final client = container.read(socketPoolProvider).currentClient;
       client.connect();
       await client.firstConnection;
-      await Future<void>.delayed(kFakeWebSocketConnectionLag * 4);
+      await waitUntil(() {
+        return container.read(socketPingProvider(null)).averageLag != Duration.zero;
+      });
       await pumpEventQueue();
 
       expect(container.read(socketPingProvider(null)).averageLag, isNot(Duration.zero));
