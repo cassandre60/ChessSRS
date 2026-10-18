@@ -128,5 +128,69 @@ void main() {
       expect(rState.stability, 172800000.0);
       expect(rState.difficulty, 4.5);
     });
+
+    test('equality compares every field of the canonical state', () {
+      // SPEC INV-016. The canonical state is a value: two separately built
+      // instances with the same fields must be equal — and must not be the
+      // same object, or `identical` would answer before the field chain runs.
+      final t0 = DateTime.utc(2026, 1, 1);
+      PositionKnowledgeState make({String canonicalId = 'canonical-1'}) {
+        return PositionKnowledgeState(
+          canonicalId: canonicalId,
+          firstReviewedAt: t0,
+          lastReviewedAt: t0.add(const Duration(hours: 1)),
+          nextDueAt: t0.add(const Duration(days: 1)),
+          repetitionCount: 3,
+          lapseCount: 1,
+          stability: 172800000.0,
+          difficulty: 4.5,
+          latencyEmaMs: 1200.0,
+          latencySampleCount: 4,
+          lastExposedAt: t0.add(const Duration(days: 2)),
+        );
+      }
+
+      final a = make();
+      final b = make();
+      expect(identical(a, b), isFalse);
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a == Object(), isFalse);
+
+      final base = make();
+      final variants = <String, PositionKnowledgeState>{
+        'canonicalId': make(canonicalId: 'canonical-2'),
+        'firstReviewedAt': base.copyWith(firstReviewedAt: t0.add(const Duration(days: 9))),
+        'lastReviewedAt': base.copyWith(lastReviewedAt: t0.add(const Duration(days: 9))),
+        'nextDueAt': base.copyWith(nextDueAt: t0.add(const Duration(days: 9))),
+        'repetitionCount': base.copyWith(repetitionCount: 4),
+        'lapseCount': base.copyWith(lapseCount: 2),
+        'stability': base.copyWith(stability: 259200000.0),
+        'difficulty': base.copyWith(difficulty: 5.5),
+        'latencyEmaMs': base.copyWith(latencyEmaMs: 4321.0),
+        'latencySampleCount': base.copyWith(latencySampleCount: 5),
+        'lastExposedAt': base.copyWith(lastExposedAt: t0.add(const Duration(days: 3))),
+      };
+
+      for (final entry in variants.entries) {
+        expect(
+          base == entry.value,
+          isFalse,
+          reason: 'a state differing in ${entry.key} must not compare equal',
+        );
+      }
+    });
+
+    test('an answered state is not new even without a due date', () {
+      // Domain API parity with ReviewState's isNew (pinned by the scheduler
+      // suite): "new" cannot be true for a state that has been answered.
+      const answered = PositionKnowledgeState(
+        canonicalId: 'canonical-answered',
+        repetitionCount: 3,
+      );
+
+      expect(answered.isNew, isFalse);
+      expect(answered.isLearned, isTrue);
+    });
   });
 }
