@@ -196,4 +196,45 @@ void main() {
       reason: 'the file picker must be dead while the bulk import runs',
     );
   });
+
+  testWidgets('Build studies from my games is shown when signed in and disables other controls', (
+    tester,
+  ) async {
+    final stalled = Completer<http.Response>();
+    await openImportDialog(
+      tester,
+      overrides: {
+        isLoggedInProvider: isLoggedInProvider.overrideWith((ref) => true),
+        lichess_study.studyRepositoryProvider: lichess_study.studyRepositoryProvider.overrideWith(
+          (ref) => lichess_study.StudyRepository(ref, MockClient((_) => stalled.future)),
+        ),
+      },
+    );
+
+    ProviderScope.containerOf(
+      tester.element(find.byType(RepertoireImportDialog)),
+    ).read(authControllerProvider.notifier).state = const AuthUser(
+      token: 'test-token',
+      user: LightUser(id: UserId('tester'), name: 'tester'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Build studies from my games'), findsOneWidget);
+    await tester.ensureVisible(find.text('Build studies from my games'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Build studies from my games'));
+    await tester.pump();
+
+    ButtonStyleButton buttonLabelled(String label) => tester.widget<ButtonStyleButton>(
+      find
+          .ancestor(
+            of: find.text(label),
+            matching: find.byWidgetPredicate((widget) => widget is ButtonStyleButton),
+          )
+          .first,
+    );
+
+    expect(buttonLabelled('Fetch & Import from Lichess').onPressed, isNull);
+    expect(buttonLabelled('Import all my studies').onPressed, isNull);
+  });
 }
