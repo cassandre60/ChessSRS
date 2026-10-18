@@ -26,6 +26,11 @@
 
 | Date | Stream | Target File / Module | Content Hash | Status | PR / Issue | Summary / Outcome | Re-Audit Trigger |
 |---|---|---|---|---|---|---|---|
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/review/review_session.dart` | `d2b783d6f` | COMPLETED | #223 | 248 curated mutants: 78 killed by the pre-existing suite, 66 won't-compile, 101 survivors (+3 timeout artifacts). The new 39-test suite kills 67 of the 101: 50 of the 71 the first pass left, plus 17 of the 30 it had killed (recheck: 13 of those are no longer killed). 34 survivors recorded, L1224/L170/L1045 documented equivalents, L1060 open. | Any modification to review_session.dart. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/position_knowledge_state.dart` | `2860408ca` | COMPLETED | #208 | 29 curated mutants: 5 killed, 13 survived (11 invalid); all 13 closed with 2 tests. | Any modification to position_knowledge_state.dart. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/persistence/sqlite_study_repository.dart` | `80b5f1647` | COMPLETED | #206 | 158 curated mutants: 91 killed, 67 survived; 8 real gaps closed with 6 tests, 59 documented equivalents (6 loop-boundary mutants pinned by 4 exact-multiple tests + SQLite IN () no-op evidence). | Any modification to sqlite_study_repository.dart. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/import/pgn_exporter.dart` | `5e4c31a2d` | COMPLETED | #204 | 41 curated mutants: 27 killed, 6 compile-killed, 8 survivors; 3 real fidelity gaps closed with 4 tests (Chapter tag vs Event fallback; mainline and variation comments; black-to-move round trip; INV-014), 5 documented (L106 numbering form, L154–L159 unreachable else-branch). | Any modification to pgn_exporter.dart. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/chess_fsrs_scheduler.dart` | `f23a3db68` | COMPLETED | #203 | 76 curated mutants: 20 killed by the suite, 23 compile-killed, 33 survivors; 29 real gaps closed with 9 tests (the const-canonicalised equality test could not fail; runtime-constructed operands re-pin INV-026, plus INV-025 boundary guards), 4 documented equivalents (L144, L152, L236, L330). | Any modification to chess_fsrs_scheduler.dart. |
 | 2026-10-17 | Stream 1 (Mutation) | `lib/src/domain/graph_aware_review_coordinator.dart` | `9e2c9e480` | COMPLETED | #202 | 27 curated mutants: 17 killed, 7 invalid (compile), 3 survived; closed 2 real INV-028 gaps with tests, L209 documented equivalent. | Any modification to graph_aware_review_coordinator.dart. |
 | 2026-10-16 | Stream 2 (Spec Audit) | Full Repertoire SRS core (`44 invariants`) | `bad86151f` | COMPLETED | #191, #192 | Verified 44/44 invariants. Identified open findings F1–F5 in `docs/spec-conformance-audit-2026-10-16.md`. | Major architectural change or new spec version. |
 | 2026-10-17 | Stream 1 (Mutation) | `lib/src/domain/scheduler.dart` | `a71a19096` | IN_PROGRESS | Issue draft | Evaluated 10 mutants: 6 killed, 4 survived. Found stability zero fallback gap & equality test gap. | Any modification to `scheduler.dart`. |
@@ -47,12 +52,12 @@ a second work queue — it is a convenience index into plan-owned work.
 ### Stream 1: Mutation Testing Targets (Never Audited)
 
 - [x] `lib/src/domain/graph_aware_review_coordinator.dart` (Core graph propagation: contagion, exposure, sibling coupling)
-- [ ] `lib/src/domain/chess_fsrs_scheduler.dart` (DSR power-law formulas, retrievability interval solving)
+- [x] `lib/src/domain/chess_fsrs_scheduler.dart` (DSR power-law formulas, retrievability interval solving)
 - [ ] `lib/src/domain/review/review_engine.dart` (Move validation, auto-traversal, line transitions)
-- [ ] `lib/src/domain/review/review_session.dart` (Queue partitioning, prefetch refills, daily limits)
-- [ ] `lib/src/import/pgn_exporter.dart` (PGN serialization, move comments, orientation tags)
-- [ ] `lib/src/persistence/sqlite_study_repository.dart` (Targeted scope queries, transactions, mmap)
-- [ ] `lib/src/domain/position_knowledge_state.dart` (Canonical key generation and state conversions)
+- [x] `lib/src/domain/review/review_session.dart` (Queue partitioning, prefetch refills, daily limits)
+- [x] `lib/src/import/pgn_exporter.dart` (PGN serialization, move comments, orientation tags)
+- [x] `lib/src/persistence/sqlite_study_repository.dart` (Targeted scope queries, transactions, mmap)
+- [x] `lib/src/domain/position_knowledge_state.dart` (Canonical key generation and state conversions)
 
 ### Stream 2: Test Smell Remediation Targets
 
