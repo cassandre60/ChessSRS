@@ -1,4 +1,10 @@
-# Review brief queue
+# Review brief queue & Autonomous Improvement
+
+> **Autonomous Improvement Engine:**
+> For continuous, autonomous improvement cycles, mutation tests, or test suite audits,
+> follow the **[Autonomous Improvement Catalogue](../AUTONOMOUS_IMPROVEMENT_CATALOG.md)**.
+> All agents working on repo improvement must follow the **Fail-to-Pass Invariant**
+> and the **Worktree Isolation Rule** defined there.
 
 Work items for review passes over this codebase. Each `.md` here is a brief an
 agent can pick up and execute top-to-bottom.
