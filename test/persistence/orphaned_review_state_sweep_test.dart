@@ -135,11 +135,7 @@ void main() {
       expect(swept, 1, reason: 'exactly the stranded mirror is unreachable');
       expect(await db.query(kTableSrsReviewState), hasLength(3));
       expect(
-        await db.query(
-          kTableSrsReviewState,
-          where: 'decisionId = ?',
-          whereArgs: ['stranded-key'],
-        ),
+        await db.query(kTableSrsReviewState, where: 'decisionId = ?', whereArgs: ['stranded-key']),
         isEmpty,
       );
     });
