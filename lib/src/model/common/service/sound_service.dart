@@ -44,10 +44,16 @@ final _extension = defaultTargetPlatform == TargetPlatform.iOS ? 'aifc' : 'mp3';
 
 const Set<Sound> _emtpySet = {};
 
-final _linuxSoundPlayer = _LinuxSoundPlayer();
+final _linuxSoundPlayer = LinuxSoundPlayer();
 
 /// Linux audio player using system audio backends (pw-play, paplay, or aplay).
-class _LinuxSoundPlayer {
+///
+/// Public so tests can inject a recording stand-in ([SoundService.linuxPlayer])
+/// and observe what the service decided to play — enabled, disabled, resolved
+/// volume — instead of merely that play() completed. Asset loading
+/// ([initialize]/[load] callers) stays on the process-wide default instance;
+/// only the play decision is routed through the injected instance.
+class LinuxSoundPlayer {
   final Map<String, String> _soundPaths = {};
   String? _playerCmd;
 
@@ -144,9 +150,14 @@ Future<void> _loadSound(SoundTheme theme, Sound sound) async {
 
 /// Service to play game sounds.
 class SoundService {
-  SoundService(this._ref);
+  SoundService(this._ref, {@visibleForTesting LinuxSoundPlayer? linuxPlayer})
+    : _linuxPlayer = linuxPlayer ?? _linuxSoundPlayer;
 
   final Ref _ref;
+
+  /// The Linux audio backend used on the Linux platform. Defaults to the
+  /// process-wide instance; tests inject a recording stand-in.
+  final LinuxSoundPlayer _linuxPlayer;
 
   /// Initialize the sound service.
   ///
@@ -185,7 +196,7 @@ class SoundService {
       return;
     }
     if (defaultTargetPlatform == TargetPlatform.linux) {
-      _linuxSoundPlayer.play(sound.name, volume: finalVolume);
+      _linuxPlayer.play(sound.name, volume: finalVolume);
       return;
     }
     try {
@@ -210,7 +221,7 @@ class SoundService {
   /// If [playSound] is true, a move sound will be played.
   Future<void> changeTheme(SoundTheme theme, {bool playSound = false}) async {
     if (defaultTargetPlatform == TargetPlatform.linux) {
-      _linuxSoundPlayer.release();
+      _linuxPlayer.release();
     } else {
       try {
         await _soundEffectPlugin.release();
@@ -227,7 +238,7 @@ class SoundService {
 
   Future<void> release() async {
     if (defaultTargetPlatform == TargetPlatform.linux) {
-      _linuxSoundPlayer.release();
+      _linuxPlayer.release();
     } else {
       try {
         await _soundEffectPlugin.release();
