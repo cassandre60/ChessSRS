@@ -523,7 +523,9 @@ void main() {
 
       // Past it, the next question is open and the verdict is gone rather than lingering.
       await tester.tap(find.widgetWithText(SrsPillButton, 'Continue'));
-      await pumpUntilGone(tester, find.bySemanticsLabel(RegExp('Correct')));
+      await pumpAsyncUntil(tester, () {
+        return !tester.any(find.bySemanticsLabel(RegExp('Correct')));
+      });
       expect(find.bySemanticsLabel(RegExp('Correct')), findsNothing);
 
       // A wrong move, announced with the study move. The study's second move is Nf3, so
