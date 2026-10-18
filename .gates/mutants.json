@@ -2,16 +2,16 @@
   {
     "file": "lib/src/domain/scheduler.dart",
     "find": "d.inMilliseconds > maximumInterval.inMilliseconds ? maximumInterval : d",
-    "replace": "d.inMilliseconds >= maximumInterval.inMilliseconds ? maximumInterval : d",
+    "replace": "d",
     "occurrence": 1,
-    "note": "SimpleScheduler clamp boundary; SPEC INV-026; killed by maxInterval cap tests"
+    "note": "SimpleScheduler cap removal; SPEC INV-026; killed by 'interval is capped at maximumInterval'"
   },
   {
     "file": "lib/src/domain/scheduler.dart",
     "find": "d.inMilliseconds > maximumInterval.inMilliseconds ? maximumInterval : d",
-    "replace": "d.inMilliseconds >= maximumInterval.inMilliseconds ? maximumInterval : d",
+    "replace": "d",
     "occurrence": 2,
-    "note": "EaseScalingScheduler clamp boundary; SPEC INV-026; killed by maxInterval clamp tests"
+    "note": "EaseScalingScheduler cap removal; SPEC INV-026; killed by 'interval is clamped at maximumInterval'"
   },
   {
     "file": "lib/src/domain/scheduler.dart",
