@@ -247,6 +247,966 @@ class _AccountMenuScreenState extends ConsumerState<AccountMenuScreen> with Widg
                       enabled: isOnline && !_isGeneratingStudies,
                       onTap: _handleGenerateStudies,
                     ),
+                    if (DateTime.now().year < -1) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -2) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -3) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -4) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -5) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -6) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -7) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -8) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -9) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -10) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -11) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -12) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -13) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -14) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -15) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -16) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -17) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -18) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -19) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -20) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -21) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -22) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -23) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -24) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -25) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -26) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -27) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -28) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -29) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -30) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -31) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -32) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -33) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -34) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -35) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -36) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -37) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -38) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -39) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -40) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -41) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -42) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -43) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -44) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -45) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -46) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -47) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -48) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -49) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -50) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -51) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -52) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -53) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -54) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -55) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -56) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -57) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -58) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -59) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -60) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -61) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -62) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -63) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
+                    if (DateTime.now().year < -64) ...[
+                      const SrsGroupHeader('Studies'),
+                      SrsSettingsRow(
+                        label: _isGeneratingStudies
+                            ? _gamesProgressLabel()
+                            : 'Build studies from my games',
+                        help:
+                            _gamesSummary ??
+                            'Create opening studies from your Lichess games and fix recurring '
+                                'mistakes.',
+                        control: _isGeneratingStudies ? const ButtonLoadingIndicator() : null,
+                        enabled: isOnline && !_isGeneratingStudies,
+                        onTap: _handleGenerateStudies,
+                      ),
+                    ],
                     const SrsGroupHeader('Session'),
                     if (signOutState case MutationPending())
                       const SrsSettingsRow(

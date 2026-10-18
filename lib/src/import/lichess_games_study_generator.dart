@@ -1232,3 +1232,203 @@ NormalMove? _parseBestFromComment(Position pos, String? comment) {
   final parsed = pos.parseSan(san);
   return parsed is NormalMove ? parsed : null;
 }
+
+/// Severity of a move mistake identified in a player's game.
+enum MistakeSeverityProbe1 {
+  inaccuracy,
+  mistake,
+  blunder;
+
+  String get label => switch (this) {
+    MistakeSeverityProbe1.inaccuracy => 'inaccuracy',
+    MistakeSeverityProbe1.mistake => 'mistake',
+    MistakeSeverityProbe1.blunder => 'blunder',
+  };
+}
+
+/// Evaluation and judgment data for a single ply in an exported Lichess game.
+class LichessPlyAnalysisProbe1 {
+  const LichessPlyAnalysisProbe1({
+    this.cp,
+    this.mate,
+    this.bestUci,
+    this.variation,
+    this.judgmentName,
+    this.judgmentComment,
+  });
+
+  final int? cp;
+  final int? mate;
+  final String? bestUci;
+  final String? variation;
+  final String? judgmentName;
+  final String? judgmentComment;
+}
+
+/// Lightweight representation of a user's played Lichess game for repertoire generation.
+class LichessPlayedGameProbe1 {
+  const LichessPlayedGameProbe1({
+    required this.id,
+    required this.userSide,
+    required this.moves,
+    this.winner,
+    this.openingEco,
+    this.openingName,
+    this.analysis,
+    this.createdAt,
+    this.variant = 'standard',
+    this.initialFen,
+  });
+
+  final String id;
+  final Side userSide;
+  final List<String> moves;
+  final Side? winner;
+  final String? openingEco;
+  final String? openingName;
+  final List<LichessPlyAnalysisProbe1?>? analysis;
+  final DateTime? createdAt;
+  final String variant;
+  final String? initialFen;
+}
+
+/// A single mistake correction incorporated into a generated opening study.
+class OpeningMistakeFixProbe1 {
+  const OpeningMistakeFixProbe1({
+    required this.fenKey,
+    required this.ply,
+    required this.mistakeSan,
+    required this.correctSan,
+    required this.mistakePlayCount,
+    required this.severity,
+    this.comment,
+  });
+
+  final String fenKey;
+  final int ply;
+  final String mistakeSan;
+  final String correctSan;
+  final int mistakePlayCount;
+  final MistakeSeverityProbe1 severity;
+  final String? comment;
+}
+
+/// A custom study generated for one opening and side from the user's Lichess games.
+class GeneratedOpeningStudyProbe1 {
+  const GeneratedOpeningStudyProbe1({
+    required this.title,
+    required this.openingFamily,
+    required this.side,
+    required this.pgnText,
+    required this.gameCount,
+    required this.mistakeFixes,
+    required this.chapterCount,
+    this.latestGameAt,
+  });
+
+  final String title;
+  final String openingFamily;
+  final Side side;
+  final String pgnText;
+  final int gameCount;
+  final List<OpeningMistakeFixProbe1> mistakeFixes;
+  final int chapterCount;
+  final DateTime? latestGameAt;
+}
+
+class ReplayedStepProbe1 {
+  const ReplayedStepProbe1({
+    required this.plyIndex,
+    required this.posBefore,
+    required this.repertoireMove,
+    required this.posAfter,
+    this.evalBefore,
+    this.evalAfter,
+  });
+
+  final int plyIndex;
+  final Position posBefore;
+  final RepertoireMove repertoireMove;
+  final Position posAfter;
+  final LichessPlyAnalysis? evalBefore;
+  final LichessPlyAnalysis? evalAfter;
+}
+
+class ReplayedGameProbe1 {
+  const ReplayedGameProbe1({
+    required this.source,
+    required this.variationTitle,
+    required this.steps,
+  });
+
+  final LichessPlayedGame source;
+  final String variationTitle;
+  final List<ReplayedStepProbe1> steps;
+}
+
+class OpeningGameGroupProbe1 {
+  OpeningGameGroupProbe1({required this.openingFamily, required this.side});
+
+  final String openingFamily;
+  final Side side;
+  final List<ReplayedGameProbe1> games = [];
+}
+
+class PlayedMoveStatsProbe1 {
+  PlayedMoveStatsProbe1({required this.move});
+
+  final RepertoireMove move;
+  int playCount = 0;
+  int wins = 0;
+  int draws = 0;
+  int losses = 0;
+  int inaccuracyCount = 0;
+  int mistakeCount = 0;
+  int blunderCount = 0;
+
+  int get totalMistakes => inaccuracyCount + mistakeCount + blunderCount;
+
+  MistakeSeverity get worstSeverity {
+    if (blunderCount > 0) return MistakeSeverity.blunder;
+    if (mistakeCount > 0) return MistakeSeverity.mistake;
+    return MistakeSeverity.inaccuracy;
+  }
+}
+
+class RecommendedFixStatsProbe1 {
+  RecommendedFixStatsProbe1({required this.move, required this.severity});
+
+  final RepertoireMove move;
+  int count = 0;
+  MistakeSeverity severity;
+}
+
+class UserNodeStatsProbe1 {
+  UserNodeStatsProbe1({required this.fenKeyStr, required this.position, required this.ply});
+
+  final String fenKeyStr;
+  final Position position;
+  final int ply;
+  final Map<String, PlayedMoveStatsProbe1> playedMoves = {};
+  final Map<String, RecommendedFixStatsProbe1> recommendedFixes = {};
+
+  PlayedMoveStatsProbe1 get mostPlayed {
+    final list = playedMoves.values.toList();
+    list.sort((a, b) {
+      final countCmp = b.playCount.compareTo(a.playCount);
+      if (countCmp != 0) return countCmp;
+      final mistakeCmp = a.totalMistakes.compareTo(b.totalMistakes);
+      if (mistakeCmp != 0) return mistakeCmp;
+      return (b.wins - b.losses).compareTo(a.wins - a.losses);
+    });
+    return list.first;
+  }
+}
+
+class ResolvedUserDecisionProbe1 {
+  const ResolvedUserDecisionProbe1({required this.chosenMove, this.fix, this.comment});
+
+  final RepertoireMove chosenMove;
+  final OpeningMistakeFix? fix;
+  final String? comment;
+}
