@@ -1,0 +1,183 @@
+path,kind,#tests,runtime,behavior,SPEC invariants,mock_count,real_time_IO,cut_list
+test/app_links_service_test.dart,widget,22,n/a,resolveAppLinkUri,INV-008,23,delay/pumpAndSettle,n
+test/app_test.dart,widget,4,n/a,app,,0,none,n
+test/db/database_config_test.dart,unit,1,n/a,database connection configuration,INV-001,0,FileIO,n
+test/db/openings_database_test.dart,unit,1,n/a,Openings database,,0,FileIO,n
+test/db/srs_upgrade_test.dart,unit,2,n/a,schema v17 remote study linkage,INV-001;INV-005,0,FileIO,n
+test/design/board_squares_test.dart,widget,4,n/a,square tokens,INV-061,0,none,n
+test/design/design_primitives_test.dart,widget,10,n/a,SrsIconButton,INV-061;INV-062,0,none,n
+test/design/folio_tokens_test.dart,unit,4,n/a,SrsFolioColors matches the demo,,0,none,n
+test/design/one_look_test.dart,unit,2,n/a,no iOS-native look on a reachable screen,,0,FileIO;network,n
+test/design/practice_exit_test.dart,widget,5,n/a,Practice mode exit,INV-062,0,delay/pumpAndSettle,n
+test/design/review_line_reserve_test.dart,widget,2,n/a,SrsReviewSide notation-line reserve,,0,none,n
+test/design/srs_accent_test.dart,unit,5,n/a,Srs accent persistence,,0,none,n
+test/design/srs_colors_contrast_test.dart,unit,2,n/a,SrsColors text contrast (INV-061),INV-061,0,none,n
+test/design/srs_dialog_test.dart,widget,7,n/a,SrsDialog,,0,delay/pumpAndSettle,n
+test/design/srs_notation_line_test.dart,widget,4,n/a,SrsNotationLine,,0,delay/pumpAndSettle,n
+test/design/srs_page_head_test.dart,widget,2,n/a,SrsPageHead (demo .set-head),,0,delay/pumpAndSettle,n
+test/design/srs_sheet_dismissible_test.dart,widget,4,n/a,srs sheet dismissible,,0,delay/pumpAndSettle,n
+test/design/srs_switch_test.dart,widget,2,n/a,SrsSwitch (demo .tog),,0,delay/pumpAndSettle,n
+test/design/srs_toast_test.dart,widget,6,n/a,srs toast,,0,delay/pumpAndSettle,n
+test/design/theme_bridge_test.dart,unit,3,n/a,srsThemeData interactive colours,,0,none,n
+test/design/top_bar_colour_squares_test.dart,widget,9,n/a,top bar colour squares,INV-030,0,delay/pumpAndSettle,n
+test/design/top_bar_narrow_test.dart,widget,3,n/a,top bar narrow,INV-062,0,delay/pumpAndSettle,n
+test/domain/chess_fsrs_scheduler_test.dart,unit,25,n/a,ChessFSRS Math Functions,INV-024;INV-025;INV-026,0,none,n
+test/domain/due_status_test.dart,unit,9,n/a,dueStatusOf,INV-068,0,none,n
+test/domain/entities_test.dart,unit,23,n/a,Study,INV-010;INV-033,0,none,n
+test/domain/graph_aware_review_coordinator_test.dart,unit,16,n/a,GraphAwareReviewCoordinator,INV-017;INV-027;INV-028;INV-029,0,none,n
+test/domain/position_knowledge_state_test.dart,unit,12,n/a,PositionKnowledgeState & canonicalKey,INV-015;INV-016;INV-017,0,none,n
+test/domain/repertoire_progress_test.dart,unit,4,n/a,RepertoireProgress,,0,none,n
+test/domain/review_scope_test.dart,unit,9,n/a,ReviewScope side scopes,INV-030,0,none,n
+test/domain/scheduler_test.dart,unit,26,n/a,ReviewState,INV-024;INV-025;INV-026;INV-030;INV-041,0,none,n
+test/gates/domain_boundary_test.dart,unit,4,n/a,"domain boundary (SPEC INV-040, INV-041, INV-042)",INV-040;INV-041;INV-042,0,FileIO;network,n
+test/import/chapter_orientation_test.dart,unit,9,n/a,resolveChapterOrientation,INV-013,0,none,n
+test/import/lichess_study_importer_test.dart,unit,14,n/a,extractLichessStudyId,,0,none,n
+test/import/opening_name_test.dart,unit,8,n/a,opening name predicates,INV-067,0,none,n
+test/import/pgn_exporter_test.dart,unit,18,n/a,PGN Exporter,INV-010;INV-014,0,none,n
+test/import/pgn_importer_test.dart,unit,76,n/a,fenKey,INV-003;INV-010;INV-011;INV-012;INV-013;INV-014;INV-015;INV-016;INV-017;INV-067,0,FileIO,n
+test/import/pgn_offload_test.dart,unit,3,n/a,shouldOffloadPgnWork,,0,FileIO,n
+test/model/account/account_preferences_test.dart,unit,12,n/a,AccountPrefState serialization,,8,network,n
+test/model/account/account_repository_test.dart,unit,1,n/a,AccountRepository,,1,none,n
+test/model/analysis/forecast_test.dart,unit,12,n/a,adding a line,,0,none,n
+test/model/analysis/server_analysis_service_test.dart,unit,5,n/a,ServerAnalysisService request lifecycle,,4,network,n
+test/model/auth/auth_controller_test.dart,unit,6,n/a,auth controller,,14,none,n
+test/model/auth/auth_identity_fencing_test.dart,unit,3,n/a,checkToken identity fencing,INV-007,4,network,n
+test/model/auth/auth_repository_test.dart,unit,24,n/a,AuthRepository.signIn,INV-006,15,FileIO;network,n
+test/model/auth/startup_token_check_test.dart,unit,5,n/a,startup token check,INV-007,15,network,n
+test/model/board_editor/board_editor_controller_test.dart,unit,4,n/a,BoardEditorController,,0,none,n
+test/model/clock/chess_clock_test.dart,unit,13,n/a,chess clock,,0,none,n
+test/model/common/eval_test.dart,unit,9,n/a,Eval.evalString (centipawn formatting),,0,none,n
+test/model/common/node_test.dart,unit,53,n/a,Node,,0,none,n
+test/model/common/service/sound_service_test.dart,unit,3,n/a,sound service,,5,none,n
+test/model/common/time_increment_test.dart,unit,6,n/a,TimeIncrement Tests,,0,none,n
+test/model/common/uci_test.dart,unit,10,n/a,UciPath,,0,none,n
+test/model/engine/cloud_eval_http_test.dart,widget,2,n/a,Unauthenticated HTTP Cloud Evaluation,,4,network,n
+test/model/engine/engine_availability_test.dart,unit,6,n/a,isLocalEngineOffered,,0,none,n
+test/model/engine/engine_budget_test.dart,unit,11,n/a,EngineBudget,,0,none,n
+test/model/engine/engine_factory_test.dart,unit,10,n/a,EngineFactory,,7,none,n
+test/model/engine/engine_opponent_test.dart,unit,32,n/a,StockfishOpponent,,40,none,n
+test/model/engine/engine_providers_test.dart,unit,4,n/a,engineProvider,,4,delay/pumpAndSettle,n
+test/model/engine/engine_test.dart,unit,33,n/a,Engine,,26,none,n
+test/model/engine/engine_utils_test.dart,unit,13,n/a,hasNonStandardMaterial,,0,none,n
+test/model/engine/evaluation_mixin_test.dart,unit,2,n/a,evaluation mixin,,4,none,n
+test/model/engine/likely_nodes_test.dart,unit,3,n/a,likelyNodesFor,,0,none,n
+test/model/engine/maia_book_asset_test.dart,unit,4,n/a,the bundled Maia books,,0,none,n
+test/model/engine/opening_book_test.dart,unit,24,n/a,PolyglotBook,,2,network,n
+test/model/engine/position_evaluator_test.dart,unit,64,n/a,PositionEvaluator state transitions,,23,none,n
+test/model/engine/stockfish_nnue_service_test.dart,unit,18,n/a,StockfishNnueService,,14,FileIO;network,n
+test/model/engine/thinking_time_test.dart,unit,8,n/a,ThinkingTime,,0,none,n
+test/model/engine/weights_service_test.dart,unit,14,n/a,MaiaWeightsService,,10,FileIO;network,n
+test/model/explorer/opening_explorer_repository_test.dart,unit,3,n/a,OpeningExplorerRepository.getMasterDatabase,,3,none,n
+test/model/explorer/tablebase_repository_test.dart,unit,2,n/a,TablebaseRepository.getTablebase,,2,network,n
+test/model/game/game_history_test.dart,unit,1,n/a,UserGameHistoryNotifier,,7,none,n
+test/model/game/game_repository_test.dart,unit,6,n/a,GameRepository.getRecentGames,,6,none,n
+test/model/game/game_status_test.dart,unit,2,n/a,game status,,0,none,n
+test/model/game/game_storage_test.dart,unit,2,n/a,GameStorage,,0,none,n
+test/model/game/game_test.dart,unit,13,n/a,ExportedGame,,0,none,n
+test/model/game/material_diff_test.dart,unit,4,n/a,GameMaterialDiff,,0,none,n
+test/model/game/offline_computer_game_test.dart,unit,3,n/a,OfflineComputerGame,,0,none,n
+test/model/log/http_log_paginator_test.dart,unit,2,n/a,HttpLogPaginator paging,,7,none,n
+test/model/log/log_diagnostics_test.dart,unit,5,n/a,Domain & Diagnostics Logger Audit,,0,DateTime.now,n
+test/model/offline_computer/practice_analyser_test.dart,unit,8,n/a,PracticeAnalyser,,0,none,n
+test/model/offline_computer/practice_comment_test.dart,unit,1,n/a,MoveVerdict,,0,none,n
+test/model/offline_computer/tablebase_eval_test.dart,unit,15,n/a,tablebaseEntryToCloudEval,,0,none,n
+test/model/settings/preferences_storage_test.dart,unit,5,n/a,PreferencesStorage corrupted blob backup (DATA-FIX-31),,0,none,n
+test/model/study/study_collaboration_test.dart,unit,7,n/a,Study collaboration edits,,8,none,n
+test/model/study/study_preferences_test.dart,unit,3,n/a,StudyPrefs migrations,,0,none,n
+test/model/study/study_repository_test.dart,unit,2,n/a,StudyRepository.getStudy,,3,network,n
+test/model/user/user_repository_test.dart,unit,7,n/a,UserRepository.getUser,,7,none,n
+test/network/aggregator_test.dart,unit,4,n/a,Aggregator,,8,network,n
+test/network/connectivity_test.dart,unit,16,n/a,isDeviceOnlineProvider,,24,FileIO;network,n
+test/network/default_client_deadline_test.dart,unit,3,n/a,DefaultClient deadline,,2,network,n
+test/network/http_redaction_test.dart,unit,14,n/a,redactUriForLogging,INV-006,3,FileIO;network,n
+test/network/http_test.dart,unit,25,n/a,shouldRetryOn429,,49,FileIO;network,n
+test/network/server_status_test.dart,unit,9,n/a,ServerStatusNotifier,,7,network,n
+test/network/socket_test.dart,unit,47,n/a,SocketClient,INV-064,123,FileIO;network,n
+test/perf/driver_overhead_test.dart,unit,1,n/a,driver overhead,,0,FileIO,n
+test/perf/due_summary_attribution_test.dart,unit,1,n/a,due summary attribution,,0,DateTime.now;FileIO,n
+test/perf/real_library_session_cost_test.dart,unit,1,n/a,real library session cost,,0,DateTime.now;FileIO,n
+test/persistence/canonical_rekey_migration_test.dart,unit,11,n/a,rekeyCanonicalReviewState,INV-005,0,FileIO,n
+test/persistence/fast_date_parser_test.dart,unit,5,n/a,parseUtcIso,INV-002,0,none,n
+test/persistence/json_adapters_test.dart,unit,4,n/a,review state JSON round-trip,,0,none,n
+test/persistence/opening_name_repair_migration_test.dart,unit,8,n/a,spurious opening names,INV-005;INV-067,0,FileIO,n
+test/persistence/sqlite_study_repository_test.dart,unit,48,n/a,SqliteStudyRepository,INV-001;INV-002;INV-003;INV-004;INV-005;INV-016;INV-028;INV-031;INV-051,0,FileIO,n
+test/persistence/srs_schema_indexes_test.dart,unit,2,n/a,SRS SQLite schema indexes,,0,none,n
+test/platform/app_store_links_test.dart,unit,5,n/a,app store listings,,0,FileIO,n
+test/platform/ios_share_extension_test.dart,unit,4,n/a,iOS PGN share extension,,0,FileIO,n
+test/platform/oauth_callback_identity_test.dart,unit,3,n/a,OAuth callback identity,,0,FileIO,n
+test/platform/verified_link_claims_test.dart,unit,3,n/a,verified link claims,,0,FileIO,n
+test/reachability/enforcement_matrix_test.dart,unit,2,n/a,enforcement matrix,,0,FileIO,n
+test/reachability/reachability_test.dart,unit,4,n/a,reachability,,0,FileIO,n
+test/review/move_latency_test.dart,unit,1,n/a,QUALITY.md §4.1 move validation latency,INV-050,0,FileIO,n
+test/review/review_continuity_test.dart,unit,12,n/a,ReviewContinuity,INV-021;INV-022;INV-025;INV-031;INV-066,0,none,n
+test/review/review_controller_test.dart,unit,64,n/a,ReviewController,INV-001;INV-003;INV-011;INV-013;INV-020;INV-021;INV-023;INV-026;INV-030;INV-031;INV-032;INV-033;INV-050;INV-068,15,network,n
+test/review/review_engine_test.dart,unit,47,n/a,ReviewSession Engine,INV-010;INV-012;INV-015;INV-016;INV-017;INV-020;INV-021;INV-022;INV-023;INV-025;INV-027;INV-028;INV-029;INV-031;INV-033;INV-041;INV-068,2,none,n
+test/review/review_flip_study_test.dart,unit,7,n/a,review flip study,INV-010;INV-016;INV-030;INV-068,1,none,n
+test/review/review_order_test.dart,unit,4,n/a,ReviewSession queue order,INV-066,0,none,n
+test/review/review_service_test.dart,unit,21,n/a,ReviewService,INV-002;INV-016;INV-030;INV-032;INV-051;INV-065;INV-068,0,FileIO,n
+test/review/review_side_scope_test.dart,unit,6,n/a,side-scoped repertoires,INV-013;INV-030;INV-068,0,FileIO,n
+test/review/review_transposition_test.dart,unit,7,n/a,ReviewSession transpositions,INV-065,0,none,n
+test/review/session_constructor_cost_test.dart,unit,3,n/a,ReviewSession construction cost,,0,none,n
+test/scripts/update_openings_db_test.dart,unit,4,n/a,update openings db,,0,FileIO,n
+test/utils/cache_test.dart,unit,9,n/a,cache,,0,none,n
+test/utils/color_palette_test.dart,unit,4,n/a,loadSystemColors,,0,none,n
+test/utils/duration_test.dart,unit,14,n/a,DurationExtensions.toDaysHoursMinutes(),,9,none,n
+test/utils/json_test.dart,unit,38,n/a,decodeObjectList,,0,none,n
+test/utils/l10n_test.dart,unit,13,n/a,l10nWithWidget,,0,none,n
+test/utils/lru_list_test.dart,unit,10,n/a,LRUList,,0,none,n
+test/utils/rate_limit_test.dart,unit,12,n/a,debounce,,0,none,n
+test/utils/riverpod_test.dart,unit,4,n/a,lichessProviderRetry,,0,FileIO;network,n
+test/utils/string_test.dart,unit,19,n/a,genRandomString,,0,none,n
+test/vertical_slice_gate_test.dart,widget,1,n/a,V6: Vertical Slice End-to-End Gate,,0,FileIO,n
+test/view/analysis/analysis_action_row_test.dart,widget,1,n/a,analysis action row,,2,delay/pumpAndSettle;network,n
+test/view/analysis/analysis_layout_test.dart,widget,4,n/a,analysis layout,,0,delay/pumpAndSettle,n
+test/view/analysis/analysis_opening_test.dart,widget,3,n/a,Analysis opening detection,,4,delay/pumpAndSettle,n
+test/view/analysis/analysis_screen_test.dart,widget,58,n/a,Analysis Screen,,4,delay/pumpAndSettle;network,n
+test/view/analysis/analysis_share_screen_test.dart,widget,2,n/a,AnalysisShareScreen,,0,delay/pumpAndSettle,n
+test/view/analysis/engine_settings_widget_test.dart,widget,2,n/a,engine settings widget,,0,delay/pumpAndSettle,n
+test/view/auth/email_login_screen_test.dart,widget,11,n/a,rejects a malformed address without any request,INV-006,4,delay/pumpAndSettle;network,n
+test/view/board_editor/board_editor_palette_layout_test.dart,widget,7,n/a,Board editor piece palette,,0,delay/pumpAndSettle,n
+test/view/board_editor/board_editor_screen_test.dart,widget,33,n/a,Board Editor,,2,delay/pumpAndSettle,n
+test/view/engine/engine_button_test.dart,widget,5,n/a,engine button,,1,delay/pumpAndSettle,n
+test/view/engine/engine_gauge_test.dart,widget,3,n/a,engine gauge,,0,delay/pumpAndSettle,n
+test/view/engine/engine_line_semantics_test.dart,widget,2,n/a,engine line semantics,,0,none,n
+test/view/explorer/explorer_view_test.dart,widget,15,n/a,ExplorerView,,14,delay/pumpAndSettle;network,n
+test/view/game/game_list_tile_test.dart,widget,4,n/a,GameListTile,INV-062,0,delay/pumpAndSettle,n
+test/view/more/import_pgn_screen_test.dart,widget,8,n/a,Clipboard paste,,5,delay/pumpAndSettle;FileIO,n
+test/view/offline_computer/offline_computer_game_screen_test.dart,widget,85,n/a,Offline computer game,,96,delay/pumpAndSettle;DateTime.now;FileIO,n
+test/view/offline_computer/opponent_picker_test.dart,widget,7,n/a,Opponent picker,,5,delay/pumpAndSettle,n
+test/view/review/about_page_test.dart,widget,3,n/a,about page,,0,delay/pumpAndSettle,n
+test/view/review/export_pgn_dialog_test.dart,widget,4,n/a,ExportPgnDialog,,0,delay/pumpAndSettle,n
+test/view/review/import_sign_in_test.dart,widget,7,n/a,sign-in affordance in the import scene,,4,delay/pumpAndSettle;network,n
+test/view/review/library_sheet_test.dart,widget,3,n/a,library sheet,,0,delay/pumpAndSettle;FileIO,n
+test/view/review/repertoire_import_dialog_test.dart,widget,2,n/a,repertoire import dialog,,1,delay/pumpAndSettle;FileIO;network,n
+test/view/review/review_screen_test.dart,widget,45,n/a,ReviewScreen widget tests,INV-011;INV-030;INV-031;INV-050;INV-060;INV-062;INV-063;INV-068,4,delay/pumpAndSettle;FileIO;network,n
+test/view/review/scope_split_drawers_test.dart,widget,11,n/a,scope split drawers,INV-030,0,delay/pumpAndSettle;FileIO,n
+test/view/review/sheet_dismiss_test.dart,widget,3,n/a,sheet dismiss,,0,delay/pumpAndSettle,n
+test/view/review/study_actions_sheet_test.dart,widget,11,n/a,the sheet carries no title of its own,INV-030,0,delay/pumpAndSettle,n
+test/view/screenshot_capture_test.dart,widget,10,n/a,screenshot capture,,1,delay/pumpAndSettle;FileIO;network,n
+test/view/settings/app_log_settings_screen_test.dart,widget,2,n/a,app log settings screen,,0,delay/pumpAndSettle;DateTime.now,n
+test/view/settings/board_and_sound_screens_test.dart,widget,7,n/a,board choice,,0,delay/pumpAndSettle,n
+test/view/settings/board_thumbnail_test.dart,widget,6,n/a,board thumbnail,,0,delay/pumpAndSettle,n
+test/view/settings/http_log_screen_test.dart,widget,2,n/a,http log screen,,0,delay/pumpAndSettle;DateTime.now,n
+test/view/settings/legacy_settings_screen_test.dart,unit,2,n/a,legacy settings screen,,0,FileIO,n
+test/view/settings/log_screens_no_horizontal_scroll_test.dart,widget,1,n/a,log screens no horizontal scroll,,0,delay/pumpAndSettle,n
+test/view/settings/settings_account_entry_test.dart,widget,2,n/a,settings account entry,,0,delay/pumpAndSettle,n
+test/view/settings/srs_settings_screen_test.dart,widget,5,n/a,srs settings screen,INV-068,0,delay/pumpAndSettle,n
+test/view/study/create_study_chapter_bottom_sheet_test.dart,widget,8,n/a,CreateStudyChapterBottomSheet,,14,delay/pumpAndSettle;network,n
+test/view/study/study_list_screen_test.dart,widget,2,n/a,Study list screen,,2,delay/pumpAndSettle;network,n
+test/view/study/study_opening_test.dart,widget,2,n/a,Study opening detection,,10,delay/pumpAndSettle,n
+test/view/study/study_screen_test.dart,widget,14,n/a,Study screen,,37,delay/pumpAndSettle,n
+test/view/user/perf_stats_screen_test.dart,widget,3,n/a,PerfStatsScreen,,2,network,n
+test/view/user/search_screen_test.dart,widget,2,n/a,SearchScreen,,1,delay/pumpAndSettle;network,n
+test/view/user/user_screen_test.dart,widget,2,n/a,UserScreen,,2,network,n
+test/widgets/adaptive_action_sheet_test.dart,widget,7,n/a,one look on every platform,,0,delay/pumpAndSettle,n
+test/widgets/adaptive_choice_picker_test.dart,widget,11,n/a,the Diagram picker,,0,delay/pumpAndSettle,n
+test/widgets/clock_test.dart,widget,11,n/a,Clock,,0,none,n
+test/widgets/feedback_test.dart,widget,7,n/a,LagIndicator,,0,none,n
+test/widgets/game_layout_test.dart,widget,9,n/a,game layout,,0,delay/pumpAndSettle,n
+test/widgets/move_times_chart_test.dart,widget,4,n/a,Move times chart,,2,delay/pumpAndSettle;network,n
+test/widgets/pgn_shapes_test.dart,unit,2,n/a,pgn shapes,,0,none,n
+test/widgets/platform_context_menu_button_test.dart,widget,1,n/a,platform context menu button,,0,delay/pumpAndSettle,n
+test/widgets/rich_link_text_test.dart,widget,35,n/a,linkify,,0,none,n
+test/widgets/user_test.dart,widget,2,n/a,UserFullNameWidget,,0,none,n
