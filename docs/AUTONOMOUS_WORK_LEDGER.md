@@ -26,6 +26,8 @@
 
 | Date | Stream | Target File / Module | Content Hash | Status | PR / Issue | Summary / Outcome | Re-Audit Trigger |
 |---|---|---|---|---|---|---|---|
+| 2026-10-18 | Stream 2 (Test Smell) | `test/view/offline_computer/offline_computer_game_screen_test.dart` | `91d535dbc` | COMPLETED | #229 | Removed the suite's last wall-clock sleep (the 1s-control timeout test): LocalGameClock now runs on package:clock's stopwatch, so `tester.pump` charges the countdown. Stashing the lib change fails the test at its 'White time out' expectation. | Any change to LocalGameClock's time source, or to this test. |
+| 2026-10-18 | Stream 2 (Test Smell) | `test/review/review_service_test.dart` | `b4ec07cc6` | COMPLETED | #227 | The `incremental persistence` test claimed "without rewriting trees" but only checked that state and event landed. It now records every study/chapter/decision writer and compares the tree blob and decisions before/after; it fails when the answer path re-saves a decision. | Any change to the answer path or to this oracle. |
 | 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/review/review_session.dart` | `d2b783d6f` | COMPLETED | #223 | 248 curated mutants: 78 killed by the pre-existing suite, 66 won't-compile, 101 survivors (+3 timeout artifacts). The new 39-test suite kills 67 of the 101: 50 of the 71 the first pass left, plus 17 of the 30 it had killed (recheck: 13 of those are no longer killed). 34 survivors recorded, L1224/L170/L1045 documented equivalents, L1060 open. | Any modification to review_session.dart. |
 | 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/position_knowledge_state.dart` | `2860408ca` | COMPLETED | #208 | 29 curated mutants: 5 killed, 13 survived (11 invalid); all 13 closed with 2 tests. | Any modification to position_knowledge_state.dart. |
 | 2026-10-18 | Stream 1 (Mutation) | `lib/src/persistence/sqlite_study_repository.dart` | `80b5f1647` | COMPLETED | #206 | 158 curated mutants: 91 killed, 67 survived; 8 real gaps closed with 6 tests, 59 documented equivalents (6 loop-boundary mutants pinned by 4 exact-multiple tests + SQLite IN () no-op evidence). | Any modification to sqlite_study_repository.dart. |
@@ -61,9 +63,9 @@ a second work queue — it is a convenience index into plan-owned work.
 
 ### Stream 2: Test Smell Remediation Targets
 
-- [ ] `test/view/offline_computer/offline_computer_game_screen_test.dart:1353` (Eliminate blocking `sleep()` with fake clock/pump)
-- [ ] `test/review/review_service_test.dart:43` (Harden `INV-002`: verify chapter tree table is genuinely not rewritten)
-- [ ] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits)
+- [x] `test/view/offline_computer/offline_computer_game_screen_test.dart:1353` (Eliminate blocking `sleep()` with fake clock/pump)
+- [x] `test/review/review_service_test.dart:43` (Harden `INV-002`: verify chapter tree table is genuinely not rewritten)
+- [ ] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits) — parked 2026-10-18: SQLite here allows 250000 bound variables and the app's DB layer exposes no per-connection limit, so exceeding it is impractical; needs a different oracle.
 
 ### Stream 4: SQLite Migration & Data Preservation Targets
 
