@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -68,12 +70,18 @@ void main() {
     await tester.tap(settingOption(tester, 'Daily limit', '50'));
     await tester.pumpAndSettle();
 
+    // The tap has a persisted effect, not merely "no exception": the provider that the row writes
+    // through now reads back the chosen value (the default is 100).
+    final container = ProviderScope.containerOf(tester.element(find.byType(SrsSettingsScreen)));
+    expect(container.read(studyPreferencesProvider).maxDailyReviews, 50);
+
     // New positions per day (INV-068): the introduction allowance beside the daily limit.
     expect(find.text('New positions per day'), findsOneWidget);
     expect(find.text('10'), findsOneWidget);
     expect(find.text('20'), findsOneWidget);
     await tester.tap(settingOption(tester, 'New positions per day', '10'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).maxNewPerDay, 10);
     await tester.tap(settingOption(tester, 'New positions per day', '20'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -82,6 +90,7 @@ void main() {
     expect(find.text('95%'), findsOneWidget);
     await tester.tap(find.text('95%'));
     await tester.pumpAndSettle();
+    expect(container.read(studyPreferencesProvider).targetRetention, 0.95);
 
     // Toggle notes. Scrolled to rather than assumed present: the settings list is long and
     // which rows a ListView has built depends on the height of the rows above them, so
