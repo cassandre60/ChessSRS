@@ -9,10 +9,7 @@ import 'package:logging/logging.dart';
 final _logger = Logger('JsonUtils');
 
 /// Reads a JSON list of objects and maps it using the provided mapper function.
-IList<T> decodeObjectList<T>(
-  Object? json, {
-  required T? Function(Map<String, dynamic>) mapper,
-}) {
+IList<T> decodeObjectList<T>(Object? json, {required T? Function(Map<String, dynamic>) mapper}) {
   if (json is! List<dynamic>) {
     _logger.severe('Could not read JSON object as List: expected a list.');
     throw Exception('Could not read JSON object as List: expected a list.');

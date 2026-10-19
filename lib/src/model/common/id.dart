@@ -146,10 +146,7 @@ extension IDPick on Pick {
     if (value is String) {
       return BroadcastTournamentId(value);
     }
-    throw PickException.fromPick(
-      this,
-      "can't be casted to BroadcastTournamentId",
-    );
+    throw PickException.fromPick(this, "can't be casted to BroadcastTournamentId");
   }
 
   BroadcastRoundId asBroadcastRoundIdOrThrow() {
