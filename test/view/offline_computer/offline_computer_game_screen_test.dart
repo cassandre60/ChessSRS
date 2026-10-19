@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -1348,10 +1347,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
 
-      // The clock measures system time internally, so we need to actually sleep in order
-      // for the clock to reach 0, instead of using tester.pump()
-      sleep(time + const Duration(milliseconds: 100));
-
+      // The game clock runs on package:clock's stopwatch, which the widget-test
+      // zone fakes: pumping past the remaining time charges the countdown to 0,
+      // so no real-terms sleep is needed.
+      await tester.pump(time + const Duration(milliseconds: 200));
       await tester.pumpAndSettle(const Duration(milliseconds: 600));
 
       expect(find.text('White time out'), findsOneWidget);

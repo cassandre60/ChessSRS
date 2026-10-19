@@ -128,10 +128,16 @@ void main() {
         // -----------------------------------------------------------------------
         // Step 4: Play correct move 1. e4
         // -----------------------------------------------------------------------
+        final promptBefore = container.read(reviewControllerProvider).value?.currentPrompt;
         await playMove(tester, 'e2', 'e4');
 
-        // Auto-traverses Black's response 1... e5; board is set up for 2. Nf3
-        await pumpAsync(tester, 700);
+        // Auto-traverses Black's response 1... e5; board is set up for 2. Nf3.
+        // The wait ends when the prompt is no longer the one 1. e4 was answered
+        // against, i.e. the reply has played and 2. Nf3 is live.
+        await pumpAsyncUntil(tester, () {
+          final prompt = container.read(reviewControllerProvider).value?.currentPrompt;
+          return prompt != promptBefore;
+        });
 
         // -----------------------------------------------------------------------
         // Step 5: Intentional Lapse on move 2 (play 2. d4 instead of 2. Nf3)
@@ -154,8 +160,14 @@ void main() {
         );
 
         // Reguess on the board: play the correct move 2. Nf3
+        final reguessPromptBefore = container.read(reviewControllerProvider).value?.currentPrompt;
         await playMove(tester, 'g1', 'f3');
-        await pumpAsync(tester, 700);
+        // Done when the reguess's position has advanced (reply played or the
+        // item re-queued); the restart below then reads settled database state.
+        await pumpAsyncUntil(tester, () {
+          final prompt = container.read(reviewControllerProvider).value?.currentPrompt;
+          return prompt != reguessPromptBefore;
+        });
 
         // -----------------------------------------------------------------------
         // Step 6: Simulate App Restart / Restart Durability (Invariants §1.3 & §3.1)
