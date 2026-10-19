@@ -1287,11 +1287,11 @@
       "category": "core_logic",
       "date": "2026-10-05T12:17:17+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Support duplicate variations in game tree (#3692)",
       "pr": 3692,
       "sha": "99dd3e0e4859afc7de37290b3f1905045af92004",
       "short_sha": "99dd3e0e4",
-      "status": "CANDIDATE",
+      "status": "APPLIED",
       "surviving_files": [
         "lib/src/model/common/node.dart",
         "lib/src/model/common/uci.dart",
@@ -2891,8 +2891,8 @@
   "last_synced_date": "2026-10-18T22:08:16.360999+00:00",
   "last_synced_sha": "99e1fb7fb4d84aeab200d75e54551efbb1d5d2ff",
   "stats": {
-    "applied": 3,
-    "candidates": 34,
+    "applied": 4,
+    "candidates": 33,
     "skipped": 48,
     "total": 85
   },
