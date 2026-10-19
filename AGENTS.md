@@ -349,6 +349,15 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
    that order. The flywheel only turns if you turn it.
 8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
+9. When a change needs the owner — a `gate-approved` label on a protected-file
+   PR, a product decision in `docs/open-questions.md`, a branch-protection or
+   CI-config choice — explain **in plain terms what they are accepting**: what
+   changes, what it costs, what happens if they decline. No gate jargon, and do
+   not send them to GitHub to do it themselves. If they agree, **you perform the
+   action** (e.g. `gh pr edit <n> --add-label gate-approved`) and record whose
+   consent it was in the PR or issue. Consent is per item and explicit:
+   silence, an earlier "continue", or approval of a different PR is not approval
+   of this one. Merging still belongs to the merge agent.
 
 ## 11. Releases: the agent decides, the owner does not
 
@@ -502,8 +511,10 @@ information: the review move sound (#93) was confirmed audible by the owner, and
   counts as run two, neighbours and ./verify are CI's job. Verified by: the
   owner reporting the heat and asking for the rule, against a history of green
   CI runs that had already covered every locally re-run file.
-- [2026-09-28, Space Bunny Free] `build_runner` writes `lib/l10n/*.dart` with
-  different line wrapping than what is committed, so a fresh worktree shows 52
+- [2026-09-28, Space Bunny Free] **Superseded 2026-10-19 — see the l10n entry at
+  the end of this list; the `dart format` recipe in this entry no longer
+  converges and must not be followed.** `build_runner` writes `lib/l10n/*.dart`
+  with different line wrapping than what is committed, so a fresh worktree shows 52
   files and ~38,000 changed lines that are pure formatting. Run
   `dart format lib/l10n/` after codegen and the diff disappears entirely.
   Do not commit the churn, and do not read a non-empty `git status` as real
@@ -613,3 +624,15 @@ information: the review move sound (#93) was confirmed audible by the owner, and
   the same run was live on `cassandre60/ChessSRS`. Pass `-R cassandre60/ChessSRS`
   explicitly on every `gh run watch/list/view`. Verified by: the 404 URL naming the
   parent repo, then the same run id returning `in_progress` with `-R` added.
+- [2026-10-19, DeepSeek V4.1 Flash Free] `lib/l10n/*.dart` is generator output,
+  committed exactly as the pinned toolchain writes it (`l10n.yaml` has
+  `format: false`; upstream commits the same raw style). Never run `dart format`
+  over `lib/l10n/` — on Flutter 3.47.3 it rewrites all 52 files (+167k/-162k)
+  instead of converging. A fresh `flutter pub get` regenerates the same bytes,
+  so a clean `git status` under `lib/l10n/` is the expected state once the
+  committed copy is current (PR #266); if churn appears there, commit the
+  regenerated output — do not format it. Compare an old copy against a new one
+  as per-file line multisets, not `git diff -w`, which reports line re-wrapping
+  as content. Verified by: multiset equality 52/52 files, `pub get` ≡ `gen-l10n`
+  (sha256 `de5d5c9e…`), and 0-modified `git status` after `pub get` on the #266
+  branch. See #201.

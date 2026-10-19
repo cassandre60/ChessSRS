@@ -83,35 +83,71 @@ void main() {
       expect(child.nextDueAt!.isAfter(now.add(const Duration(days: 10))), isFalse);
     });
 
-    test('recordActiveReview on correct move updates primary state without side effects', () {
-      const node = GraphNode(
-        decisionId: 'root_dec',
-        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
-        expectedMoveUci: 'e2e4',
-      );
-      repo.put(
-        'root_dec',
-        ReviewState(
+    // SPEC INV-027, INV-029. Hardened: the graph now carries a learned descendant so
+    // the propagation axis is actually exercised. A correct answer must leave it
+    // untouched (phase 1, isEmpty), while an incorrect answer must propagate to it
+    // (phase 2, non-empty) — the latter is what makes the isEmpty assertion above
+    // discriminate a mutation that skips side-effect application.
+    test(
+      'recordActiveReview: correct move primary state without side effects; incorrect move propagates side effects',
+      () {
+        repo.setChildren('root_dec', ['child_1']);
+        repo.put(
+          'child_1',
+          ReviewState(
+            decisionId: 'child_1',
+            stability: 10.0 * 86400000,
+            difficulty: 4.0,
+            repetitionCount: 3,
+            lapseCount: 0,
+            lastReviewedAt: now.subtract(const Duration(days: 5)),
+            nextDueAt: now.add(const Duration(days: 10)),
+          ),
+        );
+
+        const node = GraphNode(
           decisionId: 'root_dec',
-          stability: 2.0 * 86400000,
-          difficulty: 5.0,
-          repetitionCount: 1,
-          lastReviewedAt: now.subtract(const Duration(days: 2)),
-          nextDueAt: now,
-        ),
-      );
+          fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          expectedMoveUci: 'e2e4',
+        );
+        repo.put(
+          'root_dec',
+          ReviewState(
+            decisionId: 'root_dec',
+            stability: 2.0 * 86400000,
+            difficulty: 5.0,
+            repetitionCount: 1,
+            lastReviewedAt: now.subtract(const Duration(days: 2)),
+            nextDueAt: now,
+          ),
+        );
 
-      final result = coordinator.recordActiveReview(
-        node: node,
-        result: ReviewResult.correct,
-        now: now,
-      );
+        // Phase 1: correct answer updates primary state and produces no side effects.
+        final correctResult = coordinator.recordActiveReview(
+          node: node,
+          result: ReviewResult.correct,
+          now: now,
+        );
 
-      expect(result.primaryState.repetitionCount, 2);
-      expect(result.primaryState.stability, greaterThan(2.0 * 86400000));
-      expect(result.sideEffectStates, isEmpty);
-      expect(repo.get('root_dec'), equals(result.primaryState));
-    });
+        expect(correctResult.primaryState.repetitionCount, 2);
+        expect(correctResult.primaryState.stability, greaterThan(2.0 * 86400000));
+        expect(correctResult.sideEffectStates, isEmpty);
+        expect(repo.get('root_dec'), equals(correctResult.primaryState));
+        // Propagation axis: the descendant is untouched by a correct answer.
+        expect(repo.get('child_1')!.stability, 10.0 * 86400000);
+
+        // Phase 2: incorrect answer on the same graph propagates a side effect.
+        final incorrectResult = coordinator.recordActiveReview(
+          node: node,
+          result: ReviewResult.incorrect,
+          now: now,
+        );
+
+        expect(incorrectResult.sideEffectStates, hasLength(1));
+        final sideEffect = incorrectResult.sideEffectStates.single;
+        expect(sideEffect.decisionId, 'child_1');
+      },
+    );
 
     test('recordActiveReview on incorrect move propagates lapse contagion to descendants', () {
       // Tree topology: root -> child1 -> child2 -> child3 -> child4
