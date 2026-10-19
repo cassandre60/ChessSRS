@@ -344,12 +344,10 @@ extension ChessExtension on Pick {
       if (move != null) {
         return move;
       } else {
-        throw PickException(
-          "value $value at $debugParsingExit can't be casted to Move: invalid UCI string.",
-        );
+        throw PickException.fromPick(this, "can't be casted to Move", detail: 'invalid UCI string');
       }
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Move");
+    throw PickException.fromPick(this, "can't be casted to Move");
   }
 
   Move? asUciMoveOrNull() {
@@ -371,11 +369,9 @@ extension ChessExtension on Pick {
           ? Side.white
           : value == 'black'
           ? Side.black
-          : throw PickException(
-              "value $value at $debugParsingExit can't be casted to Side: invalid string.",
-            );
+          : throw PickException.fromPick(this, "can't be casted to Side", detail: 'invalid string');
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Side");
+    throw PickException.fromPick(this, "can't be casted to Side");
   }
 
   Side? asSideOrNull() {
@@ -407,7 +403,7 @@ extension ChessExtension on Pick {
         return variant;
       }
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Variant");
+    throw PickException.fromPick(this, "can't be casted to Variant");
   }
 
   Variant? asVariantOrNull() {

@@ -103,7 +103,7 @@ extension TimeExtension on Pick {
     if (value is int) {
       return DateTime.fromMillisecondsSinceEpoch(value);
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to DateTime");
+    throw PickException.fromPick(this, "can't be casted to DateTime");
   }
 
   /// Matches a DateTime from milliseconds since unix epoch.
@@ -125,7 +125,7 @@ extension TimeExtension on Pick {
     if (value is int) {
       return Duration(minutes: value);
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Duration");
+    throw PickException.fromPick(this, "can't be casted to Duration");
   }
 
   Duration? asDurationFromMinutesOrNull() {
@@ -148,7 +148,7 @@ extension TimeExtension on Pick {
     } else if (value is double) {
       return Duration(milliseconds: (value * 1000).toInt());
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Duration");
+    throw PickException.fromPick(this, "can't be casted to Duration");
   }
 
   /// Matches a Duration from seconds
@@ -170,7 +170,7 @@ extension TimeExtension on Pick {
     if (value is int) {
       return Duration(milliseconds: value * 10);
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Duration");
+    throw PickException.fromPick(this, "can't be casted to Duration");
   }
 
   Duration? asDurationFromCentiSecondsOrNull() {
@@ -191,7 +191,7 @@ extension TimeExtension on Pick {
     if (value is int) {
       return Duration(milliseconds: value);
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Duration");
+    throw PickException.fromPick(this, "can't be casted to Duration");
   }
 
   Duration? asDurationFromMilliSecondsOrNull() {

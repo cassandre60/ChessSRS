@@ -65,7 +65,7 @@ extension SpeedExtension on Pick {
       final speed = Speed.nameMap[value];
       if (speed != null) return speed;
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Speed");
+    throw PickException.fromPick(this, "can't be casted to Speed");
   }
 }
 
