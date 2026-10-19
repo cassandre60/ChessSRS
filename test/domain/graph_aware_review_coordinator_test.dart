@@ -266,7 +266,11 @@ void main() {
       );
       repo.put('root_dec', ReviewState.initial(decisionId: 'root_dec'));
 
-      final result = coordinator.recordActiveReview(node: node, result: ReviewResult.incorrect, now: now);
+      final result = coordinator.recordActiveReview(
+        node: node,
+        result: ReviewResult.incorrect,
+        now: now,
+      );
 
       expect(result.sideEffectStates, isNotEmpty, reason: 'the child is learned and softened');
       final updated = repo.get('overdue_child')!;
