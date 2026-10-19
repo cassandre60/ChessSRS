@@ -83,35 +83,71 @@ void main() {
       expect(child.nextDueAt!.isAfter(now.add(const Duration(days: 10))), isFalse);
     });
 
-    test('recordActiveReview on correct move updates primary state without side effects', () {
-      const node = GraphNode(
-        decisionId: 'root_dec',
-        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
-        expectedMoveUci: 'e2e4',
-      );
-      repo.put(
-        'root_dec',
-        ReviewState(
+    // SPEC INV-027, INV-029. Hardened: the graph now carries a learned descendant so
+    // the propagation axis is actually exercised. A correct answer must leave it
+    // untouched (phase 1, isEmpty), while an incorrect answer must propagate to it
+    // (phase 2, non-empty) — the latter is what makes the isEmpty assertion above
+    // discriminate a mutation that skips side-effect application.
+    test(
+      'recordActiveReview: correct move primary state without side effects; incorrect move propagates side effects',
+      () {
+        repo.setChildren('root_dec', ['child_1']);
+        repo.put(
+          'child_1',
+          ReviewState(
+            decisionId: 'child_1',
+            stability: 10.0 * 86400000,
+            difficulty: 4.0,
+            repetitionCount: 3,
+            lapseCount: 0,
+            lastReviewedAt: now.subtract(const Duration(days: 5)),
+            nextDueAt: now.add(const Duration(days: 10)),
+          ),
+        );
+
+        const node = GraphNode(
           decisionId: 'root_dec',
-          stability: 2.0 * 86400000,
-          difficulty: 5.0,
-          repetitionCount: 1,
-          lastReviewedAt: now.subtract(const Duration(days: 2)),
-          nextDueAt: now,
-        ),
-      );
+          fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          expectedMoveUci: 'e2e4',
+        );
+        repo.put(
+          'root_dec',
+          ReviewState(
+            decisionId: 'root_dec',
+            stability: 2.0 * 86400000,
+            difficulty: 5.0,
+            repetitionCount: 1,
+            lastReviewedAt: now.subtract(const Duration(days: 2)),
+            nextDueAt: now,
+          ),
+        );
 
-      final result = coordinator.recordActiveReview(
-        node: node,
-        result: ReviewResult.correct,
-        now: now,
-      );
+        // Phase 1: correct answer updates primary state and produces no side effects.
+        final correctResult = coordinator.recordActiveReview(
+          node: node,
+          result: ReviewResult.correct,
+          now: now,
+        );
 
-      expect(result.primaryState.repetitionCount, 2);
-      expect(result.primaryState.stability, greaterThan(2.0 * 86400000));
-      expect(result.sideEffectStates, isEmpty);
-      expect(repo.get('root_dec'), equals(result.primaryState));
-    });
+        expect(correctResult.primaryState.repetitionCount, 2);
+        expect(correctResult.primaryState.stability, greaterThan(2.0 * 86400000));
+        expect(correctResult.sideEffectStates, isEmpty);
+        expect(repo.get('root_dec'), equals(correctResult.primaryState));
+        // Propagation axis: the descendant is untouched by a correct answer.
+        expect(repo.get('child_1')!.stability, 10.0 * 86400000);
+
+        // Phase 2: incorrect answer on the same graph propagates a side effect.
+        final incorrectResult = coordinator.recordActiveReview(
+          node: node,
+          result: ReviewResult.incorrect,
+          now: now,
+        );
+
+        expect(incorrectResult.sideEffectStates, hasLength(1));
+        final sideEffect = incorrectResult.sideEffectStates.single;
+        expect(sideEffect.decisionId, 'child_1');
+      },
+    );
 
     test('recordActiveReview on incorrect move propagates lapse contagion to descendants', () {
       // Tree topology: root -> child1 -> child2 -> child3 -> child4
@@ -238,6 +274,45 @@ void main() {
 
       expect(result.sideEffectStates, isEmpty);
       expect(repo.get('cold_child')!.stability, 0.0);
+      expect(repo.get('cold_child')!.difficulty, 0.0);
+    });
+
+    test('lapse contagion leaves an already-due child due at its own instant', () {
+      // SPEC INV-027. Contagion softens stability along the line, but a child
+      // that is already due stays due: pulling its schedule from `now`
+      // re-anchors the overdue instant instead of leaving the overdue item
+      // exactly where the queue finds it.
+      repo.setChildren('root_dec', ['overdue_child']);
+      final overdueDue = now.subtract(const Duration(hours: 3));
+      repo.put(
+        'overdue_child',
+        ReviewState(
+          decisionId: 'overdue_child',
+          stability: 8.0 * 86400000,
+          difficulty: 4.0,
+          repetitionCount: 3,
+          nextDueAt: overdueDue,
+        ),
+      );
+
+      const node = GraphNode(
+        decisionId: 'root_dec',
+        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'e2e4',
+      );
+      repo.put('root_dec', ReviewState.initial(decisionId: 'root_dec'));
+
+      final result = coordinator.recordActiveReview(
+        node: node,
+        result: ReviewResult.incorrect,
+        now: now,
+      );
+
+      expect(result.sideEffectStates, isNotEmpty, reason: 'the child is learned and softened');
+      final updated = repo.get('overdue_child')!;
+      expect(updated.stability, lessThan(8.0 * 86400000), reason: 'stability still softened');
+      expect(updated.difficulty, greaterThan(4.0), reason: 'difficulty still bumped');
+      expect(updated.nextDueAt, overdueDue, reason: 'already-due stays where the queue finds it');
     });
 
     // SPEC INV-027. Regression for review-2 C2: the immediate child of a lapse takes the full
@@ -331,6 +406,44 @@ void main() {
       // study3_dec difficulty unchanged
       expect(updatedSibOther.difficulty, 4.0);
       expect(result.sideEffectStates, contains(updatedSibMatching));
+    });
+
+    test('sibling coupling caps difficulty at the FSRS ceiling', () {
+      // SPEC INV-029. Coupling is a bounded difficulty mover like every
+      // other: a confusable sibling already near the top of the scale stops
+      // at 10.0 instead of overshooting it, whatever kappa adds.
+      const node = GraphNode(
+        decisionId: 'study1_dec',
+        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'e2e4',
+      );
+      const nearCap = GraphNode(
+        decisionId: 'sib_near_cap',
+        fen4: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'd2d4',
+      );
+      repo.put(
+        'study1_dec',
+        const ReviewState(decisionId: 'study1_dec', stability: 1000, difficulty: 5.0),
+      );
+      repo.put(
+        'sib_near_cap',
+        const ReviewState(decisionId: 'sib_near_cap', stability: 1000, difficulty: 9.8),
+      );
+
+      coordinator.recordActiveReview(
+        node: node,
+        result: ReviewResult.incorrect,
+        now: now,
+        playedMoveUci: 'd2d4',
+        siblings: const [nearCap],
+      );
+
+      expect(
+        repo.get('sib_near_cap')!.difficulty,
+        10.0,
+        reason: '9.8 + kappa(0.35) must stop at the 10.0 ceiling, not land beyond it',
+      );
     });
 
     test('recordAutoTraversalExposure grants micro-stability bump and extends due date', () {
@@ -539,6 +652,39 @@ void main() {
       final result = coordinator.recordAutoTraversalExposure(node: node, now: now)!;
       expect(result.stability, 0.0);
       expect(result.nextDueAt, initialDue);
+    });
+
+    test('a learned row without lastReviewedAt still earns traversal credit', () {
+      // SPEC INV-028. The same-day refusal reads lastReviewedAt; a stored row
+      // that has never been actively reviewed (null) is not "reviewed
+      // today", so a null must route through the ordinary not-due /
+      // not-throttled path instead of refusing or crashing the grant.
+      const node = GraphNode(
+        decisionId: 'learned_null_review',
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      final initialDue = now.add(const Duration(days: 5));
+      const initialStability = 5.0 * 86400000;
+      repo.put(
+        'learned_null_review',
+        ReviewState(
+          decisionId: 'learned_null_review',
+          stability: initialStability,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          nextDueAt: initialDue,
+        ),
+      );
+
+      final granted = coordinator.recordAutoTraversalExposure(node: node, now: now)!;
+
+      expect(
+        granted.stability,
+        closeTo(initialStability * 1.08, 100),
+        reason: 'credit flows when nothing was reviewed today',
+      );
+      expect(granted.nextDueAt!.isAfter(initialDue), isTrue, reason: 'due extended as usual');
     });
 
     test('recordAutoTraversalExposure ignores unlearned / cold decisions', () {
