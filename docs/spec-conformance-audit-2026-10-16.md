@@ -25,6 +25,8 @@ Method, so the reader can weigh the evidence:
 - One gap was **already fixed** while this audit ran (INV-067, #179).
 - Open: a wording drift (INV-060), three tests that cannot fail
   (INV-002 / INV-005 / INV-051), and 117 orphan rows in the live DB.
+  Dispositions recorded 2026-10-19 at the end of this document: F2 (#227),
+  F3 (#236), F4 (#232 and #223/#238), F5 (#239).
 
 ## Open findings
 
@@ -108,6 +110,38 @@ was not identified and the rows should not be there.
   unvalidated, so a name that merely mentions a family could become a hub. This
   landed during the audit window (2026-10-16 21:19), which is why it appears in
   no finding above.
+
+## Disposition (2026-10-19)
+
+- **F1 — still open.** Q7 is with the owner; nothing here can settle which
+  wording is right.
+- **F2 — closed by #227.** The INV-002 test now snapshots the chapter blob and
+  records every study/chapter/decision writer, and fails when the answer path
+  re-saves a decision.
+- **F3 — closed by #236.** `test/persistence/migration_fixtures_test.dart`
+  carries v6–v11 and v14–v15 through the real `openAppDatabase` path, built as
+  "the current schema minus additions after N" so a stale strip fails loudly.
+- **F4 — closed by #232 and #223/#238.** The chunking oracle now records the
+  bound-argument count of every cleanup delete and fails if any exceeds the
+  401-variable bound (fail-to-pass shown by raising `chunkSize` 400 → 1000 in a
+  scratch mutation). The prefetch half: `review_session`'s buffer semantics are
+  driven directly (null batch, refill threshold, lapse requeue behind the
+  buffer, #223), and the engine's `prefetchBatchSize` / `prefetchRefillThreshold`
+  pass-through is asserted in the wiring test (#238), so dropping or overriding
+  it fails.
+- **F5 — origin found, closed by #239.** The 117 sha1-keyed rows are 50 live
+  canonical mirrors (a decision references them via `canonicalStateId`) plus 67
+  unreachable ones. Cause: the v14/v16 canonical rekeys moved
+  `position_knowledge_state` rows to the new keys and rewrote
+  `srs_decision.canonicalStateId`, but never touched the `srs_review_state`
+  mirror written next to each knowledge row (`saveAnswerBatch` writes the
+  pair); the mirrors stayed under the old, pre-side-split keys. No delete path
+  was involved, so the ledger's cascade-trigger idea was rejected as guarding
+  the wrong mechanism. `rekeyCanonicalReviewState` now carries mirrors through
+  the rekey and the v19→v20 upgrade step sweeps rows that neither a decision
+  (by `id` or `canonicalStateId`) nor a knowledge row names; review events are
+  untouched. Both test files fail on the pre-fix code.
+- **F6 — unchanged.** The notes remain latent, none confirmed as a defect.
 
 ## Not verified
 
