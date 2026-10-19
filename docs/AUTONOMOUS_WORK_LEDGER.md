@@ -43,6 +43,7 @@
 | 2026-10-17 | Stream 1 (Mutation) | `lib/src/domain/scheduler.dart` | `a71a19096` | IN_PROGRESS | Issue draft | Evaluated 10 mutants: 6 killed, 4 survived. Found stability zero fallback gap & equality test gap. | Any modification to `scheduler.dart`. |
 | 2026-10-17 | Stream 2 (Smell Audit) | Full Test Suite (`1855 declarations`) | `a71a19096` | IN_PROGRESS | `scripts/audit_2026-10/` | Screened 1855 tests with `smell_tests.py`; flagged 298 declarations (vacuous assertions, blocking sleeps). | Any new test additions without linter coverage. |
 | 2026-10-18 | Stream 2 (Smell Audit) | `test/model/offline_computer/practice_analyser_test.dart` | `bdf1e3d42` | COMPLETED | #197, #221 | Converted 23 fixed wall-clock waits (22 × `settleEvals` 400 ms + one 100 ms `usableEval` deadline await) to `fakeAsync`/`async.elapse`; 0 real sleeps remain (`rg` clean), 8/8 green on the fake clock, deadline-edge mutant killed by the new 99/100 ms boundary expect. | Any reintroduction of fixed real-clock waits into this file. |
+| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/graph_aware_review_coordinator.dart` | `b11aeacc6fa00d5e8c4b55aa62535fcee465a794` | COMPLETED (full-window re-audit) | #222 | 34 candidates post-filter: 20 killed, 1 survived (equivalent: remainingMs > 0 -> >= 0), 13 uncompilable (null-promotion noise), 0 timeouts. Kill rate 95.2% (20/21 killable). Engine fixed: generic-angle exclusion, timeout bucket, shard windowing (--start/--skip-m). No real gaps; no tests added. | Any modification to graph_aware_review_coordinator.dart or mutation_engine.py. |
 
 > **Note on existing rows:** Hashes recorded before 2026-10-18 used
 > `git log -- <file>` (commit hash). They remain valid as "last audited
@@ -71,7 +72,7 @@ a second work queue — it is a convenience index into plan-owned work.
 
 - [x] `test/view/offline_computer/offline_computer_game_screen_test.dart:1353` (Eliminate blocking `sleep()` with fake clock/pump)
 - [x] `test/review/review_service_test.dart:43` (Harden `INV-002`: verify chapter tree table is genuinely not rewritten)
-- [ ] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits) — oracle proposed in #232: record the bound-argument count of every delete the cleanup issues and require ≤401, since this SQLite's 250000-variable limit cannot be tripped by row count. Tick when #232 merges.
+- [x] `test/persistence/sqlite_study_repository_test.dart:1745` (Harden `INV-051`: test delete chunking at SQLite variable limits) — ticked: #232 merged; the bound-argument recorder and the 401-variable bound asserts are live in the suite (`recorder.deleteArgs` around line 1944: every cleanup delete must be a 400-id chunk plus the study-id guard, never one wide `IN (...)`).
 
 ### Stream 4: SQLite Migration & Data Preservation Targets
 
