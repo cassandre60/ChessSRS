@@ -268,15 +268,26 @@ void main() {
       expect(find.byTooltip('White repertoire'), findsOneWidget);
       expect(find.byTooltip('Black repertoire'), findsOneWidget);
 
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
+
       // Play correct move: e2 -> e4
       await playMove(tester, 'e2', 'e4');
 
-      // Wait for move pacing (user move -> pause -> opponent reply 1... e5 -> pause)
-      await pumpAsync(tester, 700);
+      // Move pacing: user move -> pause -> opponent reply 1... e5 -> pause.
+      // The wait ends when the prompt is no longer the one 1. e4 was answered
+      // against, i.e. the reply has played and the next prompt is live.
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
 
       // Next due move is 2. Nf3 (opponent move e5 was auto-played)
       await playMove(tester, 'g1', 'f3');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       // Session is now complete (0 due)
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -359,7 +370,13 @@ void main() {
 
       // Reguess on the board by playing the correct study move d2 -> d4
       await playMove(tester, 'd2', 'd4');
-      await pumpAsync(tester, 700);
+      // The reguess is processed when the lapse banner yields to the
+      // re-queued item's re-prompt — exactly what the asserts below check.
+      await pumpAsyncUntil(
+        tester,
+        () =>
+            !tester.any(find.text('Play this move to continue. The position will come back soon.')),
+      );
 
       // Re-prompted for the failed item (re-queued for practice)
       expect(find.byType(Chessboard), findsOneWidget);
@@ -367,7 +384,7 @@ void main() {
 
       // Play 1. d4 successfully on the re-test
       await playMove(tester, 'd2', 'd4');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       // Session is now complete (0 due)
       expect(find.text('Nothing due.'), findsOneWidget);
@@ -462,7 +479,13 @@ void main() {
       await pumpUntilFound(tester, find.text('Reveal answer'));
 
       await tester.tap(find.text('Reveal answer'));
-      await pumpAsync(tester, 700);
+      // Revealing plays the study move and continues the session; the wait ends
+      // when the banner the following asserts call absent has actually left.
+      await pumpAsyncUntil(
+        tester,
+        () =>
+            !tester.any(find.text('Play this move to continue. The position will come back soon.')),
+      );
 
       // The correction is gone and the session continued (re-queued card re-prompted,
       // exactly as after a manual correct reguess).
@@ -621,7 +644,7 @@ void main() {
 
       // The announced control really does continue the session.
       await tester.tap(overlay);
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
       expect(find.text('Nothing due.'), findsOneWidget);
 
       // flutter_test checks at end of test that every handle was disposed, so this cannot be an
@@ -1450,8 +1473,18 @@ void main() {
       await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
 
       // Play 1. e4 (first move)
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 700);
+      // Pacing: the wait ends when the reply has played and the 2. Nf3 prompt
+      // is live — the prompt is no longer the one 1. e4 was answered against.
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
 
       // Play 2. Nf3 (second move)
       await playMove(tester, 'g1', 'f3');
@@ -1892,7 +1925,9 @@ void main() {
       await tester.tap(inDrawer('Open'));
       await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
       ReviewScopeDrawer.show(tester.element(find.byType(ReviewScreen)), Side.white);
-      await pumpAsync(tester);
+      // The pop above guarantees no stale drawer instance precedes this one;
+      // sweep through the re-open's entry before the colour reads below.
+      await pumpAsyncUntil(tester, () => tester.any(find.byType(ReviewScopeDrawer)));
 
       final light = SrsColors.light(SrsAccent.ultramarine);
       final dueColors = tester
@@ -2108,8 +2143,18 @@ void main() {
         expect(find.widgetWithText(SrsTextButton, 'Skip'), findsOneWidget);
 
         // Play 1. e4
+        final promptBefore = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
         await playMove(tester, 'e2', 'e4');
-        await pumpAsync(tester, 700);
+        // Pump through the auto-advance animation so any overflow it provokes
+        // surfaces before the exception check; done when the prompt moves on.
+        await pumpAsyncUntil(tester, () {
+          final prompt = ProviderScope.containerOf(
+            tester.element(find.byType(ReviewScreen)),
+          ).read(reviewControllerProvider).value?.currentPrompt;
+          return prompt != promptBefore;
+        });
 
         // Verify no exceptions or overflow occurred
         expect(tester.takeException(), isNull);
@@ -2161,10 +2206,19 @@ void main() {
       await pumpUntilFound(tester, find.byType(Chessboard));
 
       // Finish the White queue: 1. e4 (opponent ...e5 auto-played), then 2. Nf3.
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 700);
+      // The reply has played when the prompt is no longer 1. e4's.
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
       await playMove(tester, 'g1', 'f3');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       expect(find.text('Nothing due.'), findsOneWidget);
       expect(find.text('Review Black — 1 due'), findsOneWidget);
@@ -2202,10 +2256,19 @@ void main() {
       await tester.pumpWidget(app);
       await pumpUntilFound(tester, find.byType(Chessboard));
 
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 700);
+      // The reply has played when the prompt is no longer 1. e4's.
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
       await playMove(tester, 'g1', 'f3');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
 
       expect(find.text('Nothing due.'), findsOneWidget);
       expect(find.textContaining('Review Black'), findsNothing);
@@ -2255,10 +2318,19 @@ void main() {
       await tester.pumpWidget(app);
       await pumpUntilFound(tester, find.byType(Chessboard));
 
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
       await playMove(tester, 'e2', 'e4');
-      await pumpAsync(tester, 700);
+      // The reply has played when the prompt is no longer 1. e4's.
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
       await playMove(tester, 'g1', 'f3');
-      await pumpAsync(tester, 700);
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Review Black — 1 due')));
 
       // Sanity: the automatic scope does offer Black here.
       expect(find.text('Review Black — 1 due'), findsOneWidget);
