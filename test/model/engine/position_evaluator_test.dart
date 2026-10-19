@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../binding.dart';
 import '../../test_container.dart';
+import '../../test_helpers.dart';
 import 'fake_engine.dart';
 import 'fake_stockfish_nnue_service.dart';
 
@@ -174,9 +175,7 @@ void main() {
       await initStream!.first;
 
       // Wait for state to settle to idle
-      while (service.state.lifecycle != EngineLifecycle.idle) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await waitUntil(() => service.state.lifecycle == EngineLifecycle.idle);
       expect(service.state.lifecycle, EngineLifecycle.idle);
 
       // Track state transitions for the next evaluation (filter out consecutive duplicates)
@@ -200,9 +199,7 @@ void main() {
       await stream!.first;
 
       // Wait for state to settle back to idle
-      while (service.state.lifecycle != EngineLifecycle.idle) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await waitUntil(() => service.state.lifecycle == EngineLifecycle.idle);
 
       expect(states, [EngineLifecycle.computing, EngineLifecycle.idle]);
     });
@@ -216,9 +213,7 @@ void main() {
       final initStream = service.evaluate(initWork);
       await initStream!.first;
 
-      while (service.state.lifecycle != EngineLifecycle.idle) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await waitUntil(() => service.state.lifecycle == EngineLifecycle.idle);
 
       // Track stream1 results
       final stream1ResultsBeforeWork2 = <EvalWork>[];
@@ -237,9 +232,7 @@ void main() {
       });
 
       // Wait for stream1 to receive at least one result
-      while (stream1ResultsBeforeWork2.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await waitUntil(() => stream1ResultsBeforeWork2.isNotEmpty);
 
       expect(stream1ResultsBeforeWork2, isNotEmpty);
       expect(stream1ResultsBeforeWork2.first, work1);
@@ -255,9 +248,7 @@ void main() {
       final (resultWork2, _) = await stream2!.first;
       expect(resultWork2, work2);
 
-      while (service.state.lifecycle != EngineLifecycle.idle) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await waitUntil(() => service.state.lifecycle == EngineLifecycle.idle);
 
       // stream1 should not receive any results after work2 started
       expect(stream1ResultsAfterWork2, isEmpty);
@@ -302,6 +293,8 @@ void main() {
       // the screen's for as long as the screen is open, however often the button is tapped.
       service.release();
       expect(service.state.engineName, isNull, reason: 'nothing to show for an engine that is off');
+      // A bounded window, not a poll: 2.1s is past kEngineDisposeDelay (2s) but inside
+      // kEnginePauseDelay (3s), and the expect below asserts that nothing happened.
       await Future<void>.delayed(kEngineDisposeDelay + const Duration(milliseconds: 100));
       expect(stockfish.quitCount, 0, reason: 'still inside the pause window');
 
@@ -441,9 +434,7 @@ void main() {
       service.evaluate(work1);
 
       // Wait for the engine to be starting.
-      while (delayedStockfish.startCount == 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
+      await waitUntil(() => delayedStockfish.startCount > 0);
       expect(delayedStockfish.isRunning, isFalse, reason: 'still starting');
 
       // Call evaluate again while stockfish is starting
@@ -657,6 +648,8 @@ void main() {
 
       stockfish.emitEvalEvents();
       await pumpEventQueue();
+      // Also a bounded window: 250ms outlasts the 200ms kEngineEvalEmissionThrottleDelay, so a
+      // subscription the release should have killed has had time for its trailing emission.
       await Future<void>.delayed(const Duration(milliseconds: 250));
 
       expect(
