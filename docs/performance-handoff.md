@@ -54,8 +54,21 @@ Two harnesses already exist and print what they measure:
 - `test/perf/due_summary_attribution_test.dart` — per-call attribution of the
   due-summary cost.
 
-Both skip without `CHESS_SRS_PERF_DB` and never fall back to a synthetic
+Both harnesses skip without `CHESS_SRS_PERF_DB` and never fall back to a synthetic
 fixture. Extend them rather than writing a third from scratch.
+
+The attribution harness has two tests since 2026-10-19: the sequential
+median-of-15 attribution, and an interleaved variant that rotates the call order
+every round and reports min/p25/median/p75/max per call. Trust the interleaved
+one. Its findings (first use documented in
+`docs/tasks/PERF-FIX-24-real-library-measurement.md`, fifth pass):
+
+- measurement order biases a sequential harness: `getAllReviewStates()` produced
+  16, 29 and 36 ms under it for the same call, depending on harness and order;
+- residual spread survives the rotation (GC/allocation interruptions), and the
+  whole instrument still moves between processes minutes apart;
+- so: measure before and after **in one process**, quote bands
+  (min/p25/median/p75/max), and never decide on a sub-band difference.
 
 ### Median, generous ceilings
 
