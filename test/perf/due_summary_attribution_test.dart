@@ -47,6 +47,49 @@ Future<Duration> medianOf(Future<void> Function() body, {int warmups = 3, int ru
   return Duration(microseconds: samples[samples.length ~/ 2]);
 }
 
+/// Stops trusting a median taken from a fixed measurement order.
+///
+/// A sequential harness runs every sample of call A before the first sample of
+/// call B, so each figure carries whatever allocator and GC state its slot in the
+/// sequence produced. `getAllReviewStates()` measured 16, 29 and 36 ms for the
+/// same call on the same database under that regime, varying only by harness and
+/// measurement order. This harness runs every call equally often in every
+/// [rounds] rounds, rotating the order each round; one timed sample of each
+/// target per round.
+///
+/// Returns one sample list per target, in chronological collection order. Report
+/// min/median/max from these instead of a single median; the median is fine only
+/// when the spread is small enough to say it is.
+Future<Map<String, List<int>>> interleavedRoundsOf(
+  Map<String, Future<void> Function()> targets, {
+  int warmups = 3,
+  int rounds = 10,
+}) async {
+  final names = targets.keys.toList();
+  for (var w = 0; w < warmups; w++) {
+    for (final name in names) {
+      await targets[name]!();
+    }
+  }
+  final samples = {for (final n in names) n: <int>[]};
+  for (var r = 0; r < rounds; r++) {
+    final order = [...names.skip(r % names.length), ...names.take(r % names.length)];
+    for (final name in order) {
+      final sw = Stopwatch()..start();
+      await targets[name]!();
+      sw.stop();
+      samples[name]!.add(sw.elapsedMicroseconds);
+    }
+  }
+  return samples;
+}
+
+/// Nearest-rank percentile over a pre-sorted list.
+int percentileOf(List<int> sorted, double p) {
+  final idx = (p * (sorted.length - 1)).round();
+  return sorted[idx];
+}
+
 void main() {
   final dbPath = Platform.environment['CHESS_SRS_PERF_DB'];
 
@@ -148,6 +191,84 @@ void main() {
       );
 
       expect(total.inMilliseconds, lessThan(2000));
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('measure the same calls in interleaved rotated rounds and report spread', () async {
+    if (dbPath == null || !File(dbPath).existsSync()) {
+      markTestSkipped(
+        "CHESS_SRS_PERF_DB is unset or missing. This measures the owner's real "
+        'library; it does not fall back to a synthetic fixture.',
+      );
+      return;
+    }
+
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+
+    final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+    final repo = SqliteStudyRepository(db);
+
+    try {
+      final decisions = await repo.getAllDecisions();
+      final canonicalIds = decisions
+          .map((d) => d.canonicalStateId)
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      // The same call set the sequential attribution test times, now measured
+      // once per round with the order rotating, so no call owns a fixed slot.
+      final targets = <String, Future<void> Function()>{
+        'getChapterOpenings': () => repo.getChapterOpenings(),
+        'getChapterOrientations': () => repo.getChapterOrientations(),
+        'getChapterStudyIds': () => repo.getChapterStudyIds(),
+        'getAllDecisions': () => repo.getAllDecisions(),
+        'getTallyDecisions': () => repo.getTallyDecisions(),
+        'getAllReviewStates': () => repo.getAllReviewStates(),
+        'getKnowledgeStates': () => repo.getKnowledgeStatesByCanonicalIds(canonicalIds),
+      };
+
+      const rounds = 10;
+      const warmups = 3;
+      final samples = await interleavedRoundsOf(targets, warmups: warmups, rounds: rounds);
+      stdout.writeln(
+        '\n=== interleaved rounds: $rounds rounds x ${targets.length} calls, '
+        'order rotated each round (after $warmups warmup rounds) ===',
+      );
+      stdout.writeln(
+        'rows in play: decisions=${decisions.length} canonical=${canonicalIds.length}',
+      );
+      for (final entry in samples.entries) {
+        final chronological = entry.value;
+        final sorted = [...chronological]..sort();
+        expect(chronological, hasLength(rounds), reason: '${entry.key} sampled every round');
+        expect(sorted.first, greaterThan(0), reason: '${entry.key} recorded a positive duration');
+        expect(
+          percentileOf(sorted, 0.5),
+          lessThan(10000 * 1000),
+          reason: '${entry.key} median must stay under the generous 10 s stall guard',
+        );
+        stdout.writeln(
+          '${entry.key.padRight(34)} '
+          'min ${(sorted.first / 1000).toStringAsFixed(2)}  '
+          'p25 ${(percentileOf(sorted, 0.25) / 1000).toStringAsFixed(2)}  '
+          'median ${(percentileOf(sorted, 0.5) / 1000).toStringAsFixed(2)}  '
+          'p75 ${(percentileOf(sorted, 0.75) / 1000).toStringAsFixed(2)}  '
+          'max ${(sorted.last / 1000).toStringAsFixed(2)} ms',
+        );
+      }
+
+      // Chronological sequences for the two calls whose figures the fourth pass
+      // relied on, so the pure effect of position is visible in the log.
+      for (final contested in ['getAllReviewStates', 'getAllDecisions']) {
+        final perRound = samples[contested] ?? const <int>[];
+        final line = perRound.map((us) => (us / 1000).toStringAsFixed(1)).join(', ');
+        stdout.writeln('rounds of $contested'.padRight(34));
+        stdout.writeln('  $line');
+      }
     } finally {
       await db.close();
     }

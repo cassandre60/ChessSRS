@@ -262,6 +262,57 @@ obvious:
    31k-decision pipeline, even though only the active scope filter changed.
    -> Handed off to **PERF-FIX-36**.
 
+### Fifth pass — an order-controlled instrument (2026-10-19)
+
+Pass three blocked on: *"a harness that controls for measurement order and
+reports spread rather than a single median. Until that exists, a change that
+appears to halve the cost may have halved nothing."* That harness exists now —
+the second test in `test/perf/due_summary_attribution_test.dart`:
+
+- warmup rounds, then 10 rounds x 7 calls, one sample of each call per round,
+  the call order rotated every round so no call owns a fixed slot;
+- output per call: min / p25 / median / p75 / max, plus the chronological
+  sequence for `getAllReviewStates` and `getAllDecisions`, so the pure shape of
+  the spread is visible in the log.
+
+Measured twice against a copy of the current library (31,182 decisions,
+25,102 canonical ids):
+
+| call | run A min/med/max | run B min/med/max |
+|---|---|---|
+| `getAllReviewStates()` | 12.4 / 17.7 / **48.7** ms | 10.4 / 11.0 / 20.5 ms |
+| `getAllDecisions()` | 147.9 / 181.3 / **271.6** ms | 120.5 / 130.6 / 155.7 ms |
+| `getDueSummary()` total (sequential block) | — | 152.5 ms |
+| `parseUtcIso` x1743 (post PERF-FIX-35) | — | 0.38 ms vs 2.49 ms `DateTime.parse` |
+
+Two verdicts.
+
+**1. Within one process, the rotation does its job.** Run A's
+`getAllReviewStates` outliers (44.6 and 48.7 ms) fall at rounds 4 and 8 of 10,
+at two different positions in the rotation, while the same call produced 12.6
+and 12.4 ms samples in the same process. The pauses are real interruptions —
+allocation and GC, as pass three hypothesised — not artifacts of where a call
+happens to sit in a fixed sequence. A single median can now be shown to be what
+it is: one sample of a distribution whose p75 sits 21% away from its min even
+for small calls.
+
+**2. Across processes, the same harness still moves.** Minutes apart, unchanged
+code, same database copy: `getAllReviewStates` median 17.7 -> 11.0 ms,
+`getAllDecisions` 181.3 -> 130.6 ms. So the practice rule for any future
+before/after claim: measure before and after **in the same process**, report
+the band rather than the median, and treat a sub-band difference as
+unconcluded rather than as a win.
+
+The second pass's "16.7 ms, 76% of getDueSummary" and the third pass's ~13 ms
+unattributed residue both belonged to the 519-decision scale and were found
+noisy by this very instrument before they could mislead anyone. At the current
+31k scale the summary is dominated by decision loading (`getAllDecisions()` raw
+~131-181 ms; the summary's own `getTallyDecisions()` ~62-96 ms after
+PERF-FIX-33 slimmed the tally path), which the handed-off
+PERF-FIX-33/34/35/36 already addressed. No further attribution is owed on the
+old numbers; the instrument change is the deliverable of this pass.
+
+
 ### Reproducing
 
 ```bash
