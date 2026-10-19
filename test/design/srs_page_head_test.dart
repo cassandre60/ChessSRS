@@ -1,6 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:ui' show Tristate;
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +46,17 @@ void main() {
 
       expect(find.text('Library'), findsOneWidget);
       expect(find.byType(SrsPageHead), findsOneWidget);
+
+      // Trailing is absent
+      expect(find.byType(Spacer), findsNothing);
+      expect(find.text('Trailing'), findsNothing);
+
+      // Disables without onBack
+      final pressable = tester.widget<SrsPressable>(find.byType(SrsPressable));
+      expect(pressable.onPressed, isNull);
+
+      final semantics = tester.getSemantics(find.byType(SrsPressable));
+      expect(semantics.flagsCollection.isEnabled == Tristate.isFalse, isTrue);
     });
   });
 }

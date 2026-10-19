@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../test_container.dart';
+import '../test_helpers.dart';
 import '../utils/fake_connectivity.dart';
 import 'fake_http_client_factory.dart';
 import 'fake_websocket_channel.dart';
@@ -61,7 +62,7 @@ void main() {
       final client = container.read(socketPoolProvider).currentClient;
       client.connect();
       await client.firstConnection;
-      await Future<void>.delayed(kFakeWebSocketConnectionLag * 4);
+      await waitUntil(() => client.isConnected);
       await pumpEventQueue();
       expect(client.isConnected, isTrue);
 
