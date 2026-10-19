@@ -20,3 +20,7 @@ Because `HEAD` does not share a linear ancestor history with recent upstream com
 | `e6be63d22` | Native Linux audio playback support (#3670) | `c042255c0` (#120) | `lib/src/model/common/service/sound_service.dart` | Linux audio playback using pw-play/paplay/aplay system backends |
 | `cd25cd5f8` | Cancel superseded PR runs so only latest commit is tested (#3763) | `7fa8262ff` (#121) | `.github/workflows/test.yml` | Concurrency cancel-in-progress on pull_request |
 | `54f7eeedd` | Update chessground to 10.3.0 and dartchess to 0.14.0 | `acd273472` (#122) | `pubspec.yaml`, `pubspec.lock` | Drops material dep from board & removes git override |
+| `c4fc04c5d` | Dismiss promotion selector on analysis board navigation (#3777) | `25c8ec48c` (#241) | `lib/src/view/analysis/analysis_board.dart` | Resets pendingPromotion when FEN changes on navigation |
+| `2bcbbe7e8` | Hoist loop-invariant mainline walk out of PGN tree part loop (#3786) | `25c8ec48c` (#241) | `lib/src/widgets/pgn.dart` | Hoists _mainlinePartOfCurrentPath out of mapIndexed |
+| `99dd3e0e4` | Support duplicate variations in game tree (#3692) | `7291edf50` (#246) | `lib/src/model/common/node.dart`, `lib/src/model/common/uci.dart` | Disambiguates duplicate variation move IDs using Unicode PUA |
+| `a884a7219` | Only rebuild app theme on theme-relevant preference changes (#3767) | in-flight | `lib/src/app.dart` | Selects themeMode and locale instead of watching all generalPrefs |

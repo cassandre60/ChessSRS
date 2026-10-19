@@ -1,0 +1,89 @@
+name: Nightly proof build
+
+# Builds the app from main once a night, so there is always something fresh to
+# install, without spending a release build on a day when nothing that ships
+# changed. It publishes nothing: the artifacts hang off the run that built them.
+#
+# This is deliberately not "build every night". A build costs a Linux release
+# compile and two Android release compiles, and this repository merges test,
+# gate and documentation work far more often than it merges changes to the app
+# — between v1.6.2 and v1.6.3, 17 merges contained no shipped change at all.
+# Building unconditionally would spend most nights reproducing the last tag.
+# The decision, and the tests for it, are in .github/scripts/nightly-decide*.sh.
+#
+# A nightly is not a release. It is for the owner to try today's main without
+# anyone cutting a tag. Releases are the agent's call, per AGENTS.md §11.
+
+on:
+  schedule:
+    # 03:17 UTC, not 03:00. Scheduled jobs are queued, and the top of the hour
+    # is the busiest slot on the shared runner pool.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+# One nightly at a time: the scheduled run and a manual one can land on the
+# same commit, and two concurrent release builds would waste exactly the
+# minutes this workflow exists to save.
+concurrency:
+  group: nightly-proof-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Nightly build if warranted
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # The decision compares main against the newest release tag.
+          fetch-depth: 0
+
+      - name: 🧠 Decide whether a build is warranted
+        id: decide
+        env:
+          # The decision asks `gh run list` whether this commit was already built.
+          # Without a token gh refuses to run inside Actions and the step dies
+          # before deciding anything (nightly run 39226289575). Same token the
+          # dispatch step below uses.
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/nightly-decide.sh
+
+      - name: 🐦 Dispatch the build
+        # Dispatch the existing Release workflow rather than repeating its
+        # steps here: its publish job is gated on a tag push, so a dispatched
+        # run builds every artifact and stops, which is what a nightly wants.
+        #
+        # `reason` arrives as text that contains a tag name, so it goes through
+        # env rather than straight into the script — a tag is anyone with push
+        # access could choose, and `${{ }}` in a run block is shell.
+        if: steps.decide.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          set -euo pipefail
+          gh workflow run Release --ref main
+          {
+            echo '### Nightly build dispatched'
+            echo
+            echo "Reason: $REASON"
+            echo
+            echo "Artifacts appear on the new run of the Release workflow:"
+            echo "https://github.com/${{ github.repository }}/actions/workflows/release.yml"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📝 Record a skipped night
+        if: steps.decide.outputs.needed != 'true'
+        env:
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          {
+            echo '### Nightly build skipped'
+            echo
+            echo "Reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"

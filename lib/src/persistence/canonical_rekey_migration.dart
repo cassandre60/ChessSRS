@@ -155,6 +155,35 @@ Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) asyn
     );
   }
 
+  // The mirror rows in `srs_review_state` are written next to their knowledge rows
+  // (`saveAnswerBatch` writes both halves of the pair), so a moved knowledge row has to take
+  // its mirror with it. Left behind under the superseded key, no decision and no knowledge row
+  // names it any more and nothing can read it again — this is where the live v19 database
+  // accumulated 67 stranded rows across the v14/v16 rekeys. Runs after the decision updates so
+  // the guard below sees the rewritten `canonicalStateId`s; a decision the rekey could not move
+  // still reads through the old key, and that mirror stays.
+  for (final oldId in renames.keys) {
+    await db.delete(
+      kTableSrsReviewState,
+      where:
+          'decisionId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision d WHERE d.canonicalStateId = $kTableSrsReviewState.decisionId)',
+      whereArgs: [oldId],
+    );
+  }
+  for (final entry in merged.entries) {
+    final row = entry.value;
+    await db.insert(kTableSrsReviewState, {
+      'decisionId': entry.key,
+      'firstReviewedAt': row['firstReviewedAt'],
+      'lastReviewedAt': row['lastReviewedAt'],
+      'nextDueAt': row['nextDueAt'],
+      'repetitionCount': row['repetitionCount'] ?? 0,
+      'lapseCount': row['lapseCount'] ?? 0,
+      'stability': row['stability'] ?? 0.0,
+      'difficulty': row['difficulty'] ?? 5.0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   return CanonicalRekeyResult(
     decisionsRemapped: decisionUpdates.length,
     statesRemapped: merged.length,
