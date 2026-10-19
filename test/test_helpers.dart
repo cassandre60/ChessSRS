@@ -304,17 +304,3 @@ Future<void> pumpAsyncUntil(
 
   return loop();
 }
-
-/// Legacy pumpAsync for backwards compatibility — prefer pumpUntil/pumpUntilFound.
-///
-/// This uses a fixed delay and is kept for existing tests that haven't migrated yet.
-/// New tests should use pumpUntil/pumpUntilFound instead.
-@Deprecated('Use pumpUntil or pumpUntilFound instead')
-Future<void> pumpAsync(WidgetTester tester, [int ms = 120]) async {
-  await tester.runAsync(() async {
-    await Future<void>.delayed(Duration(milliseconds: ms));
-  });
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.pump(const Duration(milliseconds: 300));
-}
