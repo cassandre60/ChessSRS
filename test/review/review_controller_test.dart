@@ -733,7 +733,24 @@ void main() {
       // Answer correctly but do not await the advancement: the 300ms+
       // opponent-reply animation is still in flight below.
       final advance = controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Arm the race on a condition, not on the clock. The optimistic write at move
+      // entry sets lastMove before grading, so lastMove alone does not mean the move
+      // was graded; lastStepResult is written only by the post-grade advancement
+      // write, and the generation capture this test's discard depends on runs in the
+      // same synchronous stretch as that write — before _executeAdvancement's first
+      // await — so once the condition holds, changeScope's generation bump is
+      // guaranteed to land inside the advancement's window and the discard below is
+      // actually exercised. A fixed 100 ms sleep let a slow grade lose that race:
+      // the advancement then captured the NEW generation, never tripped its guard,
+      // and the test passed only because whichever write landed last happened to
+      // satisfy the asserts (#197 wave 5).
+      await waitUntil(() {
+        final s = container.read(reviewControllerProvider).value;
+        return s != null &&
+            s.lastStepResult != null &&
+            (s.lastMove == const NormalMove(from: Square.e2, to: Square.e4) ||
+                s.lastMove == const NormalMove(from: Square.e7, to: Square.e5));
+      });
 
       // Switch to study B mid-advance and let it fully load.
       await controller.changeScope(ReviewScope.study(importB.study.id));
@@ -1410,8 +1427,19 @@ void main() {
         expect(state.lastMove, const NormalMove(from: Square.e2, to: Square.e4));
         expect(state.totalDueCount, 0);
 
-        // Wait a moment: queue must remain paused and not auto-advance
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        // A bounded window, not a poll: the assertion below is an absence — a poll
+        // cannot express "still paused". The window is the controller's own complete
+        // auto-advance chain (kOpponentMoveDelay + kOpponentPostMoveDelay): any
+        // auto-advance the annotations pause failed to suppress clears
+        // isAwaitingAdvance at one of those two writes (the opponent-reply write or
+        // the final advancement write) inside it, and the window tracks those
+        // constants if they ever move. The old fixed 500 ms was a magic margin that
+        // covered only the first write and silently stopped covering the chain at
+        // all if either constant grew (#197 wave 5, pattern of #256's bounded
+        // windows).
+        await Future<void>.delayed(
+          kOpponentMoveDelay + kOpponentPostMoveDelay + const Duration(milliseconds: 100),
+        );
         state = container.read(reviewControllerProvider).requireValue;
         expect(state.isAwaitingAdvance, isTrue);
 
