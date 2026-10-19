@@ -15,7 +15,7 @@
 #      a scheduled run and a manual one can land on the same commit.
 # A previous build that FAILED does not skip: retrying it is the point.
 #
-# Env: GITHUB_OUTPUT, GITHUB_TOKEN, PATH (a fake `gh` is used in tests).
+# Env: GITHUB_OUTPUT, GH_TOKEN (for `gh run list`), PATH (a fake `gh` is used in tests).
 # Runs on a checkout with full history and tags.
 set -euo pipefail
 
