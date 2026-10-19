@@ -249,7 +249,10 @@ inner-loop step.**
   is green, so a local full-suite run before that push is duplicate work, not
   extra safety. Run `./verify` locally only when CI is unavailable or you
   specifically need the answer before pushing. Wait on a run with
-  `gh run watch <id> --exit-status`, not sleep-and-poll loops.
+  `gh run watch <id> --exit-status`, not sleep-and-repeat polling (always pass
+  `-R cassandre60/ChessSRS`: without it every `gh run` subcommand resolves its
+  repo from the checkout's remotes, and in this fork that default lands on the
+  parent).
 
 Say plainly in the commit message when a change was verified only by
 targeted tests, so nobody mistakes it for a full-suite result.
@@ -346,6 +349,15 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
    that order. The flywheel only turns if you turn it.
 8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
+9. When a change needs the owner — a `gate-approved` label on a protected-file
+   PR, a product decision in `docs/open-questions.md`, a branch-protection or
+   CI-config choice — explain **in plain terms what they are accepting**: what
+   changes, what it costs, what happens if they decline. No gate jargon, and do
+   not send them to GitHub to do it themselves. If they agree, **you perform the
+   action** (e.g. `gh pr edit <n> --add-label gate-approved`) and record whose
+   consent it was in the PR or issue. Consent is per item and explicit:
+   silence, an earlier "continue", or approval of a different PR is not approval
+   of this one. Merging still belongs to the merge agent.
 
 ## 11. Releases: the agent decides, the owner does not
 
@@ -603,3 +615,10 @@ information: the review move sound (#93) was confirmed audible by the owner, and
   unreported and blocking merge even with --admin. Verified by: PR #119 failing
   merge with 'GraphQL: Required status check \"T1 fast gates\" is expected', while
   PR #112 merged cleanly because touching AGENTS.md triggered gates.yml.
+- [2026-10-19, GLM-5.3-Flash Free] Every `gh run` subcommand resolves its repo from
+  the checkout's remotes, and in this fork that default lands on the PARENT
+  (`lichess-org/mobile`): `gh run watch 39235893854 --exit-status` died with
+  `HTTP 404: ... api.github.com/repos/lichess-org/mobile/actions/runs/...` while
+  the same run was live on `cassandre60/ChessSRS`. Pass `-R cassandre60/ChessSRS`
+  explicitly on every `gh run watch/list/view`. Verified by: the 404 URL naming the
+  parent repo, then the same run id returning `in_progress` with `-R` added.
