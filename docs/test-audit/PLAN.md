@@ -1,5 +1,7 @@
 # Orchestrator plan — ChessSRS test-audit follow-on work
 
+> **Status: Retired.** This document's 8 task briefs (`docs/tasks/TEST-0*`) have been removed. They duplicated `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` and `docs/AUTONOMOUS_WORK_LEDGER.md`. For dispatch, use `python3 scripts/autonomous/ledger.py next --stream <N>` and `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` §4. Evidence files `docs/test-audit/baseline.md` / `audit-report.md` / `redesign.md` / `final.md` / `inventory.csv` remain as read-only input for Stream 1. See Cleanup section at end.
+
 Branch `test-audit` (base `a9fbfe0fb`). The audit itself is finished; what remains is **wiring** the redesign. I am the orchestrator: I do not implement the tasks below myself. Each task is a self-contained brief an agent picks up in its own worktree, lands in one small PR, and verifies with targeted tests + `flutter analyze` (+ `gates.sh t1` where it touches gates). CI (`Tests`) is the full-suite authority — no agent runs `./verify` or the whole suite locally (AGENTS.md §3.1).
 
 ## What is already landed on this branch
@@ -87,4 +89,11 @@ The last agent to land (expected: task 08) does three things:
 3. Post the honest final message required by the brief: what was measured, what got worse, what remains and why.
 
 ---
+
+## Cleanup (2026-10-19): duplicate queue retired
+
+On 2026-10-19 `docs/tasks/TEST-01-dart-lane.md` … `TEST-08-strategy-capstone.md` were removed. Reason: they re-invented a queue that already exists in `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` (catalog, Streams 1–2 active, 3–6 planned) + `docs/AUTONOMOUS_WORK_LEDGER.md` (content-hash dedup, `ledger.py`). The audit data stays; the dispatch layer does not.
+
+For any blind spot listed in `docs/test-audit/audit-report.md` Top-10, file it as a Stream 1 issue against `LEDGER.md` instead of a `TEST-0*` task. Streams 3–6 are **planned** (`GATES_PLAN.md` rows 9–11) — do not start them to use tokens (see catalog §1).
+
 Orchestrator: Claude Opus 5.5 (OpenCode). Measure, then judge.
