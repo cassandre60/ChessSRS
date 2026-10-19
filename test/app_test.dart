@@ -5,6 +5,7 @@ import 'package:chess_srs/src/app.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -30,6 +31,27 @@ void main() {
 
     expect(Theme.of(tester.element(find.byType(MaterialApp))).brightness, Brightness.light);
   }, variant: kPlatformVariant);
+
+  testWidgets(
+    'Updating sound preference does not rebuild root Application or MaterialApp',
+    variant: kPlatformVariant,
+    (tester) async {
+      final app = await makeTestProviderScope(tester, child: const Application());
+      await tester.pumpWidget(app);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final materialAppBefore = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      final element = tester.element(find.byType(Application));
+      final container = ProviderScope.containerOf(element);
+
+      // Toggle sound preference (which shouldn't touch theme or locale)
+      await container.read(generalPreferencesProvider.notifier).toggleSoundEnabled();
+      await tester.pump();
+
+      final materialAppAfter = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(identical(materialAppBefore, materialAppAfter), isTrue);
+    },
+  );
 
   testWidgets(
     'Root screen has no bottom navigation and mounts ReviewScreen',

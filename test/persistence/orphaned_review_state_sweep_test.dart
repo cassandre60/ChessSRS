@@ -1,6 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-005.
+// SPEC coverage: INV-005, INV-069.
 
 import 'dart:io';
 

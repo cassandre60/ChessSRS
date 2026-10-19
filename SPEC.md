@@ -99,6 +99,23 @@ handled as trusted navigation.
 - Gates: app-links suite.
 - Tier: T0. Covering: `test/app_links_service_test.dart`.
 
+### INV-069 An upgrade leaves no review-state mirror that nothing names
+Every `srs_review_state` row that survives the schema upgrade path is still
+reachable: a decision names its key via `id` or `canonicalStateId`, or a
+knowledge row names it via `canonicalId`. A canonical rekey carries the mirror
+with the key it moves; the v19→v20 sweep deletes the rows already stranded
+rather than leaving them behind.
+- Oracle: `a v19 database with stranded rows is swept on the upgrade` (stranded
+  row removed, every reachable key kept) and the rekey tests `carries the
+  canonical review-state mirror through the rekey` / `keeps the mirror while a
+  decision still points at the old key`.
+- Gates: persistence suite (tier-2 on schema changes).
+- Tier: T0. History: the v14/v16 rekeys left 67 mirrors stranded on the live
+  database (2026-10-16 conformance audit, finding F5); fixed by #239, no gate
+  was red.
+- Covering: `test/persistence/orphaned_review_state_sweep_test.dart`,
+  `test/persistence/canonical_rekey_migration_test.dart`.
+
 ## B. Import pipeline (T0/T1)
 
 ### INV-010 Variations are preserved as first-class branches
@@ -470,3 +487,4 @@ total. Practice mode is exempt and still surfaces fresh positions.
 | 2026-10-05 | INV-067 | Added: an opening hub is a family name, not a title that mentions one (spurious hubs) | (owner, on merge) |
 | 2026-10-15 | INV-068 | Added: due requires a prior presentation; fresh is introduced under its own cap | (owner, on merge) |
 | 2026-10-16 | INV-006 | Amended: secrets are body-first with a redacted query-string fallback on the mobile-code endpoints; the guard is redaction at the `http_log` write, not "never a URL" (PR #94 → PR #123 + H4) | (owner, on approval) |
+| 2026-10-19 | INV-069 | Added: an upgrade leaves no unreachable review-state mirror (escape: audit F5, fixed by #239) | (owner, on approval) |
