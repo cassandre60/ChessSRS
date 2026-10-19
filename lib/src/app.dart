@@ -131,13 +131,15 @@ class _AppState extends ConsumerState<Application> {
 
   @override
   Widget build(BuildContext context) {
-    final generalPrefs = ref.watch(generalPreferencesProvider);
+    final (themeMode, locale) = ref.watch(
+      generalPreferencesProvider.select((p) => (p.themeMode, p.locale)),
+    );
 
     // Brightness is the theme mode and nothing else. It used to also be forced dark whenever a
     // background colour or image was set, which is gone with the background setting: the
     // Diagram palette is light or dark by choice, and every token's contrast is specified
     // against the matching `ground`.
-    final brightness = switch (generalPrefs.themeMode) {
+    final brightness = switch (themeMode) {
       BackgroundThemeMode.light => Brightness.light,
       BackgroundThemeMode.dark || BackgroundThemeMode.amoled => Brightness.dark,
       BackgroundThemeMode.system => MediaQuery.platformBrightnessOf(context),
@@ -163,7 +165,7 @@ class _AppState extends ConsumerState<Application> {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         title: 'ChessSRS',
-        locale: generalPrefs.locale,
+        locale: locale,
         theme: theme.copyWith(
           navigationBarTheme: isIOS
               ? null

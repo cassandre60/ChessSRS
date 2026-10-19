@@ -45,6 +45,12 @@ jobs:
 
       - name: 🧠 Decide whether a build is warranted
         id: decide
+        env:
+          # The decision asks `gh run list` whether this commit was already built.
+          # Without a token gh refuses to run inside Actions and the step dies
+          # before deciding anything (nightly run 39226289575). Same token the
+          # dispatch step below uses.
+          GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/nightly-decide.sh
 
       - name: 🐦 Dispatch the build

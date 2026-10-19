@@ -40,5 +40,117 @@
     "replace": "states.where((s) => !s.isDueAt(clock.now())).toList(growable: false)",
     "occurrence": 1,
     "note": "dueItems negated; SPEC INV-030; killed by dueItems filter tests"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "final input = '$fenKey|$expectedMoveUci';",
+    "replace": "final input = '$fenKey$expectedMoveUci';",
+    "occurrence": 1,
+    "note": "canonicalKey separator drop: sha1 digest drift orphans every persisted memory row; SPEC INV-015/016; killed by 'canonicalKey is pinned to the exact separator format'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "[repertoireSide.name, fenKey, ...sortedMoves].join('|')",
+    "replace": "[repertoireSide.name, fenKey, ...sortedMoves].join('')",
+    "occurrence": 1,
+    "note": "position-key field separator drop; SPEC INV-016/017; killed by 'is pinned to the side|fen|sorted-moves digest format'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "nextDueAt: state.nextDueAt,",
+    "replace": "nextDueAt: null,",
+    "occurrence": 1,
+    "note": "fromReviewState drops due date: memory loses scheduling; SPEC INV-016; killed by 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "firstReviewedAt: state.firstReviewedAt,",
+    "replace": "firstReviewedAt: null,",
+    "occurrence": 1,
+    "note": "fromReviewState drops first-review instant; SPEC INV-016; killed by 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "repetitionCount: state.repetitionCount,",
+    "replace": "repetitionCount: 0,",
+    "occurrence": 1,
+    "note": "fromReviewState resets streak: reviewed item reappears as new; SPEC INV-016; killed by 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "stability: state.stability,",
+    "replace": "stability: state.difficulty,",
+    "occurrence": 1,
+    "note": "fromReviewState cross-wires stability to difficulty; SPEC INV-016; killed by 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "difficulty: state.difficulty,",
+    "replace": "difficulty: state.stability,",
+    "occurrence": 1,
+    "note": "fromReviewState cross-wires difficulty to stability; SPEC INV-016; killed by 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "decisionId: decisionId ?? canonicalId,",
+    "replace": "decisionId: decisionId ?? 'missing-id',",
+    "occurrence": 1,
+    "note": "toReviewState default decision id falls back to a sentinel instead of the canonical id; SPEC INV-016; killed by the round-trip assertion in 'fromReviewState maps every scheduling field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "bool isDueAt(DateTime now) => nextDueAt == null || !nextDueAt!.isAfter(now);",
+    "replace": "bool isDueAt(DateTime now) => nextDueAt == null || nextDueAt!.isAfter(now);",
+    "occurrence": 1,
+    "note": "isDueAt negation drop: future items leak into the queue; SPEC INV-017 scheduling; killed by 'isDueAt boundary' future arm"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "bool isDueAt(DateTime now) => nextDueAt == null || !nextDueAt!.isAfter(now);",
+    "replace": "bool isDueAt(DateTime now) => nextDueAt == null && !nextDueAt!.isAfter(now);",
+    "occurrence": 1,
+    "note": "isDueAt || to && conjugation: null-due items stop being due; SPEC INV-016; killed by the existing cold-state isDueAt assertion (null ! dereference throws)"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "!nextDueAt!.isAfter(now);",
+    "replace": "!nextDueAt!.isBefore(now);",
+    "occurrence": 1,
+    "note": "isAfter to isBefore boundary flip moves the due instant; SPEC INV-016; killed by 'isDueAt boundary' future and past arms"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "firstReviewedAt: firstReviewedAt ?? this.firstReviewedAt,",
+    "replace": "firstReviewedAt: firstReviewedAt,",
+    "occurrence": 1,
+    "note": "copyWith keep-fallback drop (DateTime slot): unspecified field nulled; SPEC INV-016; killed by 'copyWith preserves every unspecified field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "repetitionCount: repetitionCount ?? this.repetitionCount,",
+    "replace": "repetitionCount: repetitionCount,",
+    "occurrence": 1,
+    "note": "copyWith keep-fallback drop (int slot): null passed to a non-nullable field; SPEC INV-016; killed by 'copyWith preserves every unspecified field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "stability: stability ?? this.stability,",
+    "replace": "stability: stability,",
+    "occurrence": 1,
+    "note": "copyWith keep-fallback drop (double slot); SPEC INV-016; killed by 'copyWith preserves every unspecified field'"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "this.lapseCount = 0,",
+    "replace": "this.lapseCount = 1,",
+    "occurrence": 1,
+    "note": "cold state starts with a phantom lapse; SPEC INV-016; killed by extended cold-default assertions"
+  },
+  {
+    "file": "lib/src/domain/position_knowledge_state.dart",
+    "find": "isNew => repetitionCount == 0 && nextDueAt == null",
+    "replace": "isNew => repetitionCount != 0 && nextDueAt == null",
+    "occurrence": 1,
+    "note": "isNew polarity flip; SPEC INV-016; killed by the existing cold-state isNew assertion"
   }
 ]
