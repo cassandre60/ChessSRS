@@ -196,11 +196,10 @@ void main() {
 
     final controller = container.read(authControllerProvider.notifier);
 
-    // Trigger signOut (which has a 500ms delay)
+    // Trigger signOut: it records the user and bumps the generation synchronously, then parks
+    // on its 500ms delay — so by the time this call returns the timer is already running, and
+    // no settle sleep is needed before signing in.
     final signOutFuture = controller.signOut();
-
-    // Advance time enough to let the delayed timer be scheduled and start signing in
-    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     // Immediately sign in as userB before the 500ms expires
     await controller.signIn();
@@ -212,6 +211,11 @@ void main() {
     expect(container.read(authControllerProvider), userB);
     expect(fakeStorage.storedUser, userB);
     expect(fakeStorage.deleteCalls, 0);
+    expect(
+      fakeRepo.signedOutUser,
+      isNull,
+      reason: "a superseded signOut must not revoke anyone's token",
+    );
   });
 
   test('retains authUser state when all listeners are closed', () async {
@@ -234,6 +238,8 @@ void main() {
 
     // Close listener (simulates user leaving screen)
     sub.close();
+    // A settle yield, not a sleep: one turn for any disposal close() could have scheduled,
+    // before asserting the state survived it — an absence a poll cannot express.
     await Future<void>.delayed(Duration.zero);
 
     // Must still be userA!
