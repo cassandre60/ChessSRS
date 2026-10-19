@@ -99,6 +99,25 @@ void main() {
       return rows.isEmpty ? const {} : rows.first;
     }
 
+    /// The canonical mirror row, as `saveAnswerBatch` writes it next to the knowledge row.
+    Future<void> seedMirror(String canonicalId, {int repetitions = 1}) {
+      return db.insert(kTableSrsReviewState, {
+        'decisionId': canonicalId,
+        'firstReviewedAt': '2026-09-01T10:00:00.000Z',
+        'lastReviewedAt': '2026-09-15T10:00:00.000Z',
+        'nextDueAt': '2026-09-20T10:00:00.000Z',
+        'repetitionCount': repetitions,
+        'lapseCount': 0,
+        'stability': 1.0,
+        'difficulty': 5.0,
+      });
+    }
+
+    Future<Map<String, Object?>> mirrorFor(String key) async {
+      final rows = await db.query(kTableSrsReviewState, where: 'decisionId = ?', whereArgs: [key]);
+      return rows.isEmpty ? const {} : rows.first;
+    }
+
     test('moves knowledge state from the old key to the new one', () async {
       const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
       final oldId = canonicalKey(fenKey, 'e2e4');
@@ -292,6 +311,82 @@ void main() {
       final merged = await stateFor(newId);
       expect(merged, isNotEmpty);
       expect(merged['repetitionCount'], 3);
+    });
+
+    test('carries the canonical review-state mirror through the rekey', () async {
+      const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      final oldId = canonicalKey(fenKey, 'e2e4');
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4', 'd2d4'], repertoireSide: Side.white);
+
+      await seed(
+        studyId: 'study-1',
+        chapterId: 'chapter-1',
+        nodeId: 'node-1',
+        fenKey: fenKey,
+        expectedMoves: encodeExpectedMoves([
+          const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          const RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+        ]),
+        canonicalStateId: oldId,
+      );
+      await seedState(oldId, repetitions: 7, stability: 12.5);
+      await seedMirror(oldId, repetitions: 7);
+
+      await rekeyCanonicalReviewState(db);
+
+      // The knowledge row moves to the new key; its mirror is written next to it, so it has to
+      // move too. Left behind under the old key, no decision and no knowledge row names it any
+      // more — the exact stranded row the live v19 database accumulated across the v14/v16
+      // rekeys.
+      expect(
+        await mirrorFor(oldId),
+        isEmpty,
+        reason: 'a mirror under a superseded key can never be read again',
+      );
+      final moved = await mirrorFor(newId);
+      expect(moved, isNotEmpty, reason: 'the pair stays complete under the new key');
+      expect(moved['repetitionCount'], 7);
+    });
+
+    test('keeps the mirror while a decision still points at the old key', () async {
+      const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      final oldId = canonicalKey(fenKey, 'e2e4');
+      final newId = canonicalKeyForPosition(fenKey, ['e2e4'], repertoireSide: Side.white);
+      expect(oldId, isNot(newId));
+
+      for (final index in [1, 2]) {
+        await seed(
+          studyId: 'study-$index',
+          chapterId: 'chapter-$index',
+          nodeId: 'node-$index',
+          fenKey: fenKey,
+          expectedMoves: encodeExpectedMoves([
+            const RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+          ]),
+          canonicalStateId: oldId,
+        );
+      }
+      // The second decision's position cannot be recovered, so its key is left alone and it
+      // keeps reading through the old one (same skip path as the unreadable-tree test).
+      await db.update(
+        kTableSrsChapter,
+        {'treeJson': '{not json'},
+        where: 'id = ?',
+        whereArgs: ['chapter-2'],
+      );
+      await seedState(oldId, repetitions: 5);
+      await seedMirror(oldId, repetitions: 5);
+
+      final result = await rekeyCanonicalReviewState(db);
+
+      expect(result.decisionsRemapped, 1);
+      expect(result.skipped, 1);
+      expect(
+        (await mirrorFor(oldId))['repetitionCount'],
+        5,
+        reason: 'the decision that still points at the old key still reads through it',
+      );
+      expect((await mirrorFor(newId))['repetitionCount'], 5);
     });
   });
   group('backfillCanonicalStatesFromLegacy', () {

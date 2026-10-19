@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
 import 'package:chess_srs/src/persistence/opening_name_repair_migration.dart';
+import 'package:chess_srs/src/persistence/orphaned_review_state_sweep.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
@@ -90,7 +91,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 19,
+      version: 20,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -374,6 +375,15 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
             'Opening name repair: ${repaired.cleared} spurious names cleared, '
             '${repaired.kept} kept',
           );
+        }
+
+        // Also not a schema change: v20 clears the review-state mirrors the v14/v16 rekeys
+        // stranded under superseded canonical keys. The rekey now carries each mirror along
+        // with its knowledge row, so this only removes what the earlier passes already left
+        // behind — rows that neither a decision nor a knowledge row names any more.
+        if (oldVersion < 20) {
+          final swept = await sweepOrphanedReviewStates(db);
+          _logger.info('Orphaned review-state sweep: $swept rows removed');
         }
 
         _logger.info('Database schema upgraded successfully to v$newVersion');
