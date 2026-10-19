@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../binding.dart';
 import '../../test_container.dart';
+import '../../test_helpers.dart';
 
 const _testContext = EvaluationContext(
   id: StringId('eval_mixin_test'),
@@ -86,10 +87,6 @@ final _testControllerProvider = AsyncNotifierProvider.autoDispose<_TestControlle
   name: 'TestEvalControllerProvider',
 );
 
-/// Lets the eval request debounce fire.
-Future<void> elapseEvalDebounce() =>
-    Future<void>.delayed(kRequestEvalDebounceDelay + const Duration(milliseconds: 50));
-
 void main() {
   TestLichessBinding.ensureInitialized();
 
@@ -114,13 +111,20 @@ void main() {
     final controller = container.read(_testControllerProvider.notifier);
 
     controller.requestEval();
-    await elapseEvalDebounce();
+    // Poll for the dispatch instead of sleeping out the debounce plus a margin: the debounce is
+    // a real 250ms timer, and under contention the margin is what decides whether the request
+    // has gone out yet.
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
+    );
 
     expect(fakeEvaluator.streams, hasLength(1));
     expect(fakeEvaluator.streams.single.hasListener, isTrue);
 
     controller.requestEval();
-    await elapseEvalDebounce();
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 2 && fakeEvaluator.streams.last.hasListener,
+    );
 
     expect(fakeEvaluator.streams, hasLength(2));
     expect(
@@ -139,11 +143,15 @@ void main() {
     final controller = container.read(_testControllerProvider.notifier);
 
     controller.requestEval();
-    await elapseEvalDebounce();
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
+    );
     expect(fakeEvaluator.streams.single.hasListener, isTrue);
 
     // closing the last listener disposes the autoDispose notifier
     subscription.close();
+    // A deterministic ordering yield, not a sleep: the disposal runs in the turn close()
+    // schedules, and the assertion below is an absence — a poll cannot express "still gone".
     await Future<void>.delayed(Duration.zero);
 
     expect(

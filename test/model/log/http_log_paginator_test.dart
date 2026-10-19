@@ -22,8 +22,11 @@ HttpLog _page(List<String> ids, {int? next}) =>
 
 void main() {
   group('HttpLogPaginator paging', () {
-    /// A storage whose next-page reads are slow enough that two of them overlap if the
-    /// paginator lets them. [pageCalls] counts every read, including the opening one.
+    /// A storage whose reads are counted, so the tests can prove that two overlapping next()
+    /// calls fetch the page once. [pageCalls] counts every read, including the opening one.
+    ///
+    /// The overlap needs no slow-read simulation: the two calls are issued synchronously, so no
+    /// state update can land between them whatever the read duration is.
     ({MockHttpLogStorage storage, int Function() pageCalls}) build() {
       final storage = MockHttpLogStorage();
       var calls = 0;
@@ -36,8 +39,6 @@ void main() {
       ).thenAnswer((invocation) async {
         calls++;
         final cursor = invocation.namedArguments[#cursor] as int?;
-        // The opening read answers at once; every later one is slow.
-        if (cursor != null) await Future<void>.delayed(const Duration(milliseconds: 40));
         return cursor == null ? _page(['3', '2', '1'], next: 1) : _page(['0'], next: null);
       });
       return (storage: storage, pageCalls: () => calls);
