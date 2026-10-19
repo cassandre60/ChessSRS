@@ -42,6 +42,7 @@
 | 2026-10-16 | Stream 2 (Spec Audit) | Full Repertoire SRS core (`44 invariants`) | `bad86151f` | COMPLETED | #191, #192 | Verified 44/44 invariants. Identified open findings F1–F5 in `docs/spec-conformance-audit-2026-10-16.md`. | Major architectural change or new spec version. |
 | 2026-10-17 | Stream 1 (Mutation) | `lib/src/domain/scheduler.dart` | `a71a19096` | IN_PROGRESS | Issue draft | Evaluated 10 mutants: 6 killed, 4 survived. Found stability zero fallback gap & equality test gap. | Any modification to `scheduler.dart`. |
 | 2026-10-17 | Stream 2 (Smell Audit) | Full Test Suite (`1855 declarations`) | `a71a19096` | IN_PROGRESS | `scripts/audit_2026-10/` | Screened 1855 tests with `smell_tests.py`; flagged 298 declarations (vacuous assertions, blocking sleeps). | Any new test additions without linter coverage. |
+| 2026-10-18 | Stream 2 (Smell Audit) | `test/model/offline_computer/practice_analyser_test.dart` | `bdf1e3d42` | COMPLETED | #197, #221 | Converted 23 fixed wall-clock waits (22 × `settleEvals` 400 ms + one 100 ms `usableEval` deadline await) to `fakeAsync`/`async.elapse`; 0 real sleeps remain (`rg` clean), 8/8 green on the fake clock, deadline-edge mutant killed by the new 99/100 ms boundary expect. | Any reintroduction of fixed real-clock waits into this file. |
 
 > **Note on existing rows:** Hashes recorded before 2026-10-18 used
 > `git log -- <file>` (commit hash). They remain valid as "last audited

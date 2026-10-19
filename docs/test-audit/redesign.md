@@ -1,5 +1,7 @@
 # Redesign proposal — ChessSRS testing framework (Phase 3, 2026-10-18)
 
+> **Status: Read-only evidence / superseded by catalog.** For the actual levers, see `GATES_PLAN.md` rows 9–11 and `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` §§3–6. The `docs/tasks/TEST-0*` tasks that once ranked these levers have been removed.
+
 Branch `test-audit`. This document evaluates the levers from the task brief,
 ranks them by **(CI time saved + signal gained) / cost**, and records which
 were adopted, which were deferred, and why. No production code was changed to
