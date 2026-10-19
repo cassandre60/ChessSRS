@@ -2,6 +2,8 @@
 // ignore_for_file: invalid_use_of_protected_member
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
+
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/socket.dart';
@@ -266,21 +268,32 @@ void main() {
     });
 
     test('the chapter you asked for last is the one you get', () async {
-      // Hold the first request open so it resolves *after* the second. A study opens on
-      // chapter one, so without holding it the first request would land first anyway.
+      // Hold the first request open until the second has landed, so the superseded response
+      // resolves *after* the newer one and the stale-response guard is the only thing that can
+      // produce the right final chapter. A fixed delay would leave it to machine load whether
+      // the inversion — and so the guard — is exercised at all.
+      final releaseFirst = Completer<void>();
+      var heldRequests = 0;
       var hold = false;
       final controller = await openController(
         _chapterOne,
         onGet: (chapterId) {
           if (hold && chapterId == _chapterOne) {
-            return Future<void>.delayed(const Duration(milliseconds: 150));
+            heldRequests++;
+            return releaseFirst.future;
           }
           return Future<void>.value();
         },
       );
 
       hold = true;
-      await Future.wait([controller.goToChapter(_chapterOne), controller.goToChapter(_chapterTwo)]);
+      final superseded = controller.goToChapter(_chapterOne);
+      await controller.goToChapter(_chapterTwo);
+      expect(heldRequests, 1, reason: 'the scenario needs the first request to be genuinely held');
+
+      // The superseded request lands only now, after the newer chapter is already on screen.
+      releaseFirst.complete();
+      await superseded;
 
       expect(
         controller.state.requireValue.study.chapter.id,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
@@ -14,6 +15,7 @@ import 'package:multistockfish/multistockfish.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../network/fake_http_client_factory.dart';
+import '../../test_helpers.dart';
 
 class ConfigurableFakeConnectivity implements Connectivity {
   ConfigurableFakeConnectivity({this.result = ConnectivityResult.wifi});
@@ -230,9 +232,16 @@ void main() {
         final tempDir = await Directory.systemTemp.createTemp('nnue_test_');
         addTearDown(() => tempDir.delete(recursive: true));
 
+        // The first download is parked inside its HTTP call until the test releases it, so "the
+        // first is still in flight" is a fact of the gate rather than of a delay being long
+        // enough. The payload is deliberately one the checksum rejects: what is under test is
+        // the in-flight guard, whose only distinguishable answer is that the second call never
+        // reaches the network at all.
+        final holdDownload = Completer<void>();
+        var requests = 0;
         final mockClient = MockClient((request) async {
-          // Simulate slow download
-          await Future<void>.delayed(const Duration(milliseconds: 100));
+          requests++;
+          await holdDownload.future;
           return http.Response('test content', 200);
         });
 
@@ -245,16 +254,20 @@ void main() {
 
         final service = container.read(stockfishNnueServiceProvider);
 
-        // Start first download
+        // Start first download and wait until it is genuinely in flight — parked in the client.
         final firstDownload = service.downloadNNUEFile(inBackground: true);
+        await waitUntil(() => requests == 1);
 
         // Immediately start second download while first is in progress
         final secondDownload = service.downloadNNUEFile(inBackground: true);
 
+        holdDownload.complete();
         final results = await Future.wait([firstDownload, secondDownload]);
 
-        // Second call should be rejected
+        // Second call should be rejected — and rejected here means it was turned away before
+        // sending anything: any path that runs a download would have bumped the request count.
         expect(results[1], isFalse);
+        expect(requests, 1);
       });
 
       test('throws exception when in background and not on WiFi', () async {
