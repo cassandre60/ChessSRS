@@ -259,6 +259,52 @@ Future<void> pumpUntilGone(
   await pumpUntil(tester, () => finder.evaluate().isEmpty, timeout: timeout, interval: interval);
 }
 
+/// Polls until [condition] holds, pumping as it goes, and additionally advances the fake
+/// clock the way [pumpAsync] does on every sweep.
+///
+/// [pumpUntil]'s loop only emits plain `pump()` calls: enough to re-render real-async
+/// updates (database reads through `runAsync`), not enough for updates gated on fake-clock
+/// timers or animations needing the 400/300ms advance. Progressions await — "Continue"
+/// flows, pace-driven overlays — combine both instruments: each sweep grants the poll's
+/// `runAsync` to real work as well as the pump advances, so they land whenever everything
+/// fits (CPU contention) and beyond the fixed window, not never.
+/// Every call performs at least [minSweeps] sweeps before the condition may satisfy the
+/// loop — even when it already holds at entry. This mirrors [pumpAsync]'s unconditional
+/// small clock advance and matters before an interaction: a finder can match a drawer or
+/// dialog row that is still mid-slide (the animation advances only on pump durations, and
+/// `pumpUntil`'s zero-duration frames do not move it), and a tap or long-press against
+/// such a row misses its hit test.
+Future<void> pumpAsyncUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 5),
+  Duration interval = const Duration(milliseconds: 50),
+  int minSweeps = 1,
+}) {
+  final deadline = DateTime.now().add(timeout);
+  Future<void> sweep() async {
+    await tester.runAsync(() async {
+      await Future<void>.delayed(interval);
+    });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  Future<void> loop() async {
+    var sweeps = 0;
+    while (sweeps < minSweeps || !condition()) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw StateError('pumpAsyncUntil timed out after $timeout');
+      }
+      await sweep();
+      sweeps++;
+    }
+  }
+
+  return loop();
+}
+
 /// Legacy pumpAsync for backwards compatibility — prefer pumpUntil/pumpUntilFound.
 ///
 /// This uses a fixed delay and is kept for existing tests that haven't migrated yet.
