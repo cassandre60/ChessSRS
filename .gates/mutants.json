@@ -40,5 +40,131 @@
     "replace": "states.where((s) => !s.isDueAt(clock.now())).toList(growable: false)",
     "occurrence": 1,
     "note": "dueItems negated; SPEC INV-030; killed by dueItems filter tests"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (previous == null) return null;",
+    "replace": "if (previous == null) return ReviewState.initial(decisionId: canonicalId);",
+    "occurrence": 1,
+    "note": "exposure credit materialises a row for a never-engaged position (review-2 C3); SPEC INV-028; killed by 'recordAutoTraversalExposure returns null for nodes with no stored state'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (previous.stability <= 0) return previous;",
+    "replace": "if (previous.stability < 0) return previous;",
+    "occurrence": 1,
+    "note": "zero-stability guard widened to negative-only: stable-0 rows gain due extensions; SPEC INV-028; killed by 'INV-028 zero-stability states are refused credit even when not yet due'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (scheduler.isDue(previous, now)) return previous;",
+    "replace": "if (!scheduler.isDue(previous, now)) return previous;",
+    "occurrence": 1,
+    "note": "refusal polarity inverts: due items gain credit, healthy items refuse; SPEC INV-028; killed by 'recordAutoTraversalExposure refuses exposure credit to already-due decisions'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (previous.lastReviewedAt != null && _isSameCalendarDay(previous.lastReviewedAt!, now))",
+    "replace": "if (previous.lastReviewedAt == null && _isSameCalendarDay(previous.lastReviewedAt!, now))",
+    "occurrence": 1,
+    "note": "lastReviewedAt null-check polarity flipped: null rows crash, reviewed-today rows slip through; SPEC INV-028; killed by 'a learned row without lastReviewedAt still earns traversal credit' and 'INV-028 same-day active review blocks traversal credit with an empty throttle'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "_lastExposedAt[canonicalId] = now;",
+    "replace": "_lastExposedAt.clear();",
+    "occurrence": 1,
+    "note": "grant never records throttle (and wipes the rest): the once-per-day cap cannot persist; SPEC INV-028; killed by 'INV-028 a reseeded throttle still refuses a same-day grant after a restart' (persistedThrottle map assert)"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final boostedStability = previous.stability * (1 + params.exposureStabilityGain);",
+    "replace": "final boostedStability = previous.stability * (1 - params.exposureStabilityGain);",
+    "occurrence": 1,
+    "note": "micro-bump becomes micro-haircut; SPEC INV-028; killed by 'recordAutoTraversalExposure grants micro-stability bump and extends due date'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final extendedDue = remainingMs > 0",
+    "replace": "final extendedDue = remainingMs < 0",
+    "occurrence": 1,
+    "note": "due extension inverted, sampled only on overdue rows; SPEC INV-028; killed by 'grants micro-stability bump and extends due date' (isAfter initialDue)"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (remaining.isNegative) return s.nextDueAt; // already due; leave as-is",
+    "replace": "if (remaining.isNegative) return now.add(const Duration(days: 2));",
+    "occurrence": 1,
+    "note": "already-due child re-anchored into the future under contagion instead of left where the queue finds it; SPEC INV-027; killed by 'lapse contagion leaves an already-due child due at its own instant'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final newRemainingMs = (remaining.inMilliseconds * (1 - decay)).round();",
+    "replace": "final newRemainingMs = (remaining.inMilliseconds * (1 + decay)).round();",
+    "occurrence": 1,
+    "note": "contagion pulls the due date backward instead of forward (extends by decay instead of shrinking); SPEC INV-027; killed by 'propagates lapse contagion to descendants' (isBefore initialDue asserts)"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final shrunkStability = childState.stability * (1 - decay).clamp(0.0, 1.0);",
+    "replace": "final shrunkStability = childState.stability * (1 + decay).clamp(0.0, 1.0);",
+    "occurrence": 1,
+    "note": "haircut becomes a bonus under contagion; SPEC INV-027; killed by the closeTo stability asserts at depths 1-2 in 'propagates lapse contagion to descendants'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "math.exp(-(depth - 1) / tau)",
+    "replace": "math.exp(-depth / tau)",
+    "occurrence": 1,
+    "note": "review-2 C2 regression: depth-1 receives only exp(-1/tau) = 51.3% of the documented lambda0 at every depth; SPEC INV-027; killed by 'INV-027 lapse contagion applies the full lambda0 haircut at depth 1'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (depth > params.maxContagionDepth) return;",
+    "replace": "if (depth >= params.maxContagionDepth) return;",
+    "occurrence": 1,
+    "note": "contagion cut moves from depth 4 to depth 3: the last documented ply goes untouched; SPEC INV-027; killed by 'propagates lapse contagion to descendants' (sideEffect length 3 + depth-3 asserts)"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "_propagateLapseContagion(childId, now, depth: depth + 1, collector: collector);",
+    "replace": "_propagateLapseContagion(childId, now, depth: depth, collector: collector);",
+    "occurrence": 1,
+    "note": "depth never increments: every descendant receives the depth-1 haircut and the depth cap never engages; SPEC INV-027; killed by the depth-2/3 closeTo asserts and the untouched depth-4 child"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final bumpedDifficulty = (childState.difficulty + params.contagionDifficultyBump * decay)",
+    "replace": "final bumpedDifficulty = (childState.difficulty + params.contagionDifficultyBump * 1.0)",
+    "occurrence": 1,
+    "note": "difficulty bump stops attenuating with depth; SPEC INV-027; killed by the closeTo difficulty asserts at depths 1-2 in 'propagates lapse contagion to descendants'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (childState == null || childState.stability <= 0) continue;",
+    "replace": "if (childState == null || childState.stability < 0) continue;",
+    "occurrence": 1,
+    "note": "cold descendants (stability 0) enter contagion and gain a difficulty bump; SPEC INV-027; killed by 'lapse contagion skips unlearned / cold descendants' (+ its new difficulty assert)"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "if (sib.expectedMoveUci != playedMoveUci) continue;",
+    "replace": "if (sib.expectedMoveUci == playedMoveUci) continue;",
+    "occurrence": 1,
+    "note": "coupling polarity inverted: the genuine-confusion sibling is skipped, strangers are bumped; SPEC INV-029; killed by 'couples difficulty on confusable sibling moves'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final bumped = (sibState.difficulty + params.confusionDifficultyCoupling).clamp(1.0, 10.0);",
+    "replace": "final bumped = sibState.difficulty + params.confusionDifficultyCoupling;",
+    "occurrence": 1,
+    "note": "coupling unbounded: a near-cap sibling overshoots the FSRS ceiling; SPEC INV-029; killed by 'sibling coupling caps difficulty at the FSRS ceiling'"
+  },
+  {
+    "file": "lib/src/domain/graph_aware_review_coordinator.dart",
+    "find": "final bumped = (sibState.difficulty + params.confusionDifficultyCoupling).clamp(1.0, 10.0);",
+    "replace": "final bumped = (sibState.difficulty - params.confusionDifficultyCoupling).clamp(1.0, 10.0);",
+    "occurrence": 1,
+    "note": "kappa sign flipped: confusion lowers difficulty; SPEC INV-029; killed by 'couples difficulty on confusable sibling moves' (closeTo 4.35)"
   }
 ]
