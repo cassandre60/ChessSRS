@@ -17,6 +17,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../network/fake_http_client_factory.dart';
 import '../../network/fake_websocket_channel.dart';
 import '../../test_container.dart';
+import '../../test_helpers.dart';
 
 /// A channel factory whose connections never complete, so a socket's `firstConnection` future
 /// stays pending and the service's own connect timeout is the thing under test.
@@ -117,7 +118,15 @@ void main() {
       // The socket connect times out after 3s, which cancels the analysis and nulls the field.
       // The continuation that follows used to reach back through that field and crash.
       await service.requestAnalysis(source);
-      await Future<void>.delayed(const Duration(seconds: 4));
+      expect(
+        service.currentAnalysis.value,
+        isNotNull,
+        reason: 'the request claimed the analysis before the socket connect settles',
+      );
+
+      // Watched with a condition poll, not a fixed 4s sleep: the connect timeout lands ~3s in,
+      // and under contention a fixed margin is exactly what decides whether 4s was enough.
+      await waitUntil(() => service.currentAnalysis.value == null);
 
       expect(service.currentAnalysis.value, isNull);
       // Reaching here without an unhandled asynchronous error is the assertion that matters.
