@@ -8,7 +8,6 @@ import 'dart:convert';
 
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
-import 'package:chess_srs/src/model/common/chess.dart' as chess;
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
@@ -29,21 +28,6 @@ import '../binding.dart';
 import '../model/common/service/fake_sound_service.dart';
 import '../test_helpers.dart';
 import 'gated_study_repository.dart';
-
-/// A sound service that remembers what it was asked to play.
-///
-/// [FakeSoundService] swallows every call, which is right for the tests that only care that
-/// nothing crashes and wrong for the ones that care whether a move was audible at all.
-class _RecordingSoundService extends FakeSoundService {
-  final List<Sound> recorded = [];
-
-  @override
-  Future<void> play(Sound sound, {double? volume}) async => recorded.add(sound);
-
-  @override
-  Future<void> playCaptureSound(chess.Variant variant, {double? volume}) async =>
-      recorded.add(Sound.capture);
-}
 
 /// A repository whose pgnHash lookup never matches, so the controller's pre-write duplicate
 /// check cannot short-circuit an import.
@@ -611,7 +595,7 @@ void main() {
       // the screen this app spends most of its time on — played one for the opponent's reply and
       // for an animated pre-move, and nothing at all for the user's own move. Every position the
       // user recalls was silent, with no haptics either.
-      final sounds = _RecordingSoundService();
+      final sounds = FakeSoundService();
       final container = createContainer(soundService: sounds);
       final controller = container.read(reviewControllerProvider.notifier);
 
@@ -631,7 +615,7 @@ void main() {
     });
 
     test('a capture the user plays gets the capture sound, not the plain move sound', () async {
-      final sounds = _RecordingSoundService();
+      final sounds = FakeSoundService();
       final container = createContainer(soundService: sounds);
       final controller = container.read(reviewControllerProvider.notifier);
 
@@ -2205,15 +2189,24 @@ void main() {
 
         // Touching an unrelated square (e.g. a2) does not prewarm the e2e4 candidate
         controller.prewarmMoveCandidate(Square.a2);
+        expect(controller.prewarmedCandidateMove, isNull);
+        expect(controller.prewarmedCandidatePosition, isNull);
 
         // Touching origin square of expected move (e2 for e2e4) prewarms candidate
         controller.prewarmMoveCandidate(Square.e2);
+        final expectedMove = Move.parse('e2e4');
+        expect(controller.prewarmedCandidateMove, equals(expectedMove));
+        expect(controller.prewarmedCandidatePosition, equals(Chess.initial.play(expectedMove!)));
+        expect(controller.prewarmedIsCapture, isFalse);
+        expect(controller.prewarmedIsCheck, isFalse);
 
         const move = NormalMove(from: Square.e2, to: Square.e4);
         final step = await controller.onUserMove(move);
 
         expect(step, isNotNull);
         expect(step!.isCorrect, isTrue);
+        expect(controller.prewarmedCandidateMove, isNull);
+        expect(controller.prewarmedCandidatePosition, isNull);
       },
     );
 

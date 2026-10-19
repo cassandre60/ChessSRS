@@ -46,6 +46,45 @@ void main() {
       final dAfterSuccess = fsrsNextDifficulty(dAfterLapse, FsrsRating.good, p);
       expect(dAfterSuccess, lessThanOrEqualTo(dAfterLapse));
     });
+
+    // SPEC INV-025. Zero or negative stability means "no memory": the curve must return 0.0
+    // rather than divide by stability (0/0 -> NaN at t=0, and a negative ratio under a
+    // fractional exponent is NaN too).
+    test('INV-025 retrievability treats zero and negative stability as no memory', () {
+      expect(fsrsRetrievability(0.0, 0.0), 0.0);
+      expect(fsrsRetrievability(5.0, 0.0), 0.0);
+      expect(fsrsRetrievability(0.0, -1.0), 0.0);
+      expect(fsrsRetrievability(5.0, -1.0), 0.0);
+    });
+
+    // SPEC INV-025. The solver accepts whatever callers pass; for a non-positive stability
+    // the linear term turns negative and it must fall back to 0.0 (schedule() then clamps to
+    // minIntervalDays) instead of handing back a negative interval.
+    test('INV-025 interval solver refuses non-positive stability', () {
+      expect(fsrsIntervalForTarget(0.0, 0.90), 0.0);
+      expect(fsrsIntervalForTarget(-5.0, 0.90), 0.0);
+      expect(fsrsIntervalForTarget(-5.0, 0.99), 0.0);
+    });
+
+    // SPEC INV-025. The success update reads s through pow(s, -w9); a zero stability must
+    // floor to minStabilityDays or the update computes 0 * Infinity = NaN. Pinned because
+    // the guard's direction is the only thing standing between a floored row and a poisoned
+    // one.
+    test('INV-025 zero stability floors inside the success update', () {
+      const p = ChessFsrsParams.chessDefaults();
+      final s = fsrsNextStabilitySuccess(4.93, 0.0, 0.9, p);
+      expect(s, greaterThan(0));
+      expect(s, closeTo(fsrsNextStabilitySuccess(4.93, p.minStabilityDays, 0.9, p), 1e-9));
+    });
+
+    // SPEC INV-025. Same floor in the lapse update: with s = 0 the (S+1)^w13 term collapses
+    // to 0 and the lapse would return exactly 0.0, i.e. an unlearned item.
+    test('INV-025 zero stability floors inside the lapse update', () {
+      const p = ChessFsrsParams.chessDefaults();
+      final s = fsrsNextStabilityLapse(4.93, 0.0, 0.9, p);
+      expect(s, greaterThan(0));
+      expect(s, closeTo(fsrsNextStabilityLapse(4.93, p.minStabilityDays, 0.9, p), 1e-12));
+    });
   });
 
   group('ChessFsrsScheduler', () {
@@ -211,6 +250,30 @@ void main() {
       expect(afterLapse.difficulty, closeTo(7.009, 0.001));
     });
 
+    // SPEC INV-025. The same-day shortcut is bounded to elapsed < sameDayThresholdDays, so
+    // exactly one hour of delay is already the overdue regime. A full lapse on a 10-day item
+    // cuts stability below half and raises difficulty; the rapid path would only shave 15%
+    // and freeze difficulty. Distinguishes the boundary from the rapid side.
+    test('INV-025 exactly the same-day threshold gets the full DSR update', () {
+      final mature = ReviewState(
+        decisionId: 'd1',
+        stability: 10.0 * 86400000,
+        difficulty: 4.93,
+        repetitionCount: 3,
+        firstReviewedAt: t0.subtract(const Duration(days: 30)),
+        lastReviewedAt: t0,
+        nextDueAt: t0.add(const Duration(days: 10)),
+      );
+
+      final afterLapse = scheduler.schedule(
+        previous: mature,
+        result: ReviewResult.incorrect,
+        now: t0.add(const Duration(minutes: 60)),
+      );
+      expect(afterLapse.stability, lessThan(mature.stability * 0.5));
+      expect(afterLapse.difficulty, greaterThan(mature.difficulty));
+    });
+
     test('tournament mode target retention produces tighter review intervals', () {
       const normalScheduler = ChessFsrsScheduler(targetRetention: 0.88);
       const tournamentScheduler = ChessFsrsScheduler(targetRetention: 0.95);
@@ -286,6 +349,36 @@ void main() {
       expect(a.hashCode, b.hashCode);
     });
 
+    // SPEC INV-026. The test above is vacuous for the field chain: two `const` expressions
+    // with identical arguments are canonicalized to one instance, so `identical(this, other)`
+    // short-circuits and no field comparison runs. Build both sides at runtime (distinct
+    // instances, equal values) so the chain is what decides equality — this is the case the
+    // provider reload gate actually depends on, since a settings change always arrives as a
+    // new instance.
+    test('INV-026 runtime-equal params compare by value, not identity', () {
+      // Constructed through a helper so the arguments are runtime values: literal-only
+      // invocations would be constant expressions, and Dart would canonicalize them into a
+      // single instance again — reintroducing the very blind spot this test closes.
+      ChessFsrsParams params(double w2, double w8) => ChessFsrsParams(w2: w2, w8: w8);
+      final a = params(22 / 10, 149 / 100);
+      final b = params(44 / 20, 298 / 200);
+      expect(identical(a, b), isFalse);
+      expect(a == b, isTrue);
+      expect(a.hashCode, b.hashCode);
+    });
+
+    // SPEC INV-026. Same canonicalization, same stakes for the scheduler itself: a target
+    // retention or cap change arrives as a new instance, never as the same object.
+    test('INV-026 runtime-equal schedulers compare by value, not identity', () {
+      ChessFsrsScheduler withCaps(double retention, double maxDays) =>
+          ChessFsrsScheduler(targetRetention: retention, maxIntervalDays: maxDays);
+      final a = withCaps(88 / 100, 2190 / 2);
+      final b = withCaps(176 / 200, 4380 / 4);
+      expect(identical(a, b), isFalse);
+      expect(a == b, isTrue);
+      expect(a.hashCode, b.hashCode);
+    });
+
     // A stability that has decayed to a sub-millisecond positive value — reachable through
     // repeated lapse contagion, which multiplies stability by a factor clamped to [0, 1] but
     // never reaching exactly zero — must still schedule as a reviewable interval rather than
@@ -322,6 +415,61 @@ void main() {
           reason: 'stability $stability must still come back later, not immediately',
         );
       }
+    });
+
+    // SPEC INV-025. A row that has repetitions but a zeroed stability (bad import, foreign
+    // state) must schedule exactly as if its stability were minStabilityDays: the floor in
+    // schedule() feeds the same number the curve would, keeping the retrievability argument
+    // positive. Without that outer floor the curve is evaluated at S = 0 and the row
+    // overshoots this answer.
+    test('INV-025 a zero stability on a learned row schedules as minStabilityDays', () {
+      const params = ChessFsrsParams.chessDefaults();
+      const scheduler = ChessFsrsScheduler(params: params, targetRetention: 0.90);
+      final zeroed = ReviewState(
+        decisionId: 'd',
+        stability: 0.0,
+        difficulty: 5.0,
+        repetitionCount: 3,
+        lastReviewedAt: t0.subtract(const Duration(days: 10)),
+        nextDueAt: t0,
+      );
+      final floored = zeroed.copyWith(stability: params.minStabilityDays * 86400000.0);
+
+      final fromZero = scheduler.schedule(previous: zeroed, result: ReviewResult.correct, now: t0);
+      final fromFloor = scheduler.schedule(
+        previous: floored,
+        result: ReviewResult.correct,
+        now: t0,
+      );
+
+      expect(fromZero.stability, closeTo(fromFloor.stability, 1000));
+      expect(fromZero.difficulty, closeTo(fromFloor.difficulty, 1e-9));
+    });
+
+    // SPEC INV-025. Same fallback for a zeroed difficulty: schedule() substitutes the initial
+    // good difficulty instead of running the update from 0.0, which mean-reverts to the 1.0
+    // clamp and takes hundreds of reviews to unwind.
+    test('INV-025 a zero difficulty on a learned row schedules as initial good difficulty', () {
+      const params = ChessFsrsParams.chessDefaults();
+      const scheduler = ChessFsrsScheduler(params: params, targetRetention: 0.90);
+      final zeroed = ReviewState(
+        decisionId: 'd',
+        stability: 5.0 * 86400000,
+        difficulty: 0.0,
+        repetitionCount: 3,
+        lastReviewedAt: t0.subtract(const Duration(days: 10)),
+        nextDueAt: t0,
+      );
+      final reference = zeroed.copyWith(difficulty: fsrsInitialDifficulty(FsrsRating.good, params));
+
+      final fromZero = scheduler.schedule(previous: zeroed, result: ReviewResult.correct, now: t0);
+      final fromReference = scheduler.schedule(
+        previous: reference,
+        result: ReviewResult.correct,
+        now: t0,
+      );
+
+      expect(fromZero.difficulty, closeTo(fromReference.difficulty, 1e-9));
     });
   });
 }

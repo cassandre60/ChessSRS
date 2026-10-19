@@ -25,14 +25,17 @@ Future<void> settleToast(WidgetTester tester) async {
 void main() {
   setUpAll(TestLichessBinding.ensureInitialized);
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {SnackBarType type = SnackBarType.info}) async {
     await tester.pumpWidget(
       await makeTestProviderScopeApp(
         tester,
         home: Builder(
           builder: (context) => Scaffold(
             body: Center(
-              child: SrsTextButton(label: 'Act', onPressed: () => showSnackBar(context, 'Saved')),
+              child: SrsTextButton(
+                label: 'Act',
+                onPressed: () => showSnackBar(context, 'Saved', type: type),
+              ),
             ),
           ),
         ),
@@ -139,11 +142,23 @@ void main() {
     // The 53 call sites pass error/success/info and the design specifies no difference, so
     // this is deliberate rather than an oversight. If a tone ever gains a look, this is the
     // test that should be changed with it.
+    final c = SrsColors.light(SrsAccent.ultramarine);
     for (final type in SnackBarType.values) {
-      await open(tester);
+      await open(tester, type: type);
       await tester.tap(find.text('Act'));
-      await tester.pump(const Duration(milliseconds: 200));
+      await settleToast(tester);
       expect(find.text('Saved'), findsOneWidget, reason: '$type must still show');
+
+      final box = tester
+          .widgetList<Container>(find.byType(Container))
+          .map((c) => c.decoration)
+          .whereType<BoxDecoration>()
+          .firstWhere((d) => d.color == c.ink);
+      expect(box.borderRadius, BorderRadius.circular(999), reason: '$type must render ink pill');
+
+      final text = tester.widget<Text>(find.text('Saved'));
+      expect(text.style?.color, c.ground, reason: '$type text color must be ground');
+
       await tester.pump(const Duration(milliseconds: 2400));
     }
   });

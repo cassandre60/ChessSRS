@@ -153,7 +153,11 @@ void main() {
         now = state.nextDueAt!;
       }
       final interval = state.nextDueAt!.difference(state.lastReviewedAt!);
-      expect(interval.inDays, lessThanOrEqualTo(30));
+      // SPEC INV-026: the cap must be enforced exactly. An inequality is not a
+      // cap check — a broken cap ends the pump on an overflowed negative
+      // Duration (the 100x multiplier wraps into the millions of days),
+      // which still satisfies it. Only equality at the cap detects that.
+      expect(interval, const Duration(days: 30));
     });
 
     test('dueItems filters correctly', () {

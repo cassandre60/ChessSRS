@@ -483,6 +483,64 @@ void main() {
       expect(result.nextDueAt, initialDue);
     });
 
+    // SPEC INV-028. The same-day refusal reads lastReviewedAt as well as the in-memory
+    // throttle: a fresh session (empty throttle) must still refuse traversal credit on a
+    // calendar day the item was actively reviewed, or the passive boost compounds once
+    // per session instead of once per day.
+    test('INV-028 same-day active review blocks traversal credit with an empty throttle', () {
+      const node = GraphNode(
+        decisionId: 'reviewed_today',
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      final initialDue = now.add(const Duration(days: 5));
+      const initialStability = 5.0 * 86400000;
+
+      repo.put(
+        'reviewed_today',
+        ReviewState(
+          decisionId: 'reviewed_today',
+          stability: initialStability,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: now.subtract(const Duration(hours: 2)),
+          nextDueAt: initialDue,
+        ),
+      );
+
+      final result = coordinator.recordAutoTraversalExposure(node: node, now: now)!;
+      expect(result.stability, initialStability);
+      expect(result.nextDueAt, initialDue);
+    });
+
+    // SPEC INV-028. The <= 0 guard is independent of the due-date refusal: a zero-stability
+    // row with a future due date is still unlearned, and crediting it would extend a schedule
+    // for an item whose stability never grew.
+    test('INV-028 zero-stability states are refused credit even when not yet due', () {
+      const node = GraphNode(
+        decisionId: 'zero_stability',
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      final initialDue = now.add(const Duration(days: 5));
+
+      repo.put(
+        'zero_stability',
+        ReviewState(
+          decisionId: 'zero_stability',
+          stability: 0.0,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: now.subtract(const Duration(days: 2)),
+          nextDueAt: initialDue,
+        ),
+      );
+
+      final result = coordinator.recordAutoTraversalExposure(node: node, now: now)!;
+      expect(result.stability, 0.0);
+      expect(result.nextDueAt, initialDue);
+    });
+
     test('recordAutoTraversalExposure ignores unlearned / cold decisions', () {
       const node = GraphNode(
         decisionId: 'cold_dec',

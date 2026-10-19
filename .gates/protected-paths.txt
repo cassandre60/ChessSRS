@@ -7,6 +7,11 @@ GATES_PLAN.md
 QUALITY.md
 TEST_STRATEGY.md
 docs/ESCAPE_TO_GATE.md
+docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md
+docs/AUTONOMOUS_WORK_LEDGER.md
+docs/UNIVERSAL_AUTONOMOUS_IMPROVEMENT_PROMPT.md
+docs/recursive-agent-improvement-strategy.md
+scripts/autonomous/*
 CODEOWNERS
 verify
 .gates/*

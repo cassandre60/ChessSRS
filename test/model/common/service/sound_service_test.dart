@@ -14,6 +14,25 @@ class _FakeGeneralPreferencesNotifier extends GeneralPreferencesNotifier {
   GeneralPrefs build() => _initialState;
 }
 
+/// Stands in for the Linux audio backend (the platform under test here), so the
+/// assertions can say what the service played instead of only that play()
+/// completed. The process-wide default player is never touched.
+class _RecordingLinuxPlayer implements LinuxSoundPlayer {
+  final List<(String, double)> played = [];
+
+  @override
+  void initialize() {}
+
+  @override
+  Future<void> load(SoundTheme theme, String soundId, String fullPath) async {}
+
+  @override
+  void play(String soundId, {double volume = 1.0}) => played.add((soundId, volume));
+
+  @override
+  void release() {}
+}
+
 void main() {
   TestLichessBinding.ensureInitialized();
 
@@ -25,7 +44,8 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  test('SoundService can play sound when enabled without crashing on Linux', () async {
+  test('SoundService plays the requested sounds at the resolved volume when enabled', () async {
+    final player = _RecordingLinuxPlayer();
     final container = await makeContainer(
       overrides: {
         generalPreferencesProvider: generalPreferencesProvider.overrideWith(
@@ -33,21 +53,30 @@ void main() {
             GeneralPrefs.defaults.copyWith(isSoundEnabled: true, masterVolume: 0.8),
           ),
         ),
-        soundServiceProvider: soundServiceProvider.overrideWith((ref) => SoundService(ref)),
+        soundServiceProvider: soundServiceProvider.overrideWith(
+          (ref) => SoundService(ref, linuxPlayer: player),
+        ),
       },
     );
 
     final soundService = container.read(soundServiceProvider);
 
-    // Verify calling play does not throw on Linux
-    await expectLater(soundService.play(Sound.move), completes);
-    await expectLater(soundService.play(Sound.capture, volume: 0.5), completes);
+    await soundService.play(Sound.move);
+    await soundService.play(Sound.capture, volume: 0.5);
 
-    // Verify release does not throw
-    await expectLater(soundService.release(), completes);
+    expect(player.played.map((p) => p.$1), [
+      'move',
+      'capture',
+    ], reason: 'both requests must reach the audio backend when sound is enabled');
+    expect(player.played[0].$2, closeTo(0.8, 0.0001));
+    expect(player.played[1].$2, closeTo(0.4, 0.0001));
+
+    // Release does not throw.
+    await soundService.release();
   });
 
-  test('SoundService does not play sound when disabled', () async {
+  test('SoundService does not reach the audio backend when sound is disabled', () async {
+    final player = _RecordingLinuxPlayer();
     final container = await makeContainer(
       overrides: {
         generalPreferencesProvider: generalPreferencesProvider.overrideWith(
@@ -55,11 +84,44 @@ void main() {
             GeneralPrefs.defaults.copyWith(isSoundEnabled: false),
           ),
         ),
-        soundServiceProvider: soundServiceProvider.overrideWith((ref) => SoundService(ref)),
+        soundServiceProvider: soundServiceProvider.overrideWith(
+          (ref) => SoundService(ref, linuxPlayer: player),
+        ),
       },
     );
 
     final soundService = container.read(soundServiceProvider);
-    await expectLater(soundService.play(Sound.move), completes);
+    await soundService.play(Sound.move);
+
+    expect(
+      player.played,
+      isEmpty,
+      reason: 'a disabled request must be dropped before the backend, not merely completed',
+    );
+  });
+
+  test('SoundService does not reach the audio backend at zero master volume', () async {
+    final player = _RecordingLinuxPlayer();
+    final container = await makeContainer(
+      overrides: {
+        generalPreferencesProvider: generalPreferencesProvider.overrideWith(
+          () => _FakeGeneralPreferencesNotifier(
+            GeneralPrefs.defaults.copyWith(isSoundEnabled: true, masterVolume: 0.0),
+          ),
+        ),
+        soundServiceProvider: soundServiceProvider.overrideWith(
+          (ref) => SoundService(ref, linuxPlayer: player),
+        ),
+      },
+    );
+
+    final soundService = container.read(soundServiceProvider);
+    await soundService.play(Sound.move);
+
+    expect(
+      player.played,
+      isEmpty,
+      reason: 'a fully muted master must drop the request before the backend',
+    );
   });
 }
