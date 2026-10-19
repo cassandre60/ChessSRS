@@ -1,5 +1,8 @@
 # Audit report — ChessSRS test suite (Phase 2, 2026-10-18)
 
+> **Status: Read-only evidence. Do not dispatch agents from this directory.**
+> For work queue and dispatch, use `docs/AUTONOMOUS_IMPROVEMENT_CATALOG.md` (catalog, §3 Streams), `docs/AUTONOMOUS_WORK_LEDGER.md` (ledger), and `.gates/mutants.json` via `scripts/autonomous/mutation_engine.py`. The `docs/tasks/TEST-0*` briefs that once elaborated this report's Top-10 have been removed.
+
 This report is the objective audit on branch `test-audit` (base `a9fbfe0fb`).
 Every claim cites its measurement or notes "not measured" with why and how it
 would be measured. No test is called "bad" from reading alone.
