@@ -19,7 +19,7 @@ evaluated. It reproduces #203's four equivalents exactly and finds nothing new.
 | Base | `origin/main` @ `ed86543f1`; target and test file unchanged since the runs began |
 | Test command | `fvm flutter test test/domain/chess_fsrs_scheduler_test.dart` |
 | Test file | 25 tests, baseline green, ~27 s wall including Flutter startup |
-| Engine | `scripts/autonomous/mutation_engine.py` at `origin/fix/mutation-engine-instrument` (PR #222); generic-suppression + timeout bucket + `--skip-m`. Used as an uncommitted local file, excluded from this PR. |
+| Engine | `scripts/autonomous/mutation_engine.py` at the PR #222 revision (generic-angle suppression + timeout bucket + `--skip-m`). Still an uncommitted local copy when the shards ran; #222 has since merged to `main` as `2b618de41`, so the identical file is now the default. Not part of this PR. |
 | Timeout | `--timeout 240` per mutant (default 60 is under 3× the baseline and was raised for the graph_aware run for the same reason) |
 | Shards | `--max-mutants 20 --skip-m 0 / 20 / 40 / 60` |
 
