@@ -11,7 +11,7 @@ A tag on `main` builds every artifact and publishes a (pre-)release with
 generated notes. Manual dispatch (Actions tab → Release → Run workflow)
 builds the same artifacts without publishing, for proof. `main` only merges
 green PRs, so a tag is already tested — the release workflow ships, it does
-not re-test.
+not re-test. `AGENTS.md` §11 is the policy for *whether* to cut one.
 
 ## What ships per tag
 
@@ -34,16 +34,68 @@ not re-test.
 
 ## Pipeline dry-run (no tag, no publish)
 
-Validate the entire release pipeline locally without creating a tag or
-publishing:
+Validate the release pipeline without creating a tag or publishing: run the
+workflow by hand from the Actions tab (**Actions → Release → Run workflow**)
+or:
 
 ```bash
-gh workflow run Release -f dry_run=true
+gh workflow run Release
 ```
 
-This runs the Linux and Android build jobs exactly as a real release would,
-but skips artifact upload and the `gh release create` step. Use it to
-verify that the pipeline passes before cutting a real tag.
+This builds the Linux and Android jobs exactly as a real release would. The
+publish job is gated on the run being a tag push (`refs/tags/v…`), so a manual
+run stops after building — you download the artifacts from that run. The
+artifacts are stamped with the version in `pubspec.yaml`, since there is no tag
+to take one from.
+
+## The tag is the only version ledger
+
+Each build is stamped with `--build-name`/`--build-number`, so the version the
+owner sees is derived from the tag, not from `pubspec.yaml`:
+
+| Where | What carries the version |
+|---|---|
+| About screen, account menu (Linux) | `data/flutter_assets/version.json`, generated from `--build-name` |
+| Android | `versionName`/`versionCode`, generated from `--build-name`/`--build-number` |
+
+Both build jobs assert that their own artifact reports the expected version, so
+a stamping regression fails the release instead of shipping. `versionCode`
+comes from the workflow run number, which rises on every run — Play Store
+uploads require a strictly increasing `versionCode`.
+
+The logic lives in `.github/scripts/` and is covered by
+`release-version-test.sh`, which the `Tests` job runs on every PR.
+
+`pubspec.yaml` therefore holds the **development** version and is deliberately
+*not* bumped per release.
+
+## Nightly proof builds
+
+`.github/workflows/nightly.yml` runs at 03:17 UTC and builds the artifacts
+from `main` **without publishing anything** — the files hang off the Release
+run it dispatches. It exists so there is always something fresh to install
+without cutting a tag for it.
+
+It is not a release, and it is not "build every night". It skips, and says so
+in the run summary, when:
+
+| Skip | Why |
+|---|---|
+| `main` has not moved since the newest tag | There is nothing new to build. |
+| Nothing shipped changed since that tag | `lib/`, `assets/`, `android/`, `linux/`, `pubspec.yaml`/`pubspec.lock` are unchanged, so the build would be identical to the last one. Test, gate and docs commits change none of them. |
+| This exact commit was already built, or is building | The scheduled run and a manual one can land on the same commit. A build that **failed** or was cancelled is retried. |
+
+This repository merges test, gate and documentation work far more often than
+it merges changes to the app — 17 merges after v1.6.2 contained no shipped
+change at all — so an unconditional nightly would spend most of its builds
+reproducing the last tag.
+
+The decision lives in `.github/scripts/nightly-decide.sh` and is tested by
+`nightly-decide-test.sh` on every PR. Dispatch it by hand from the Actions tab
+(**Actions → Nightly proof build → Run workflow**); it applies the same rules.
+
+Whether to cut an actual **release** is a separate decision, made by the agent
+under AGENTS.md §11.
 
 ## Local release builds
 
