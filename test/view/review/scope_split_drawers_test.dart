@@ -12,6 +12,7 @@ import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:dartchess/dartchess.dart' show Side;
+import 'package:flutter/material.dart' show CircularProgressIndicator;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderContainer, ProviderScope;
 import 'package:flutter_test/flutter_test.dart';
@@ -94,7 +95,17 @@ void main() {
     await tester.pumpWidget(app);
     // Not pumpAndSettle: the drawer's search field autofocuses on a wide layout
     // and its cursor blinks forever, so settling never completes.
-    await pumpAsync(tester);
+    // The load is complete when the drawer's spinner is gone — this holds for
+    // an emptied colour too, which settles onto a row-less drawer.
+    await pumpAsyncUntil(
+      tester,
+      () => !tester.any(
+        find.descendant(
+          of: find.byType(ReviewScopeDrawer),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+      ),
+    );
     // Captured before any tap: the drawer pops itself on selection, so its
     // element is gone by the time the resulting scope is read.
     return ProviderScope.containerOf(tester.element(find.byType(ReviewScopeDrawer)));
@@ -143,7 +154,12 @@ void main() {
     expect(inDrawer(find.text('White book')), findsOneWidget);
 
     await tester.tap(inDrawer(find.bySemanticsLabel('Black repertoire')));
-    await pumpAsync(tester);
+    await pumpAsyncUntil(
+      tester,
+      () =>
+          tester.any(inDrawer(find.text('Black book'))) &&
+          !tester.any(inDrawer(find.text('White book'))),
+    );
 
     expect(inDrawer(find.text('Black book')), findsOneWidget);
     expect(inDrawer(find.text('White book')), findsNothing);
@@ -160,7 +176,8 @@ void main() {
     final container = await pumpDrawer(tester, Side.black);
 
     await tester.tap(inDrawer(find.text('Black book')));
-    await pumpAsync(tester);
+    // Selecting a row pops the drawer; its scope persists asynchronously.
+    await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
 
     final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
     expect(state?.scope.studyId, isNotNull);
@@ -186,7 +203,15 @@ void main() {
           .read(reviewControllerProvider.notifier)
           .changeScope(const ReviewScope.opening('Sicilian Defense', side: Side.white)),
     );
-    await pumpAsync(tester);
+    // changeScope is already awaited above, so a re-render alone is left; wait
+    // for exactly what the asserts below check: the scoped row's isSelected.
+    await pumpAsyncUntil(tester, () {
+      final selected = inDrawer(find.bySemanticsLabel(RegExp('^Sicilian Defense opening,')));
+      if (!tester.any(selected)) return false;
+      return isSemantics(
+        isSelected: true,
+      ).matches(tester.getSemantics(selected), <dynamic, dynamic>{});
+    });
 
     final selected = inDrawer(find.bySemanticsLabel(RegExp('^Sicilian Defense opening,')));
     expect(selected, findsOneWidget);
@@ -210,7 +235,8 @@ void main() {
     final container = await pumpDrawer(tester, Side.white);
 
     await tester.tap(inDrawer(find.text('Sicilian Defense')));
-    await pumpAsync(tester);
+    // Selecting a row pops the drawer; its scope persists asynchronously.
+    await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
 
     final state = await tester.runAsync(() async => container.read(reviewControllerProvider).value);
     expect(state?.scope.openingFamily, 'Sicilian Defense');
@@ -242,7 +268,9 @@ void main() {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'French');
-    await pumpAsync(tester);
+    // The search filters already-loaded rows synchronously; only the frame
+    // carrying the change is left to run.
+    await tester.pump();
 
     expect(inDrawer(find.text('Black book')), findsNothing);
     expect(inDrawer(find.text('Sicilian Defence')), findsNothing);
@@ -253,7 +281,9 @@ void main() {
     await pumpDrawer(tester, Side.white);
 
     await tester.enterText(find.byType(EditableText).first, 'Sicilian');
-    await pumpAsync(tester);
+    // The search filters already-loaded rows synchronously; only the frame
+    // carrying the change is left to run.
+    await tester.pump();
 
     final clear = inDrawer(find.bySemanticsLabel('Clear search'));
     expect(clear, findsOneWidget);
