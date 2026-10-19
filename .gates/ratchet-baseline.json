@@ -18,7 +18,7 @@
     "test_declarations": {
       "direction": "higher_is_better",
       "tolerance": 0,
-      "value": 1948
+      "value": 1963
     },
     "test_skips": {
       "direction": "lower_is_better",
