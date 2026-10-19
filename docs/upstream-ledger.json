@@ -201,11 +201,11 @@
       "category": "ui_widget",
       "date": "2026-10-05T12:05:12+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Hoist loop-invariant mainline walk out of PGN tree part loop (#3786)",
       "pr": 3786,
       "sha": "2bcbbe7e8458a6465ecf590a417dc5b9614deb33",
       "short_sha": "2bcbbe7e8",
-      "status": "CANDIDATE",
+      "status": "APPLIED",
       "surviving_files": [
         "lib/src/widgets/pgn.dart"
       ],
@@ -352,11 +352,11 @@
       "category": "ui_widget",
       "date": "2026-10-15T11:14:54+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Already solved by ChessSRS custom board editor sizing arithmetic",
       "pr": null,
       "sha": "3d610174e679dfbe5486522a1ebf3bbb33686071",
       "short_sha": "3d610174e",
-      "status": "CANDIDATE",
+      "status": "SKIPPED_VISUAL",
       "surviving_files": [
         "lib/src/view/board_editor/board_editor_screen.dart"
       ],
@@ -2261,11 +2261,11 @@
       "category": "ui_widget",
       "date": "2026-10-01T11:16:36+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Dismiss promotion selector on analysis board navigation (#3777)",
       "pr": 3777,
       "sha": "c4fc04c5db3a84cb6d09d3147052ae2adbe74693",
       "short_sha": "c4fc04c5d",
-      "status": "CANDIDATE",
+      "status": "APPLIED",
       "surviving_files": [
         "lib/src/view/analysis/analysis_board.dart"
       ],
@@ -2891,9 +2891,9 @@
   "last_synced_date": "2026-10-18T22:08:16.360999+00:00",
   "last_synced_sha": "99e1fb7fb4d84aeab200d75e54551efbb1d5d2ff",
   "stats": {
-    "applied": 1,
-    "candidates": 37,
-    "skipped": 47,
+    "applied": 3,
+    "candidates": 34,
+    "skipped": 48,
     "total": 85
   },
   "upstream_repo": "lichess-org/mobile",

@@ -1,5 +1,7 @@
 # Before / after — ChessSRS test-audit branch `test-audit` (2026-10-18)
 
+> **Status: Read-only evidence.** Refresh is owned by the capstone agent that closes the last autonomous stream (see `docs/test-audit/PLAN.md`).
+
 Same machine/method as `baseline.md`. "Before" is `main` at `a9fbfe0fb`
 (before this branch). "After" is this branch at HEAD. CI timings are from
 `Tests` workflow run `39118936674` (before) vs same workflow after (when CI
