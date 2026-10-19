@@ -71,7 +71,10 @@ on:
   pull_request:
     paths:
       - 'lib/**'
-      - '!lib/l10n/**'
+      # lib/l10n is generated, but a regeneration-only PR still needs the
+      # "Tests" check to exist: branch protection requires it on every PR, and
+      # a filtered workflow leaves it permanently "expected" (same reason the
+      # docs and spec paths at the end of this list are listed).
       - 'test/**'
       - 'assets/**'
       - 'scripts/**'
