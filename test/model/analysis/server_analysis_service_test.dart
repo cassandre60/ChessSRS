@@ -7,6 +7,7 @@ import 'package:chess_srs/src/model/common/node.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,11 +117,32 @@ void main() {
 
       // The socket connect times out after 3s, which cancels the analysis and nulls the field.
       // The continuation that follows used to reach back through that field and crash.
-      await service.requestAnalysis(source);
-      await Future<void>.delayed(const Duration(seconds: 4));
+      //
+      // The wait runs on the fake clock, the pattern #221 used for a service test: the connect
+      // timeout is a Timer, so waiting for it is an elapse, not a wall-clock sleep. The old
+      // `Future.delayed(4s)` bought that timeout with a one-second margin — a race under load,
+      // since a run whose cancellation landed after 4s failed on a healthy build — and it spent
+      // four seconds of real time on every run of the file. Here the timeout is advanced
+      // exactly, and the test costs no wall-clock time at all.
+      fakeAsync((async) {
+        var requested = false;
+        service.requestAnalysis(source).then((_) => requested = true);
+        async.flushMicrotasks();
 
-      expect(service.currentAnalysis.value, isNull);
-      // Reaching here without an unhandled asynchronous error is the assertion that matters.
+        expect(requested, isTrue, reason: 'the request must have been issued');
+        expect(
+          service.currentAnalysis.value,
+          source,
+          reason: 'the request claims the analysis before the socket connect settles',
+        );
+
+        // Exactly the timeout the service applies, and no more: the connect never lands.
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+
+        expect(service.currentAnalysis.value, isNull);
+        // Reaching here without an unhandled asynchronous error is the assertion that matters.
+      });
     }, timeout: const Timeout(Duration(seconds: 30)));
   });
 
