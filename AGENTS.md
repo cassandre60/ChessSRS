@@ -349,6 +349,15 @@ honestly, not to make the gates go green. Before editing, read `SPEC.md`
    that order. The flywheel only turns if you turn it.
 8. Report honestly: what you ran, what passed, what you could not run, and
    what remains unverified.
+9. When a change needs the owner — a `gate-approved` label on a protected-file
+   PR, a product decision in `docs/open-questions.md`, a branch-protection or
+   CI-config choice — explain **in plain terms what they are accepting**: what
+   changes, what it costs, what happens if they decline. No gate jargon, and do
+   not send them to GitHub to do it themselves. If they agree, **you perform the
+   action** (e.g. `gh pr edit <n> --add-label gate-approved`) and record whose
+   consent it was in the PR or issue. Consent is per item and explicit:
+   silence, an earlier "continue", or approval of a different PR is not approval
+   of this one. Merging still belongs to the merge agent.
 
 ## 11. Releases: the agent decides, the owner does not
 

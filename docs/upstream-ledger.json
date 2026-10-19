@@ -105,11 +105,11 @@
       "category": "core_logic",
       "date": "2026-10-15T11:33:45+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Port only when the fork adopts deep_pick >=1.2.0: PickException.fromPick was added in 1.2.0 so this fix does not compile against the fork's locked 1.1.0; debugParsingExit is deprecated (not removed) in 1.2.0, so current code still compiles. Pair with the deep_pick version bump in one task.",
       "pr": null,
       "sha": "243b19b532c86101a389072becce60e51c71bbd0",
       "short_sha": "243b19b53",
-      "status": "CANDIDATE",
+      "status": "BACKLOG",
       "surviving_files": [
         "lib/src/model/common/chess.dart",
         "lib/src/model/common/id.dart",
@@ -371,11 +371,11 @@
       "category": "dependency",
       "date": "2026-10-12T12:27:11+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "FIC 11.2.0 -> ^12.0.0 major bump. Breaking: == on identity-comparing (non-default) collections became identical(). Attractive for a later migration: much faster unflushed iteration/flush, fixed IMap.fromJson for non-String keys. Touches every FIC usage; deliberate task not a happy-path bump.",
       "pr": null,
       "sha": "3df660332cf138ec7aa6262d46dbc37855a02ec9",
       "short_sha": "3df660332",
-      "status": "CANDIDATE",
+      "status": "BACKLOG",
       "surviving_files": [
         "pubspec.lock",
         "pubspec.yaml"
@@ -394,11 +394,11 @@
       "category": "general",
       "date": "2026-10-05T11:59:22+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Fork CI is bespoke (gates/nightly/release-proof); fork already pins actions to exact versions and sets timeout-minutes on jobs, so the intent is satisfied; the other four workflows upstream touched do not exist here.",
       "pr": 3783,
       "sha": "40c53e716e2772d79b36bb8225c638b826869452",
       "short_sha": "40c53e716",
-      "status": "CANDIDATE",
+      "status": "SKIPPED_CUT",
       "surviving_files": [
         ".github/workflows/test.yml"
       ],
@@ -1010,11 +1010,11 @@
       "category": "dependency",
       "date": "2026-10-07T10:57:34+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "linux/flutter generated plugin files are regenerated per machine and pubspec.lock is derived; no yaml change.",
       "pr": null,
       "sha": "71491e0cd5047940504cba377ce2233507ba4dbb",
       "short_sha": "71491e0cd",
-      "status": "CANDIDATE",
+      "status": "SKIPPED_CHORE",
       "surviving_files": [
         "linux/flutter/generated_plugin_registrant.cc",
         "linux/flutter/generated_plugins.cmake",
@@ -1191,11 +1191,11 @@
       "category": "dependency",
       "date": "2026-10-15T11:00:11+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Lock-only: upstream resolved deep_pick 1.2.x (pub 2026-10-13) under the unchanged ^1.1.0 constraint; fork lock still pins 1.1.0 by digest. Skipping this bump and fix 243b19b53 must always be dispositioned together.",
       "pr": null,
       "sha": "8580aadd9c6a2d14e33fdf18a880195171d7117b",
       "short_sha": "8580aadd9",
-      "status": "CANDIDATE",
+      "status": "SKIPPED_CHORE",
       "surviving_files": [
         "pubspec.lock"
       ],
@@ -1229,11 +1229,11 @@
       "category": "dependency",
       "date": "2026-10-07T10:57:12+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Upstream flutter 3.47.5 -> 3.47.6 patch; fork fvm-pins 3.47.3. Bundle 3.47.3 -> 3.47.7 into one deliberate toolchain task (fvm, pubspec env, CI wheels) when framework fixes are wanted; not auto-portable.",
       "pr": null,
       "sha": "91d22d1c4e383bfe037c348ff67fd9918cc17d40",
       "short_sha": "91d22d1c4",
-      "status": "CANDIDATE",
+      "status": "BACKLOG",
       "surviving_files": [
         "pubspec.lock",
         "pubspec.yaml"
@@ -1265,11 +1265,11 @@
       "category": "dependency",
       "date": "2026-10-12T12:27:11+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Upstream flutter 3.47.6 -> 3.47.7 patch; fork fvm-pins 3.47.3. Same belt as 91d22d1c4: one deliberate toolchain task covering 3.47.3 -> 3.47.7.",
       "pr": null,
       "sha": "965ce01fdc1da2a78c06f745bf19920239c61dcd",
       "short_sha": "965ce01fd",
-      "status": "CANDIDATE",
+      "status": "BACKLOG",
       "surviving_files": [
         "pubspec.lock",
         "pubspec.yaml"
@@ -2892,8 +2892,8 @@
   "last_synced_sha": "99e1fb7fb4d84aeab200d75e54551efbb1d5d2ff",
   "stats": {
     "applied": 6,
-    "candidates": 7,
-    "skipped": 71,
+    "candidates": 0,
+    "skipped": 74,
     "total": 85
   },
   "upstream_repo": "lichess-org/mobile",
