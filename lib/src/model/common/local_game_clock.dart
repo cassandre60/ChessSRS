@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/model/common/time_increment.dart';
+import 'package:clock/clock.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -25,7 +26,12 @@ enum TimeControlType {
 /// Only one side's time runs at a time, and only once [switchSide] has been called for the first
 /// time — so the clock starts on the first move, not when the game is set up.
 abstract class LocalGameClock extends Notifier<LocalGameClockState> {
-  final Stopwatch _stopwatch = Stopwatch();
+  /// Charges the time run between ticks.
+  ///
+  /// Backed by the app clock (`package:clock`) rather than a raw [Stopwatch], so
+  /// the widget-test fake async can advance it: `tester.pump` moves that clock,
+  /// letting tests charge the countdown instead of sleeping in real time.
+  final Stopwatch _stopwatch = clock.stopwatch();
 
   Timer? _updateTimer;
 
