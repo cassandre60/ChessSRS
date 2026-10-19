@@ -5,9 +5,14 @@ Adapted from the agent-proof-codebase skill template for this repo's Dart/Flutte
 conventions. Scans `git diff -U0 BASE...HEAD` and reports:
   - removed assertion-like lines in test files (`expect`, `expectLater`, `assert`)
   - removed test-case declarations in test files
+  - removed test files (whole-file deletions)
   - added `skip:` markers in test files (Dart's skip mechanism)
   - added lint/type suppressions in ANY file
 It is a tripwire, not proof: findings require a human (or a justified note in the PR).
+A deleted test file is one finding for the file itself, regardless of how many
+assertions it held; an intentional cut records the review with `Ack-G08:` like
+any other finding. (Renames with `--no-renames` appear as delete + add, so they
+also sign one finding.)
 
 Pairing rule (G08 retune): a removed assertion is NOT a finding when an added
 assertion in the same file has the same shape — the line with string
@@ -84,9 +89,22 @@ def diff_lines(base, head):
         print(out.stderr, file=sys.stderr)
         sys.exit(2)
     path, lineno = None, 0
+    dash_path = None
     for raw in out.stdout.splitlines():
-        if raw.startswith("+++ "):
-            path = raw[6:] if raw.startswith("+++ b/") else None
+        if raw.startswith("--- a/"):
+            dash_path = raw[6:]
+        elif raw.startswith("+++ "):
+            if raw.startswith("+++ b/"):
+                path = raw[6:]
+                dash_path = None
+            else:
+                # `+++ /dev/null` closes a whole-file deletion. Its removed lines carry no
+                # path (they are skipped below), so yield one marker for the file itself --
+                # without this a deleted test file would vanish without a trace.
+                path = None
+                if dash_path is not None:
+                    yield dash_path, 1, "D", dash_path
+                    dash_path = None
         elif raw.startswith("@@"):
             m = re.search(r"\+(\d+)", raw)
             lineno = int(m.group(1)) if m else 0
@@ -114,6 +132,10 @@ def main():
         is_test = bool(TEST_PATH.search(path))
         if sign == "-" and is_test and ASSERT.search(text):
             removed_asserts.setdefault(path, []).append((lineno, shape_of_assertion(text), text.strip()))
+        elif sign == "D":
+            # Whole-file deletion, marked by diff_lines: one finding for the file itself.
+            if is_test:
+                findings.append((path, lineno, "removed test file", path))
         elif sign == "+" and is_test and ASSERT.search(text):
             added_shapes.setdefault(path, []).append(shape_of_assertion(text))
         elif sign == "-" and is_test and CASE.search(text):
