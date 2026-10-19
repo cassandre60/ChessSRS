@@ -30,6 +30,163 @@ class _BackfillCountingRepository extends SqliteStudyRepository {
   }
 }
 
+/// Records the bound-argument counts of every delete issued through this
+/// handle, so a test can assert on the statement sizes the repository sends to
+/// SQLite instead of only on their effects.
+///
+/// INV-051's 400-item batches exist to stay under SQLite's bound-variable
+/// limit, which this build allows 250000 of — far too many to trip by row
+/// count. Asserting the bound sizes is the falsifiable stand-in: a chunk loop
+/// that regressed to one wide `IN (...)` makes the counts jump, while the rows
+/// still disappear and every row-level assertion still passes.
+class _RecordingDatabase implements Database {
+  _RecordingDatabase(this._inner);
+
+  final Database _inner;
+
+  /// Bound-argument counts of the deletes issued since the last [reset].
+  final List<int> deleteArgs = [];
+
+  void reset() => deleteArgs.clear();
+
+  @override
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) {
+    deleteArgs.add(whereArgs?.length ?? 0);
+    return _inner.delete(table, where: where, whereArgs: whereArgs);
+  }
+
+  @override
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _inner.insert(
+    table,
+    values,
+    nullColumnHack: nullColumnHack,
+    conflictAlgorithm: conflictAlgorithm,
+  );
+
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _inner.update(
+    table,
+    values,
+    where: where,
+    whereArgs: whereArgs,
+    conflictAlgorithm: conflictAlgorithm,
+  );
+
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) => _inner.query(
+    table,
+    distinct: distinct,
+    columns: columns,
+    where: where,
+    whereArgs: whereArgs,
+    groupBy: groupBy,
+    having: having,
+    orderBy: orderBy,
+    limit: limit,
+    offset: offset,
+  );
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(String sql, [List<Object?>? arguments]) =>
+      _inner.rawQuery(sql, arguments);
+
+  @override
+  Future<T> transaction<T>(Future<T> Function(Transaction txn) action, {bool? exclusive}) => _inner
+      .transaction((txn) => action(_RecordingTransaction(txn, deleteArgs)), exclusive: exclusive);
+
+  @override
+  Batch batch() => _inner.batch();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('_RecordingDatabase does not forward ${invocation.memberName}');
+}
+
+/// Mirrors [_RecordingDatabase] for the transaction-scoped calls the delete
+/// path makes, feeding the same [deleteArgs] list.
+class _RecordingTransaction implements Transaction {
+  _RecordingTransaction(this._inner, this._deleteArgs);
+
+  final Transaction _inner;
+  final List<int> _deleteArgs;
+
+  @override
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) {
+    _deleteArgs.add(whereArgs?.length ?? 0);
+    return _inner.delete(table, where: where, whereArgs: whereArgs);
+  }
+
+  @override
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _inner.insert(
+    table,
+    values,
+    nullColumnHack: nullColumnHack,
+    conflictAlgorithm: conflictAlgorithm,
+  );
+
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) => _inner.query(
+    table,
+    distinct: distinct,
+    columns: columns,
+    where: where,
+    whereArgs: whereArgs,
+    groupBy: groupBy,
+    having: having,
+    orderBy: orderBy,
+    limit: limit,
+    offset: offset,
+  );
+
+  @override
+  Future<int> rawInsert(String sql, [List<Object?>? arguments]) => _inner.rawInsert(sql, arguments);
+
+  @override
+  Batch batch() => _inner.batch();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('_RecordingTransaction does not forward ${invocation.memberName}');
+}
+
 void main() {
   setUpAll(() {
     sqfliteFfiInit();
@@ -1750,7 +1907,8 @@ void main() {
           createSrsTables(batch);
           await batch.commit();
 
-          final repo = SqliteStudyRepository(db);
+          final recorder = _RecordingDatabase(db);
+          final repo = SqliteStudyRepository(recorder);
           final study = Study.create(title: 'Large Study');
           final chapter = Chapter.create(studyId: study.id, title: 'Chapter 1', sourceOrder: 0);
           await repo.saveStudy(study);
@@ -1770,7 +1928,13 @@ void main() {
           );
           await repo.saveDecisions(decisions);
 
-          // Delete study should chunk delete operations smoothly
+          // SPEC INV-051. The bound that matters is the statement, not the row
+          // count: this build allows 250000 bound variables, so 450 rows would
+          // delete fine even unchunked. Record what the cleanup actually sends —
+          // every delete must stay within the 401-variable bound (a 400-id
+          // chunk plus the study-id guard) instead of collapsing into one wide
+          // `IN (...)` of 450.
+          recorder.reset();
           await repo.deleteStudy(study.id);
 
           final remainingDecisions = await repo.getDecisionsByStudy(study.id);
@@ -1778,6 +1942,19 @@ void main() {
 
           final remainingStudy = await repo.getStudy(study.id);
           expect(remainingStudy, isNull);
+
+          expect(
+            recorder.deleteArgs,
+            isNotEmpty,
+            reason: 'the cleanup must issue deletes through the recorded handle',
+          );
+          expect(
+            recorder.deleteArgs.where((count) => count > 401),
+            isEmpty,
+            reason:
+                'a delete bound more than 401 variables: the 450-id cleanup '
+                'regressed to an unchunked IN (...) list',
+          );
         } finally {
           await db.close();
         }
