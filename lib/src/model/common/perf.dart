@@ -154,7 +154,8 @@ enum Perf {
   static final IMap<String, Perf> nameMap = IMap(Perf.values.asNameMap());
 }
 
-String _titleKey(String title) => title.toLowerCase().replaceAll(RegExp('[ -_]'), '');
+String _titleKey(String title) =>
+    title.toLowerCase().replaceAll(RegExp('[ -_]'), '');
 
 final IMap<String, Perf> _lowerCaseTitleMap = Perf.nameMap.map(
   (key, value) => MapEntry(_titleKey(value.title), value),
@@ -185,7 +186,7 @@ extension PerfExtension on Pick {
         return perf;
       }
     }
-    throw PickException("value $value at $debugParsingExit can't be casted to Perf");
+    throw PickException.fromPick(this, "can't be casted to Perf");
   }
 
   Perf? asPerfOrNull() {

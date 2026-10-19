@@ -45,7 +45,9 @@ class UserRepository {
           'activity',
         ).asListOrEmpty((p) => _userActivityFromPick(p.required())).toIList();
         final recentGames = pick(json, 'games')
-            .asListOrEmpty((gamePick) => LightExportedGame.fromPick(gamePick.required()))
+            .asListOrEmpty(
+              (gamePick) => LightExportedGame.fromPick(gamePick.required()),
+            )
             .map(
               (e) => (
                 game: e,
@@ -55,12 +57,18 @@ class UserRepository {
             )
             .toIList();
 
-        final isOnline = pick(json, 'status').letOrNull((p) => p('online').asBoolOrNull());
+        final isOnline = pick(
+          json,
+          'status',
+        ).letOrNull((p) => p('online').asBoolOrNull());
         final isPlayingLive = pick(
           json,
           'status',
         ).letOrNull((p) => p('playing').asMapOrNull<String, dynamic>() != null);
-        final crosstable = pick(json, 'crosstable').letOrNull(Crosstable.fromPick);
+        final crosstable = pick(
+          json,
+          'crosstable',
+        ).letOrNull(Crosstable.fromPick);
 
         return (
           user: user,
@@ -76,7 +84,10 @@ class UserRepository {
 
   Future<User> getUser(UserId id, {bool withCanChallenge = false}) {
     return client.readJson(
-      Uri(path: '/api/user/$id', queryParameters: withCanChallenge ? {'challenge': 'true'} : null),
+      Uri(
+        path: '/api/user/$id',
+        queryParameters: withCanChallenge ? {'challenge': 'true'} : null,
+      ),
       mapper: User.fromServerJson,
     );
   }
@@ -95,15 +106,25 @@ class UserRepository {
     );
   }
 
-  Future<Crosstable> getCrosstable(UserId id1, UserId id2, {bool matchup = false}) {
+  Future<Crosstable> getCrosstable(
+    UserId id1,
+    UserId id2, {
+    bool matchup = false,
+  }) {
     return client.readJson(
-      Uri(path: '/api/crosstable/$id1/$id2', queryParameters: {'matchup': matchup.toString()}),
+      Uri(
+        path: '/api/crosstable/$id1/$id2',
+        queryParameters: {'matchup': matchup.toString()},
+      ),
       mapper: Crosstable.fromJson,
     );
   }
 
   Future<IList<UserActivity>> getActivity(UserId id) {
-    return client.readJsonList(Uri(path: '/api/user/$id/activity'), mapper: _userActivityFromJson);
+    return client.readJsonList(
+      Uri(path: '/api/user/$id/activity'),
+      mapper: _userActivityFromJson,
+    );
   }
 
   Future<IList<LightUser>> autocompleteUser(String term) {
@@ -164,14 +185,17 @@ IList<LightUser> _autocompleteFromJson(Map<String, dynamic> json) =>
     _autocompleteFromPick(pick(json).required());
 
 IList<LightUser> _autocompleteFromPick(RequiredPick pick) {
-  return pick('result').asListOrThrow((userPick) => userPick.asLightUserOrThrow()).toIList();
+  return pick('result')
+      .asListOrThrow((userPick) => userPick.asLightUserOrThrow())
+      .toIList();
 }
 
 UserActivity _userActivityFromJson(Map<String, dynamic> json) =>
     _userActivityFromPick(pick(json).required());
 
 UserActivity _userActivityFromPick(RequiredPick pick) {
-  final receivedGamesMap = pick('games').asMapOrEmpty<String, Map<String, dynamic>>();
+  final receivedGamesMap = pick('games')
+      .asMapOrEmpty<String, Map<String, dynamic>>();
 
   final games = IMap({
     for (final entry in receivedGamesMap.entries)
@@ -249,29 +273,48 @@ UserPerfStats _userPerfStatsFromPick(RequiredPick pick) {
     lowestRatingGame: lowest.letOrNull(_userPerfGameFromPick),
     highestRating: highest('int').asIntOrNull(),
     highestRatingGame: highest.letOrNull(_userPerfGameFromPick),
-    curWinStreak: resultStreak('win', 'cur').letOrNull(_userStreakFromPick),
-    maxWinStreak: resultStreak('win', 'max').letOrNull(_userStreakFromPick),
-    curLossStreak: resultStreak('loss', 'cur').letOrNull(_userStreakFromPick),
-    maxLossStreak: resultStreak('loss', 'max').letOrNull(_userStreakFromPick),
-    curPlayStreak: playStreak('nb', 'cur').letOrNull(_userStreakFromPick),
-    maxPlayStreak: playStreak('nb', 'max').letOrNull(_userStreakFromPick),
-    curTimeStreak: playStreak('time', 'cur').letOrNull(_userStreakFromPick),
-    maxTimeStreak: playStreak('time', 'max').letOrNull(_userStreakFromPick),
-    worstLosses: IList(stat('worstLosses', 'results').asListOrNull(_userPerfGameFromPick)),
-    bestWins: IList(stat('bestWins', 'results').asListOrNull(_userPerfGameFromPick)),
+    curWinStreak: resultStreak(
+      'win',
+      'cur',
+    ).letOrNull((p) => _userStreakFromPick(p, 'win')),
+    maxWinStreak: resultStreak(
+      'win',
+      'max',
+    ).letOrNull((p) => _userStreakFromPick(p, 'win')),
+    curLossStreak: resultStreak(
+      'loss',
+      'cur',
+    ).letOrNull((p) => _userStreakFromPick(p, 'loss')),
+    maxLossStreak: resultStreak(
+      'loss',
+      'max',
+    ).letOrNull((p) => _userStreakFromPick(p, 'loss')),
+    curPlayStreak: playStreak(
+      'nb',
+      'cur',
+    ).letOrNull((p) => _userStreakFromPick(p, 'nb')),
+    maxPlayStreak: playStreak(
+      'nb',
+      'max',
+    ).letOrNull((p) => _userStreakFromPick(p, 'nb')),
+    curTimeStreak: playStreak(
+      'time',
+      'cur',
+    ).letOrNull((p) => _userStreakFromPick(p, 'time')),
+    maxTimeStreak: playStreak(
+      'time',
+      'max',
+    ).letOrNull((p) => _userStreakFromPick(p, 'time')),
+    worstLosses: IList(
+      stat('worstLosses', 'results').asListOrNull(_userPerfGameFromPick),
+    ),
+    bestWins: IList(
+      stat('bestWins', 'results').asListOrNull(_userPerfGameFromPick),
+    ),
   );
 }
 
-UserStreak _userStreakFromPick(RequiredPick pick) {
-  final path = pick.path;
-  if (path.length <= 1) {
-    throw PickException("cannot decode $pick as 'UserStreak'");
-  }
-
-  // Since we are passing 'cur' or 'max' as the last pick,
-  // we check the previous value in the path (the parent).
-  final type = path.reversed.elementAt(1);
-
+UserStreak _userStreakFromPick(RequiredPick pick, String type) {
   final value = pick('v');
   final isValueEmpty = value.asIntOrThrow() == 0;
   final startGame = pick('from').letOrNull(_userPerfGameFromPick);
@@ -295,7 +338,7 @@ UserStreak _userStreakFromPick(RequiredPick pick) {
         endGame: endGame,
       );
     default:
-      throw PickException("cannot decode $pick as 'UserStreak'");
+      throw PickException.fromPick(pick, "unknown streak type '$type'");
   }
 }
 
