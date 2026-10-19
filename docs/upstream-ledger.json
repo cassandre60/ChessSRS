@@ -1420,11 +1420,11 @@
       "category": "general",
       "date": "2026-10-01T11:17:55+02:00",
       "fork_pr": null,
-      "notes": "",
+      "notes": "Only rebuild app theme on theme-relevant preference changes (#3767)",
       "pr": 3767,
       "sha": "a884a7219ac3dc8c3c545a1282251b7d91552a6c",
       "short_sha": "a884a7219",
-      "status": "CANDIDATE",
+      "status": "APPLIED",
       "surviving_files": [
         "lib/src/app.dart",
         "lib/src/theme.dart"
@@ -2891,8 +2891,8 @@
   "last_synced_date": "2026-10-18T22:08:16.360999+00:00",
   "last_synced_sha": "99e1fb7fb4d84aeab200d75e54551efbb1d5d2ff",
   "stats": {
-    "applied": 4,
-    "candidates": 33,
+    "applied": 5,
+    "candidates": 32,
     "skipped": 48,
     "total": 85
   },
