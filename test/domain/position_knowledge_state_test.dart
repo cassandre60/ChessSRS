@@ -29,7 +29,8 @@ void main() {
       expect(
         canonicalKey(fenKey, 'e7e5'),
         '848edc0b8842724df73f154fa05c25cca8d91603',
-        reason: 'sha1("<fenKey>|<uci>"), recomputed with python hashlib as an '
+        reason:
+            'sha1("<fenKey>|<uci>"), recomputed with python hashlib as an '
             'independent oracle — dropping or moving the separator changes it',
       );
     });
@@ -58,13 +59,10 @@ void main() {
         // all participate in the identity; pinning the digest pins all of
         // them at once, where equality-only tests can each miss one.
         expect(
-          canonicalKeyForPosition(
-            start,
-            ['e2e4', 'd2d4', 'g1f3'],
-            repertoireSide: Side.white,
-          ),
+          canonicalKeyForPosition(start, ['e2e4', 'd2d4', 'g1f3'], repertoireSide: Side.white),
           'f0f16b372de0231d55826e53d2a81c977fe65b15',
-          reason: 'sha1("white|<fen>|d2d4|e2e4|g1f3"), recomputed with python '
+          reason:
+              'sha1("white|<fen>|d2d4|e2e4|g1f3"), recomputed with python '
               'hashlib as an independent oracle',
         );
       });
