@@ -127,9 +127,8 @@ void main() {
     test('a graded move validates and persists well inside one display frame', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       addTearDown(() async {
-        try {
-          await db.close();
-        } catch (_) {}
+        // Pinned, not swallowed: a database that will not shut down cleanly is a real defect.
+        await expectLater(db.close(), completes);
       });
 
       final repo = await seedRepository(db);
