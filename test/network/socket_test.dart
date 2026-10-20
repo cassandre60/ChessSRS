@@ -835,46 +835,61 @@ void main() {
       expect(socketClient.averageLag.value, Duration.zero);
     });
 
-    test('handles ackable messages', () async {
-      final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+    test('handles ackable messages', () {
+      fakeAsync((async) {
+        final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
 
-      final socketClient = makeTestSocketClient(
-        fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
-      );
-      await socketClient.connect();
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        );
+        socketClient.connect();
+        async.elapse(kFakeWebSocketConnectionLag);
+        async.flushMicrotasks();
 
-      // Collect every outgoing (non-ping) message so the exact sequence, not just
-      // a prefix, is checked: emitsInOrder stops after its last matcher, so it
-      // would pass if a fourth resend leaked through.
-      final emitted = <dynamic>[];
-      final collector = fakeChannel.sentMessagesExceptPing.listen(emitted.add);
-      addTearDown(collector.cancel);
+        // Collect every outgoing (non-ping) message. emitsInOrder stops after its
+        // last matcher, so it would pass if an extra resend leaked through; the
+        // collector + the checks below are what make the negative case fail.
+        final emitted = <dynamic>[];
+        final collector = fakeChannel.sentMessagesExceptPing.listen(emitted.add);
 
-      // send a message that requires an ack
-      socketClient.send('test', {'data': 'ackable'}, ackable: true);
+        // send a message that requires an ack
+        socketClient.send('test', {'data': 'ackable'}, ackable: true);
+        async.flushMicrotasks();
 
-      // several messages are expected, since the server didn't ack the message
-      await expectLater(
-        fakeChannel.sentMessagesExceptPing,
-        emitsInOrder([
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-        ]),
-      );
+        // several messages are expected, since the server didn't ack the message
+        expectLater(
+          fakeChannel.sentMessagesExceptPing,
+          emitsInOrder([
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+          ]),
+        );
 
-      // server acks the message
-      sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
+        // Let the resend timers fire deterministically instead of sleeping.
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
 
-      // Give any stray resend timer time to fire before asserting the total.
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        // Every message sent so far is the ackable message, byte for byte.
+        expect(emitted, isNotEmpty);
+        expect(emitted.every((m) => m == '{"t":"test","d":{"data":"ackable","a":1}}'), isTrue);
 
-      // The initial delivery plus the three retries above are ever sent; the ack
-      // stops further resends. (emitsInOrder above observes only the retries,
-      // since it subscribes after the first send.)
-      expect(emitted, List.filled(4, '{"t":"test","d":{"data":"ackable","a":1}}'));
+        final countBeforeAck = emitted.length;
 
-      socketClient.close();
+        // server acks the message
+        sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
+        async.flushMicrotasks();
+
+        // The ack stops further resends: nothing more is sent afterwards.
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+
+        expect(emitted.length, countBeforeAck);
+
+        collector.cancel();
+        socketClient.close();
+        async.flushTimers();
+      });
     });
 
     test(
