@@ -25,3 +25,8 @@ Because `HEAD` does not share a linear ancestor history with recent upstream com
 | `99dd3e0e4` | Support duplicate variations in game tree (#3692) | `7291edf50` (#246) | `lib/src/model/common/node.dart`, `lib/src/model/common/uci.dart` | Disambiguates duplicate variation move IDs using Unicode PUA |
 | `a884a7219` | Only rebuild app theme on theme-relevant preference changes (#3767) | `ed86543f1` (#250) | `lib/src/app.dart` | Selects themeMode and locale instead of watching all generalPrefs |
 | `bc0213734` | Rebase withClientCacheFor/withAggregatorCacheFor on RefExtension.cacheFor (#3727) | `b2cf82ac9` (#93) | `lib/src/network/http.dart` | Rebase withClientCacheFor on RefExtension.cacheFor |
+| `91d22d1c4` | Upgrade flutter | `275` | `pubspec.lock`, `pubspec.yaml` | Kit catch-up belt step 1/2 (flutter 3.47.3->3.47.7): merged as b333325ad (PR #275). |
+| `965ce01fd` | Upgrade flutter | `275` | `pubspec.lock`, `pubspec.yaml` | Kit catch-up belt step 2/2: same PR #275 folded both patches. |
+| `243b19b53` | Fix analysis after upgrading deep_pick | `276` | `lib/src/model/common/chess.dart`, `lib/src/model/common/id.dart` | Ported onto the fork's 8 surviving parser files alongside the deep_pick 1.1.0->1.3.0 adoption (d9e882e56); includes the fork-only StudyId/FideId/TournamentId and game_status sites. |
+| `8580aadd9` | Upgrade dependencies | `276` | `pubspec.lock` | Lock companion inherited via our own deep_pick upgrade in PR #276 (1.1.0->1.3.0, digest identical to this commit's resolution). |
+| `3df660332` | Upgrade dependencies | `277` | `pubspec.lock`, `pubspec.yaml` | FIC ^12.0.0 one-line bump (97f9accf1); the breaking == change checked non-applicable (zero identity-comparing configs in fork). |
