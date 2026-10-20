@@ -854,6 +854,41 @@ void main() {
       // comes from the buffer, which the advance must refill.
       expect(session.currentPrompt?.decision.id, 'dec-x');
     });
+
+    test('a full-line re-answer of a completed prefix is rehearsed, not re-graded', () {
+      // mutant L539: continuity == ReviewContinuity.fullLine -> != / ||
+      // mutant L540: mode == ReviewMode.srs -> != / ||
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [_chapterOf(_lRoot)],
+        decisions: [_dec1(), _dec2()],
+        reviewStates: {
+          'dec-1': _dueState('dec-1'),
+          'dec-2': _dueState('dec-2', overdue: const Duration(hours: 1)),
+        },
+        continuity: ReviewContinuity.fullLine,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final first = session.submitMove(from: 'e2', to: 'e4');
+      expect(first.nextPrompt?.decision.id, 'dec-2');
+      final gradedReps = session.reviewStates['dec-1']!.repetitionCount;
+      expect(gradedReps, 4);
+
+      // dec-2 lapses; its line-start re-pop walks the ancestry back to the
+      // already-completed prefix (dec-1) and re-prompts it.
+      final lapse = session.submitMove(from: 'c2', to: 'c4');
+      expect(lapse.isCorrect, isFalse);
+      session.continueAfterIncorrect();
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final replay = session.submitMove(from: 'e2', to: 'e4');
+      expect(replay.isCorrect, isTrue);
+      // Rehearsed: the prefix is re-walked with practice grading. No SRS event
+      // fires and the state written by the first answer stands untouched.
+      expect(replay.event, isNull);
+      expect(session.reviewStates['dec-1']!.repetitionCount, gradedReps);
+    });
   });
 
   group('ReviewSession full-line starts', () {
@@ -1600,6 +1635,66 @@ void main() {
       final result = session.submitMove(from: 'a7', to: 'a8', promotion: 'q');
       expect(result.isCorrect, isTrue);
       expect(session.reviewStates['dec-pm']!.repetitionCount, greaterThan(1));
+    });
+
+    test('practice full-line in dynamic mode still prompts the locked branch below', () {
+      // mutant L804: mode == ReviewMode.srs -> != (the locked-branch break
+      // would fire for practice instead of srs)
+      const queueRoot = RepertoireNode(id: 'node-x-root', fen: _fenStart, fenKey: _fenKeyStart);
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(_lRoot),
+          _chapterOf(queueRoot, chapterId: 'ch-2'),
+        ],
+        decisions: [
+          _dec1(),
+          // Never presented and never unlocked: locked in dynamic mode.
+          _dec2(),
+          _decision(
+            id: 'dec-u',
+            nodeId: 'node-x-root',
+            expectedMoves: const [_mD4],
+            chapterId: 'ch-2',
+          ),
+        ],
+        reviewStates: {'dec-1': _dueState('dec-1')},
+        mode: ReviewMode.practice,
+        continuity: ReviewContinuity.fullLine,
+        dynamic: true,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      // Practice mode has no dynamic lock on the walk: the branch below the
+      // reply is prompted even though nothing was ever unlocked for it.
+      expect(result.nextPrompt?.decision.id, 'dec-2');
+    });
+
+    test('reaching the daily quota in due-only mode still auto-plays the line below', () {
+      // mutant L805: continuity == ReviewContinuity.fullLine -> != (a due-only
+      // walk would break at the quota instead of walking past it)
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [_chapterOf(_lRoot)],
+        decisions: [_dec1(), _dec2()],
+        reviewStates: {
+          'dec-1': _dueState('dec-1'),
+          'dec-2': _dueState('dec-2', overdue: const Duration(hours: 1)),
+        },
+        remainingDailyQuota: 1,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      // The quota has no card left for dec-2, but the walk under the answer
+      // still plays on: the reply, the user continuation past the passed-over
+      // question, its opponent reply — and dec-2 earns its traversal exposure.
+      expect(result.autoPlayedMoves.length, 4);
+      expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6', 'Bc4']);
+      expect(result.sideEffectStates, isNotEmpty);
     });
   });
 
