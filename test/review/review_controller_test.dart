@@ -733,7 +733,9 @@ void main() {
       // Answer correctly but do not await the advancement: the 300ms+
       // opponent-reply animation is still in flight below.
       final advance = controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // Wait until the move has been processed and advancement is awaiting
+      // the opponent-reply delay, then change scope mid-advance.
+      await waitUntil(() => container.read(reviewControllerProvider).value?.lastStepResult != null);
 
       // Switch to study B mid-advance and let it fully load.
       await controller.changeScope(ReviewScope.study(importB.study.id));
@@ -1410,8 +1412,8 @@ void main() {
         expect(state.lastMove, const NormalMove(from: Square.e2, to: Square.e4));
         expect(state.totalDueCount, 0);
 
-        // Wait a moment: queue must remain paused and not auto-advance
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        // Queue must remain paused and not auto-advance
+        await pumpEventQueue();
         state = container.read(reviewControllerProvider).requireValue;
         expect(state.isAwaitingAdvance, isTrue);
 
