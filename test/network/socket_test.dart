@@ -843,6 +843,13 @@ void main() {
       );
       await socketClient.connect();
 
+      // Collect every outgoing (non-ping) message so the exact sequence, not just
+      // a prefix, is checked: emitsInOrder stops after its last matcher, so it
+      // would pass if a fourth resend leaked through.
+      final emitted = <dynamic>[];
+      final collector = fakeChannel.sentMessagesExceptPing.listen(emitted.add);
+      addTearDown(collector.cancel);
+
       // send a message that requires an ack
       socketClient.send('test', {'data': 'ackable'}, ackable: true);
 
@@ -859,8 +866,13 @@ void main() {
       // server acks the message
       sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
 
-      // no more messages are expected
-      await expectLater(fakeChannel.sentMessagesExceptPing, emitsInOrder([]));
+      // Give any stray resend timer time to fire before asserting the total.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      // The initial delivery plus the three retries above are ever sent; the ack
+      // stops further resends. (emitsInOrder above observes only the retries,
+      // since it subscribes after the first send.)
+      expect(emitted, List.filled(4, '{"t":"test","d":{"data":"ackable","a":1}}'));
 
       socketClient.close();
     });
@@ -1958,6 +1970,12 @@ Future<void> testEventEmitted(
   String serverMessage,
   Iterable<SocketEvent> eventsToMatch,
 ) async {
+  // Guard against the empty-matcher footgun: an empty [eventsToMatch] makes
+  // emitsInOrder consume zero events, so the assertion below could never fail.
+  // Negative ("should not emit") cases must use a collector + exact assertion
+  // instead of this helper.
+  expect(eventsToMatch, isNotEmpty, reason: 'testEventEmitted needs at least one expected event');
+
   // start listening to the stream
   final futureExpect = expectLater(socketClient.stream, emitsInOrder(eventsToMatch));
 
