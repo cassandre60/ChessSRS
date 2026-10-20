@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -6,12 +7,14 @@ import 'package:chess_srs/src/model/engine/opponent_level.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 
 import '../../network/fake_http_client_factory.dart';
 import '../../test_container.dart';
 import '../../test_helpers.dart';
+import 'fake_elapsed.dart';
 import 'polyglot_fixture.dart';
 
 void main() {
@@ -283,9 +286,34 @@ void main() {
     test('gives up on a slow explorer rather than holding the move up', () async {
       final (:book, requests: _) = await makeBook(delay: const Duration(seconds: 3));
 
-      final elapsed = Stopwatch()..start();
-      expect(await book.movesFor(Chess.initial, MaiaRating.maia1500), isEmpty);
+      // The book gives up at its own 1.5s timeout; the explorer's answer lands 3s in. The
+      // give-up is a timer, so it is placed on the fake clock instead of measured against
+      // the machine: the wait costs no wall-clock time and cannot be cut short by a slow run.
+      late final List<BookMove> answer;
+      var answered = false;
+      final elapsed = FakeElapsed();
+      fakeAsync((async) {
+        final moves = book.movesFor(Chess.initial, MaiaRating.maia1500);
+        unawaited(
+          moves.then((value) {
+            answer = value;
+            answered = true;
+            elapsed.markEnded();
+          }),
+        );
+        async.flushMicrotasks();
 
+        // The request is out; the explorer has not answered yet.
+        expect(answered, isFalse, reason: 'the explorer has not answered yet');
+
+        // Exactly the book's own timeout: the give-up lands there, not at the explorer's 3s.
+        async.elapse(const Duration(milliseconds: 1500));
+        async.flushMicrotasks();
+
+        expect(answered, isTrue, reason: 'the book gives up at its own timeout');
+      });
+
+      expect(answer, isEmpty);
       expect(elapsed.elapsed, lessThan(const Duration(seconds: 3)));
     });
 
