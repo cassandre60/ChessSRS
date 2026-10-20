@@ -8,6 +8,34 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   final t0 = DateTime(2026, 9, 16, 10);
 
+  // Runtime factories: values arriving through parameters are not constant
+  // expressions, so each call builds a *distinct* instance. Const construction
+  // would canonicalise equal-argument schedulers into one object and let
+  // `identical(other, this)` short-circuit every field comparison below.
+  SimpleScheduler simple({
+    Duration firstInterval = const Duration(days: 1),
+    Duration baseInterval = const Duration(days: 2),
+    double intervalMultiplier = 2.0,
+    Duration maximumInterval = const Duration(days: 3650),
+  }) => SimpleScheduler(
+    firstInterval: firstInterval,
+    baseInterval: baseInterval,
+    intervalMultiplier: intervalMultiplier,
+    maximumInterval: maximumInterval,
+  );
+
+  EaseScalingScheduler easeScheduler({
+    Duration firstInterval = const Duration(days: 1),
+    double ease = 2.5,
+    double scaling = 1.5,
+    Duration maximumInterval = const Duration(days: 3650),
+  }) => EaseScalingScheduler(
+    firstInterval: firstInterval,
+    ease: ease,
+    scaling: scaling,
+    maximumInterval: maximumInterval,
+  );
+
   group('ReviewState', () {
     test('initial state is new and due', () {
       final s = ReviewState.initial(decisionId: 'd1');
@@ -106,6 +134,21 @@ void main() {
       expect(s2.stability, const Duration(days: 1).inMilliseconds.toDouble());
     });
 
+    // SPEC INV-025. The current interval lives in `stability`; when that field
+    // is absent (zero) the growth must restart from `baseInterval`, not from
+    // zero. A zero-length interval makes the item due again immediately, so the
+    // learner would see it twice in a row instead of in two days.
+    test('falls back to baseInterval when stability is zero for repetitionCount >= 2', () {
+      const state = ReviewState(decisionId: 'd1', repetitionCount: 2, stability: 0);
+      final next = scheduler.schedule(previous: state, result: ReviewResult.correct, now: t0);
+      expect(next.repetitionCount, equals(3));
+      // current = baseInterval (2 days), then scaled once by intervalMultiplier
+      // (2.0) = 4 days.
+      const expected = Duration(days: 4);
+      expect(next.stability, equals(expected.inMilliseconds.toDouble()));
+      expect(next.nextDueAt, equals(t0.add(expected)));
+    });
+
     test('a lapsed item recovers correctly after a correct recall', () {
       var state = ReviewState.initial(decisionId: 'd1');
       var now = t0;
@@ -197,6 +240,14 @@ void main() {
       expect(s1.lastReviewedAt, t0);
       expect(s1.nextDueAt, t0.add(const Duration(days: 1)));
       expect(s1.stability, const Duration(days: 1).inMilliseconds.toDouble());
+    });
+
+    // SPEC gap: `scheduler.dart` L145/L146 mutant `assert(ease >= 1.0)` ->
+    // `assert(ease > 1.0)` (and the same for `scaling`) survived the whole
+    // scheduler suite: no test builds a scheduler at the documented minimum.
+    test('accepts the documented minimum ease and scaling of 1.0', () {
+      expect(() => easeScheduler(ease: 1.0), returnsNormally);
+      expect(() => easeScheduler(scaling: 1.0), returnsNormally);
     });
 
     test('second correct recall scales by ease factor (2.5 days)', () {
@@ -301,6 +352,22 @@ void main() {
       expect(s1.hashCode, equals(s2.hashCode));
       expect(s1, isNot(equals(s3)));
     });
+
+    // SPEC INV-026 (parameters compare by value). The const pair above is
+    // canonicalised, so `identical` answers true and not one field comparison
+    // runs; only `ease` is ever varied. These operands are runtime-built and
+    // every field is exercised, which is what makes a dropped comparison fail.
+    test('equality compares every field on runtime-built instances', () {
+      final a = easeScheduler();
+      final b = easeScheduler();
+      expect(identical(a, b), isFalse, reason: 'guard: pair must not be canonicalised');
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(easeScheduler(firstInterval: const Duration(days: 3)))));
+      expect(a, isNot(equals(easeScheduler(ease: 3.0))));
+      expect(a, isNot(equals(easeScheduler(scaling: 2.0))));
+      expect(a, isNot(equals(easeScheduler(maximumInterval: const Duration(days: 100)))));
+    });
   });
 
   group('SimpleScheduler equality', () {
@@ -311,6 +378,21 @@ void main() {
       expect(s1, equals(s2));
       expect(s1.hashCode, equals(s2.hashCode));
       expect(s1, isNot(equals(s3)));
+    });
+
+    // SPEC INV-026. Same const-canonicalisation gap as above, and only
+    // `intervalMultiplier` was ever varied, so three of the four fields were
+    // uncompared by evidence.
+    test('equality compares every field on runtime-built instances', () {
+      final a = simple();
+      final b = simple();
+      expect(identical(a, b), isFalse, reason: 'guard: pair must not be canonicalised');
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+      expect(a, isNot(equals(simple(firstInterval: const Duration(days: 3)))));
+      expect(a, isNot(equals(simple(baseInterval: const Duration(days: 5)))));
+      expect(a, isNot(equals(simple(intervalMultiplier: 3.0))));
+      expect(a, isNot(equals(simple(maximumInterval: const Duration(days: 100)))));
     });
   });
 }
