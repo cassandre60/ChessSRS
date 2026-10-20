@@ -49,8 +49,10 @@ def cmd_create_worktree(slug: str, branch_type: str = "fix") -> str:
     print("[*] Generating code assets in new worktree (pub get + build_runner)...")
     run_cmd("fvm flutter pub get", cwd=worktree_path)
     run_cmd("fvm dart run build_runner build --delete-conflicting-outputs", cwd=worktree_path)
-    # Discard l10n formatting churn from codegen (AGENTS.md lesson 2026-09-28)
-    run_cmd("fvm dart format lib/l10n/", cwd=worktree_path)
+    # build_runner may regenerate lib/l10n/; the committed output is authoritative
+    # (l10n.yaml sets format: false). Never format it (AGENTS.md lesson 2026-10-19).
+    # Restore the directory to the committed state so the worktree starts clean.
+    run_cmd("git checkout -- lib/l10n/", cwd=worktree_path)
     print(f"[+] Worktree ready at {worktree_path}")
     return worktree_path
 

@@ -1,6 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-002, INV-016, INV-030, INV-032, INV-051.
+// SPEC coverage: INV-002, INV-016, INV-030, INV-032, INV-051, INV-068.
 
 import 'dart:async';
 import 'dart:io';
@@ -1353,6 +1353,844 @@ void main() {
         }
       });
     });
+
+    // Mutation round 1 (Stream A): the summary's aggregate surfaces and the
+    // service's scope plumbing carried no assertions, so a mutation of any of
+    // them left the suite green. Each test below pins one surface.
+    group('summary surfaces (mutation round 1)', () {
+      /// Three studies, four chapters, five decisions — the shape the drawer's
+      /// figures are built from:
+      ///
+      /// | decision | chapter             | side  | family           | state                   |
+      /// |----------|---------------------|-------|------------------|-------------------------|
+      /// | d1       | A1 (study A)        | White | Sicilian Defense | due, never learned      |
+      /// | d2       | A1 (study A)        | White | Sicilian Defense | learned, scheduled      |
+      /// | d3       | A2 (study A)        | Black | French Defense   | never presented (fresh) |
+      /// | d4       | B1 (study B)        | White | Sicilian Defense | learned and due         |
+      /// | d5       | C1 (study C, paused)| White | Sicilian Defense | due                     |
+      ///
+      /// The paused study is what separates the study-wide figures (which count
+      /// every study handed to the summary) from the per-side ones (which count
+      /// active studies only, INV-030).
+      Future<({List<Study> studies, List<RepertoireDecision> decisions})> seedMixedLibrary(
+        SqliteStudyRepository repo,
+      ) async {
+        const studyA = Study(id: 's_a', title: 'Study A');
+        const studyB = Study(id: 's_b', title: 'Study B');
+        const studyC = Study(id: 's_c', title: 'Study C', isActive: false);
+        await repo.saveStudy(studyA);
+        await repo.saveStudy(studyB);
+        await repo.saveStudy(studyC);
+
+        final chA1 = Chapter.create(
+          studyId: 's_a',
+          sourceOrder: 0,
+          title: 'A white',
+          opening: 'Sicilian Defense',
+          orientation: Side.white,
+        );
+        final chA2 = Chapter.create(
+          studyId: 's_a',
+          sourceOrder: 1,
+          title: 'A black',
+          opening: 'French Defense',
+          orientation: Side.black,
+        );
+        final chB1 = Chapter.create(
+          studyId: 's_b',
+          sourceOrder: 0,
+          title: 'B white',
+          opening: 'Sicilian Defense',
+          orientation: Side.white,
+        );
+        final chC1 = Chapter.create(
+          studyId: 's_c',
+          sourceOrder: 0,
+          title: 'C white',
+          opening: 'Sicilian Defense',
+          orientation: Side.white,
+        );
+        await repo.saveChapters([chA1, chA2, chB1, chC1]);
+
+        final decisions = <RepertoireDecision>[
+          RepertoireDecision(
+            id: 'd1',
+            studyId: 's_a',
+            chapterId: chA1.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          ),
+          RepertoireDecision(
+            id: 'd2',
+            studyId: 's_a',
+            chapterId: chA1.id,
+            nodeId: 'n2',
+            expectedMoves: const [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+          ),
+          RepertoireDecision(
+            id: 'd3',
+            studyId: 's_a',
+            chapterId: chA2.id,
+            nodeId: 'n3',
+            expectedMoves: const [RepertoireMove(from: 'e7', to: 'e5', san: 'e5')],
+          ),
+          RepertoireDecision(
+            id: 'd4',
+            studyId: 's_b',
+            chapterId: chB1.id,
+            nodeId: 'n4',
+            expectedMoves: const [RepertoireMove(from: 'c2', to: 'c4', san: 'c4')],
+          ),
+          RepertoireDecision(
+            id: 'd5',
+            studyId: 's_c',
+            chapterId: chC1.id,
+            nodeId: 'n5',
+            expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+          ),
+        ];
+        await repo.saveDecisions(decisions);
+
+        // INV-068: a position holding a state whose date arrived is due, one
+        // scheduled for later is not, and one with no state at all has never
+        // been presented, so it is fresh.
+        await repo.saveReviewState(
+          ReviewState(decisionId: 'd1', repetitionCount: 0, nextDueAt: now),
+        );
+        await repo.saveReviewState(
+          ReviewState(
+            decisionId: 'd2',
+            repetitionCount: 2,
+            nextDueAt: now.add(const Duration(days: 1)),
+          ),
+        );
+        await repo.saveReviewState(
+          ReviewState(
+            decisionId: 'd4',
+            repetitionCount: 1,
+            nextDueAt: now.subtract(const Duration(hours: 1)),
+          ),
+        );
+        await repo.saveReviewState(
+          ReviewState(decisionId: 'd5', repetitionCount: 0, nextDueAt: now),
+        );
+
+        return (studies: [studyA, studyB, studyC], decisions: decisions);
+      }
+
+      /// One study, one chapter, two due positions: one of them unlocked.
+      Future<Study> seedUnlockableStudy(SqliteStudyRepository repo) async {
+        const study = Study(id: 's_unlock', title: 'Unlocking');
+        await repo.saveStudy(study);
+        final chapter = Chapter.create(studyId: 's_unlock', sourceOrder: 0, title: 'Chapter');
+        await repo.saveChapter(chapter);
+        await repo.saveDecisions([
+          RepertoireDecision(
+            id: 'u_open',
+            studyId: 's_unlock',
+            chapterId: chapter.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          ),
+          RepertoireDecision(
+            id: 'u_shut',
+            studyId: 's_unlock',
+            chapterId: chapter.id,
+            nodeId: 'n2',
+            expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+          ),
+        ]);
+        // Both positions are due; only one of them is unlocked.
+        await repo.saveReviewState(
+          ReviewState(decisionId: 'u_open', repetitionCount: 0, nextDueAt: now),
+        );
+        await repo.saveReviewState(
+          ReviewState(decisionId: 'u_shut', repetitionCount: 0, nextDueAt: now),
+        );
+        await repo.unlockDecisions(['u_open']);
+        return study;
+      }
+
+      test('opening families are tallied per family in the summary', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final seeded = await seedMixedLibrary(repo);
+          final summary = await service.getDueSummary(studies: seeded.studies);
+
+          // The families the library actually holds, and only those: a chapter
+          // with no opening family is not a hub.
+          expect(summary.openingProgress.keys, hasLength(2));
+          expect(summary.openingProgress.keys, containsAll(['Sicilian Defense', 'French Defense']));
+          expect(summary.openingDueCounts.keys, hasLength(2));
+
+          // Sicilian: d1 (due) + d2 (learned, scheduled) + d4 (learned and due).
+          // d5 belongs to a paused study, so it counts for neither figure.
+          expect(summary.openingProgress['Sicilian Defense'], isNotNull);
+          final sicilian = summary.openingProgress['Sicilian Defense']!;
+          expect(sicilian.totalDecisions, 3);
+          expect(sicilian.learnedDecisions, 2);
+          expect(sicilian.dueDecisions, 2);
+          expect(sicilian.freshDecisions, 0);
+
+          // French: d3 only, and it has never been presented.
+          expect(summary.openingProgress['French Defense'], isNotNull);
+          final french = summary.openingProgress['French Defense']!;
+          expect(french.totalDecisions, 1);
+          expect(french.learnedDecisions, 0);
+          expect(french.dueDecisions, 0);
+          expect(french.freshDecisions, 1);
+
+          expect(summary.openingDueCounts['Sicilian Defense'], 2);
+          expect(summary.openingDueCounts['French Defense'], 0);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test(
+        'the drawer partitions studies and opening families by the side their chapters train',
+        () async {
+          final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+          final repo = SqliteStudyRepository(db);
+          final service = ReviewService(repository: repo, clock: clock);
+
+          try {
+            final seeded = await seedMixedLibrary(repo);
+            final summary = await service.getDueSummary(studies: seeded.studies);
+
+            // A study that trains only White belongs to the White drawer alone
+            // (INV-030): the Black drawer would offer a repertoire the study has
+            // none of.
+            expect(summary.studyIdsBySide[Side.white], containsAll(['s_a', 's_b', 's_c']));
+            expect(summary.studyIdsBySide[Side.white], hasLength(3));
+            expect(summary.studyIdsBySide[Side.black], ['s_a']);
+
+            // A paused study stays findable in the drawer that owns it, so the
+            // user can go and resume it.
+            expect(summary.studyIdsBySide[Side.white], contains('s_c'));
+
+            // The opening families are partitioned the same way.
+            expect(summary.openingsBySide[Side.white], ['Sicilian Defense']);
+            expect(summary.openingsBySide[Side.black], ['French Defense']);
+          } finally {
+            await db.close();
+          }
+        },
+      );
+
+      test('per-side study figures sum to the study-wide ones', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final seeded = await seedMixedLibrary(repo);
+          final summary = await service.getDueSummary(studies: seeded.studies);
+
+          expect(summary.studySideProgress['s_a'], isNotNull);
+          final white = summary.studySideProgress['s_a']![Side.white]!;
+          final black = summary.studySideProgress['s_a']![Side.black]!;
+          final studyWide = summary.studyProgress['s_a']!;
+
+          // Study A's White chapter holds d1 and d2, its Black chapter d3.
+          expect(white.totalDecisions, 2);
+          expect(white.learnedDecisions, 1);
+          expect(white.dueDecisions, 1);
+          expect(white.freshDecisions, 0);
+
+          expect(black.totalDecisions, 1);
+          expect(black.learnedDecisions, 0);
+          expect(black.dueDecisions, 0);
+          expect(black.freshDecisions, 1);
+
+          // The contract the summary documents: the per-side figures sum to
+          // the study-wide ones.
+          expect(white.totalDecisions + black.totalDecisions, studyWide.totalDecisions);
+          expect(white.learnedDecisions + black.learnedDecisions, studyWide.learnedDecisions);
+          expect(white.dueDecisions + black.dueDecisions, studyWide.dueDecisions);
+          expect(white.freshDecisions + black.freshDecisions, studyWide.freshDecisions);
+
+          // A study that trains one side only has no entry for the other.
+          expect(summary.studySideProgress['s_b']![Side.white]!.totalDecisions, 1);
+          expect(summary.studySideProgress['s_b']!.containsKey(Side.black), isFalse);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('side totals count the active studies only', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          final seeded = await seedMixedLibrary(repo);
+          final summary = await service.getDueSummary(studies: seeded.studies);
+
+          // White: d1, d2 (study A) and d4 (study B). d5 is in a paused study,
+          // so neither repertoire button shows work the session will not ask
+          // for (INV-030).
+          final white = summary.sideProgress[Side.white]!;
+          expect(white.totalDecisions, 3);
+          expect(white.learnedDecisions, 2);
+          expect(white.dueDecisions, 2);
+          expect(white.freshDecisions, 0);
+
+          // Black: d3 only, and it has never been presented.
+          final black = summary.sideProgress[Side.black]!;
+          expect(black.totalDecisions, 1);
+          expect(black.learnedDecisions, 0);
+          expect(black.dueDecisions, 0);
+          expect(black.freshDecisions, 1);
+
+          // The two buttons partition the active studies' positions.
+          expect(white.totalDecisions + black.totalDecisions, 4);
+          expect(summary.dueCountForSide(Side.white), 2);
+          expect(summary.freshCountForSide(Side.black), 1);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test(
+        'dynamic repertoire mode: a learned position stays unlocked and a locked one stays out',
+        () async {
+          final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+          final repo = SqliteStudyRepository(db);
+          final service = ReviewService(
+            repository: repo,
+            clock: clock,
+            dynamicRepertoireMode: true,
+          );
+
+          try {
+            const study = Study(id: 's_dyn', title: 'Dynamic');
+            await repo.saveStudy(study);
+            final chapter = Chapter.create(studyId: 's_dyn', sourceOrder: 0, title: 'Chapter');
+            await repo.saveChapter(chapter);
+
+            // Locked: due, but never unlocked.
+            final locked = RepertoireDecision(
+              id: 'd_locked',
+              studyId: 's_dyn',
+              chapterId: chapter.id,
+              nodeId: 'n1',
+              expectedMoves: const [],
+            );
+            // Unlocked by its own occurrence id only: the canonical position is a
+            // different id, so the unlock names the occurrence, not the position.
+            final unlocked = RepertoireDecision(
+              id: 'd_unlocked',
+              studyId: 's_dyn',
+              chapterId: chapter.id,
+              nodeId: 'n2',
+              expectedMoves: const [],
+              canonicalStateId: 'canon_unlocked',
+            );
+            // Learned and due: a position the user has answered before is never
+            // re-locked, whatever the unlock table says.
+            final learned = RepertoireDecision(
+              id: 'd_learned',
+              studyId: 's_dyn',
+              chapterId: chapter.id,
+              nodeId: 'n3',
+              expectedMoves: const [],
+            );
+            await repo.saveDecisions([locked, unlocked, learned]);
+
+            await repo.saveReviewState(
+              ReviewState(decisionId: 'd_locked', repetitionCount: 0, nextDueAt: now),
+            );
+            await repo.saveReviewState(
+              ReviewState(decisionId: 'canon_unlocked', repetitionCount: 0, nextDueAt: now),
+            );
+            await repo.saveReviewState(
+              ReviewState(
+                decisionId: 'd_learned',
+                repetitionCount: 1,
+                nextDueAt: now.subtract(const Duration(hours: 1)),
+              ),
+            );
+            await repo.unlockDecisions(['d_unlocked']);
+
+            final summary = await service.getDueSummary(studies: [study]);
+
+            // The unlocked position and the learned one are due; the locked one
+            // is not, and none of them is fresh — all three hold a state.
+            expect(summary.totalDueCount, 2);
+            expect(summary.totalFreshCount, 0);
+            expect(summary.studyDueCounts['s_dyn'], 2);
+          } finally {
+            await db.close();
+          }
+        },
+      );
+
+      test('a study scope counts a transposition once per chapter, a wider scope once', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const study = Study(id: 's_trans', title: 'Transposed');
+          await repo.saveStudy(study);
+          final ch1 = Chapter.create(studyId: 's_trans', sourceOrder: 0, title: 'One');
+          final ch2 = Chapter.create(studyId: 's_trans', sourceOrder: 1, title: 'Two');
+          await repo.saveChapters([ch1, ch2]);
+
+          // The same position reached through two chapters of one study.
+          await repo.saveDecisions([
+            RepertoireDecision(
+              id: 't1',
+              studyId: 's_trans',
+              chapterId: ch1.id,
+              nodeId: 'n1',
+              expectedMoves: const [],
+              canonicalStateId: 'canon_t',
+            ),
+            RepertoireDecision(
+              id: 't2',
+              studyId: 's_trans',
+              chapterId: ch2.id,
+              nodeId: 'n2',
+              expectedMoves: const [],
+              canonicalStateId: 'canon_t',
+            ),
+          ]);
+          await repo.saveReviewState(
+            ReviewState(decisionId: 'canon_t', repetitionCount: 0, nextDueAt: now),
+          );
+
+          // A study scope names one position set, so both of its rows count:
+          // the session queues both occurrences, and the summary has to agree
+          // with it.
+          final inStudy = await service.getDueSummary(
+            studies: [study],
+            scope: const ReviewScope.study('s_trans'),
+          );
+          expect(inStudy.totalDueCount, 2);
+
+          // A wider scope asks the position once, however many chapters reach
+          // it (INV-016).
+          final all = await service.getDueSummary(studies: [study]);
+          expect(all.totalDueCount, 1);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('a position keeps its memory when only its own occurrence was recorded', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const study = Study(id: 's_mirror', title: 'Mirror');
+          await repo.saveStudy(study);
+          final chapter = Chapter.create(studyId: 's_mirror', sourceOrder: 0, title: 'Chapter');
+          await repo.saveChapter(chapter);
+
+          // The decision reaches a position another study also reaches, and
+          // its own memory was recorded before the canonical one existed.
+          await repo.saveDecision(
+            RepertoireDecision(
+              id: 'm1',
+              studyId: 's_mirror',
+              chapterId: chapter.id,
+              nodeId: 'n1',
+              expectedMoves: const [],
+              canonicalStateId: 'canon_m',
+            ),
+          );
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: 'm1',
+              repetitionCount: 1,
+              nextDueAt: now.subtract(const Duration(hours: 1)),
+            ),
+          );
+
+          final summary = await service.getDueSummary(studies: [study]);
+
+          // The position was presented and its date arrived, so it is due and
+          // not fresh. Its own recorded state is what says so.
+          expect(summary.totalDueCount, 1);
+          expect(summary.totalFreshCount, 0);
+          expect(summary.studyDueCounts['s_mirror'], 1);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('a preloaded study list is matched by id, not by position', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const right = Study(id: 's_right', title: 'Right Study');
+          const other = Study(id: 's_other', title: 'Other Study');
+          await repo.saveStudy(right);
+          await repo.saveStudy(other);
+
+          final chapter = Chapter.create(studyId: 's_right', sourceOrder: 0, title: 'Chapter');
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(
+            RepertoireDecision(
+              id: 'r1',
+              studyId: 's_right',
+              chapterId: chapter.id,
+              nodeId: 'n1',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          );
+
+          // The preloaded list is in the wrong order on purpose: the study the
+          // scope names is not the first one in it.
+          final preloaded = [other, right];
+
+          final inStudy = await service.startSession(
+            scope: const ReviewScope.study('s_right'),
+            preloadedStudies: preloaded,
+          );
+          expect(inStudy.currentPrompt?.decision.id, 'r1');
+          expect(inStudy.currentPrompt?.studyTitle, 'Right Study');
+
+          final inChapter = await service.startSession(
+            scope: ReviewScope.chapter(studyId: 's_right', chapterId: chapter.id),
+            preloadedStudies: preloaded,
+          );
+          expect(inChapter.currentPrompt?.decision.id, 'r1');
+          expect(inChapter.currentPrompt?.studyTitle, 'Right Study');
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('a chapter scope trains its own chapter and loads only its states', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const study = Study(id: 's_chapters', title: 'Two chapters');
+          await repo.saveStudy(study);
+          final black = Chapter.create(
+            studyId: 's_chapters',
+            sourceOrder: 0,
+            title: 'Black',
+            orientation: Side.black,
+          );
+          final white = Chapter.create(
+            studyId: 's_chapters',
+            sourceOrder: 1,
+            title: 'White',
+            orientation: Side.white,
+          );
+          await repo.saveChapters([black, white]);
+
+          final blackDecision = RepertoireDecision(
+            id: 'c_black',
+            studyId: 's_chapters',
+            chapterId: black.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'e7', to: 'e5', san: 'e5')],
+          );
+          final whiteDecision = RepertoireDecision(
+            id: 'c_white',
+            studyId: 's_chapters',
+            chapterId: white.id,
+            nodeId: 'n2',
+            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+          );
+          await repo.saveDecisions([blackDecision, whiteDecision]);
+          // The other chapter's position has a memory of its own; a chapter
+          // scope must not pull it in (INV-051).
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: 'c_white',
+              repetitionCount: 3,
+              nextDueAt: now.add(const Duration(days: 4)),
+            ),
+          );
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: 'c_black',
+              repetitionCount: 1,
+              nextDueAt: now.subtract(const Duration(hours: 1)),
+            ),
+          );
+
+          final session = await service.startSession(
+            scope: ReviewScope.chapter(
+              studyId: 's_chapters',
+              chapterId: black.id,
+              side: Side.black,
+            ),
+            preloadedAllDecisions: [blackDecision, whiteDecision],
+          );
+
+          // The scope names the Black chapter and the Black side, so that is
+          // what the session trains.
+          expect(session.currentPrompt?.decision.id, 'c_black');
+
+          // The other chapter's memory was not loaded: a scope loads the
+          // states of the positions it trains, and no more (INV-051).
+          expect(session.reviewStates.containsKey('c_white'), isFalse);
+          expect(session.reviewStates.containsKey('c_black'), isTrue);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('dynamic repertoire mode: a startSession queues the unlocked position', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock, dynamicRepertoireMode: true);
+
+        try {
+          await seedUnlockableStudy(repo);
+          final session = await service.startSession(scope: const ReviewScope.study('s_unlock'));
+
+          // The unlocked position is queued; the locked one is not, so the
+          // session holds exactly one position.
+          expect(session.currentPrompt?.decision.id, 'u_open');
+          expect(session.initialQueueCount, 1);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('dynamic repertoire mode: getDueSummary counts the unlocked position', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock, dynamicRepertoireMode: true);
+
+        try {
+          final study = await seedUnlockableStudy(repo);
+          final summary = await service.getDueSummary(studies: [study]);
+
+          expect(summary.totalDueCount, 1);
+          expect(summary.studyDueCounts['s_unlock'], 1);
+        } finally {
+          await db.close();
+        }
+      });
+
+      test(
+        'dynamic repertoire mode: loadSessionAndSummary counts and queues the unlocked position',
+        () async {
+          final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+          final repo = SqliteStudyRepository(db);
+          final service = ReviewService(
+            repository: repo,
+            clock: clock,
+            dynamicRepertoireMode: true,
+          );
+
+          try {
+            final study = await seedUnlockableStudy(repo);
+            final (:session, :summary) = await service.loadSessionAndSummary(studies: [study]);
+
+            expect(summary.totalDueCount, 1);
+            expect(session.currentPrompt?.decision.id, 'u_open');
+          } finally {
+            await db.close();
+          }
+        },
+      );
+
+      test('the unlocked-decision table is read only in dynamic repertoire mode', () async {
+        // INV-051: the unlocked table is a whole-table read. Outside dynamic
+        // repertoire mode nothing consults it, and inside it an empty scope has
+        // nothing to unlock, so the read is skipped in both cases.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = _QueryCountRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+        final dynamicService = ReviewService(
+          repository: repo,
+          clock: clock,
+          dynamicRepertoireMode: true,
+        );
+
+        try {
+          const study = Study(id: 's_read', title: 'Reads');
+          await repo.saveStudy(study);
+          final chapter = Chapter.create(studyId: 's_read', sourceOrder: 0, title: 'Chapter');
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(
+            RepertoireDecision(
+              id: 'q1',
+              studyId: 's_read',
+              chapterId: chapter.id,
+              nodeId: 'n1',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          );
+
+          await service.getDueSummary(studies: [study]);
+          expect(repo.unlockedDecisionReads, 0, reason: 'the summary read the unlocked table');
+
+          await service.loadSessionAndSummary(studies: [study]);
+          expect(
+            repo.unlockedDecisionReads,
+            0,
+            reason: 'the combined pass read the unlocked table',
+          );
+
+          await service.startSession();
+          expect(repo.unlockedDecisionReads, 0, reason: 'the session read the unlocked table');
+
+          // In dynamic mode there is still nothing to unlock in an empty scope.
+          await dynamicService.startSession(scope: const ReviewScope.study('s_missing'));
+          expect(repo.unlockedDecisionReads, 0, reason: 'an empty scope read the unlocked table');
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('a retry that walks no side effects persists nothing', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = _TreeWriteRecordingRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const study = Study(id: 's_retry_write', title: 'Retry');
+          await repo.saveStudy(study);
+
+          // A one-move line: the retry walks to its end and stops, so there is
+          // no continuation to credit.
+          const root = RepertoireNode(
+            id: 'n_root',
+            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+            children: [
+              RepertoireNode(
+                id: 'n_e4',
+                fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+                fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+                incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              ),
+            ],
+          );
+          await repo.saveChapter(
+            Chapter(
+              id: 'ch_rw',
+              studyId: 's_retry_write',
+              title: 'Line',
+              sourceOrder: 0,
+              root: root,
+            ),
+          );
+          await repo.saveDecision(
+            const RepertoireDecision(
+              id: 'rw1',
+              studyId: 's_retry_write',
+              chapterId: 'ch_rw',
+              nodeId: 'n_root',
+              expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          );
+
+          final session = await service.startSession(
+            scope: const ReviewScope.study('s_retry_write'),
+          );
+          expect(session.currentPrompt?.decision.id, 'rw1');
+
+          // The wrong move is a lapse, and the lapse is persisted.
+          final lapse = await service.submitMove(from: 'd2', to: 'd4');
+          expect(lapse.isCorrect, isFalse);
+          expect(repo.answerBatchWrites, 1);
+
+          // The retry walks to the end of the line, so there is no side effect
+          // to persist: only the lapse may reach the store.
+          final retry = await service.retryMove(from: 'e2', to: 'e4');
+          expect(retry.isCorrect, isTrue);
+          expect(retry.sideEffectStates, isEmpty);
+          expect(
+            repo.answerBatchWrites,
+            1,
+            reason: 'a retry with no side effects wrote a batch of its own',
+          );
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('an opening scope queues only that family, and loads only its states', () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const sicilianStudy = Study(id: 's_sic', title: 'Sicilian book');
+          const frenchStudy = Study(id: 's_fra', title: 'French book');
+          await repo.saveStudy(sicilianStudy);
+          await repo.saveStudy(frenchStudy);
+
+          final sicilianChapter = Chapter.create(
+            studyId: 's_sic',
+            sourceOrder: 0,
+            title: 'Sicilian',
+            opening: 'Sicilian Defense',
+          );
+          final frenchChapter = Chapter.create(
+            studyId: 's_fra',
+            sourceOrder: 0,
+            title: 'French',
+            opening: 'French Defense',
+          );
+          await repo.saveChapters([sicilianChapter, frenchChapter]);
+
+          final sicilianDecision = RepertoireDecision(
+            id: 'o_sic',
+            studyId: 's_sic',
+            chapterId: sicilianChapter.id,
+            nodeId: 'n1',
+            expectedMoves: const [RepertoireMove(from: 'c7', to: 'c5', san: 'c5')],
+          );
+          final frenchDecision = RepertoireDecision(
+            id: 'o_fra',
+            studyId: 's_fra',
+            chapterId: frenchChapter.id,
+            nodeId: 'n2',
+            expectedMoves: const [RepertoireMove(from: 'e7', to: 'e6', san: 'e6')],
+          );
+          await repo.saveDecisions([sicilianDecision, frenchDecision]);
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: 'o_sic',
+              repetitionCount: 1,
+              nextDueAt: now.subtract(const Duration(hours: 1)),
+            ),
+          );
+          await repo.saveReviewState(
+            ReviewState(
+              decisionId: 'o_fra',
+              repetitionCount: 3,
+              nextDueAt: now.add(const Duration(days: 4)),
+            ),
+          );
+
+          final session = await service.startSession(
+            scope: const ReviewScope.opening('Sicilian Defense'),
+          );
+
+          expect(session.currentPrompt?.decision.id, 'o_sic');
+          expect(session.initialQueueCount, 1);
+
+          // The other family's memory was not loaded: an opening scope loads
+          // the states of the positions it trains, and no more (INV-051).
+          expect(session.reviewStates.containsKey('o_fra'), isFalse);
+          expect(session.reviewStates.containsKey('o_sic'), isTrue);
+        } finally {
+          await db.close();
+        }
+      });
+    });
   });
 }
 
@@ -1396,6 +2234,16 @@ class _QueryCountRepository extends SqliteStudyRepository {
   int reviewStateBatchReads = 0;
   int knowledgeStateBatchReads = 0;
   int allDecisionsReads = 0;
+
+  /// Reads of the whole unlocked-decision table, which only dynamic
+  /// repertoire mode has any use for (INV-051).
+  int unlockedDecisionReads = 0;
+
+  @override
+  Future<Set<String>> getUnlockedDecisionIds({String? studyId}) {
+    unlockedDecisionReads++;
+    return super.getUnlockedDecisionIds(studyId: studyId);
+  }
 
   @override
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) {
