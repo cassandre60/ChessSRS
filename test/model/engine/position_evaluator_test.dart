@@ -284,24 +284,33 @@ void main() {
       fakeEngine = stockfish;
 
       final container = await makeContainer();
-      final service = readEvaluator(container);
 
-      await service.evaluate(makeWork())!.first;
-      expect(stockfish.startCount, 1);
+      fakeAsync((async) {
+        final service = readEvaluator(container);
 
-      // The engine button, turned off and left off for longer than the grace window: the engine is
-      // the screen's for as long as the screen is open, however often the button is tapped.
-      service.release();
-      expect(service.state.engineName, isNull, reason: 'nothing to show for an engine that is off');
-      // A bounded window, not a poll: 2.1s is past kEngineDisposeDelay (2s) but inside
-      // kEnginePauseDelay (3s), and the expect below asserts that nothing happened.
-      await Future<void>.delayed(kEngineDisposeDelay + const Duration(milliseconds: 100));
-      expect(stockfish.quitCount, 0, reason: 'still inside the pause window');
+        service.evaluate(makeWork());
+        async.elapse(const Duration(seconds: 1));
+        expect(stockfish.startCount, 1);
 
-      await service.evaluate(makeWork())!.first;
-      expect(stockfish.startCount, 1, reason: 'the engine was never let go of');
-      expect(stockfish.quitCount, 0);
-      expect(service.state.engineName, isNotNull, reason: 'the button shows the engine again');
+        // The engine button, turned off and left off for longer than the grace window: the engine is
+        // the screen's for as long as the screen is open, however often the button is tapped.
+        service.release();
+        expect(
+          service.state.engineName,
+          isNull,
+          reason: 'nothing to show for an engine that is off',
+        );
+        // A bounded window, not a poll: 2.1s is past kEngineDisposeDelay (2s) but inside
+        // kEnginePauseDelay (3s), and the expect below asserts that nothing happened.
+        async.elapse(kEngineDisposeDelay + const Duration(milliseconds: 100));
+        expect(stockfish.quitCount, 0, reason: 'still inside the pause window');
+
+        service.evaluate(makeWork());
+        async.elapse(const Duration(seconds: 1));
+        expect(stockfish.startCount, 1, reason: 'the engine was never let go of');
+        expect(stockfish.quitCount, 0);
+        expect(service.state.engineName, isNotNull, reason: 'the button shows the engine again');
+      });
     });
 
     test('an engine left turned off is let go of', () async {
@@ -599,27 +608,29 @@ void main() {
           stockfishNnueServiceProvider: stockfishNnueServiceProvider.overrideWithValue(nnue),
         },
       );
-      final service = readEvaluator(container);
 
-      // Ask for work. Choosing the engine is parked on the NNUE availability check.
-      service.evaluate(makeWork());
-      await pumpEventQueue();
-      expect(stockfish.startCount, 0, reason: 'the engine is not attached yet');
+      fakeAsync((async) {
+        final service = readEvaluator(container);
 
-      // The user turns the engine off before the choice completes.
-      service.release();
+        // Ask for work. Choosing the engine is parked on the NNUE availability check.
+        service.evaluate(makeWork());
+        async.flushMicrotasks();
+        expect(stockfish.startCount, 0, reason: 'the engine is not attached yet');
 
-      // Now let the choice finish. The engine it was going to attach must never be started.
-      nnue.releaseCheck();
-      await pumpEventQueue();
-      await Future<void>.delayed(Duration.zero);
+        // The user turns the engine off before the choice completes.
+        service.release();
 
-      expect(
-        stockfish.startCount,
-        0,
-        reason: 'a spec resolution that finished after a release must not resurrect the engine',
-      );
-      expect(service.state.currentWork, isNull);
+        // Now let the choice finish. The engine it was going to attach must never be started.
+        nnue.releaseCheck();
+        async.flushMicrotasks();
+
+        expect(
+          stockfish.startCount,
+          0,
+          reason: 'a spec resolution that finished after a release must not resurrect the engine',
+        );
+        expect(service.state.currentWork, isNull);
+      });
     });
 
     test('a stopped search stops reporting to subscribers', () async {
@@ -627,36 +638,39 @@ void main() {
       fakeEngine = stockfish;
 
       final container = await makeContainer();
-      final service = readEvaluator(container);
 
-      // Collected from the stream, not from state: `state.eval` is already cleared by the
-      // release, so it cannot tell "nothing arrived" from "nothing was accepted".
-      final received = <EvalResult>[];
-      final subscription = service.evalStream.listen(received.add);
-      addTearDown(subscription.cancel);
+      fakeAsync((async) {
+        final service = readEvaluator(container);
 
-      service.evaluate(makeWork());
-      await pumpEventQueue();
-      stockfish.emitEvalEvents();
-      await pumpEventQueue();
-      expect(received, isNotEmpty, reason: 'the search reported before the release');
+        // Collected from the stream, not from state: `state.eval` is already cleared by the
+        // release, so it cannot tell "nothing arrived" from "nothing was accepted".
+        final received = <EvalResult>[];
+        final subscription = service.evalStream.listen(received.add);
+        addTearDown(subscription.cancel);
 
-      // The user turns the engine off. The engine underneath is kept for the grace window and can
-      // still have lines to say, but this search is over and its subscription is gone.
-      service.release();
-      final countAtRelease = received.length;
+        service.evaluate(makeWork());
+        async.elapse(const Duration(milliseconds: 50));
+        stockfish.emitEvalEvents();
+        async.flushMicrotasks();
+        expect(received, isNotEmpty, reason: 'the search reported before the release');
 
-      stockfish.emitEvalEvents();
-      await pumpEventQueue();
-      // Also a bounded window: 250ms outlasts the 200ms kEngineEvalEmissionThrottleDelay, so a
-      // subscription the release should have killed has had time for its trailing emission.
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+        // The user turns the engine off. The engine underneath is kept for the grace window and can
+        // still have lines to say, but this search is over and its subscription is gone.
+        service.release();
+        final countAtRelease = received.length;
 
-      expect(
-        received.length,
-        countAtRelease,
-        reason: 'a stopped search must not keep publishing evaluations after a release',
-      );
+        stockfish.emitEvalEvents();
+        async.flushMicrotasks();
+        // A full throttle window with no trailing emission: release cancelled the throttle timer,
+        // so nothing may be published once it would have fired.
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+
+        expect(
+          received.length,
+          countAtRelease,
+          reason: 'a stopped search must not keep publishing evaluations after a release',
+        );
+      });
     });
   });
 
