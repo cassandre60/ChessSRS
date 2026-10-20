@@ -5,6 +5,7 @@ import 'package:chess_srs/src/model/auth/auth_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_storage.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/user/user.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../test_container.dart';
@@ -196,26 +197,37 @@ void main() {
 
     final controller = container.read(authControllerProvider.notifier);
 
-    // Trigger signOut: it records the user and bumps the generation synchronously, then parks
-    // on its 500ms delay — so by the time this call returns the timer is already running, and
-    // no settle sleep is needed before signing in.
-    final signOutFuture = controller.signOut();
+    // The sign-out's 500ms delay is a timer, so the wait runs on the fake clock: the sign-in
+    // lands inside the delay window and the stale sign-out must not undo it.
+    fakeAsync((async) {
+      var signedIn = false;
+      var signedOut = false;
 
-    // Immediately sign in as userB before the 500ms expires
-    await controller.signIn();
-    expect(container.read(authControllerProvider), userB);
+      // Trigger signOut: it records the user and bumps the generation synchronously, then parks
+      // on its 500ms delay — so by the time this call returns the timer is already running.
+      unawaited(controller.signOut().then((_) => signedOut = true));
 
-    await signOutFuture;
+      // Immediately sign in as userB before the 500ms expires
+      unawaited(controller.signIn().then((_) => signedIn = true));
+      async.flushMicrotasks();
+      expect(signedIn, isTrue, reason: 'the sign-in lands while the sign-out is still parked');
+      expect(container.read(authControllerProvider), userB);
 
-    // Verify userB was not wiped out by userA's stale signOut
-    expect(container.read(authControllerProvider), userB);
-    expect(fakeStorage.storedUser, userB);
-    expect(fakeStorage.deleteCalls, 0);
-    expect(
-      fakeRepo.signedOutUser,
-      isNull,
-      reason: "a superseded signOut must not revoke anyone's token",
-    );
+      // Let the sign-out's delay expire on the fake clock: its generation is stale by now.
+      async.elapse(const Duration(milliseconds: 500));
+      async.flushMicrotasks();
+      expect(signedOut, isTrue, reason: 'the stale sign-out has run to its end');
+
+      // Verify userB was not wiped out by userA's stale signOut
+      expect(container.read(authControllerProvider), userB);
+      expect(fakeStorage.storedUser, userB);
+      expect(fakeStorage.deleteCalls, 0);
+      expect(
+        fakeRepo.signedOutUser,
+        isNull,
+        reason: "a superseded signOut must not revoke anyone's token",
+      );
+    });
   });
 
   test('retains authUser state when all listeners are closed', () async {
@@ -238,9 +250,9 @@ void main() {
 
     // Close listener (simulates user leaving screen)
     sub.close();
-    // A settle yield, not a sleep: one turn for any disposal close() could have scheduled,
-    // before asserting the state survived it — an absence a poll cannot express.
-    await Future<void>.delayed(Duration.zero);
+    // A deterministic settle, not a timed wait: one turn for any disposal close() could have
+    // scheduled, before asserting the state survived it — an absence a poll cannot express.
+    await pumpEventQueue();
 
     // Must still be userA!
     expect(container.read(authControllerProvider), userA);

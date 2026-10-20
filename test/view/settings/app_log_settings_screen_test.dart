@@ -59,7 +59,9 @@ void main() {
 
       final storage = await capturedRef.read(appLogStorageProvider.future);
       await capturedRef.read(logPreferencesProvider.notifier).setLogLevel(Level.ALL);
-      final now = DateTime.now();
+      // A fixed stamp: the log query filters on id, level and text, never on the time, so
+      // the wall clock has no place in this fixture.
+      final now = DateTime.utc(2026, 1, 1);
 
       await storage.save(
         AppLogEntry(
