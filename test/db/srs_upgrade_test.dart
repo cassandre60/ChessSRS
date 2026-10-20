@@ -59,9 +59,9 @@ void main() {
 
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       addTearDown(() async {
-        try {
-          await db.close();
-        } catch (_) {}
+        // The close is pinned, not swallowed: a database that will not shut down cleanly is a
+        // real defect here, and a catch-all would hide it behind a green test.
+        await expectLater(db.close(), completes);
       });
 
       final tables = await db.rawQuery(
@@ -165,9 +165,9 @@ void main() {
 
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       addTearDown(() async {
-        try {
-          await db.close();
-        } catch (_) {}
+        // The close is pinned, not swallowed: a database that will not shut down cleanly is a
+        // real defect here, and a catch-all would hide it behind a green test.
+        await expectLater(db.close(), completes);
       });
 
       // The undeclared constraints are gone from both tables.

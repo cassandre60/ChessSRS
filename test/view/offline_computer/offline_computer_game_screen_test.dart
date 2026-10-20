@@ -43,6 +43,12 @@ import '../../test_provider_scope.dart';
 
 class MockOfflineComputerGameStorage extends Mock implements OfflineComputerGameStorage {}
 
+/// When the saved games below were created.
+///
+/// A fixture stamped with the wall clock is a different value on every run, and the game
+/// screen never asks how old a game is: the stamp is data, so it is a constant.
+final kFixedGameCreatedAt = DateTime.utc(2026, 1, 1);
+
 void main() {
   TestLichessBinding.ensureInitialized();
 
@@ -51,7 +57,7 @@ void main() {
       id: const StringId('test-game-id'),
       steps: [const GameStep(position: Chess.initial)].lock,
       meta: GameMeta(
-        createdAt: DateTime.now(),
+        createdAt: kFixedGameCreatedAt,
         rated: false,
         variant: Variant.standard,
         speed: Speed.classical,
@@ -724,7 +730,7 @@ void main() {
               ),
             ].lock,
             meta: GameMeta(
-              createdAt: DateTime.now(),
+              createdAt: kFixedGameCreatedAt,
               rated: false,
               variant: Variant.standard,
               speed: Speed.classical,
@@ -814,7 +820,7 @@ void main() {
               ),
             ].lock,
             meta: GameMeta(
-              createdAt: DateTime.now(),
+              createdAt: kFixedGameCreatedAt,
               rated: false,
               variant: Variant.standard,
               speed: Speed.classical,
@@ -1349,7 +1355,7 @@ void main() {
 
       // The game clock runs on package:clock's stopwatch, which the widget-test
       // zone fakes: pumping past the remaining time charges the countdown to 0,
-      // so no real-terms sleep is needed.
+      // so no real-time wait is needed.
       await tester.pump(time + const Duration(milliseconds: 200));
       await tester.pumpAndSettle(const Duration(milliseconds: 600));
 

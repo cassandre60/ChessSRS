@@ -46,7 +46,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final storage = await capturedRef.read(httpLogStorageProvider.future);
-    final now = DateTime.now();
+    // A fixed stamp: the log query filters on id and text, never on the time, so the wall
+    // clock has no place in this fixture.
+    final now = DateTime.utc(2026, 1, 1);
 
     await storage.save(
       HttpLogEntry(

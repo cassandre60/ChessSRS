@@ -594,18 +594,24 @@ void main() {
 
   group('MaiaOpponent thinking time', () {
     /// A container whose Maia opponent waits [think] before answering, however fast the engine is.
-    Future<ProviderContainer> makeSlowContainer(Duration think, {MaiaOfflineBook? book}) =>
-        makeContainer(
-          overrides: {
-            maiaWeightsServiceProvider: maiaWeightsServiceProvider.overrideWithValue(
-              FakeMaiaWeightsService(),
-            ),
-            thinkingTimeProvider: thinkingTimeProvider.overrideWithValue(FixedThinkingTime(think)),
-            maiaBookServiceProvider: maiaBookServiceProvider.overrideWithValue(
-              FakeMaiaOfflineBookService(book: book),
-            ),
-          },
-        );
+    Future<ProviderContainer> makeSlowContainer(
+      Duration think, {
+      MaiaOfflineBook? book,
+    }) => makeContainer(
+      overrides: {
+        maiaWeightsServiceProvider: maiaWeightsServiceProvider.overrideWithValue(
+          FakeMaiaWeightsService(),
+        ),
+        thinkingTimeProvider: thinkingTimeProvider.overrideWithValue(FixedThinkingTime(think)),
+        maiaBookServiceProvider: maiaBookServiceProvider.overrideWithValue(
+          FakeMaiaOfflineBookService(book: book),
+        ),
+        // Exercise the real composed-moves path (MaiaOnlineBook) against the mocked HTTP
+        // layer instead of a provider override, so no real network request (and its 1.5s
+        // timeout) is part of the measured elapsed.
+        maiaOnlineBookProvider: maiaOnlineBookProvider.overrideWith((ref) => MaiaOnlineBook(ref)),
+      },
+    );
 
     test('sits on the move instead of answering the instant the engine does', () async {
       fakeEngine = FakeEngine();
