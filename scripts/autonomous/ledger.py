@@ -76,22 +76,59 @@ def get_open_prs() -> List[str]:
         return []
 
 
+def hash_match_basis(stored: Optional[str], computed: Optional[str]) -> str:
+    """Return how a stored ledger hash relates to a freshly computed blob hash.
+
+    Returns one of: 'exact', 'prefix', 'none'. A stored value matches a computed
+    blob when one is a prefix of the other, so a 9-char row and a full 40-char
+    blob (or vice versa) are recognised as the same content instead of forcing a
+    bogus re-audit. The basis is reported so callers can see which comparison
+    was used.
+    """
+    if not stored or not computed:
+        return "none"
+    s = stored.strip().strip("`")
+    c = computed.strip().strip("`")
+    if not s or not c:
+        return "none"
+    if s == c:
+        return "exact"
+    if s.startswith(c) or c.startswith(s):
+        return "prefix"
+    return "none"
+
+
+def hashes_match(stored: Optional[str], computed: Optional[str]) -> bool:
+    return hash_match_basis(stored, computed) != "none"
+
+
 def parse_audited_targets() -> Dict[str, str]:
-    """Parses docs/AUTONOMOUS_WORK_LEDGER.md and extracts {target_file: audited_hash}."""
+    """Parses docs/AUTONOMOUS_WORK_LEDGER.md and extracts {target_file: audited_hash}.
+
+    Newest row wins: for each target the authoritative row is the greatest
+    (Date, -position) among COMPLETED/SOUND rows -- newest date wins, ties broken
+    by topmost position. A newer row of any other status never erases an older
+    audit.
+    """
     if not os.path.exists(LEDGER_PATH):
         return {}
-    audited = {}
+    # target -> (sort key, hash)
+    best: Dict[str, tuple] = {}
     with open(LEDGER_PATH, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.startswith("|") and not line.startswith("| Date") and not line.startswith("|---"):
-                parts = [p.strip() for p in line.split("|")[1:-1]]
-                if len(parts) >= 5:
-                    target = parts[2].replace("`", "")
-                    sha = parts[3].replace("`", "")
-                    status = parts[4]
-                    if "COMPLETED" in status or "SOUND" in status:
-                        audited[target] = sha
-    return audited
+        lines = f.readlines()
+    for idx, line in enumerate(lines):
+        if line.startswith("|") and not line.startswith("| Date") and not line.startswith("|---"):
+            parts = [p.strip() for p in line.split("|")[1:-1]]
+            if len(parts) >= 5:
+                target = parts[2].replace("`", "")
+                sha = parts[3].replace("`", "")
+                status = parts[4]
+                if "COMPLETED" in status or "SOUND" in status:
+                    date = parts[0]
+                    key = (date, -idx)
+                    if target not in best or key > best[target][0]:
+                        best[target] = (key, sha)
+    return {t: v[1] for t, v in best.items()}
 
 
 def cmd_next(stream: int) -> None:
@@ -126,13 +163,13 @@ def cmd_next(stream: int) -> None:
                 print(f"      Re-check with: gh pr list --search \"{slug}\"")
                 continue
 
-            # Check if already audited at current content hash
-            if last_audited_hash and current_hash and last_audited_hash == current_hash:
-                print(f"  [-] {src} was already audited at content hash {current_hash} and has not changed. Skipping.")
-                continue
-            if last_audited_hash and current_hash and last_audited_hash != current_hash:
-                print(f"  [~] {src} was audited at {last_audited_hash} but content is now {current_hash} — re-audit needed.")
-
+            # Check if already audited at current content hash (prefix-aware)
+            if last_audited_hash and current_hash:
+                basis = hash_match_basis(last_audited_hash, current_hash)
+                if basis != "none":
+                    print(f"  [-] {src} was already audited at content hash {current_hash} and has not changed. Skipping. (comparison: {basis})")
+                    continue
+                print(f"  [~] {src} was audited at {last_audited_hash} but content is now {current_hash} — re-audit needed. (comparison: none)")
             print("\n" + "=" * 60)
             print(f"NEXT TARGET FOUND: {src}")
             print(f"Current Content Hash: {current_hash or 'unknown'} (git hash-object)")
@@ -170,12 +207,90 @@ def cmd_record(stream: str, target: str, status: str, pr: str, summary: str) -> 
         sys.exit(1)
 
 
+def run_selftest() -> int:
+    """Built-in self-check for the ledger's hash comparison logic.
+
+    Demonstrates:
+      - a 9-char row + matching full blob  => audited, no re-audit needed
+      - a changed blob                      => re-audit needed
+    plus newest-row-wins and prefix matching in both directions.
+    """
+    failures = []
+
+    # 1. prefix matching both directions
+    if hash_match_basis("b11aeacc6", "b11aeacc6fa00d5e8c4b55aa62535fcee465a794") != "prefix":
+        failures.append("9-char stored + 40-char blob should be prefix")
+    if hash_match_basis("b11aeacc6fa00d5e8c4b55aa62535fcee465a794", "b11aeacc6") != "prefix":
+        failures.append("40-char stored + 9-char blob should be prefix")
+    # exact
+    if hash_match_basis("b11aeacc6", "b11aeacc6") != "exact":
+        failures.append("identical hashes should be exact")
+    # changed blob -> no match
+    if hash_match_basis("b11aeacc6", "deadbeef1") != "none":
+        failures.append("different hashes should be none")
+    if hashes_match("b11aeacc6", "deadbeef1"):
+        failures.append("changed blob should NOT match")
+
+    # 2. newest-row-wins via a temp ledger
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".md")
+    os.close(fd)
+    try:
+        # older row (full 40-char) first in file? We'll put newest 9-char row on top.
+        content = (
+            "| Date | Stream | Target File / Module | Content Hash | Status | PR / Issue | Summary / Outcome | Re-Audit Trigger |\n"
+            "|---|---|---|---|---|---|---|---|\n"
+            "| 2026-10-19 | Stream 1 (Mutation) | `lib/src/domain/graph_aware_review_coordinator.dart` | `b11aeacc6` | COMPLETED | #257 | newer | x |\n"
+            "| 2026-10-18 | Stream 1 (Mutation) | `lib/src/domain/graph_aware_review_coordinator.dart` | `b11aeacc6fa00d5e8c4b55aa62535fcee465a794` | COMPLETED | #222 | older | x |\n"
+        )
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        # temporarily point LEDGER_PATH
+        global LEDGER_PATH
+        saved = LEDGER_PATH
+        LEDGER_PATH = path
+        try:
+            audited = parse_audited_targets()
+        finally:
+            LEDGER_PATH = saved
+        if audited.get("lib/src/domain/graph_aware_review_coordinator.dart") != "b11aeacc6":
+            failures.append(
+                "newest row should win (expected 9-char, got %s)"
+                % audited.get("lib/src/domain/graph_aware_review_coordinator.dart")
+            )
+        # simulated "next" decision: 9-char row + matching blob => audited
+        stored = audited.get("lib/src/domain/graph_aware_review_coordinator.dart")
+        blob = "b11aeacc6"
+        if hash_match_basis(stored, blob) == "none":
+            failures.append("9-char row + matching blob should be audited (no re-audit)")
+        # changed blob => re-audit
+        if hash_match_basis(stored, "deadbeef1") != "none":
+            failures.append("changed blob should trigger re-audit")
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    if failures:
+        print("[selftest] FAIL:")
+        for fr in failures:
+            print(f"  - {fr}")
+        return 1
+    print("[selftest] OK: 9-char row + matching blob => audited (no re-audit); changed blob => re-audit needed.")
+    print("[selftest] OK: prefix matching works both directions; newest row wins.")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Autonomous Work Ledger Manager (content-hash based)")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--selftest", action="store_true", help="Run built-in self-check of ledger hash comparison logic")
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
     next_parser = subparsers.add_parser("next")
     next_parser.add_argument("--stream", type=int, required=True, help="Stream number (e.g. 1)")
+
+    subparsers.add_parser("selftest", help="Run built-in self-check of ledger hash comparison logic")
 
     record_parser = subparsers.add_parser("record")
     record_parser.add_argument("--stream", required=True, help="Stream name, e.g. 'Stream 1 (Mutation)'")
@@ -185,6 +300,9 @@ def main():
     record_parser.add_argument("--summary", required=True, help="Summary of work completed")
 
     args = parser.parse_args()
+
+    if getattr(args, "selftest", False):
+        sys.exit(run_selftest())
 
     if args.command == "next":
         cmd_next(stream=args.stream)
@@ -196,6 +314,11 @@ def main():
             pr=args.pr,
             summary=args.summary,
         )
+    elif args.command == "selftest":
+        sys.exit(run_selftest())
+    else:
+        parser.print_help()
+        sys.exit(2)
 
 
 if __name__ == "__main__":
