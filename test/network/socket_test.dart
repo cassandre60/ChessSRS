@@ -835,34 +835,61 @@ void main() {
       expect(socketClient.averageLag.value, Duration.zero);
     });
 
-    test('handles ackable messages', () async {
-      final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+    test('handles ackable messages', () {
+      fakeAsync((async) {
+        final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
 
-      final socketClient = makeTestSocketClient(
-        fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
-      );
-      await socketClient.connect();
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        );
+        socketClient.connect();
+        async.elapse(kFakeWebSocketConnectionLag);
+        async.flushMicrotasks();
 
-      // send a message that requires an ack
-      socketClient.send('test', {'data': 'ackable'}, ackable: true);
+        // Collect every outgoing (non-ping) message. emitsInOrder stops after its
+        // last matcher, so it would pass if an extra resend leaked through; the
+        // collector + the checks below are what make the negative case fail.
+        final emitted = <dynamic>[];
+        final collector = fakeChannel.sentMessagesExceptPing.listen(emitted.add);
 
-      // several messages are expected, since the server didn't ack the message
-      await expectLater(
-        fakeChannel.sentMessagesExceptPing,
-        emitsInOrder([
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-          '{"t":"test","d":{"data":"ackable","a":1}}',
-        ]),
-      );
+        // send a message that requires an ack
+        socketClient.send('test', {'data': 'ackable'}, ackable: true);
+        async.flushMicrotasks();
 
-      // server acks the message
-      sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
+        // several messages are expected, since the server didn't ack the message
+        expectLater(
+          fakeChannel.sentMessagesExceptPing,
+          emitsInOrder([
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+            '{"t":"test","d":{"data":"ackable","a":1}}',
+          ]),
+        );
 
-      // no more messages are expected
-      await expectLater(fakeChannel.sentMessagesExceptPing, emitsInOrder([]));
+        // Let the resend timers fire deterministically instead of sleeping.
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
 
-      socketClient.close();
+        // Every message sent so far is the ackable message, byte for byte.
+        expect(emitted, isNotEmpty);
+        expect(emitted.every((m) => m == '{"t":"test","d":{"data":"ackable","a":1}}'), isTrue);
+
+        final countBeforeAck = emitted.length;
+
+        // server acks the message
+        sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
+        async.flushMicrotasks();
+
+        // The ack stops further resends: nothing more is sent afterwards.
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+
+        expect(emitted.length, countBeforeAck);
+
+        collector.cancel();
+        socketClient.close();
+        async.flushTimers();
+      });
     });
 
     test(
@@ -1958,6 +1985,12 @@ Future<void> testEventEmitted(
   String serverMessage,
   Iterable<SocketEvent> eventsToMatch,
 ) async {
+  // Guard against the empty-matcher footgun: an empty [eventsToMatch] makes
+  // emitsInOrder consume zero events, so the assertion below could never fail.
+  // Negative ("should not emit") cases must use a collector + exact assertion
+  // instead of this helper.
+  expect(eventsToMatch, isNotEmpty, reason: 'testEventEmitted needs at least one expected event');
+
   // start listening to the stream
   final futureExpect = expectLater(socketClient.stream, emitsInOrder(eventsToMatch));
 
