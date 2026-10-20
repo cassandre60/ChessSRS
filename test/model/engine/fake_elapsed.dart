@@ -21,3 +21,4 @@ class FakeElapsed {
   /// How long the wait took, on the clock it was scheduled on.
   Duration get elapsed => (_endedAt ?? clock.now()).difference(_start);
 }
+// ci-retrigger: inert touch so the path-filtered workflows run for this head.
