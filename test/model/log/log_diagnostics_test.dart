@@ -267,7 +267,9 @@ void main() {
       final storage = await container.read(appLogStorageProvider.future);
       await storage.save(
         AppLogEntry(
-          logTime: DateTime.now(),
+          // A fixed stamp: the page query filters on text, never on the time, so the wall
+          // clock has no place in this fixture.
+          logTime: DateTime.utc(2026, 1, 1),
           loggerName: 'DiagnosticTestLogger',
           levelValue: Level.WARNING.value,
           levelName: 'WARNING',
