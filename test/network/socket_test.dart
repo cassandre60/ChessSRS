@@ -1,4 +1,5 @@
 // SPEC coverage: INV-064.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -32,6 +33,11 @@ SocketClient makeTestSocketClient({
   WebSocketChannelFactory fakeChannelFactory = defaultFakeWebSocketChannelFactory,
   int? version,
   VoidCallback? onEventGapFailure,
+  Duration? pingDelay,
+  Duration? pingMaxLag,
+  Duration? autoReconnectDelay,
+  Duration? reconnectGracePeriod,
+  Duration? resendAckDelay,
 }) {
   final client = SocketClient(
     route ?? defaultSocketUri,
@@ -55,14 +61,28 @@ SocketClient makeTestSocketClient({
       'identifierForVendor': 'test',
       'isPhysicalDevice': true,
     }),
-    pingDelay: const Duration(milliseconds: 50),
-    pingMaxLag: const Duration(milliseconds: 200),
-    autoReconnectDelay: const Duration(milliseconds: 100),
-    reconnectGracePeriod: const Duration(seconds: 1),
-    resendAckDelay: const Duration(milliseconds: 100),
+    pingDelay: pingDelay ?? const Duration(milliseconds: 50),
+    pingMaxLag: pingMaxLag ?? const Duration(milliseconds: 200),
+    autoReconnectDelay: autoReconnectDelay ?? const Duration(milliseconds: 100),
+    reconnectGracePeriod: reconnectGracePeriod ?? const Duration(seconds: 1),
+    resendAckDelay: resendAckDelay ?? const Duration(milliseconds: 100),
   );
 
   return client;
+}
+
+/// Collects every log record the socket writes, the fine-grained ones included.
+///
+/// The root logger is raised for the duration of the test and put back afterwards: the socket
+/// says plenty of things that are only interesting at the level it says them at.
+List<LogRecord> collectLogRecords() {
+  final records = <LogRecord>[];
+  final previousLevel = Logger.root.level;
+  Logger.root.level = Level.FINE;
+  addTearDown(() => Logger.root.level = previousLevel);
+  final subscription = Logger.root.onRecord.listen(records.add);
+  addTearDown(subscription.cancel);
+  return records;
 }
 
 /// A [WebSocketChannelFactory] that hands out one prepared channel, for the fakes that are built
@@ -104,6 +124,17 @@ void main() {
   TestLichessBinding.ensureInitialized();
 
   group('SocketClient', () {
+    test('the client refuses a timing it cannot work with', () {
+      // A zero delay is not a slower ping: it is a ping storm, a reconnect loop with no breathing
+      // room between the attempts, or an acknowledgement replayed on every turn of the event
+      // loop. The constructor is where that is caught.
+      expect(() => makeTestSocketClient(pingDelay: Duration.zero), throwsAssertionError);
+      expect(() => makeTestSocketClient(pingMaxLag: Duration.zero), throwsAssertionError);
+      expect(() => makeTestSocketClient(autoReconnectDelay: Duration.zero), throwsAssertionError);
+      expect(() => makeTestSocketClient(reconnectGracePeriod: Duration.zero), throwsAssertionError);
+      expect(() => makeTestSocketClient(resendAckDelay: Duration.zero), throwsAssertionError);
+    });
+
     test('connects with the sri in the query string', () async {
       final factory = _RecordingUrlChannelFactory();
 
@@ -155,6 +186,44 @@ void main() {
 
       // 2 pong messages are expected since we're closing just after 3 pings
       await expectLater(fakeChannel.stream, emitsInOrder(['0', '0']));
+    });
+
+    test('the ping that carries the lag goes out every tenth time', () {
+      fakeAsync((async) {
+        final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+
+        // The listener goes in first: the first ping goes out with the handshake.
+        final sent = <dynamic>[];
+        fakeChannel.sentMessages.listen(sent.add);
+
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        );
+        socketClient.connect();
+        async.flushMicrotasks();
+
+        // Long enough for a dozen pings and a dozen pongs.
+        async.elapse(const Duration(milliseconds: 700));
+        async.flushMicrotasks();
+
+        final pings = sent.where(FakeWebSocketChannel.isPing).toList();
+        final lagPings = <int>[];
+        for (var i = 0; i < pings.length; i++) {
+          if (pings[i] != 'p') lagPings.add(i);
+        }
+
+        expect(lagPings, isNotEmpty, reason: 'the sweep was long enough to see the pattern');
+        expect(
+          lagPings.every((index) => index % 10 == 2),
+          isTrue,
+          reason: 'the lag rides on every tenth ping, and on no other',
+        );
+        for (final index in lagPings) {
+          final decoded = jsonDecode(pings[index] as String) as Map<String, dynamic>;
+          expect(decoded['t'], 'p');
+          expect(decoded['l'], isA<int>(), reason: 'the ping carries the lag it measured');
+        }
+      });
     });
 
     test('reconnects when connection attempt fails', () async {
@@ -835,6 +904,52 @@ void main() {
       expect(socketClient.averageLag.value, Duration.zero);
     });
 
+    test('the average lag is the mean of the first four pongs, then a decaying one', () {
+      fakeAsync((async) {
+        final fakeChannel = FakeWebSocketChannel(
+          defaultSocketUri,
+          connectionLag: const Duration(milliseconds: 10),
+        );
+
+        // Every ping is answered more slowly than the last one, so the pongs differ and the
+        // weight the client gives them becomes visible.
+        var pings = 0;
+        fakeChannel.sentMessages.listen((message) {
+          if (!FakeWebSocketChannel.isPing(message)) return;
+          pings++;
+          fakeChannel.connectionLag = Duration(milliseconds: 10 * (pings + 1));
+        });
+
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        );
+        socketClient.connect();
+        async.flushMicrotasks();
+
+        // Four pongs: 10ms, 20ms, 30ms and 40ms.
+        async.elapse(const Duration(milliseconds: 260));
+        async.flushMicrotasks();
+
+        final lags = [10, 20, 30, 40];
+        final mean = lags.reduce((a, b) => a + b) ~/ lags.length;
+        expect(
+          socketClient.averageLag.value.inMilliseconds,
+          mean,
+          reason: 'the first four pongs are averaged evenly, not weighted',
+        );
+
+        // The fifth pong (50ms) moves the average by a tenth of the difference.
+        async.elapse(const Duration(milliseconds: 100));
+        async.flushMicrotasks();
+        expect(
+          socketClient.averageLag.value,
+          Duration(milliseconds: mean) +
+              (const Duration(milliseconds: 50) - Duration(milliseconds: mean)) * 0.1,
+          reason: 'after the fourth pong the average decays instead of averaging',
+        );
+      });
+    });
+
     test('handles ackable messages', () {
       fakeAsync((async) {
         final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
@@ -889,6 +1004,40 @@ void main() {
         collector.cancel();
         socketClient.close();
         async.flushTimers();
+      });
+    });
+
+    test('a message sent with withLag carries the measured lag', () {
+      fakeAsync((async) {
+        final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        );
+        socketClient.connect();
+        async.elapse(kFakeWebSocketConnectionLag);
+        async.flushMicrotasks();
+
+        final sent = <dynamic>[];
+        fakeChannel.sentMessagesExceptPing.listen(sent.add);
+
+        socketClient.send('chat', {'room': 'study'}, withLag: true);
+        socketClient.send('move', {'u': 'e2e4'}, ackable: true, withLag: true);
+        async.flushMicrotasks();
+
+        final lag = socketClient.averageLag.value.inMilliseconds;
+        expect(sent, hasLength(2));
+
+        final plain = jsonDecode(sent.first as String) as Map<String, dynamic>;
+        expect(plain['d'], containsPair('l', lag), reason: 'a plain message carries the lag');
+
+        final ackable = jsonDecode(sent.last as String) as Map<String, dynamic>;
+        expect(ackable['d'], containsPair('l', lag), reason: 'an ackable message carries the lag');
+        expect(
+          ackable['d'],
+          containsPair('u', 'e2e4'),
+          reason: 'and keeps the fields it was given',
+        );
       });
     });
 
@@ -1142,6 +1291,118 @@ void main() {
 
       await socketClient.close();
     });
+
+    test('a disposed client cannot be reconnected', () async {
+      final socketClient = makeTestSocketClient();
+      socketClient.dispose();
+
+      await expectLater(socketClient.connect(), throwsStateError);
+    });
+
+    test('a peer that hangs up is routine, not a warning', () {
+      final records = collectLogRecords();
+
+      fakeAsync((async) {
+        FakeWebSocketChannel? channel;
+        final socketClient = makeTestSocketClient(
+          fakeChannelFactory: FakeWebSocketChannelFactory(
+            (route) => channel = FakeWebSocketChannel(route),
+          ),
+        );
+        socketClient.connect();
+        async.elapse(const Duration(milliseconds: 20));
+        expect(socketClient.isConnected, isTrue);
+
+        // The peer hangs up without an error: the ordinary end of a connection.
+        channel!.closeFromServer();
+        async.elapse(const Duration(milliseconds: 1));
+
+        final hangups = records
+            .where((record) => record.message.contains('was closed (failing'))
+            .toList();
+        expect(hangups, hasLength(1), reason: 'the hangup is reported once');
+        expect(
+          hangups.single.level,
+          Level.FINE,
+          reason: 'a peer that hangs up is ordinary, and the reconnect answers it',
+        );
+
+        socketClient.close();
+        async.flushTimers();
+      });
+    });
+
+    test('the ping/pong protocol is announced once, not on every pong', () {
+      final records = collectLogRecords();
+
+      fakeAsync((async) {
+        final socketClient = makeTestSocketClient();
+        socketClient.connect();
+        async.elapse(const Duration(milliseconds: 200));
+        async.flushMicrotasks();
+
+        final announcements = records
+            .where((record) => record.message.contains('Ping/pong protocol'))
+            .toList();
+        expect(announcements, hasLength(1), reason: 'the protocol is established, not repeated');
+
+        socketClient.close();
+        async.flushTimers();
+      });
+    });
+  });
+
+  test('the global stream carries only the topics that are broadcast to everyone', () async {
+    final events = <SocketEvent>[];
+    final subscription = socketGlobalStream.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+    final socketClient = makeTestSocketClient(
+      fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+    );
+    await socketClient.connect();
+
+    sendServerSocketMessages(defaultSocketUri, [
+      '{"t":"n","d":10,"r":3}',
+      '{"t":"message","d":"hello"}',
+      '{"t":"challenges","d":[]}',
+      '{"t":"announce","d":"x"}',
+      '{"t":"test","d":"data"}',
+    ]);
+    await pumpEventQueue();
+
+    expect(events.map((event) => event.topic), [
+      'n',
+      'message',
+      'challenges',
+      'announce',
+    ], reason: 'a topic that is not broadcast to everyone stays on the socket that received it');
+
+    await socketClient.close();
+  });
+
+  test('a connection timeout is routine, like a missing network', () async {
+    var attempts = 0;
+    final fakeChannelFactory = FakeWebSocketChannelFactory((_) {
+      attempts++;
+      if (attempts == 1) throw TimeoutException('Connection timed out');
+      return FakeWebSocketChannel(defaultSocketUri);
+    });
+
+    final records = <LogRecord>[];
+    final subscription = Logger.root.onRecord
+        .where((record) => record.level >= Level.WARNING)
+        .listen(records.add);
+    addTearDown(subscription.cancel);
+
+    final socketClient = makeTestSocketClient(fakeChannelFactory: fakeChannelFactory);
+    socketClient.connect();
+    await socketClient.firstConnection;
+
+    expect(records, isEmpty, reason: 'a timeout says nothing beyond the network being slow');
+
+    socketClient.close();
   });
 
   test('emits events', () async {
@@ -1318,6 +1579,42 @@ void main() {
       expect(onEventGapFailureCalled, 1);
 
       socketClient.close();
+    });
+  });
+
+  test('a version gap is given ten retries before the client gives up on it', () {
+    fakeAsync((async) {
+      final fakeChannel = FakeWebSocketChannel(defaultSocketUri);
+
+      var gapFailures = 0;
+      final socketClient = makeTestSocketClient(
+        fakeChannelFactory: FakeWebSocketChannelFactory((_) => fakeChannel),
+        version: 0,
+        onEventGapFailure: () {
+          gapFailures++;
+        },
+      );
+      socketClient.connect();
+      socketClient.stream.listen((_) {});
+
+      async.elapse(kFakeWebSocketConnectionLag);
+      sendServerSocketMessages(defaultSocketUri, [
+        '{"t":"test","v":1, "d":"data"}',
+        '{"t":"test","v":2, "d":"data"}',
+        '{"t":"test","v":4, "d":"data"}',
+      ]);
+      async.flushMicrotasks();
+
+      // Nine retries have gone by, 200ms apart, and the client is still waiting for the event
+      // that fills the hole.
+      async.elapse(const Duration(milliseconds: 1800));
+      expect(gapFailures, 0, reason: 'the gap is given the whole window before it is given up');
+
+      async.elapse(const Duration(milliseconds: 300));
+      expect(gapFailures, 1, reason: 'the tenth retry settles it');
+
+      socketClient.close();
+      async.flushTimers();
     });
   });
 
@@ -1922,6 +2219,125 @@ void main() {
         async.flushTimers();
       });
     });
+
+    test('forceReconnect reopens a route that is already connected, and only then', () async {
+      final attempts = <Uri>[];
+      final container = await makeContainer(
+        overrides: offlineNetworkOverrides(() => false, onSocketAttempt: attempts.add),
+      );
+      final pool = container.read(socketPoolProvider);
+
+      fakeAsync((async) {
+        const route = '/lobby/socket/v5';
+        pool.open(Uri(path: route));
+        async.elapse(const Duration(seconds: 1));
+        expect(attempts.map((uri) => uri.path), [route]);
+
+        // Asking for the route again, without asking for a reconnect, leaves it alone.
+        pool.open(Uri(path: route));
+        async.elapse(const Duration(seconds: 1));
+        expect(attempts.map((uri) => uri.path), [route], reason: 'a live route is not reopened');
+
+        // Asking for a reconnect is what reopens it.
+        pool.open(Uri(path: route), forceReconnect: true);
+        async.elapse(const Duration(seconds: 1));
+        expect(attempts.map((uri) => uri.path), [
+          route,
+          route,
+        ], reason: 'forceReconnect reopens it');
+
+        pool.currentClient.close();
+        async.flushTimers();
+      });
+    });
+
+    test(
+      'a route that goes idle while another one is current leaves the pool where it is',
+      () async {
+        final attempts = <Uri>[];
+        final container = await makeContainer(
+          overrides: offlineNetworkOverrides(() => false, onSocketAttempt: attempts.add),
+        );
+        final pool = container.read(socketPoolProvider);
+
+        fakeAsync((async) {
+          const first = '/first/socket/v5';
+          const second = '/second/socket/v5';
+
+          final firstClient = pool.open(Uri(path: first));
+          final firstSubscription = firstClient.stream.listen((_) {});
+          pool.open(Uri(path: second));
+          async.elapse(const Duration(seconds: 1));
+          expect(attempts.map((uri) => uri.path), [first, second]);
+          expect(pool.currentClient.route.path, second);
+
+          // The first route goes idle: the screen that was using it is gone.
+          firstSubscription.cancel();
+          async.elapse(const Duration(seconds: 3));
+
+          expect(
+            pool.currentClient.route.path,
+            second,
+            reason:
+                'the route that went idle is not the current one, so the pool stays where it is',
+          );
+          expect(
+            attempts.map((uri) => uri.path),
+            [first, second],
+            reason:
+                'the default socket is not brought back for a route that was not the current one',
+          );
+
+          pool.currentClient.close();
+          async.flushTimers();
+        });
+      },
+    );
+
+    test(
+      'after the app comes back, a route that goes idle brings the default socket back',
+      () async {
+        final attempts = <Uri>[];
+        final container = await makeContainer(
+          overrides: offlineNetworkOverrides(() => false, onSocketAttempt: attempts.add),
+        );
+        final pool = container.read(socketPoolProvider);
+
+        fakeAsync((async) {
+          // The app goes to the background and comes straight back: the pool is in the foreground
+          // again, and everything the background kept closed is open again.
+          pool.onAppHidden();
+          pool.onAppShown();
+
+          const route = '/lobby/socket/v5';
+          final client = pool.open(Uri(path: route));
+          final subscription = client.stream.listen((_) {});
+          async.elapse(const Duration(seconds: 1));
+          expect(attempts.map((uri) => uri.path), [kDefaultSocketRoute, route]);
+
+          // The screen that was using the route is gone.
+          subscription.cancel();
+          async.elapse(const Duration(seconds: 3));
+
+          expect(attempts.map((uri) => uri.path), [
+            kDefaultSocketRoute,
+            route,
+            kDefaultSocketRoute,
+          ], reason: 'the default socket comes back when the app is in the foreground');
+
+          pool.currentClient.close();
+          async.flushTimers();
+        });
+      },
+    );
+
+    test('a disposed pool refuses to open a route', () async {
+      final container = await makeContainer();
+      final pool = container.read(socketPoolProvider);
+      pool.dispose();
+
+      expect(() => pool.open(Uri(path: '/lobby/socket/v5')), throwsStateError);
+    });
   });
 
   group('socketPingProvider', () {
@@ -1952,6 +2368,95 @@ void main() {
       expect(container.read(socketPingProvider(null)).averageLag, Duration.zero);
 
       client.close();
+    });
+
+    test('a ping reading is about the route it was asked for', () async {
+      final container = await makeContainer();
+      final pool = container.read(socketPoolProvider);
+      final client = pool.currentClient;
+      client.connect();
+      await client.firstConnection;
+      await waitUntil(() => client.isConnected);
+
+      // A reading of the whole app is about the route that is current.
+      expect(container.read(socketPingProvider(null)).averageLag, isNot(Duration.zero));
+      expect(container.read(socketPingProvider(null)).isActive, isTrue);
+
+      // A reading of a route that is not the current one says nothing at all.
+      const otherRoute = '/other/socket/v5';
+      expect(container.read(socketPingProvider(Uri(path: otherRoute))).averageLag, Duration.zero);
+      expect(container.read(socketPingProvider(Uri(path: otherRoute))).isActive, isFalse);
+
+      client.close();
+    });
+
+    test('a ping reading that stays open follows the socket down', () async {
+      final container = await makeContainer();
+      final client = container.read(socketPoolProvider).currentClient;
+      client.connect();
+      await client.firstConnection;
+      await waitUntil(() => client.isConnected);
+
+      // A reading that stays open is what the ping icon in the app is: it has to follow the
+      // socket, not keep the lag it saw when it was built.
+      final subscription = container.listen(socketPingProvider(null), (_, _) {});
+      addTearDown(subscription.close);
+      expect(container.read(socketPingProvider(null)).averageLag, isNot(Duration.zero));
+
+      client.close();
+      await pumpEventQueue();
+
+      expect(
+        container.read(socketPingProvider(null)).averageLag,
+        Duration.zero,
+        reason: 'a reading that stays open follows the socket down',
+      );
+    });
+
+    test('the ping rating follows the lag ladder', () async {
+      const lags = <String, int>{'/fast': 100, '/ok': 150, '/slow': 300, '/bad': 500};
+      const ratings = <String, int>{'/fast': 4, '/ok': 3, '/slow': 2, '/bad': 1};
+
+      final container = await makeContainer(
+        overrides: {
+          webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWithValue(
+            FakeWebSocketChannelFactory(
+              (route) => FakeWebSocketChannel(
+                route,
+                connectionLag: Duration(milliseconds: lags[route.path]!),
+              ),
+            ),
+          ),
+        },
+      );
+      await container.read(connectivityChangesProvider.future);
+      final pool = container.read(socketPoolProvider);
+
+      // A socket that is down has no lag, and no rating either.
+      expect(container.read(socketPingProvider(null)).rating, 0);
+
+      fakeAsync((async) {
+        for (final entry in lags.entries) {
+          final route = Uri(path: entry.key);
+          pool.open(route);
+          // Long enough for the handshake and for the pong that measures the lag.
+          async.elapse(const Duration(milliseconds: 700));
+          async.flushMicrotasks();
+
+          expect(
+            container.read(socketPingProvider(route)).averageLag,
+            Duration(milliseconds: entry.value),
+            reason: entry.key,
+          );
+          expect(
+            container.read(socketPingProvider(route)).rating,
+            ratings[entry.key],
+            reason: entry.key,
+          );
+        }
+      });
+
+      pool.currentClient.close();
     });
   });
 }
