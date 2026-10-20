@@ -1099,8 +1099,19 @@ void main() {
         SocketEvent(topic: 'test3', data: 'data', json: {'t': 'test3', 'd': 'data'}),
       ];
 
+      // Collect every event the socket emits: emitsInOrder stops consuming after
+      // its last matcher, so it would pass on a batch processed twice or on a
+      // batch envelope emitted after the sub-events.
+      final emitted = <SocketEvent>[];
+      final collector = socketClient.stream.listen(emitted.add);
+      addTearDown(collector.cancel);
+
       // check that the messages in the batch were distributed
       await testEventEmitted(socketClient, fakeChannel, serverMessage, eventsToMatch);
+
+      // Each batched message is distributed exactly once, in order, and the
+      // batch envelope itself never reaches the stream.
+      expect(emitted, eventsToMatch);
 
       await socketClient.close();
     });
@@ -1114,26 +1125,40 @@ void main() {
     );
     await socketClient.connect();
 
+    // Collect every event the socket emits across the whole test. An empty
+    // emitsInOrder matcher consumes zero events and therefore passes no matter
+    // what the stream does; this exact-sequence assertion is what makes the
+    // "should not emit" steps below able to fail.
+    final emitted = <SocketEvent>[];
+    final collector = socketClient.stream.listen(emitted.add);
+    addTearDown(collector.cancel);
+
     // should not emit if _pong
-    await testEventEmitted(socketClient, fakeChannel, '0', []);
+    sendServerSocketMessages(defaultSocketUri, ['0']);
 
     // should emit if n
     const pongMessage = '{"t":"n","d":10,"r":3}';
     const pongEvent = SocketEvent(topic: 'n', data: {'nbPlayers': 10, 'nbGames': 3});
-    await testEventEmitted(socketClient, fakeChannel, pongMessage, [pongEvent]);
+    sendServerSocketMessages(defaultSocketUri, [pongMessage]);
 
     // should not emit if ack
-    const ackMessage = '{"t":"ack","d":1}';
-    await testEventEmitted(socketClient, fakeChannel, ackMessage, []);
+    sendServerSocketMessages(defaultSocketUri, ['{"t":"ack","d":1}']);
 
     // should not emit if batch
-    const batchMessage = '{"t":"batch","d":[]}';
-    await testEventEmitted(socketClient, fakeChannel, batchMessage, []);
+    sendServerSocketMessages(defaultSocketUri, ['{"t":"batch","d":[]}']);
 
     // should emit if random topic
     const randomMessage = '{"t":"test","d":"data"}';
     const randomEvent = SocketEvent(topic: 'test', data: 'data', json: {'t': 'test', 'd': 'data'});
-    await testEventEmitted(socketClient, fakeChannel, randomMessage, [randomEvent]);
+    sendServerSocketMessages(defaultSocketUri, [randomMessage]);
+
+    // Barrier: once a fresh listener has seen both expected events in order,
+    // all five messages above have been processed, so [emitted] is complete.
+    await expectLater(socketClient.stream, emitsInOrder([pongEvent, randomEvent]));
+
+    // Only the "n" pong and the arbitrary topic reach the stream; the protocol
+    // pong, the ack and the empty batch are consumed internally.
+    expect(emitted, [pongEvent, randomEvent]);
 
     await socketClient.close();
   });
