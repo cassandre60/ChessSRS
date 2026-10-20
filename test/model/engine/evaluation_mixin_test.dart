@@ -150,9 +150,9 @@ void main() {
 
     // closing the last listener disposes the autoDispose notifier
     subscription.close();
-    // A deterministic ordering yield, not a sleep: the disposal runs in the turn close()
-    // schedules, and the assertion below is an absence — a poll cannot express "still gone".
-    await Future<void>.delayed(Duration.zero);
+    // A deterministic settle, not a timed wait: the disposal runs in the turn close()
+    // schedules, and the check below is an absence — a poll cannot express "still gone".
+    await pumpEventQueue();
 
     expect(
       fakeEvaluator.streams.single.hasListener,
