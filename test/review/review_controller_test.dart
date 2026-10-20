@@ -2078,6 +2078,24 @@ void main() {
           expect(state.totalDueCount, 0);
         },
       );
+      test(
+        'a second run reports each skipped study as done',
+        // SPEC INV-003. The progress the dialog shows counts finished studies,
+        // so a study that was skipped as already present still has to be
+        // counted as done.
+        () async {
+          final container = bulkContainer(bulkClient());
+          final controller = container.read(reviewControllerProvider.notifier);
+
+          await controller.importAllMyStudies();
+
+          final seen = <BulkImportProgress>[];
+          final rerun = await controller.importAllMyStudies(onProgress: seen.add);
+
+          expect(rerun.duplicates, 2);
+          expect(seen.last, (done: 2, total: 2, currentName: 'Black Repertoire'));
+        },
+      );
     });
 
     test('maxDailyReviews limit caps session and marks isDailyLimitReached', () async {
@@ -2308,5 +2326,1007 @@ void main() {
         expect(unlocked, isNotEmpty);
       },
     );
+
+    // ---------------------------------------------------------------------
+    // The figures the review screen reads off the state.
+    //
+    // They are computed from the session's own clock and its own state map —
+    // never from the wall clock (QUALITY.md §3.2) — so a fixed clock pins them
+    // exactly, and the session can be built directly when the figure under
+    // test is a getter rather than a side effect of a move.
+    // ---------------------------------------------------------------------
+
+    /// A state whose session holds exactly [reviewStates] and nothing else.
+    ReviewScreenState stateWithReviewStates(
+      Map<String, ReviewState> reviewStates, {
+      ReviewScope scope = const ReviewScope.all(),
+    }) {
+      final session = ReviewSession(
+        studies: const <Study>[],
+        chapters: const <Chapter>[],
+        decisions: const <RepertoireDecision>[],
+        reviewStates: reviewStates,
+        clock: clock,
+      );
+      return ReviewScreenState(
+        studies: const <Study>[],
+        scope: scope,
+        totalDueCount: 0,
+        totalFreshCount: 0,
+        studyDueCounts: const <String, int>{},
+        session: session,
+      );
+    }
+
+    test('nextReviewDueAt reports the earliest future due date in the session', () {
+      // SPEC INV-031. The screen tells the player when the next position falls
+      // due. That is the *earliest* scheduled date still in the future: a
+      // position already overdue is not "next", and a later date must not
+      // replace an earlier one just because it was seen first.
+      final now = clock.now();
+      final state = stateWithReviewStates({
+        'never scheduled': const ReviewState(decisionId: 'never scheduled'),
+        'overdue': ReviewState(
+          decisionId: 'overdue',
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: now.subtract(const Duration(hours: 1)),
+        ),
+        'sooner': ReviewState(
+          decisionId: 'sooner',
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: now.add(const Duration(hours: 2)),
+        ),
+        'later': ReviewState(
+          decisionId: 'later',
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: now.add(const Duration(days: 1)),
+        ),
+      });
+
+      expect(
+        state.nextReviewDueAt,
+        now.add(const Duration(hours: 2)),
+        reason: 'the next review is the soonest date still ahead, not the overdue one',
+      );
+    });
+
+    test('nextReviewDueAt is null when nothing is scheduled ahead', () {
+      // SPEC INV-031. With only overdue positions left there is no "next" to
+      // wait for, and the screen shows no countdown at all.
+      final now = clock.now();
+      final state = stateWithReviewStates({
+        'overdue': ReviewState(
+          decisionId: 'overdue',
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: now.subtract(const Duration(hours: 1)),
+        ),
+      });
+
+      expect(state.nextReviewDueAt, isNull);
+      expect(state.timeUntilNextReview, isNull);
+    });
+
+    test('timeUntilNextReview names the remaining time in the units that fit it', () {
+      // SPEC INV-031. The countdown the screen shows has to read as English,
+      // and the unit has to change with the size of the wait: minutes below
+      // an hour, hours below a day, and days beyond that, with a day-plus-part
+      // spelled out rather than rounded away.
+      final now = clock.now();
+
+      String countdown(Duration until) => stateWithReviewStates({
+        'next': ReviewState(
+          decisionId: 'next',
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: now.add(until),
+        ),
+      }).timeUntilNextReview!;
+
+      expect(countdown(const Duration(minutes: 30)), 'in 30 minutes');
+      expect(
+        countdown(const Duration(minutes: 1)),
+        'in 1 minute',
+        reason: 'a single minute is not "in 1 minutes"',
+      );
+      expect(
+        countdown(const Duration(minutes: 60)),
+        'in 1 hour',
+        reason: 'sixty minutes is an hour, not sixty minutes',
+      );
+      expect(countdown(const Duration(minutes: 90)), 'in 1 hour');
+      expect(countdown(const Duration(hours: 2)), 'in 2 hours');
+      expect(
+        countdown(const Duration(hours: 24)),
+        'in 1 day',
+        reason: 'twenty-four hours is a day, and its hours part is zero',
+      );
+      expect(countdown(const Duration(hours: 27)), 'in 1 day, 3 hr');
+      expect(countdown(const Duration(days: 2)), 'in 2 days');
+    });
+
+    test('totalProgress counts the active studies only', () async {
+      // SPEC INV-030. The progress bar is the whole library's, so a study the
+      // user took out of the daily pool must not keep contributing to it.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final kept = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Kept',
+        repertoireSide: Side.white,
+      );
+      final dropped = await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Dropped',
+        repertoireSide: Side.white,
+      );
+
+      await controller.toggleStudyActive(dropped.study.id, false);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      final keptProgress = state.studyProgress[kept.study.id]!;
+      expect(keptProgress.totalDecisions, 2);
+      expect(
+        state.totalProgress.totalDecisions,
+        keptProgress.totalDecisions,
+        reason: 'a study that is out of the daily pool still contributed to the library total',
+      );
+      expect(state.totalProgress.totalDecisions, lessThan(3));
+    });
+
+    test('activeScopeProgress reports the scope the user is looking at', () async {
+      // SPEC INV-030. The header reads the scope's own figures: a colour scope
+      // reports that colour's tally, not the whole library's, so opening the
+      // Black drawer must not show the White positions.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'White book',
+        repertoireSide: Side.white,
+      );
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Black book',
+        repertoireSide: Side.black,
+      );
+
+      await controller.changeScope(const ReviewScope.white());
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, const ReviewScope.white());
+      expect(state.activeScopeProgress, isNotNull);
+      expect(
+        state.activeScopeProgress!.totalDecisions,
+        state.sideProgress[Side.white]!.totalDecisions,
+        reason: "the colour scope reported another scope's figures",
+      );
+      expect(
+        state.activeScopeProgress!.totalDecisions,
+        lessThan(state.totalProgress.totalDecisions),
+        reason: 'the colour scope reported the whole library instead of one colour',
+      );
+    });
+
+    test("deleting the study in scope falls back to that study's own colour", () async {
+      // SPEC INV-030. The two drawer squares have to keep showing which one is
+      // live, so deleting the study the user is looking at lands them on that
+      // study's colour rather than on the other one.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final black = await controller.importPgnText(
+        pgnText: '1. e4 e6 2. d4 d5 *',
+        title: 'Black book',
+        repertoireSide: Side.black,
+      );
+      await controller.changeScope(ReviewScope.study(black.study.id));
+      expect(container.read(reviewControllerProvider).requireValue.activeSide, Side.black);
+
+      await controller.deleteStudy(black.study.id);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.scope,
+        const ReviewScope.black(),
+        reason: 'the drawer fell back to the other colour',
+      );
+      expect(state.activeSide, Side.black);
+      expect(state.currentPrompt, isNull, reason: 'the deleted study is still on the board');
+    });
+
+    test("flipStudyColors creates the other side's copy, titled for that side", () async {
+      // SPEC INV-013 / INV-030. A White repertoire and its Black counterpart
+      // are different questions, so flipping produces a second study trained
+      // from Black — and it says so in its title, which is how the user tells
+      // the two apart in the library.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'French',
+        repertoireSide: Side.white,
+      );
+
+      final flipped = await controller.flipStudyColors(white.study.id, targetSide: Side.black);
+
+      expect(flipped, isNotNull);
+      expect(
+        flipped!.study.title,
+        'French (Black)',
+        reason: 'the flipped copy is not titled for the side it trains',
+      );
+      final chapters = await repo.getChaptersByStudy(flipped.study.id);
+      expect(chapters, isNotEmpty);
+      expect(
+        chapters.map((c) => c.orientation),
+        everyElement(Side.black),
+        reason: 'the flipped copy still trains from the original side',
+      );
+    });
+
+    test('flipStudyColors replaces a stale side suffix instead of stacking one', () async {
+      // SPEC INV-013. A study that already says which side it trains must not
+      // end up called "French (White) (Black)" after being flipped.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final white = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'French (white)',
+        repertoireSide: Side.white,
+      );
+
+      final flipped = await controller.flipStudyColors(white.study.id, targetSide: Side.black);
+
+      expect(flipped, isNotNull);
+      expect(
+        flipped!.study.title,
+        'French (Black)',
+        reason: 'the side suffix was stacked instead of replaced',
+      );
+    });
+
+    test("exportStudyPgn exports the study's moves", () async {
+      // SPEC INV-013. The export is what the study actions sheet hands to the
+      // analysis board, so a study that exports only its headers is a study
+      // the user cannot analyse.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Italian',
+        repertoireSide: Side.white,
+      );
+
+      final pgn = await controller.exportStudyPgn(imported.study.id);
+
+      expect(pgn, isNotNull);
+      expect(pgn, contains('e4'));
+      expect(pgn, contains('e5'));
+      expect(pgn, contains('Nf3'));
+    });
+
+    test("exportChapterPgn exports the chapter's moves", () async {
+      // SPEC INV-013. The chapter rows are stored without their trees, so the
+      // export has to load the tree back before it can write the moves; a
+      // chapter that skips that step exports as an empty study.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Italian',
+        repertoireSide: Side.white,
+      );
+      final chapters = await repo.getChaptersByStudy(imported.study.id);
+      expect(chapters, isNotEmpty);
+
+      final pgn = await controller.exportChapterPgn(chapters.first.id);
+
+      expect(pgn, isNotNull);
+      expect(pgn, contains('e4'));
+      expect(pgn, contains('Nf3'));
+      expect(
+        pgn,
+        contains('[Event "Italian"]'),
+        reason: 'the exported chapter lost the title of the study it belongs to',
+      );
+    });
+
+    test('dismissUnlockPrompt drops the pending unlock without unlocking anything', () async {
+      // SPEC INV-030. Declining to open a line has to close the prompt, and it
+      // must not open the line behind the user's back.
+      final container = createContainer();
+      await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Dynamic Practice Study',
+        repertoireSide: Side.white,
+      );
+      await controller.startPracticeMode();
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+      expect(container.read(reviewControllerProvider).requireValue.pendingUnlock, isNotNull);
+
+      controller.dismissUnlockPrompt();
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.pendingUnlock, isNull, reason: 'the unlock prompt is still on screen');
+      expect(
+        await repo.getUnlockedDecisionIds(),
+        isEmpty,
+        reason: 'declining the prompt unlocked the line anyway',
+      );
+    });
+
+    test('unlockBranch unlocks the whole branch, not only the answered decision', () async {
+      // SPEC INV-030. Opening a line means the whole line: the decisions below
+      // the one that was answered belong to the same branch, and leaving them
+      // locked makes the unlock look successful while the branch stays shut.
+      final container = createContainer();
+      await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Dynamic Practice Study',
+        repertoireSide: Side.white,
+      );
+
+      await controller.startPracticeMode();
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.pendingUnlock, isNotNull);
+      final pending = state.pendingUnlock!;
+
+      await controller.unlockBranch(pending.decisionId, pending.chapterId);
+
+      final unlocked = await repo.getUnlockedDecisionIds();
+      expect(unlocked, contains(pending.decisionId));
+
+      final continuation = imported.decisions.firstWhere((d) => d.expectedMoves.first.san == 'Nf3');
+      expect(
+        unlocked,
+        contains(continuation.id),
+        reason: 'only the answered decision was unlocked; the branch below it stayed locked',
+      );
+    });
+
+    test('a daily review limit of zero means no limit at all', () async {
+      // SPEC INV-031. Zero is the "unlimited" setting: the session queues the
+      // whole scope and the screen does not report the day's allowance as
+      // spent. Treating zero as a cap of zero would empty the queue.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 Nc6 *',
+        title: 'Italian',
+        repertoireSide: Side.white,
+      );
+
+      await container.read(studyPreferencesProvider.notifier).setMaxDailyReviews(0);
+      await container.read(studyPreferencesProvider.notifier).setMaxNewPerDay(0);
+
+      // The setting change rebuilds the session by itself; the screen must not
+      // keep the session it had while the new allowance was read.
+      await waitUntil(() => container.read(reviewControllerProvider).value?.maxDailyReviews == 0);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.maxDailyReviews, 0);
+      expect(
+        state.isDailyLimitReached,
+        isFalse,
+        reason: 'zero means unlimited, not "the allowance is spent"',
+      );
+      expect(state.currentPrompt, isNotNull, reason: 'the session was capped at zero positions');
+      expect(state.session?.initialQueueCount, greaterThan(1));
+    });
+
+    test('answering a due position moves every due figure by exactly one', () async {
+      // SPEC INV-030 / INV-031. The debt is shown in several places at once —
+      // the top bar, the study's figure, the chapter's, the colour's and the
+      // per-side menu. Answering one position has to move every one of them
+      // by exactly one, or the numbers the user reads disagree with each
+      // other. Two overdue positions make a decrement of two visible.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '[Event "Sicilian Defense"]\n1. e4 c5 2. Nf3 d6 3. Bb5 a6 *',
+        title: 'Sicilian',
+        repertoireSide: Side.white,
+      );
+      expect(imported.decisions.length, 3);
+
+      // Two overdue positions and one still fresh.
+      final past = clock.now().subtract(const Duration(days: 2));
+      for (final decision in imported.decisions.take(2)) {
+        await repo.saveReviewState(
+          ReviewState(
+            decisionId: decision.id,
+            repetitionCount: 3,
+            stability: 1000.0,
+            nextDueAt: past,
+          ),
+        );
+      }
+
+      await controller.reload();
+      var state = container.read(reviewControllerProvider).requireValue;
+      final studyId = imported.study.id;
+      final chapterId = state.currentPrompt!.chapterId;
+      final opening = (await repo.getChaptersByStudy(studyId)).first.opening;
+      expect(opening, isNotNull, reason: 'the fixture lost its opening family');
+
+      expect(state.totalDueCount, 2);
+      expect(state.studyDueCounts[studyId], 2);
+      expect(state.studyProgress[studyId]!.dueDecisions, 2);
+      expect(state.studyProgress[studyId]!.freshDecisions, 1);
+      expect(state.openingDueCounts[opening], 2);
+      expect(state.openingProgress[opening]!.dueDecisions, 2);
+
+      final expected = state.currentPrompt!.expectedMoves.first;
+      await controller.onUserMove(
+        NormalMove(
+          from: Square.fromName(expected.from),
+          to: Square.fromName(expected.to),
+          promotion: expected.promotion != null ? Role.fromChar(expected.promotion!) : null,
+        ),
+      );
+
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.totalDueCount,
+        1,
+        reason: 'the top bar dropped by more than the one position answered',
+      );
+      expect(state.studyDueCounts[studyId], 1);
+      expect(state.studyProgress[studyId]!.dueDecisions, 1);
+      expect(
+        state.studyProgress[studyId]!.learnedDecisions,
+        2,
+        reason: 'a position that was already learned was counted as newly learned',
+      );
+      expect(state.chapterProgress[chapterId]!.dueDecisions, 1);
+      expect(state.openingDueCounts[opening], 1);
+      expect(state.openingProgress[opening]!.dueDecisions, 1);
+      expect(state.sideProgress[Side.white]!.dueDecisions, 1);
+      expect(state.studySideProgress[studyId]![Side.white]!.dueDecisions, 1);
+    });
+
+    test('answering a fresh position retires the introduction and records the learning', () async {
+      // SPEC INV-068 / INV-030. A never-presented position is *introduced* by
+      // its first answer: the fresh count falls by one and the learned count
+      // rises by one. Every figure the screen shows has to move, not only the
+      // colour's — the others are read off the same session.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '[Event "Sicilian Defense"]\n1. e4 c5 2. Nf3 d6 *',
+        title: 'Sicilian',
+        repertoireSide: Side.white,
+      );
+      final studyId = imported.study.id;
+      final opening = (await repo.getChaptersByStudy(studyId)).first.opening;
+      expect(opening, isNotNull, reason: 'the fixture lost its opening family');
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalFreshCount, 2);
+      expect(state.studyProgress[studyId]!.freshDecisions, 2);
+      expect(state.studyProgress[studyId]!.learnedDecisions, 0);
+
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+
+      state = container.read(reviewControllerProvider).requireValue;
+      final chapterId = state.currentPrompt?.chapterId ?? imported.decisions.first.chapterId;
+      expect(state.totalFreshCount, 1);
+      expect(
+        state.studyDueCounts[studyId],
+        0,
+        reason: 'answering a fresh position charged the study a debt it did not owe',
+      );
+      expect(state.studyProgress[studyId]!.freshDecisions, 1);
+      expect(state.studyProgress[studyId]!.learnedDecisions, 1);
+      expect(state.chapterProgress[chapterId]!.freshDecisions, 1);
+      expect(state.chapterProgress[chapterId]!.learnedDecisions, 1);
+      expect(state.openingProgress[opening]!.freshDecisions, 1);
+      expect(state.openingProgress[opening]!.learnedDecisions, 1);
+      expect(state.sideProgress[Side.white]!.freshDecisions, 1);
+      expect(state.sideProgress[Side.white]!.learnedDecisions, 1);
+      expect(state.studySideProgress[studyId]![Side.white]!.freshDecisions, 1);
+      expect(state.studySideProgress[studyId]![Side.white]!.learnedDecisions, 1);
+    });
+
+    test('answering a fresh position does not charge the study a debt it owes elsewhere', () async {
+      // SPEC INV-030 / INV-068. The study's due figure counts the debt of the
+      // whole study. Answering a position that was never presented retires
+      // that position's introduction; it does not pay a debt the study owes
+      // for a different position.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Mixed',
+        repertoireSide: Side.white,
+      );
+      final studyId = imported.study.id;
+      // The second position is owed; the first was never presented.
+      await repo.saveReviewState(
+        ReviewState(
+          decisionId: imported.decisions.last.id,
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: clock.now().subtract(const Duration(days: 2)),
+        ),
+      );
+      await controller.reload();
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.studyDueCounts[studyId], 1);
+
+      // The owed position is queued first; skip it so the fresh one is on the
+      // board while the debt is still on the books.
+      controller.skip();
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt, isNotNull);
+      expect(state.studyDueCounts[studyId], 1);
+
+      final expected = state.currentPrompt!.expectedMoves.first;
+      await controller.onUserMove(
+        NormalMove(
+          from: Square.fromName(expected.from),
+          to: Square.fromName(expected.to),
+          promotion: expected.promotion != null ? Role.fromChar(expected.promotion!) : null,
+        ),
+      );
+
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.studyDueCounts[studyId],
+        1,
+        reason: 'the study was charged for a debt it did not owe',
+      );
+    });
+
+    test('an opening scope reports the side its family is trained on', () async {
+      // SPEC INV-030. The top bar's colour squares are the only way into a
+      // drawer, so an opening scope has to show the colour that family trains
+      // rather than whichever colour the board happens to be on.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '[Event "Sicilian Defense"]\n1. e4 c5 2. Nf3 d6 *',
+        title: 'Black Sicilian',
+        repertoireSide: Side.black,
+      );
+      final opening = (await repo.getChaptersByStudy(imported.study.id)).first.opening!;
+
+      // A second, unrelated repertoire, so the library's own figures differ
+      // from the opening's.
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      await controller.changeScope(ReviewScope.opening(opening));
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.scope, ReviewScope.opening(opening));
+      expect(state.activeSide, Side.black, reason: 'the opening scope shows the wrong colour');
+      expect(
+        state.activeScopeProgress!.totalDecisions,
+        state.openingProgress[opening]!.totalDecisions,
+        reason: "the opening scope reports another scope's figures",
+      );
+      expect(
+        state.activeScopeProgress!.totalDecisions,
+        lessThan(state.totalProgress.totalDecisions),
+        reason: 'the opening scope reports the whole library instead of the family',
+      );
+    });
+
+    test('a black study with nothing queued still shows the black orientation', () async {
+      // SPEC INV-030. The board is shown from the repertoire's own colour, and
+      // with nothing queued there is no prompt to take that colour from — the
+      // study's chapters are what say which side it trains.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e6 *',
+        title: 'Black book',
+        repertoireSide: Side.black,
+      );
+      await repo.saveReviewState(
+        ReviewState(
+          decisionId: imported.decisions.first.id,
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: clock.now().add(const Duration(days: 3)),
+        ),
+      );
+      await controller.reload();
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.currentPrompt, isNull, reason: 'the fixture still queues a position');
+      expect(state.boardOrientation, Side.black);
+
+      // The same colour, read from the chapter rather than from the study.
+      final chapter = (await repo.getChaptersByStudy(imported.study.id)).first;
+      await controller.changeScope(
+        ReviewScope.chapter(studyId: imported.study.id, chapterId: chapter.id),
+      );
+      final chapterState = container.read(reviewControllerProvider).requireValue;
+      expect(chapterState.boardOrientation, Side.black);
+    });
+
+    test('an import with nothing to train names the reason it was refused', () async {
+      // SPEC INV-011. A refused import has to say why, and the reason is the
+      // only thing the user gets: "nothing to train" and "the move was
+      // illegal" are different problems with different fixes.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await expectLater(
+        controller.importPgnText(
+          pgnText: '1. e4 *',
+          title: 'Wrong side',
+          repertoireSide: Side.black,
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('no moves for the selected side'),
+          ),
+        ),
+      );
+    });
+
+    test('importLichessStudy keeps the title it is given', () async {
+      // SPEC INV-013. The title the user typed is the title their study has;
+      // the PGN header is only a fallback for when they did not type one.
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/study/t3St1234.pgn') {
+          return http.Response(
+            '[Event "Catalan Opening"]\n1. d4 Nf6 2. c4 e6 *\n',
+            200,
+            headers: {'content-type': 'application/x-chess-pgn'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final container = createContainer(
+        extraOverrides: [
+          lichess_study.studyRepositoryProvider.overrideWith(
+            (ref) => lichess_study.StudyRepository(ref, mockClient),
+          ),
+        ],
+      );
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final result = await controller.importLichessStudy(
+        studyIdOrUrl: 'https://lichess.org/study/t3St1234',
+        title: 'My Catalan',
+        repertoireSide: Side.white,
+      );
+
+      expect(result.study.title, 'My Catalan');
+    });
+
+    test('a shape-only annotation still pauses the advancement', () async {
+      // SPEC INV-021. An arrow on the board is an annotation too: the learner
+      // has to see it before the queue moves on, so a comment carrying only a
+      // shape and no text still holds the advancement.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 {[%cal Ge4d5]} e5 2. Nf3 *',
+        title: 'Shape only',
+        repertoireSide: Side.white,
+      );
+
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result, isNotNull);
+      expect(result!.isCorrect, isTrue);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.isAwaitingAdvance,
+        isTrue,
+        reason: 'the board arrow was skipped and the queue moved on without it',
+      );
+    });
+
+    test('prewarming a capture reports a capture', () async {
+      // SPEC INV-050. The drag pre-warm decides the sound before the move
+      // lands, so it has to recognise a capture for what it is.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 d5 2. exd5 *',
+        title: 'Exchange',
+        repertoireSide: Side.white,
+      );
+      await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      await waitUntil(
+        () =>
+            container
+                .read(reviewControllerProvider)
+                .value
+                ?.currentPrompt
+                ?.expectedMoves
+                .any((m) => m.san == 'exd5') ==
+            true,
+      );
+
+      controller.prewarmMoveCandidate(Square.e4);
+
+      expect(controller.prewarmedCandidateMove, isNotNull);
+      expect(
+        controller.prewarmedIsCapture,
+        isTrue,
+        reason: 'the capture was pre-warmed as a quiet move',
+      );
+    });
+
+    test('the review is not complete while a fresh position is still queued', () async {
+      // SPEC INV-068 / INV-030. "Complete" means there is nothing left to
+      // answer. A position that was never presented is still work, so the
+      // screen must not report the queue as finished while one is on the
+      // board.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'Fresh',
+        repertoireSide: Side.white,
+      );
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 0);
+      expect(state.totalFreshCount, 1);
+      expect(state.currentPrompt, isNotNull);
+      expect(
+        state.isComplete,
+        isFalse,
+        reason: 'a fresh position was reported as nothing left to do',
+      );
+    });
+
+    test('the review is not complete while a due position is still on the board', () async {
+      // SPEC INV-030. A position that is owed still counts as debt, so the
+      // screen must not report the queue as finished while it is on the board.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 *',
+        title: 'Owed',
+        repertoireSide: Side.white,
+      );
+      await repo.saveReviewState(
+        ReviewState(
+          decisionId: imported.decisions.first.id,
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: clock.now().subtract(const Duration(days: 2)),
+        ),
+      );
+
+      await controller.reload();
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.totalDueCount, 1);
+      expect(state.totalFreshCount, 0);
+      expect(state.currentPrompt, isNotNull);
+      expect(
+        state.isComplete,
+        isFalse,
+        reason: 'an owed position was reported as nothing left to do',
+      );
+    });
+
+    test('copyWith keeps the pending unlock unless it is explicitly cleared', () {
+      // SPEC INV-030. Every partial update the controller publishes goes
+      // through copyWith, so a field the update does not mention has to
+      // survive it — otherwise an unrelated touch on the board silently
+      // dismisses the question the user was asked.
+      const pending = (decisionId: 'd1', chapterId: 'c1', moveSan: 'e4');
+      const state = ReviewScreenState(
+        studies: <Study>[],
+        scope: ReviewScope.all(),
+        totalDueCount: 0,
+        totalFreshCount: 0,
+        studyDueCounts: <String, int>{},
+        pendingUnlock: pending,
+      );
+
+      expect(state.copyWith(totalDueCount: 5).pendingUnlock, pending);
+    });
+
+    test('a state built without a lapse is not marked as awaiting acknowledgement', () {
+      // SPEC INV-021. The lapse banner is the screen's "that move was wrong"
+      // affordance; a screen that has never seen a move must not show it.
+      const state = ReviewScreenState(
+        studies: <Study>[],
+        scope: ReviewScope.all(),
+        totalDueCount: 0,
+        totalFreshCount: 0,
+        studyDueCounts: <String, int>{},
+      );
+
+      expect(state.isLapseAcknowledged, isTrue);
+      expect(state.feedback, ReviewFeedback.none);
+    });
+
+    test('changing the scheduler preference rebuilds the session with the new scheduler', () async {
+      // SPEC INV-026. The session grades with the scheduler it was built
+      // with, so a settings change has to rebuild it: the screen must not
+      // keep grading with the old scheduler until the next scope change.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Italian',
+        repertoireSide: Side.white,
+      );
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.scheduler,
+        isA<SimpleScheduler>(),
+      );
+
+      await container
+          .read(studyPreferencesProvider.notifier)
+          .setSchedulerType(SchedulerType.easeScaling);
+
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).value?.session?.scheduler
+                is EaseScalingScheduler,
+      );
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.scheduler,
+        isA<EaseScalingScheduler>(),
+        reason: 'the live session still grades with the previous scheduler',
+      );
+    });
+
+    test('in ordinary review the unlock prompt is not raised', () async {
+      // SPEC INV-030. The unlock question belongs to practice mode, where the
+      // learner is walking material they have not earned. Ordinary review must
+      // not raise it, or every answer in a dynamic repertoire opens a prompt
+      // the user never asked for.
+      final container = createContainer();
+      await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+
+      final controller = container.read(reviewControllerProvider.notifier);
+      final imported = await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Dynamic Review',
+        repertoireSide: Side.white,
+      );
+
+      // A learned, overdue position: in dynamic mode it is unlocked, so
+      // ordinary review has something to queue.
+      await repo.saveReviewState(
+        ReviewState(
+          decisionId: imported.decisions.first.id,
+          repetitionCount: 3,
+          stability: 1000.0,
+          nextDueAt: clock.now().subtract(const Duration(days: 2)),
+        ),
+      );
+      await controller.reload();
+      expect(container.read(reviewControllerProvider).requireValue.currentPrompt, isNotNull);
+
+      final result = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(result?.isCorrect, isTrue);
+
+      final state = container.read(reviewControllerProvider).requireValue;
+      expect(state.isPracticeMode, isFalse);
+      expect(
+        state.pendingUnlock,
+        isNull,
+        reason: 'ordinary review raised the practice-mode unlock prompt',
+      );
+    });
+
+    test('a correct answer clears the lapse banner, the comment and the step result', () async {
+      // SPEC INV-021. The lapse banner, the revealed comment and the step
+      // result belong to the position that was answered wrong. Once the
+      // learner has the position right and the queue moves on, none of them
+      // may still be on screen.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 {Good move} d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse?.isCorrect, isFalse);
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.feedback, ReviewFeedback.incorrect);
+      expect(state.isLapseAcknowledged, isFalse);
+      expect(state.revealedComment, isNotNull);
+
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.isAwaitingAdvance, isTrue, reason: 'the comment did not hold the advancement');
+
+      await controller.continueAdvancement();
+
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.feedback, ReviewFeedback.none);
+      expect(
+        state.isLapseAcknowledged,
+        isTrue,
+        reason: 'the lapse banner is still on screen after the position was answered',
+      );
+      expect(
+        state.revealedComment,
+        isNull,
+        reason: 'the comment of the answered position is still on screen',
+      );
+      expect(
+        state.lastStepResult,
+        isNull,
+        reason: 'the result of the lapsed attempt is still on screen',
+      );
+    });
+
+    test('changing the continuity preference updates the live session', () async {
+      // SPEC INV-030. Line continuity steers future traversals, so it has to
+      // reach the session that is already running instead of waiting for the
+      // next load.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. e4 e5 2. Nf3 *',
+        title: 'Italian',
+        repertoireSide: Side.white,
+      );
+      final session = container.read(reviewControllerProvider).requireValue.session!;
+      expect(session.continuity, ReviewContinuity.dueOnly);
+
+      await container
+          .read(studyPreferencesProvider.notifier)
+          .setReviewContinuity(ReviewContinuity.fullLine);
+
+      expect(
+        session.continuity,
+        ReviewContinuity.fullLine,
+        reason: 'the live session kept the previous continuity setting',
+      );
+    });
   });
 }
