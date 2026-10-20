@@ -50,6 +50,14 @@ const _fenD4AfterE4 = 'rnbqkbnr/pppp1ppp/8/4p3/3PP3/8/PPP2PPP/RNBQKBNR b KQkq d3
 const _fenKeyD4AfterE4 = 'rnbqkbnr/pppp1ppp/8/4p3/3PP3/8/PPP2PPP/RNBQKBNR b KQkq -';
 const _fenD5AfterD4 = 'rnbqkbnr/pppp1ppp/8/3pp3/3PP3/8/PPP2PPP/RNBQKBNR w KQkq d6 0 3';
 const _fenKeyD5AfterD4 = 'rnbqkbnr/pppp1ppp/8/3pp3/3PP3/8/PPP2PPP/RNBQKBNR w KQkq -';
+const _fenC5Nf3 = 'rnbqkbnr/pppp1ppp/8/2p5/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+const _fenKeyC5Nf3 = 'rnbqkbnr/pppp1ppp/8/2p5/5N2/PPPP1PPP/RNBQKB1R b KQkq -';
+const _fenC5Nf3Nc6 = 'r1bqkbnr/pppp1ppp/2n5/2p5/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3';
+const _fenKeyC5Nf3Nc6 = 'r1bqkbnr/pppp1ppp/2n5/2p5/5N2/PPPP1PPP/RNBQKB1R w KQkq -';
+const _fenC5D4 = 'rnbqkbnr/pppp1ppp/8/2p5/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 2';
+const _fenKeyC5D4 = 'rnbqkbnr/pppp1ppp/8/2p5/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -';
+const _fenC5D4D5 = 'rnbqkbnr/pppp1ppp/3p4/2p5/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 3';
+const _fenKeyC5D4D5 = 'rnbqkbnr/pppp1ppp/3p4/2p5/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -';
 const _fenPromo = '4k3/P7/8/8/8/8/8/4K3 w - - 0 1';
 const _fenKeyPromo = '4k3/P7/8/8/8/8/8/4K3 w - -';
 const _fenPromoQ = 'Q3k3/8/8/8/8/8/8/4K3 b - - 0 1';
@@ -1695,6 +1703,207 @@ void main() {
       expect(result.autoPlayedMoves.length, 4);
       expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6', 'Bc4']);
       expect(result.sideEffectStates, isNotEmpty);
+    });
+  });
+
+  group('ReviewSession dynamic lock and dedicated walk geometry', () {
+    test('a never-learned branch ends the dynamic walk instead of being entered', () {
+      // mutant L790: decState.repetitionCount > 0 -> >= 0
+      // The branch below the reply holds a state row that was never learned:
+      // in dynamic mode it is locked, so the walk stops on it and never
+      // auto-plays the user's own move into it.
+      const root = RepertoireNode(
+        id: 'node-l-root',
+        fen: _fenStart,
+        fenKey: _fenKeyStart,
+        children: [
+          RepertoireNode(
+            id: 'node-l-e4',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mE4,
+            children: [
+              RepertoireNode(
+                id: 'node-l-e5',
+                fen: _fenE5,
+                fenKey: _fenKeyE5,
+                incomingMove: _mE5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-l-nf3',
+                    fen: _fenNf3,
+                    fenKey: _fenKeyNf3,
+                    incomingMove: _mNf3,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [_chapterOf(root)],
+        decisions: [
+          _decision(
+            id: 'dec-l1',
+            nodeId: 'node-l-root',
+            expectedMoves: const [_mE4],
+            canonicalStateId: 'can-l1',
+          ),
+          _decision(
+            id: 'dec-l2',
+            nodeId: 'node-l-e5',
+            expectedMoves: const [_mNf3],
+            canonicalStateId: 'can-l2',
+          ),
+        ],
+        reviewStates: {
+          'can-l1': _dueState('can-l1', reps: 2, overdue: const Duration(hours: 2)),
+          // Due by date, but never learned: locked in dynamic mode.
+          'can-l2': _dueState('can-l2', reps: 0, overdue: const Duration(hours: 1)),
+        },
+        dynamic: true,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-l1');
+      // The locked branch is not queued either: nothing ever unlocked it.
+      expect(session.remainingDueCount, 1);
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      // The reply below the answered card is played, and the walk stops there.
+      expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5']);
+      // The locked branch earns no traversal exposure.
+      expect(result.sideEffectStates, isEmpty);
+      expect(result.nextPrompt, isNull);
+    });
+
+    test('the dedicated walk follows its guide into the side branch and re-prompts the target', () {
+      // mutant L1057: _guidedNodeIds.isEmpty -> .isNotEmpty
+      // mutant L1060: if (index < 0) -> if (index <= 0)
+      // mutant L1061: _guidedNodeIds.sublist(index + 1) -> sublist(index + 2)
+      // SPEC INV-022.
+      const sideDecoy = RepertoireNode(
+        id: 'node-g-alt',
+        fen: _fenC5Nf3,
+        fenKey: _fenKeyC5Nf3,
+        incomingMove: _mNf3,
+        children: [
+          RepertoireNode(
+            id: 'node-g-alt-nc6',
+            fen: _fenC5Nf3Nc6,
+            fenKey: _fenKeyC5Nf3Nc6,
+            incomingMove: _mNc6,
+          ),
+        ],
+      );
+      const sideBranch = RepertoireNode(
+        id: 'node-g-c5',
+        fen: _fenC5,
+        fenKey: _fenKeyC5,
+        incomingMove: _mC5,
+        children: [
+          // The decoy comes first: only the guide can pick the branch below.
+          sideDecoy,
+          RepertoireNode(
+            id: 'node-g-d4',
+            fen: _fenC5D4,
+            fenKey: _fenKeyC5D4,
+            incomingMove: _mD4,
+            children: [
+              RepertoireNode(
+                id: 'node-g-d5',
+                fen: _fenC5D4D5,
+                fenKey: _fenKeyC5D4D5,
+                incomingMove: _mD5,
+              ),
+            ],
+          ),
+        ],
+      );
+      const root = RepertoireNode(
+        id: 'node-g-root',
+        fen: _fenStart,
+        fenKey: _fenKeyStart,
+        children: [
+          RepertoireNode(
+            id: 'node-g-e4',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mE4,
+            children: [
+              // The mainline the tree-order walk takes.
+              RepertoireNode(
+                id: 'node-g-e5',
+                fen: _fenE5,
+                fenKey: _fenKeyE5,
+                incomingMove: _mE5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-g-nf3',
+                    fen: _fenNf3,
+                    fenKey: _fenKeyNf3,
+                    incomingMove: _mNf3,
+                    children: [
+                      RepertoireNode(
+                        id: 'node-g-nc6',
+                        fen: _fenNc6,
+                        fenKey: _fenKeyNc6,
+                        incomingMove: _mNc6,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              // The side branch the dedicated walk's guide points at.
+              sideBranch,
+            ],
+          ),
+        ],
+      );
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [_chapterOf(root)],
+        decisions: [
+          _decision(
+            id: 'dec-g1',
+            nodeId: 'node-g-root',
+            expectedMoves: const [_mE4],
+            canonicalStateId: 'can-g1',
+          ),
+          _decision(
+            id: 'dec-g2',
+            nodeId: 'node-g-d5',
+            expectedMoves: const [_mNf3],
+            canonicalStateId: 'can-g2',
+          ),
+        ],
+        reviewStates: {
+          'can-g1': _dueState('can-g1', reps: 2, overdue: const Duration(hours: 2)),
+          'can-g2': _dueState('can-g2', reps: 2, overdue: const Duration(hours: 1)),
+        },
+        continuity: ReviewContinuity.fullLine,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-g1');
+
+      // First pass: tree order takes the mainline and misses the side branch.
+      final first = session.submitMove(from: 'e2', to: 'e4');
+      expect(first.isCorrect, isTrue);
+      expect(first.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6']);
+      expect(first.nextPrompt?.decision.id, 'dec-g1');
+
+      // Second pass: the session re-opens the line start to try the target again.
+      final second = session.submitMove(from: 'e2', to: 'e4');
+      expect(second.isCorrect, isTrue);
+      expect(second.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6']);
+      expect(second.nextPrompt?.decision.id, 'dec-g1');
+
+      // Third pass: the guide is armed, so the walk follows the side branch
+      // and re-prompts the target that tree order would keep starving.
+      final third = session.submitMove(from: 'e2', to: 'e4');
+      expect(third.isCorrect, isTrue);
+      expect(third.autoPlayedMoves.map((m) => m.move.san), ['c5', 'd4', 'd5']);
+      expect(third.nextPrompt?.decision.id, 'dec-g2');
     });
   });
 
