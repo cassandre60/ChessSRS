@@ -8,10 +8,14 @@ declaration / group / EOF):
   - tautology: asserts a literal (== true, .isTrue on a literal)
   - brittle-time: real sleeps / wall clocks → flake candidates
   - broad-mock: any-fallback stubs (null-stand-in)
-  - 'bad-name': names that per project rules justify deleting or merging the test
 
 Odd-looking titles are deliberately tolerated by this linter; everything with a
-real assertion or real effect still counts toward the score.
+real assertion or real effect still counts toward the score. The former
+`bad-name` category was retired on 2026-10-20: its regex matched ordinary words
+(`no `, `empty`, `null`, `fail`, `throws`, `missing`, ...) inside fine test names,
+so 265 of 1855 declarations were noise, and a name alone does not justify
+deleting or merging a test (repo lesson, 2026-09-27). Add a real rule-based
+category if a project rule ever defines one.
 
 Usage:
   python3 scripts/audit_2026-10/smell_tests.py              # all categories
@@ -26,11 +30,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 TESTS = os.path.join(ROOT, "test")
 
-BAD_NAME = re.compile(
-    r"(bad|incorrect|wrong|invalid|fail|error|not plane|invalid input|"
-    r"with all|empty|no |null|malformed|missing|absent|throws|invalid data)",
-    re.I,
-)
 SLEEP = re.compile(r"\bFuture\.delayed\(Duration\(seconds: 1\)\)|\bsleep\b", re.I)
 HARDCLOCK = re.compile(r"\bDateTime\.now\(\)|\bStopwatch\(\)")
 
@@ -50,6 +49,7 @@ def victims(text: str) -> list[tuple[int, str, str]]:
 
 def scan(category: str) -> None:
     findings = []
+    declared = 0
     for dirpath, _dirs, files in os.walk(TESTS):
         for f in sorted(files):
             if not f.endswith("_test.dart"):
@@ -58,6 +58,7 @@ def scan(category: str) -> None:
             text = open(p, encoding="utf-8").read()
             rel = os.path.relpath(p, ROOT)
             for ln, line, body in victims(text):
+                declared += 1
                 tags = []
                 if category in ("all", "vacuous"):
                     if "expect" not in body and "verify" not in body and "print" not in body:
@@ -79,13 +80,11 @@ def scan(category: str) -> None:
                 if category in ("all", "broad-mock"):
                     if re.search(r"throw\s+UnimplementedError|any\s*==", body):
                         tags.append("mock-any")
-                if category in ("all", "bad-name") and BAD_NAME.search(line):
-                    tags.append("bad-name")
                 if tags:
                     findings.append((rel, ln, tags))
     for rel, ln, tags in sorted(findings):
         print(f"{rel}:{ln}: {', '.join(tags)}")
-    print(f"--- {len(findings)} flagged of 1855 declarations ---")
+    print(f"--- {len(findings)} flagged of {declared} declarations ---")
 
 def main() -> None:
     args = sys.argv[1:]
