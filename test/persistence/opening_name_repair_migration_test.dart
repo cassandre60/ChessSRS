@@ -94,9 +94,11 @@ void main() {
 
     tearDown(() async {
       await db.close();
-      try {
-        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
-      } catch (_) {}
+      // The cleanup is pinned, not swallowed: a temp directory that will not go away is a real
+      // failure, and a catch-all would hide it behind a green test.
+      if (tempDir.existsSync()) {
+        expect(() => tempDir.deleteSync(recursive: true), returnsNormally);
+      }
     });
 
     Future<void> seedChapter(String id, {String? opening}) {

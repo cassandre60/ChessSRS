@@ -7,6 +7,7 @@ import 'package:chess_srs/src/model/common/node.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +18,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../network/fake_http_client_factory.dart';
 import '../../network/fake_websocket_channel.dart';
 import '../../test_container.dart';
-import '../../test_helpers.dart';
 
 /// A channel factory whose connections never complete, so a socket's `firstConnection` future
 /// stays pending and the service's own connect timeout is the thing under test.
@@ -117,19 +117,30 @@ void main() {
 
       // The socket connect times out after 3s, which cancels the analysis and nulls the field.
       // The continuation that follows used to reach back through that field and crash.
-      await service.requestAnalysis(source);
-      expect(
-        service.currentAnalysis.value,
-        isNotNull,
-        reason: 'the request claimed the analysis before the socket connect settles',
-      );
+      //
+      // The wait runs on the fake clock: the connect timeout is a Timer, so waiting for it
+      // is an elapse, not a wall-clock wait. The poll this replaced still spent the
+      // service's three real seconds on every run of the file, and could only sample the
+      // claimed-then-cancelled transition every 20ms; the elapse places it exactly.
+      fakeAsync((async) {
+        var requested = false;
+        unawaited(service.requestAnalysis(source).then((_) => requested = true));
+        async.flushMicrotasks();
 
-      // Watched with a condition poll, not a fixed 4s sleep: the connect timeout lands ~3s in,
-      // and under contention a fixed margin is exactly what decides whether 4s was enough.
-      await waitUntil(() => service.currentAnalysis.value == null);
+        expect(requested, isTrue, reason: 'the request must have been issued');
+        expect(
+          service.currentAnalysis.value,
+          isNotNull,
+          reason: 'the request claimed the analysis before the socket connect settles',
+        );
 
-      expect(service.currentAnalysis.value, isNull);
-      // Reaching here without an unhandled asynchronous error is the assertion that matters.
+        // Exactly the timeout the service applies, and no more: the connect never lands.
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+
+        expect(service.currentAnalysis.value, isNull);
+        // Reaching here without an unhandled asynchronous error is the assertion that matters.
+      });
     }, timeout: const Timeout(Duration(seconds: 30)));
   });
 
