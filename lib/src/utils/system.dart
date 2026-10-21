@@ -63,6 +63,54 @@ class System {
 
     throw UnimplementedError('This method is only available on Android');
   }
+
+  /// Checks whether the app has permission to request package installs on Android.
+  Future<bool> canRequestPackageInstalls() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    try {
+      final res = await _channel.invokeMethod<bool>('canRequestPackageInstalls');
+      return res ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('Failed to check install permission: ${e.message}');
+      return false;
+    } on MissingPluginException catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the system settings screen for unknown app install permission on Android.
+  Future<bool> openInstallPermissionSettings() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    try {
+      final res = await _channel.invokeMethod<bool>('openInstallPermissionSettings');
+      return res ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('Failed to open install settings: ${e.message}');
+      return false;
+    } on MissingPluginException catch (_) {
+      return false;
+    }
+  }
+
+  /// Installs an APK file from a local path via Android's package installer.
+  Future<bool> installApk(String filePath) async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    try {
+      final res = await _channel.invokeMethod<bool>('installApk', {'filePath': filePath});
+      return res ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('Failed to invoke install APK: ${e.message}');
+      return false;
+    } on MissingPluginException catch (_) {
+      return false;
+    }
+  }
 }
 
 /// A provider that returns OS version of an Android device.

@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import 'package:chess_srs/src/design/design.dart';
+import 'package:chess_srs/src/model/updater/app_update.dart';
+import 'package:chess_srs/src/model/updater/app_update_service.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
 import 'package:chess_srs/src/view/review/library_sheet.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:pub_semver/pub_semver.dart';
 
 import '../../binding.dart';
 import '../../test_provider_scope.dart';
@@ -64,4 +67,46 @@ void main() {
     expect(find.byType(AboutPage), findsOneWidget);
     expect(find.byType(LicensePage), findsNothing);
   });
+
+  testWidgets('displays update availability card with action buttons', (tester) async {
+    final updateInfo = AppReleaseInfo(
+      tagName: 'v1.8.0',
+      version: Version(1, 8, 0),
+      releaseUrl: Uri.parse('https://github.com/cassandre60/ChessSRS/releases/tag/v1.8.0'),
+      apkDownloadUrl: Uri.parse(
+        'https://github.com/cassandre60/ChessSRS/releases/download/v1.8.0/chesssrs-v1.8.0-android.apk',
+      ),
+      apkSize: 104857600,
+      isNewer: true,
+    );
+
+    await tester.pumpWidget(
+      await makeTestProviderScopeApp(
+        tester,
+        home: const AboutPage(),
+        overrides: {
+          appUpdateProvider: appUpdateProvider.overrideWith(
+            () => _FakeAppUpdateNotifier(
+              AppUpdateState(status: UpdateStatus.available, releaseInfo: updateInfo),
+            ),
+          ),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Update available: v1.8.0'), findsOneWidget);
+    expect(find.textContaining('Download'), findsWidgets);
+  });
+}
+
+class _FakeAppUpdateNotifier extends AppUpdateNotifier {
+  _FakeAppUpdateNotifier(this._initialState);
+  final AppUpdateState _initialState;
+
+  @override
+  AppUpdateState build() => _initialState;
+
+  @override
+  Future<void> checkForUpdate({bool force = false}) async {}
 }
