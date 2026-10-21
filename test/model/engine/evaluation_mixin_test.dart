@@ -836,67 +836,6 @@ void main() {
     });
   });
 
-  group('evaluator subscription', () {
-    test('a new eval request cancels the subscription of the replaced request', () async {
-      final container = await makeTestContainer();
-      final subscription = container.listen(_testControllerProvider, (_, _) {});
-      addTearDown(subscription.close);
-
-      await container.read(_testControllerProvider.future);
-      final controller = container.read(_testControllerProvider.notifier);
-
-      controller.requestEval();
-      // Poll for the dispatch instead of sleeping out the debounce plus a margin: the debounce is
-      // a real 250ms timer, and under contention the margin is what decides whether the request
-      // has gone out yet.
-      await waitUntil(
-        () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
-      );
-
-      expect(fakeEvaluator.streams, hasLength(1));
-      expect(fakeEvaluator.streams.single.hasListener, isTrue);
-
-      controller.requestEval();
-      await waitUntil(
-        () => fakeEvaluator.streams.length == 2 && fakeEvaluator.streams.last.hasListener,
-      );
-
-      expect(fakeEvaluator.streams, hasLength(2));
-      expect(
-        fakeEvaluator.streams.first.hasListener,
-        isFalse,
-        reason: 'the replaced request must not leave a listener on the evaluator stream',
-      );
-      expect(fakeEvaluator.streams.last.hasListener, isTrue);
-    });
-
-    test('disposing the notifier cancels the eval stream subscription', () async {
-      final container = await makeTestContainer();
-      final subscription = container.listen(_testControllerProvider, (_, _) {});
-
-      await container.read(_testControllerProvider.future);
-      final controller = container.read(_testControllerProvider.notifier);
-
-      controller.requestEval();
-      await waitUntil(
-        () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
-      );
-      expect(fakeEvaluator.streams.single.hasListener, isTrue);
-
-      // closing the last listener disposes the autoDispose notifier
-      subscription.close();
-      // A deterministic settle, not a timed wait: the disposal runs in the turn close()
-      // schedules, and the check below is an absence — a poll cannot express "still gone".
-      await pumpEventQueue();
-
-      expect(
-        fakeEvaluator.streams.single.hasListener,
-        isFalse,
-        reason: 'a disposed notifier must not leave a listener on the evaluator stream',
-      );
-    });
-  });
-
   group('socket', () {
     test(
       'a socket that arrives after the screen was built still delivers the evaluation events',
@@ -938,6 +877,65 @@ void main() {
         await pumpEventQueue();
         expect(fakeSocket.streamReads, streamReads);
       },
+    );
+  });
+
+  test('a new eval request cancels the subscription of the replaced request', () async {
+    final container = await makeTestContainer();
+    final subscription = container.listen(_testControllerProvider, (_, _) {});
+    addTearDown(subscription.close);
+
+    await container.read(_testControllerProvider.future);
+    final controller = container.read(_testControllerProvider.notifier);
+
+    controller.requestEval();
+    // Poll for the dispatch instead of sleeping out the debounce plus a margin: the debounce is
+    // a real 250ms timer, and under contention the margin is what decides whether the request
+    // has gone out yet.
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
+    );
+
+    expect(fakeEvaluator.streams, hasLength(1));
+    expect(fakeEvaluator.streams.single.hasListener, isTrue);
+
+    controller.requestEval();
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 2 && fakeEvaluator.streams.last.hasListener,
+    );
+
+    expect(fakeEvaluator.streams, hasLength(2));
+    expect(
+      fakeEvaluator.streams.first.hasListener,
+      isFalse,
+      reason: 'the replaced request must not leave a listener on the evaluator stream',
+    );
+    expect(fakeEvaluator.streams.last.hasListener, isTrue);
+  });
+
+  test('disposing the notifier cancels the eval stream subscription', () async {
+    final container = await makeTestContainer();
+    final subscription = container.listen(_testControllerProvider, (_, _) {});
+
+    await container.read(_testControllerProvider.future);
+    final controller = container.read(_testControllerProvider.notifier);
+
+    controller.requestEval();
+    await waitUntil(
+      () => fakeEvaluator.streams.length == 1 && fakeEvaluator.streams.single.hasListener,
+    );
+    expect(fakeEvaluator.streams.single.hasListener, isTrue);
+
+    // closing the last listener disposes the autoDispose notifier
+    subscription.close();
+    // A deterministic settle, not a timed wait: the disposal runs in the turn close()
+    // schedules, and the check below is an absence — a poll cannot express "still gone".
+    await pumpEventQueue();
+
+    expect(
+      fakeEvaluator.streams.single.hasListener,
+      isFalse,
+      reason: 'a disposed notifier must not leave a listener on the evaluator stream',
     );
   });
 }
