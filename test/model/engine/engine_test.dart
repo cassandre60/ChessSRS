@@ -450,6 +450,227 @@ void main() {
       final search = engine.search(makeRequest());
       expect(await search.bestMove, isNull);
     });
+
+    test('a search that announced a new game does not announce it twice', () async {
+      // SPEC INV-020. The engine's answer has to be the engine's own: `ucinewgame` is what tells
+      // it to clear the table it built for the last game, and a search that already announced one
+      // has nothing left to announce. A second announcement would clear a table the engine has
+      // not filled yet, and the rules it is playing under are a reason to rebuild them — not a
+      // reason to say the same thing twice.
+      final transport = FakeTransport(spec: const StockfishSpec.fairy());
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      await startSearch(engine, transport, makeRequest(variant: Variant.crazyhouse));
+
+      expect(
+        transport.takeCommands().where((command) => command == 'ucinewgame'),
+        hasLength(1),
+        reason: 'the new game was announced once already',
+      );
+
+      transport.emit('bestmove e2e4');
+      await pumpEventQueue();
+    });
+
+    test('a malformed id line is ignored', () async {
+      // SPEC INV-020. The name the engine reports is what the app shows, and a line that does not
+      // say what the engine is called must neither blank that name nor take the engine down.
+      final transport = FakeTransport(startupLines: const ['uciok']);
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      expect(engine.name.value, isNull);
+
+      transport.emit('id');
+      transport.emit('id name');
+      await pumpEventQueue();
+
+      expect(engine.name.value, isNull);
+
+      // And the engine is still the one it was: it takes a search.
+      await startSearch(engine, transport, makeRequest());
+      expect(transport.takeCommands(), contains('go movetime 1000'));
+    });
+
+    test('an engine with no move to give says so', () async {
+      // SPEC INV-020. `(none)` is what an engine answers when it has no move to play, and it is
+      // not a move: reporting it as one would put a move the engine never played on the board.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      transport.emit('bestmove (none)');
+      await pumpEventQueue();
+
+      expect(await search.bestMove, isNull);
+    });
+
+    test('a bestmove with nothing after it is ignored', () async {
+      // SPEC INV-020. A `bestmove` with no move on it is malformed, and the engine must not read
+      // past the end of the line to find out.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      await startSearch(engine, transport, makeRequest());
+      transport.emit('bestmove');
+      await pumpEventQueue();
+
+      // The engine is still the one it was: it takes the next search.
+      await startSearch(engine, transport, makeRequest());
+      expect(transport.takeCommands(), contains('go movetime 1000'));
+    });
+
+    test("a stopped search does not report the engine's last words", () async {
+      // SPEC INV-020. A search that has been told to stop is over: the lines the engine answers
+      // with belong to the search that was cancelled, and reporting them would publish a result
+      // for a search nobody is waiting for any more.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final first = await startSearch(engine, transport, makeRequest());
+      final firstInfos = <UciInfo>[];
+      first.infos.listen(firstInfos.add);
+
+      // A second search supersedes the first, which asks the engine to stop.
+      engine.search(makeRequest(moves: const IListConst(['e2e4'])));
+      await pumpEventQueue();
+      expect(transport.takeCommands(), contains('stop'));
+
+      transport.emit('info depth 12 multipv 1 score cp 20 nodes 1 time 1 pv e2e4');
+      await pumpEventQueue();
+
+      expect(firstInfos, isEmpty);
+    });
+  });
+
+  // The `info` lines are what the engine's verdict is made of: the app shows what the engine
+  // reported, so a line that is read wrongly is a number the player never saw the engine give.
+  group('Engine info lines', () {
+    test('an info that names no bound is not a bound', () {
+      // SPEC INV-020. A bound is the engine saying "at least this much"; an info that names none
+      // is a score, and the evaluator drops a bounded primary line.
+      const info = UciInfo(
+        depth: 12,
+        nodes: 1000,
+        multiPv: 1,
+        elapsed: Duration(milliseconds: 100),
+        pv: IListConst(['e2e4']),
+        cp: 20,
+      );
+
+      expect(info.isLowerBound, isFalse);
+      expect(info.isUpperBound, isFalse);
+    });
+
+    test('a bound at the end of the line is reported', () async {
+      // SPEC INV-020. The bound is the engine's own claim about the score, and it is the claim
+      // the app reads to decide whether the score is a verdict.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      final infos = <UciInfo>[];
+      search.infos.listen(infos.add);
+
+      transport.emit('info depth 9 multipv 1 score cp 20 lowerbound');
+      await pumpEventQueue();
+
+      expect(infos.single.isLowerBound, isTrue);
+      expect(infos.single.isUpperBound, isFalse);
+    });
+
+    test('an upper bound is reported as an upper bound', () async {
+      // SPEC INV-020. An upper bound is the engine saying "at most this much", which is a
+      // different claim from a lower bound, and the app reads the two differently.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      final infos = <UciInfo>[];
+      search.infos.listen(infos.add);
+
+      transport.emit('info depth 9 multipv 1 score cp 20 upperbound nodes 1');
+      await pumpEventQueue();
+
+      expect(infos.single.isLowerBound, isFalse);
+      expect(infos.single.isUpperBound, isTrue);
+    });
+
+    test('the elapsed time is read from a line that ends with it', () async {
+      // SPEC INV-020. The elapsed time is the engine's own measure of how long it thought, and
+      // it is what the app shows beside the score.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      final infos = <UciInfo>[];
+      search.infos.listen(infos.add);
+
+      transport.emit('info depth 9 multipv 1 score cp 20 nodes 1 time 240');
+      await pumpEventQueue();
+
+      expect(infos.single.elapsed, const Duration(milliseconds: 240));
+    });
+
+    test('a truncated info line is ignored rather than crashing the engine', () async {
+      // SPEC INV-020. A line the engine cannot read is worth nothing, but the engine that read
+      // it wrong is worth less: it takes the whole analysis session down with it.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      final infos = <UciInfo>[];
+      search.infos.listen(infos.add);
+
+      transport.emit('info');
+      transport.emit('info depth 9 time');
+      transport.emit('info score cp');
+      await pumpEventQueue();
+
+      expect(infos, isEmpty);
+
+      // The engine is still the one it was: the next line is read as usual.
+      transport.emit('info depth 12 multipv 1 score cp 20 nodes 1 time 1 pv e2e4');
+      await pumpEventQueue();
+
+      expect(infos.single.cp, 20);
+    });
+
+    test('a score on its own is still an evaluation', () async {
+      // SPEC INV-020. The score is the verdict, and a line that carries nothing but one still
+      // carries it.
+      final transport = FakeTransport();
+      final engine = Engine(transport);
+      addTearDown(engine.dispose);
+      await pumpEventQueue();
+
+      final search = await startSearch(engine, transport, makeRequest());
+      final infos = <UciInfo>[];
+      search.infos.listen(infos.add);
+
+      transport.emit('info score cp 20');
+      await pumpEventQueue();
+
+      expect(infos, hasLength(1));
+      expect(infos.single.cp, 20);
+    });
   });
 
   // The `option` declarations of the `uci` handshake are what option hygiene puts an option back
@@ -660,6 +881,18 @@ void main() {
       expect(await declaredDefaultOf('Backend', lc0), 'metal');
       expect(await declaredDefaultOf('ConfigFile', lc0), 'lc0.config');
       expect(await declaredDefaultOf('LogFile', lc0), '');
+    });
+
+    test('an option that declares no default has an empty one', () async {
+      // SPEC INV-020. The UCI grammar makes `default` optional, and an option that declares none
+      // has nothing to put back to but the empty value.
+      expect(await declaredDefaultOf('Foo', const ['option name Foo type spin']), '');
+    });
+
+    test('a declaration that stops at its type keyword is ignored', () async {
+      // SPEC INV-020. A declaration that says what the option is called but never what it is
+      // says nothing usable, and the engine must not read past the end of the line to find out.
+      expect(await declaredDefaultOf('Foo', const ['option name Foo type']), '');
     });
   });
 }
