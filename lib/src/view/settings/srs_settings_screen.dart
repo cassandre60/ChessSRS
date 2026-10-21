@@ -12,6 +12,8 @@ import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
+import 'package:chess_srs/src/model/updater/app_update.dart';
+import 'package:chess_srs/src/model/updater/app_update_service.dart';
 import 'package:chess_srs/src/review/srs_settings_providers.dart';
 import 'package:chess_srs/src/view/account/account_menu.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
@@ -88,6 +90,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
     final dbSize = ref.watch(getDbSizeInBytesProvider);
     final accent = ref.watch(srsAccentProvider);
     final authUser = ref.watch(authControllerProvider);
+    final updateState = ref.watch(appUpdateProvider);
 
     final isDark =
         generalPrefs.themeMode == BackgroundThemeMode.dark ||
@@ -636,6 +639,9 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                               _NavRow(
                                 label: 'About and licences',
                                 help: 'Attributions, GPL-3.0, and third-party notices.',
+                                value: updateState.status == UpdateStatus.available
+                                    ? 'Update v${updateState.releaseInfo!.version}'
+                                    : null,
                                 onTap: () => Navigator.of(context).push(AboutPage.buildRoute()),
                               ),
                             ],
