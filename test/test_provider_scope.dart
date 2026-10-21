@@ -53,6 +53,107 @@ final offlineClient = MockClient((request) {
   throw const SocketException('No internet');
 });
 
+/// Marker prefix for the layout overflows the shared scope reports instead of
+/// swallowing them.
+///
+/// CI logs can be filtered on it, e.g. `grep SRS-LAYOUT-OVERFLOW`.
+const String _layoutOverflowMarker = '[SRS-LAYOUT-OVERFLOW]';
+
+/// The error handler that was installed before [_reportLayoutOverflow].
+///
+/// Captured when the overflow handler is installed, and never the overflow
+/// handler itself: [makeTestProviderScope] installs a handler on every call and
+/// a test can build several scopes, so chaining the handler onto itself would
+/// report a single overflow once per install.
+void Function(FlutterErrorDetails details)? _previousErrorHandler;
+
+/// Reports a layout overflow instead of swallowing it.
+///
+/// A `RenderFlex` overflow is a real defect, not a test artefact. Swallowing it
+/// silently hides the whole bug class from every test that uses the shared
+/// scope: the suite cannot fail on a layout overflow, so a broken layout is
+/// invisible to it.
+///
+/// The suite cannot fail on these yet either: 118 tests across 16 files
+/// overflow today, so turning them into failures is a migration, not a
+/// one-liner. They are printed with a greppable marker instead, so the blind
+/// spot becomes visible in CI output and can be ratcheted down site by site.
+///
+/// Every other error is forwarded to [_previousErrorHandler], so the test
+/// framework still fails the test.
+void _reportLayoutOverflow(FlutterErrorDetails details) {
+  if (_isRenderFlexOverflow(details)) {
+    _printLayoutOverflow(details);
+    return;
+  }
+  final previous = _previousErrorHandler;
+  if (previous == null) {
+    FlutterError.presentError(details);
+  } else {
+    previous(details);
+  }
+}
+
+/// Whether [details] reports a `RenderFlex` layout overflow.
+bool _isRenderFlexOverflow(FlutterErrorDetails details) {
+  final exception = details.exception;
+  if (exception is! FlutterError) {
+    return false;
+  }
+  return exception.diagnostics.any(
+    (e) => e.value.toString().contains('A RenderFlex overflowed by'),
+  );
+}
+
+/// The error-causing widget and its source location, as the framework prints
+/// it: `Row:file:///path/to/file.dart:15:20`.
+final RegExp _errorCausingWidgetPattern = RegExp(
+  r'^\s*([^\s:]+):(file://[^\s]*?):(\d+):(\d+)\s*$',
+  multiLine: true,
+);
+
+/// The error-causing widget on its own, for the errors that carry no source
+/// location.
+final RegExp _errorCausingWidgetNamePattern = RegExp(
+  r'The relevant error-causing widget was:\n\s*([^\n]+)\n',
+);
+
+/// The overflow amount and edge, e.g. `200 pixels on the right`.
+final RegExp _overflowAmountPattern = RegExp(r'overflowed by (.+?)\.$');
+
+/// Prints one line per layout overflow, greppable in CI output.
+///
+/// The line carries what a triage needs: the widget that overflowed, by how
+/// much, and the `file:line` of the offending widget.
+void _printLayoutOverflow(FlutterErrorDetails details) {
+  final dump = details.toDiagnosticsNode().toStringDeep();
+  final exception = details.exception;
+  final message = exception is FlutterError ? exception.message : '$exception';
+  final amount = _overflowAmountPattern.firstMatch(message)?.group(1) ?? message;
+
+  final widget = _errorCausingWidgetPattern.firstMatch(dump);
+  final name =
+      widget?.group(1) ??
+      _errorCausingWidgetNamePattern.firstMatch(dump)?.group(1)?.trim() ??
+      'RenderFlex';
+  final location = widget == null
+      ? 'no source location'
+      : '${_relativePath(widget.group(2)!)}:${widget.group(3)}';
+
+  debugPrint('$_layoutOverflowMarker $name overflowed by $amount at $location');
+}
+
+/// Turns an absolute `file://` URI into a path relative to the package root,
+/// so the printed location reads the same on every machine.
+String _relativePath(String fileUri) {
+  final path = fileUri.startsWith('file://') ? fileUri.substring(7) : fileUri;
+  final root = Directory.current.path;
+  if (path.startsWith('$root/')) {
+    return path.substring(root.length + 1);
+  }
+  return path;
+}
+
 /// Returns a [MaterialApp] wrapped in a [ProviderScope] and default mocks, ready for testing.
 ///
 /// The [home] widget is the widget we want to test. Typically a screen widget, to
@@ -219,27 +320,19 @@ Future<Widget> makeTestProviderScope(
     if (authUser != null) kAuthStorageKey: jsonEncode(authUser.toJson()),
   });
 
-  final flutterTestOnError = FlutterError.onError!;
-
-  void ignoreOverflowErrors(FlutterErrorDetails details) {
-    bool isOverflowError = false;
-    final exception = details.exception;
-
-    if (exception is FlutterError) {
-      isOverflowError = exception.diagnostics.any(
-        (e) => e.value.toString().contains('A RenderFlex overflowed by'),
-      );
-    }
-
-    if (isOverflowError) {
-      // debugPrint('Overflow error detected.');
-    } else {
-      flutterTestOnError(details);
-    }
+  // Report layout overflows instead of swallowing them: see
+  // [_reportLayoutOverflow].
+  //
+  // The handler is installed on every call, and a test can build more than one
+  // scope, so the previous handler is captured only when it is not already
+  // ours. Chaining the handler onto itself would report one overflow once per
+  // install.
+  final previousOnError = FlutterError.onError;
+  if (previousOnError != _reportLayoutOverflow) {
+    _previousErrorHandler = previousOnError;
+    // TODO consider loading true fonts as well
+    FlutterError.onError = _reportLayoutOverflow;
   }
-
-  // TODO consider loading true fonts as well
-  FlutterError.onError = ignoreOverflowErrors;
 
   final Map<ProviderOrFamily, Override> overrideMap = {
     databaseProvider: databaseProvider.overrideWith((ref) async {
