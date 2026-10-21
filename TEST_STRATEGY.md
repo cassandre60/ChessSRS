@@ -25,6 +25,31 @@ evidence. See `docs/documentation-map.md`.
 Legacy tests (`legacy/pre-reset`) are behavioral references only. Translate
 useful contracts into the current architecture; do not restore legacy code.
 
+### Enforcement navigation index (not a second contract)
+
+The existing `test/reachability/enforcement_matrix_test.dart` reads this table,
+checks named paths exist and rejects an emptied index. Retain it for navigation:
+the authoritative requirements and exact oracle/covering lists remain in SPEC
+or QUALITY; representative targets below do not promise exhaustive proof.
+
+| Invariant / property | Authoritative contract | Representative enforcement target |
+|---|---|---|
+| Domain purity and I/O | SPEC INV-040/042 | `test/gates/domain_boundary_test.dart` |
+| Single chess representation | QUALITY §1.2 | `test/import/pgn_importer_test.dart` (adapters); dependency review |
+| Local-first review | QUALITY §1.3 | `test/review/review_service_test.dart` (local service path); architecture review |
+| Variation preservation | SPEC INV-010 | `test/import/pgn_importer_test.dart` |
+| Malformed input and starting positions | SPEC INV-011/012 | `test/import/pgn_importer_test.dart` |
+| Chapter orientation | SPEC INV-013 | `test/import/chapter_orientation_test.dart` |
+| Position identity and memory sharing | SPEC INV-015/016/017 | `test/domain/position_knowledge_state_test.dart` |
+| Scheduling and time injection | SPEC INV-024/025/026/041 | `test/domain/scheduler_test.dart`, `test/domain/chess_fsrs_scheduler_test.dart` |
+| Repertoire grading and lapse recovery | SPEC INV-020/021/033/065 | `test/review/review_engine_test.dart`, `test/review/review_transposition_test.dart` |
+| Traversal and practice | SPEC INV-022/023 | `test/review/review_engine_test.dart` |
+| Durability, incremental writes and upgrades | SPEC INV-001/002/005/069 | `test/persistence/sqlite_study_repository_test.dart`, `test/persistence/migration_fixtures_test.dart` |
+| Move latency | QUALITY §4.1, SPEC INV-050; limits in §3 below | `test/review/move_latency_test.dart` |
+| Review interaction, semantics and annotations | SPEC INV-060/062/063 | `test/view/review/review_screen_test.dart` |
+| Invariant citation coverage | GATES G05 | `scripts/gates/spec_trace_check.py` |
+| Source reachability | GATES G04; executable source/baseline | `test/reachability/reachability_test.dart` |
+
 ## 2. Local versus remote verification
 
 ### Local development (bounded)

@@ -84,3 +84,22 @@ that rubber-stamps whatever code happens to do.
 - After merging current origin/main without conflicts, `APPROVED=1
   ./scripts/gates.sh t1` passed: G03 clean, G07 approved under explicit owner
   consent, G08 clean, G05 45/45, G10 ratchet OK. No local Flutter run.
+
+## Remote verification findings (PR #333)
+
+- T1 fast gates passed on `6b52b5d5` (run 39667204091).
+- Tests run 39667134130 passed formatting/analyze but rejected removal of the
+  TEST_STRATEGY table: enforcement_matrix_test reads its paths and row floor.
+  Restored a non-normative navigation index pointing to authoritative contracts;
+  the test and its assertions are unchanged. A prior claim that no test reads
+  these Markdown files was wrong for TEST_STRATEGY, although README's status is
+  still not an independent verification claim. Full suite rerun pending.
+- Red-team run 39667205702 reported **8/9 rejected, 1 stale**. rt-06 removes
+  INV-008 from app_links_service_test, but http_test also cites it; deleting that
+  header no longer orphans the invariant. rt-08's socket-test patch no longer
+  applies. Those tests, corpus patches and gate scripts are identical to the
+  merged base `b8d83be252`; this is corpus premise drift, not weakened gates in
+  reconciliation. No corpus/gate/assertion change bundled here. Independent
+  recall is not green and needs separate corpus-maintenance work. The scheduled
+  baseline run 39567900039 at `156642f103` reported the same rt-06 escape,
+  rt-08 stale patch and 8/9 result before this PR was published.
