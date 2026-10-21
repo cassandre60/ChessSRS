@@ -30,6 +30,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../binding.dart';
 import '../../model/engine/fake_engine.dart';
 import '../../network/fake_websocket_channel.dart';
 import '../../test_helpers.dart';
@@ -1039,6 +1040,59 @@ void main() {
           expect(find.text('Engine'), findsNothing);
           expect(find.byType(SrsSwitch), findsNothing);
           expect(find.byType(EngineButton), findsOneWidget);
+        });
+      });
+
+      group('Engine button', () {
+        // SPEC INV-062. The engine button is the only control for the local
+        // evaluation, so pressing it has to work.
+        //
+        // The `setState` callback that holds the in-flight future used to *return*
+        // that future (`setState(() => _toggleFuture = future)`), and `setState`
+        // requires a void callback: every press of the engine button raised
+        // "setState() called with a return value" and the press did nothing.
+        testWidgets('pressing the engine button does not trip a setState assertion', (
+          tester,
+        ) async {
+          await makeEngineTestApp(tester, isCloudEvalEnabled: false);
+
+          expect(find.byType(EngineButton), findsOneWidget);
+
+          await tester.tap(find.byType(EngineButton));
+          await tester.pump();
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'pressing the engine button must not throw',
+          );
+        });
+
+        // SPEC INV-062. The button is disabled while a toggle is in flight, so a
+        // second press cannot start a second search.
+        //
+        // The window is only there if the toggle outlives the frame that follows
+        // the press. In the app the preference write goes through a platform
+        // channel, so it never completes in a microtask; the fake write does, and
+        // would hide the window completely. The slow fake keeps the write on the
+        // event queue, as the real one does.
+        testWidgets('the engine button is disabled while a toggle is in flight', (tester) async {
+          await makeEngineTestApp(tester, isCloudEvalEnabled: false);
+
+          final engineButton = find.byType(EngineButton);
+          expect(tester.widget<EngineButton>(engineButton).onTap, isNotNull);
+
+          TestLichessBinding.instance.sharedPreferences = SlowFakeSharedPreferences(
+            writeDelay: const Duration(milliseconds: 1),
+          );
+
+          await tester.tap(engineButton);
+          await tester.pump();
+
+          expect(tester.widget<EngineButton>(engineButton).onTap, isNull);
+
+          // Let the pending write finish, so no timer outlives the test.
+          await tester.pump(const Duration(milliseconds: 1));
         });
       });
 
