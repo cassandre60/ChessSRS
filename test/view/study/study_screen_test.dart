@@ -786,6 +786,62 @@ void main() {
       // The shape drawn in the previous chapter must not survive the switch.
       expect(boardShapes(tester), isEmpty);
     });
+
+    testWidgets('A shape drawn in a chapter survives an unrelated rebuild of the same chapter', (
+      WidgetTester tester,
+    ) async {
+      // The other half of the contract: only a change of chapter clears the shapes.
+      // This one passes on the unfixed code as well — it guards the fix against
+      // clearing the shapes on every rebuild of the board.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, '1. e4 e5'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final boardRect = tester.getRect(find.byType(Chessboard));
+      final first = await tester.startGesture(
+        squareOffset(Square.e4, boardRect, orientation: Side.white),
+        pointer: 1,
+      );
+      await tester.pump();
+      final second = await tester.startGesture(
+        squareOffset(Square.a3, boardRect, orientation: Side.white),
+        pointer: 2,
+      );
+      await tester.pump();
+      await second.moveTo(squareOffset(Square.a4, boardRect, orientation: Side.white));
+      await tester.pump();
+      await second.up();
+      await tester.pump();
+      await first.up();
+      await tester.pump();
+
+      expect(boardShapes(tester), hasLength(1));
+
+      // Flip the board: the board is rebuilt, but the chapter did not change.
+      await tester.tap(find.text('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Flip board'));
+      await tester.pumpAndSettle();
+
+      expect(boardShapes(tester), hasLength(1));
+    });
   });
 
   testWidgets('Displays annotations on the correct square', (WidgetTester tester) async {
