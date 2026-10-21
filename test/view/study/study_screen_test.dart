@@ -703,6 +703,91 @@ void main() {
     });
   });
 
+  group('Drawn shapes', () {
+    // Every shape currently painted on the board, drawn by the user or not.
+    List<Shape> boardShapes(WidgetTester tester) => tester
+        .widgetList<BoardShapeWidget>(find.byType(BoardShapeWidget))
+        .map((w) => w.shape)
+        .toList();
+
+    testWidgets('A shape drawn in a chapter does not survive the switch to the next chapter', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names this behaviour: it is a view-level rule of the
+      // study board, stated by the comment above its shape-clearing guard.
+      final mockRepository = MockStudyRepository();
+
+      final studyChapter1 = makeStudy(
+        chapter: makeChapter(id: const StudyChapterId('1')),
+        chapters: IList(const [
+          StudyChapterMeta(id: StudyChapterId('1'), name: 'Chapter 1', fen: null),
+          StudyChapterMeta(id: StudyChapterId('2'), name: 'Chapter 2', fen: null),
+        ]),
+      );
+
+      final studyChapter2 = studyChapter1.copyWith(
+        chapter: makeChapter(id: const StudyChapterId('2')),
+      );
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (studyChapter1, null, '1. e4 e5'));
+      when(
+        () => mockRepository.getStudy(id: testId, chapterId: const StudyChapterId('1')),
+      ).thenAnswer((_) async => (studyChapter1, null, '1. e4 e5'));
+      when(
+        () => mockRepository.getStudy(id: testId, chapterId: const StudyChapterId('2')),
+      ).thenAnswer((_) async => (studyChapter2, null, '1. d4 d5'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Draw an arrow on the empty board: the first pointer locks the draw mode
+      // on an empty square, the second one drags the shape out of it.
+      final boardRect = tester.getRect(find.byType(Chessboard));
+      final first = await tester.startGesture(
+        squareOffset(Square.e4, boardRect, orientation: Side.white),
+        pointer: 1,
+      );
+      await tester.pump();
+      final second = await tester.startGesture(
+        squareOffset(Square.a3, boardRect, orientation: Side.white),
+        pointer: 2,
+      );
+      await tester.pump();
+      await second.moveTo(squareOffset(Square.a4, boardRect, orientation: Side.white));
+      await tester.pump();
+      await second.up();
+      await tester.pump();
+      await first.up();
+      await tester.pump();
+
+      expect(boardShapes(tester), hasLength(1));
+      expect(boardShapes(tester).single, isA<Arrow>());
+
+      // Switch to the next chapter.
+      await tester.tap(find.text('2 Chapters'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2 Chapter 2', findRichText: true));
+      await tester.pumpAndSettle();
+
+      // The shape drawn in the previous chapter must not survive the switch.
+      expect(boardShapes(tester), isEmpty);
+    });
+  });
+
   testWidgets('Displays annotations on the correct square', (WidgetTester tester) async {
     final mockRepository = MockStudyRepository();
     when(() => mockRepository.getStudy(id: testId)).thenAnswer(
