@@ -286,5 +286,40 @@ void main() {
         expect(box.height, greaterThanOrEqualTo(44));
       }
     });
+
+    // The picker is given whatever the page has left after its label -- 206px on a
+    // 240px-wide settings screen -- while its 44px targets are fixed. The gap
+    // between the dots gives way before the targets do: a narrow column gets a
+    // tighter picker, not a clipped one.
+    testWidgets('accent dots keep every 44px target inside a narrow column', (tester) async {
+      // The settings screen's column at a 240px screen: 208px, of which the
+      // picker keeps 6px on each side for its own padding (5px) and border (1px).
+      const column = 208.0;
+      await tester.pumpWidget(
+        _wrap(
+          SizedBox(
+            width: column,
+            child: SrsAccentDots(value: SrsAccent.ultramarine, onChanged: (_) {}),
+          ),
+        ),
+      );
+
+      final picker = tester.getRect(find.byType(SrsAccentDots));
+      final inner = picker.deflate(6);
+      final pressables = find.descendant(
+        of: find.byType(SrsAccentDots),
+        matching: find.byType(SrsPressable),
+      );
+      expect(pressables, findsNWidgets(4));
+      for (var i = 0; i < 4; i++) {
+        final box = tester.getRect(pressables.at(i));
+        expect(box.width, greaterThanOrEqualTo(44), reason: 'the 44px target is the floor');
+        expect(box.height, greaterThanOrEqualTo(44), reason: 'the 44px target is the floor');
+        // And the target is inside the box the picker was given: the rightmost one
+        // used to be clipped by the column, which left it a 40px target.
+        expect(box.left, greaterThanOrEqualTo(inner.left));
+        expect(box.right, lessThanOrEqualTo(inner.right));
+      }
+    });
   });
 }
