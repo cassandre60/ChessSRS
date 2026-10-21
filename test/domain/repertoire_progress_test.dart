@@ -48,5 +48,115 @@ void main() {
       expect(a.hashCode, equals(b.hashCode));
       expect(a, isNot(equals(c)));
     });
+
+    test('operator + aggregates freshDecisions and re-derives scheduledDecisions', () {
+      const ch1 = RepertoireProgress(
+        totalDecisions: 8,
+        learnedDecisions: 4,
+        dueDecisions: 2,
+        freshDecisions: 2,
+      );
+      const ch2 = RepertoireProgress(
+        totalDecisions: 12,
+        learnedDecisions: 6,
+        dueDecisions: 3,
+        freshDecisions: 3,
+      );
+
+      final combined = ch1 + ch2;
+      expect(combined.totalDecisions, 20);
+      expect(combined.learnedDecisions, 10);
+      expect(combined.dueDecisions, 5);
+      expect(combined.freshDecisions, 5);
+      expect(combined.scheduledDecisions, 10);
+      expect(combined.progressPercentage, 50);
+    });
+
+    test('INV-068: fresh, due, and scheduled partition total decisions', () {
+      // SPEC INV-068: The three states — fresh, due, scheduled — are disjoint and
+      // partition each scope's positions: fresh + due + scheduled == total.
+      const p = RepertoireProgress(
+        totalDecisions: 20,
+        learnedDecisions: 12,
+        dueDecisions: 5,
+        freshDecisions: 3,
+      );
+
+      expect(p.freshDecisions, 3);
+      expect(p.dueDecisions, 5);
+      expect(p.scheduledDecisions, 12);
+      expect(p.unlearnedDecisions, 8);
+      expect(p.freshDecisions + p.dueDecisions + p.scheduledDecisions, p.totalDecisions);
+    });
+
+    test('INV-068: scheduledDecisions clamps to zero when fresh and due exceed total', () {
+      // Defensive clamp ensures scheduledDecisions never goes negative under inconsistent data.
+      const pOver = RepertoireProgress(
+        totalDecisions: 10,
+        learnedDecisions: 0,
+        dueDecisions: 8,
+        freshDecisions: 5,
+      );
+
+      expect(pOver.scheduledDecisions, 0);
+    });
+
+    test('progressFraction clamps cleanly between 0.0 and 1.0', () {
+      const pExcess = RepertoireProgress(totalDecisions: 10, learnedDecisions: 15, dueDecisions: 0);
+      expect(pExcess.progressFraction, 1.0);
+      expect(pExcess.progressPercentage, 100);
+    });
+
+    test('equality and hashCode verify each field with runtime-constructed operands', () {
+      // SPEC INV-068: equality must verify each partition field independently
+      // without short-circuiting via const object canonicalisation (identical).
+      final base = RepertoireProgress(
+        totalDecisions: int.parse('10'),
+        learnedDecisions: int.parse('6'),
+        dueDecisions: int.parse('2'),
+        freshDecisions: int.parse('1'),
+      );
+      final same = RepertoireProgress(
+        totalDecisions: int.parse('10'),
+        learnedDecisions: int.parse('6'),
+        dueDecisions: int.parse('2'),
+        freshDecisions: int.parse('1'),
+      );
+
+      expect(identical(base, same), isFalse);
+      expect(base, equals(same));
+      expect(base.hashCode, equals(same.hashCode));
+
+      final diffTotal = RepertoireProgress(
+        totalDecisions: int.parse('11'),
+        learnedDecisions: int.parse('6'),
+        dueDecisions: int.parse('2'),
+        freshDecisions: int.parse('1'),
+      );
+      final diffLearned = RepertoireProgress(
+        totalDecisions: int.parse('10'),
+        learnedDecisions: int.parse('5'),
+        dueDecisions: int.parse('2'),
+        freshDecisions: int.parse('1'),
+      );
+      final diffDue = RepertoireProgress(
+        totalDecisions: int.parse('10'),
+        learnedDecisions: int.parse('6'),
+        dueDecisions: int.parse('3'),
+        freshDecisions: int.parse('1'),
+      );
+      final diffFresh = RepertoireProgress(
+        totalDecisions: int.parse('10'),
+        learnedDecisions: int.parse('6'),
+        dueDecisions: int.parse('2'),
+        freshDecisions: int.parse('2'),
+      );
+
+      expect(base, isNot(equals(diffTotal)));
+      expect(base, isNot(equals(diffLearned)));
+      expect(base, isNot(equals(diffDue)));
+      expect(base, isNot(equals(diffFresh)));
+      expect(base, isNot(equals(Object())));
+    });
   });
 }
