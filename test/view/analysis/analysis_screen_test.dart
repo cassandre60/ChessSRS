@@ -608,9 +608,9 @@ void main() {
       expect(tester.getCenter(find.text('04:50')).dy, lessThan(boardTop));
     });
 
-    // SPEC INV-062. The top bar menu is a control: it has to be there once the analysis
-    // it acts on has loaded.
-    testWidgets('the top bar menu is there once the analysis has loaded', (tester) async {
+    // SPEC INV-062. The top bar menu is a control: it has to be there, and live, once the
+    // analysis it acts on has loaded.
+    testWidgets('the top bar menu is there and live once the analysis has loaded', (tester) async {
       final app = await makeTestProviderScopeApp(
         tester,
         home: const AnalysisScreen(
@@ -628,6 +628,10 @@ void main() {
       await tester.pump();
 
       expect(find.byIcon(Icons.more_horiz), findsOneWidget);
+      final button = tester.widget<IconButton>(
+        find.ancestor(of: find.byIcon(Icons.more_horiz), matching: find.byType(IconButton)),
+      );
+      expect(button.onPressed, isNotNull);
     });
 
     // SPEC INV-014. Sharing the analysis is the way out of it, so the menu offers it
