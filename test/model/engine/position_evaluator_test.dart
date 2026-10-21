@@ -1,4 +1,5 @@
 import 'package:chess_srs/src/model/common/chess.dart';
+import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/uci.dart';
 import 'package:chess_srs/src/model/engine/engine_factory.dart';
@@ -88,6 +89,8 @@ EvalWork makeWork({
   Variant variant = Variant.standard,
   Duration searchTime = const Duration(seconds: 1),
   Position? initialPosition,
+  int multiPv = 1,
+  IList<Step> steps = const IListConst<Step>([]),
 }) {
   return EvalWork(
     id: id ?? const StringId('test'),
@@ -95,12 +98,42 @@ EvalWork makeWork({
     threads: 1,
     path: path ?? UciPath.empty,
     searchTime: searchTime,
-    multiPv: 1,
+    multiPv: multiPv,
     initialPosition: initialPosition ?? Chess.initial,
-    steps: const IListConst<Step>([]),
+    steps: steps,
     threatMode: false,
   );
 }
+
+/// A step carrying [eval], so that the work it belongs to has a cached evaluation to reuse.
+///
+/// The cache lives on the last step, exactly as the analysis screen's position tree puts it there.
+Step stepWithEval(ClientEval eval) =>
+    Step(position: Chess.initial, sanMove: SanMove('e4', Move.parse('e2e4')!), eval: eval);
+
+/// An evaluation as the server sends it: a cloud one, with no search time of its own.
+ClientEval cloudEval({int cp = 25}) => CloudEval(
+  position: Chess.initial,
+  depth: 20,
+  nodes: 1000,
+  pvs: IList([
+    PvData(moves: IList([Move.parse('e2e4')!.uci]), cp: cp),
+  ]),
+);
+
+/// An evaluation as the engine produces it: a local one, which knows how long it searched.
+ClientEval localEval({required Duration searchTime, int cp = 25}) => LocalEval(
+  position: Chess.initial,
+  depth: 20,
+  nodes: 1000,
+  pvs: IList([
+    PvData(moves: IList([Move.parse('e2e4')!.uci]), cp: cp),
+  ]),
+  millis: searchTime.inMilliseconds,
+  searchTime: searchTime,
+  threatMode: false,
+  cp: cp,
+);
 
 void main() {
   TestLichessBinding.ensureInitialized();
@@ -2003,6 +2036,502 @@ void main() {
         expect(filtered.currentWork, isNull);
         expect(filtered.eval, isNull);
         expect(filtered.lifecycle, EngineLifecycle.initial);
+      });
+    });
+  });
+
+  // The engine's evaluation is advisory: it never grades a move, and the repertoire decides that
+  // (QUALITY.md, "Repertoire Correctness over Engine Truth" — SPEC INV-020). What the evaluator
+  // publishes is therefore the engine's own verdict, faithfully: the right side's point of view,
+  // the right kind of score, the right depth, every variation the engine reported. A wrong number
+  // here is a wrong number on the player's screen, and nothing else in the file would notice.
+  group('PositionEvaluator evaluation arithmetic', () {
+    test('a cached cloud evaluation is reused instead of searching again', () async {
+      // SPEC INV-020. The engine's evaluation is advisory, so a good enough one is simply shown
+      // again rather than paid for twice.
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      final work = makeWork(steps: IList([stepWithEval(cloudEval())]));
+
+      expect(
+        service.evaluate(work),
+        isNull,
+        reason: 'the cached cloud evaluation is good enough, so the engine is not asked again',
+      );
+    });
+
+    test('a deeper search is not satisfied by the cached cloud evaluation', () async {
+      // SPEC INV-020. "Go deeper" is the user asking for a better answer than the one on file.
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      final work = makeWork(steps: IList([stepWithEval(cloudEval())]));
+
+      final stream = service.evaluate(work, goDeeper: true);
+
+      expect(
+        stream,
+        isNotNull,
+        reason: 'a deeper search must not be satisfied by the evaluation already on file',
+      );
+      await stream?.first;
+    });
+
+    test('a cached local evaluation of the same age is reused', () async {
+      // SPEC INV-020. The boundary matters: a cached evaluation that searched for exactly as long
+      // as the one now asked for is good enough, and re-searching it would be pure waste.
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      const searchTime = Duration(seconds: 1);
+      final work = makeWork(
+        searchTime: searchTime,
+        steps: IList([stepWithEval(localEval(searchTime: searchTime))]),
+      );
+
+      expect(
+        service.evaluate(work),
+        isNull,
+        reason: 'the cached evaluation searched for exactly as long as the one now asked for',
+      );
+    });
+
+    test('an engine the user turned off does not come back when it reports a new name', () async {
+      // SPEC INV-020. The engine is kept for a while after the user turns it off, and it keeps
+      // talking; what the screen shows must not follow it back.
+      final stockfish = FakeEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      await service.evaluate(makeWork())!.first;
+      expect(service.state.engineName, isNotNull, reason: 'the engine is on screen');
+
+      service.release();
+      expect(service.state.engineName, isNull, reason: 'the engine is off');
+
+      stockfish.emit('id name Renamed Engine');
+      await pumpEventQueue();
+
+      expect(
+        service.state.engineName,
+        isNull,
+        reason: 'an engine the user turned off must not come back to the screen',
+      );
+    });
+
+    test(
+      'a superseded search does not publish a late result to the work it was started for',
+      () async {
+        // SPEC INV-020. The user moves on while the engine is still thinking: the search that was
+        // replaced has no say over the position the user is looking at now.
+        final stockfish = ThrottleTestEngine();
+        fakeEngine = stockfish;
+
+        final container = await makeContainer();
+
+        fakeAsync((async) {
+          final service = readEvaluator(container);
+
+          final work1 = makeWork(id: const StringId('work1'));
+          final work2 = makeWork(id: const StringId('work2'));
+
+          final received = <EvalResult>[];
+          service.evaluate(work1)!.listen(received.add);
+
+          async.elapse(const Duration(milliseconds: 50));
+          stockfish.emitEvalEvents();
+          async.flushMicrotasks();
+          expect(received, isNotEmpty, reason: 'the first search reported');
+
+          // Let the throttle window close, so that nothing is left pending.
+          async.elapse(kEngineEvalEmissionThrottleDelay);
+          async.flushMicrotasks();
+          final countBefore = received.length;
+
+          // The user moves on: the second search replaces the first.
+          service.evaluate(work2);
+          async.flushMicrotasks();
+
+          // The replaced search now has its last word, late.
+          stockfish.emitBestMove();
+          async.flushMicrotasks();
+          async.elapse(kEngineEvalEmissionThrottleDelay);
+          async.flushMicrotasks();
+
+          expect(
+            received.length,
+            countBefore,
+            reason: 'a replaced search must not publish to the work it was started for',
+          );
+        });
+      },
+    );
+
+    test('an evaluation carries every variation the engine reported', () async {
+      // SPEC INV-020. The engine's extra lines are the alternatives the player is offered; a
+      // missing one is a move the app never shows.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork(multiPv: 2));
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        stockfish.emit(
+          'info depth 14 seldepth 8 multipv 2 score cp 25 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv d2d4 d7d5',
+        );
+        async.flushMicrotasks();
+
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+        async.flushMicrotasks();
+
+        expect(results, isNotEmpty);
+        expect(
+          results.last.$2.pvs,
+          hasLength(2),
+          reason: 'both variations the engine reported must be kept',
+        );
+        expect(
+          results.last.$2.depth,
+          14,
+          reason: 'the evaluation is as deep as its shallowest variation',
+        );
+      });
+    });
+
+    test('a later line for an earlier variation does not truncate the evaluation', () async {
+      // SPEC INV-020. The engine keeps reporting the first line as it deepens; that must not
+      // throw away the variations already collected.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork(multiPv: 2));
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 2 score cp 25 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv d2d4 d7d5',
+        );
+        async.flushMicrotasks();
+        stockfish.emit(
+          'info depth 16 seldepth 8 multipv 1 score cp 32 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+        async.flushMicrotasks();
+
+        expect(results, isNotEmpty);
+        expect(
+          results.last.$2.pvs,
+          hasLength(2),
+          reason: 'a deeper first line must not throw the second variation away',
+        );
+      });
+    });
+
+    test('the shallowest depth worth reporting is reported and nothing shallower is', () async {
+      // SPEC INV-020. Below the floor the engine is still guessing, and a guess is not advice.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork());
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 5 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(results, isEmpty, reason: 'at depth 5 the engine is still guessing');
+
+        stockfish.emit(
+          'info depth 6 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(
+          results,
+          hasLength(1),
+          reason: 'depth 6 is the shallowest depth worth reporting, and it is reported',
+        );
+      });
+    });
+
+    test('a centipawn score is reported as a centipawn score and not as a mate', () async {
+      // SPEC INV-020. A centipawn score and a mate score are different claims; the app shows
+      // them differently and must not confuse them.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork());
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+
+        expect(results, hasLength(1), reason: 'the centipawn score is reported at once');
+        final cpEval = results.first.$2;
+        expect(cpEval.cp, 30, reason: 'a centipawn score is a centipawn score');
+        expect(cpEval.mate, isNull, reason: 'a centipawn score is not a mate score');
+        expect(cpEval.pvs.first.cp, 30);
+        expect(cpEval.pvs.first.mate, isNull);
+
+        stockfish.emit(
+          'info depth 16 seldepth 8 multipv 1 score mate 3 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 200 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+        async.flushMicrotasks();
+
+        final mateEval = results.last.$2;
+        expect(mateEval.mate, 3, reason: 'a mate score is a mate score');
+        expect(mateEval.cp, isNull, reason: 'a mate score is not a centipawn score');
+      });
+    });
+
+    test(
+      "the evaluation is reported from White's point of view whatever the side to move",
+      () async {
+        // SPEC INV-020. The engine scores from the side to move; the app shows White's score, so
+        // the sign has to be turned over for a position where Black is to move.
+        final stockfish = ThrottleTestEngine();
+        fakeEngine = stockfish;
+
+        final container = await makeContainer();
+
+        fakeAsync((async) {
+          final service = readEvaluator(container);
+          final results = <EvalResult>[];
+          service.evalStream.listen(results.add);
+
+          // The position after 1.e4, with Black to move.
+          final afterE4 = Chess.fromSetup(
+            Setup.parseFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'),
+          );
+          service.evaluate(makeWork(initialPosition: afterE4));
+          async.elapse(const Duration(milliseconds: 50));
+
+          stockfish.emitEvalEvents();
+          async.flushMicrotasks();
+
+          expect(results, isNotEmpty);
+          expect(
+            results.first.$2.cp,
+            10,
+            reason: "the engine scored -10 from Black's point of view, which is +10 for White",
+          );
+        });
+      },
+    );
+
+    test('a bounded score on the primary variation is ignored', () async {
+      // SPEC INV-020. A bound is the engine saying "at least this much", not a verdict; showing
+      // it as one would be showing the engine something it did not say.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork());
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 lowerbound nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(results, isEmpty, reason: 'a bound on the primary line is not an evaluation');
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(results, hasLength(1), reason: 'an unbounded score is an evaluation');
+      });
+    });
+
+    test('a bounded score on a secondary variation is kept', () async {
+      // SPEC INV-020. Only the primary line is bounded away; the alternatives are all the engine
+      // has, and a bound on one of them is still what it reported.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork(multiPv: 2));
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 2 score cp 25 upperbound nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 100 pv d2d4 d7d5',
+        );
+        async.flushMicrotasks();
+
+        async.elapse(kEngineEvalEmissionThrottleDelay);
+        async.flushMicrotasks();
+
+        expect(results, isNotEmpty);
+        expect(
+          results.last.$2.pvs,
+          hasLength(2),
+          reason: 'only the primary line may be bounded away',
+        );
+      });
+    });
+
+    test('the search is only cut short once the engine reports past its own time limit', () async {
+      // SPEC INV-020. The engine reports past its own movetime because it only checks the clock
+      // between nodes; the search is ended then, and not a moment before.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+
+        service.evaluate(makeWork(searchTime: const Duration(milliseconds: 1500)));
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 1500 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(
+          stockfish.stopCount,
+          0,
+          reason: 'the engine has not gone past the time it was given',
+        );
+
+        stockfish.emit(
+          'info depth 16 seldepth 8 multipv 1 score cp 30 nodes 5000 nps 100000 '
+          'hashfull 0 tbhits 0 time 1501 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+        expect(
+          stockfish.stopCount,
+          1,
+          reason: 'past the time it was given, the search is cut short',
+        );
+      });
+    });
+
+    test('a fresh evaluator is not computing', () async {
+      // SPEC INV-020. Nothing is searching yet, so the app must not be showing a search in
+      // progress.
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      expect(service.state.isComputing, isFalse, reason: 'no engine is searching yet');
+    });
+
+    test('an evaluator waiting for its engine is not computing yet', () async {
+      // SPEC INV-020. The engine has not even started; asking for an evaluation is not the same
+      // thing as the engine searching.
+      final container = await makeContainer();
+      final service = readEvaluator(container);
+
+      service.evaluate(makeWork());
+
+      expect(
+        service.state.isComputing,
+        isFalse,
+        reason: 'the engine has not started searching yet',
+      );
+    });
+
+    test('the evaluation records the time the engine reported', () async {
+      // SPEC INV-020. The speed shown beside the score is the engine's own, read off the time it
+      // reported.
+      final stockfish = ThrottleTestEngine();
+      fakeEngine = stockfish;
+
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evalStream.listen(results.add);
+
+        service.evaluate(makeWork(searchTime: const Duration(seconds: 3)));
+        async.elapse(const Duration(milliseconds: 50));
+
+        stockfish.emit(
+          'info depth 15 seldepth 8 multipv 1 score cp 30 nodes 900000 nps 100000 '
+          'hashfull 0 tbhits 0 time 1500 pv e2e4 e7e5',
+        );
+        async.flushMicrotasks();
+
+        expect(results, isNotEmpty);
+        expect(
+          results.first.$2.millis,
+          1500,
+          reason: 'the elapsed time is the time the engine reported',
+        );
       });
     });
   });
