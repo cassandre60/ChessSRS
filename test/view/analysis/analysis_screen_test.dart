@@ -13,12 +13,15 @@ import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
+import 'package:chess_srs/src/view/analysis/analysis_layout.dart';
 import 'package:chess_srs/src/view/analysis/analysis_options.dart';
+import 'package:chess_srs/src/view/analysis/analysis_player_widget.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/view/board_editor/board_editor_screen.dart';
 import 'package:chess_srs/src/view/engine/engine_button.dart';
 import 'package:chess_srs/src/view/engine/engine_gauge.dart';
 import 'package:chess_srs/src/view/engine/engine_lines.dart';
+import 'package:chess_srs/src/widgets/acpl_chart.dart';
 import 'package:chess_srs/src/widgets/move_times_chart.dart';
 import 'package:chess_srs/src/widgets/pgn.dart';
 import 'package:chess_srs/src/widgets/pockets.dart';
@@ -458,6 +461,441 @@ void main() {
       await tester.pumpAndSettle(); // wait for play menu to open
       // Variant we set previously should be preselected
       expect(find.textContaining('Atomic'), findsOneWidget);
+    });
+  });
+
+  group('Analysis Screen header and board chrome', () {
+    // SPEC INV-013. The chapter's own headers decide what the board shows: the side it
+    // trains from, and the title it is named after. A placeholder chapter is the absence
+    // of a title, not a title -- so it must not be pasted onto the study name either.
+    testWidgets('a placeholder chapter is not shown next to the study name', (tester) async {
+      const pgn =
+          '[Study "Sicilian Repertoire"]\n'
+          '[Chapter "?"]\n\n'
+          '1. e4 *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('study-placeholder-chapter'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.text('Sicilian Repertoire'), findsOneWidget);
+      // The chapter is a placeholder, so there is nothing to append to the study name.
+      expect(find.textContaining('•'), findsNothing);
+    });
+
+    // SPEC INV-013. 'Standard' is the header a game with no title of its own carries, so
+    // it is not a title the board may show.
+    testWidgets('a placeholder event header is not shown as the title', (tester) async {
+      const pgn =
+          '[Event "Standard"]\n\n'
+          '1. e4 *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('event-placeholder'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.text('Standard'), findsNothing);
+    });
+
+    // SPEC INV-013. Without a study header the chapter name is the title on its own.
+    testWidgets('an event header alone is shown as the title', (tester) async {
+      const pgn =
+          '[Event "Chapter One"]\n\n'
+          '1. e4 *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('event-only'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.text('Chapter One'), findsOneWidget);
+    });
+
+    // SPEC INV-013. The line under the header only says something when the header does
+    // not already: a board with no study and no chapter has no title line at all.
+    testWidgets('a plain analysis shows no title line under the header', (tester) async {
+      const pgn = '1. e4 *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('plain-analysis'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.text('Analysis board'), findsNothing);
+    });
+
+    // SPEC INV-013. The side the chapter trains from is the side that sits at the foot of
+    // the board, and each side is shown its own player and its own clock.
+    testWidgets('each side of the board shows its own player and its own clock', (tester) async {
+      const pgn =
+          '[White "Alice"]\n'
+          '[Black "Bob"]\n'
+          '[TimeControl "300+3"]\n\n'
+          '1. e4 { [%clk 0:05:01] } e5 { [%clk 0:05:02] } '
+          '2. Nf3 { [%clk 0:04:55] } Nc6 { [%clk 0:04:50] } *';
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('board-sides'),
+            orientation: Side.white,
+            pgn: pgn,
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      final boardTop = tester.getTopLeft(find.byType(Chessboard)).dy;
+      final boardBottom = tester.getBottomLeft(find.byType(Chessboard)).dy;
+
+      // The point of view is white, so Alice sits below the board and Bob above it.
+      expect(tester.getCenter(find.text('Alice')).dy, greaterThan(boardBottom));
+      expect(tester.getCenter(find.text('Bob')).dy, lessThan(boardTop));
+
+      // Each clock sits next to the player it belongs to. White is to move, so it shows the
+      // reading it had before black's last move, and black shows the one it just played.
+      expect(tester.getCenter(find.text('04:55')).dy, greaterThan(boardBottom));
+      expect(tester.getCenter(find.text('04:50')).dy, lessThan(boardTop));
+    });
+
+    // SPEC INV-062. The top bar menu is a control: it has to be there, and live, once the
+    // analysis it acts on has loaded.
+    testWidgets('the top bar menu is there and live once the analysis has loaded', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('top-bar-menu'),
+            orientation: Side.white,
+            pgn: '1. e4 *',
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.byIcon(Icons.more_horiz), findsOneWidget);
+      final button = tester.widget<IconButton>(
+        find.ancestor(of: find.byIcon(Icons.more_horiz), matching: find.byType(IconButton)),
+      );
+      expect(button.onPressed, isNotNull);
+    });
+
+    // SPEC INV-014. Sharing the analysis is the way out of it, so the menu offers it
+    // whenever the position may be shared.
+    testWidgets('the top bar menu offers the share actions for a shareable analysis', (
+      tester,
+    ) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('shareable'),
+            orientation: Side.white,
+            pgn: '1. e4 *',
+            isComputerAnalysisAllowed: true,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.more_horiz));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Share & export'), findsOneWidget);
+    });
+
+    // SPEC INV-014. A board the engine may not touch has no position to share.
+    testWidgets('the top bar menu offers no share action without engine access', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('not-shareable'),
+            orientation: Side.white,
+            pgn: '1. e4 *',
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.more_horiz));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Share & export'), findsNothing);
+    });
+
+    // SPEC INV-062. The engine button is the only control for the local evaluation, so
+    // it has to be live when the engine is allowed.
+    //
+    // The button is not pressed here: pressing it trips the `setState` assertion in
+    // `lib/src/view/analysis/analysis_screen.dart` (the callback returns the future it
+    // assigns), which is reported with this round rather than pinned here.
+    testWidgets('the engine button is live when the engine is allowed', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('engine-button-live'),
+            orientation: Side.white,
+            pgn: '1. e4 *',
+            isComputerAnalysisAllowed: true,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(tester.widget<EngineButton>(find.byType(EngineButton)).onTap, isNotNull);
+    });
+
+    // SPEC INV-062. The engine popover is where the deeper search is offered, and a
+    // deeper search is a longer one.
+    testWidgets('the engine popover offers a deeper search', (tester) async {
+      final stockfish = FakeEngine();
+      await makeEngineTestApp(tester, isCloudEvalEnabled: false, stockfish: stockfish);
+      await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
+
+      await tester.longPress(find.byType(EngineButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Go deeper'), findsOneWidget);
+
+      await tester.tap(find.text('Go deeper'));
+      await tester.pump(kRequestEvalDebounceDelay);
+
+      expect(stockfish.commands, contains('go movetime ${kMaxEngineSearchTime.inMilliseconds}'));
+    });
+
+    // SPEC INV-010. The study opens on its moves, which is where the variations are.
+    testWidgets('the analysis opens on the moves tree', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('initial-tab'),
+            orientation: Side.white,
+            pgn: '1. e4 e5 *',
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      final layout = tester.widget<AnalysisLayout>(find.byType(AnalysisLayout));
+      final tabs = layout.tabs!;
+      expect(tabs[layout.tabController!.index], AnalysisTab.moves);
+    });
+
+    // SPEC INV-013. Flip turns the board around, so the other side sits at the foot of it.
+    testWidgets('the Flip button turns the board around', (tester) async {
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const AnalysisScreen(
+          options: AnalysisOptions.pgn(
+            id: StringId('flip'),
+            orientation: Side.white,
+            pgn: '1. e4 e5 *',
+            isComputerAnalysisAllowed: false,
+            variant: Variant.standard,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(tester.widget<Chessboard>(find.byType(Chessboard)).orientation, Side.white);
+
+      await tester.tap(find.text('Flip'));
+      await tester.pump();
+
+      expect(tester.widget<Chessboard>(find.byType(Chessboard)).orientation, Side.black);
+    });
+  });
+
+  group('Analysis Screen archived game', () {
+    // SPEC INV-013. The players of an archived game are lichess accounts, so the board
+    // shows them as such.
+    testWidgets('an archived game names its players around the board', (tester) async {
+      await makeEngineTestApp(tester, gameId: const GameId('xze7RH66'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('alireza2003'), findsOneWidget);
+      expect(find.text('Mishka_The_Great'), findsOneWidget);
+    });
+
+    // SPEC INV-014. The result of the game belongs next to the players: the winner sees
+    // the win, the loser the loss.
+    testWidgets('an archived game shows the result next to its players', (tester) async {
+      await makeEngineTestApp(tester, gameId: const GameId('xze7RH66'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final players = find.byType(AnalysisPlayerWidget);
+      expect(find.descendant(of: players, matching: find.text('1')), findsOneWidget);
+      expect(find.descendant(of: players, matching: find.text('0')), findsOneWidget);
+    });
+
+    // SPEC INV-014. A game is bookmarked from the top bar menu, and the menu says which
+    // of the two it will do.
+    testWidgets('an archived game can be bookmarked and unbookmarked', (tester) async {
+      await makeEngineTestApp(tester, gameId: const GameId('xze7RH66'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byIcon(Icons.more_horiz));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bookmark this game'), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark_add_outlined), findsOneWidget);
+
+      await tester.tap(find.text('Bookmark this game'));
+      await tester.pumpAndSettle();
+      // The bookmark is written to the database before the screen hears about it.
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byIcon(Icons.more_horiz));
+      await tester.pumpAndSettle();
+
+      // The menu now offers to take the bookmark back, not to add it.
+      expect(find.text('Bookmark this game'), findsNothing);
+      expect(find.byIcon(Icons.bookmark_remove_outlined), findsOneWidget);
+    });
+
+    // SPEC INV-020. The computer analysis summary is where the accuracy of the game is
+    // shown.
+    testWidgets('the computer analysis summary shows the accuracy chart', (tester) async {
+      await makeEngineTestApp(tester, gameId: const GameId('xze7RH66'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('Summary'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AcplChart), findsOneWidget);
+    });
+
+    // SPEC INV-062. A computer analysis is asked for on the server, and the server only
+    // does it for a signed-in account.
+    testWidgets('requesting a computer analysis without an account says so', (tester) async {
+      const gameId = GameId('qVChCOTc');
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+        overrides: {
+          lichessClientProvider: lichessClientProvider.overrideWith((ref) {
+            return LichessClient(
+              MockClient((request) {
+                if (request.url.path == '/game/export/$gameId') {
+                  return mockResponse(gameWithoutServerAnalysis, 200);
+                }
+                return mockResponse('', 404);
+              }),
+              ref,
+            );
+          }),
+        },
+        home: const AnalysisScreen(
+          options: AnalysisOptions.archivedGame(orientation: Side.white, gameId: gameId),
+        ),
+      );
+
+      await tester.pumpWidget(app);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('Menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Request a computer analysis'), findsOneWidget);
+
+      await tester.tap(find.text('Request a computer analysis'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('You need an account to do that'), findsOneWidget);
     });
   });
 
@@ -1698,6 +2136,11 @@ void main() {
 
 const gameResponse = '''
 {"id":"qVChCOTc","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673443822389,"lastMoveAt":1673444036416,"status":"mate","players":{"white":{"aiLevel":1},"black":{"user":{"name":"veloce","patron":true,"id":"veloce"},"rating":1435,"provisional":true}},"winner":"black","opening":{"eco":"C20","name":"King's Pawn Game: Wayward Queen Attack, Kiddie Countergambit","ply":4},"moves":"e4 e5 Qh5 Nf6 Qxe5+ Be7 b3 d6 Qb5+ Bd7 Qxb7 Nc6 Ba3 Rb8 Qa6 Nxe4 Bb2 O-O Nc3 Nb4 Nf3 Nxa6 Nd5 Nb4 Nxe7+ Qxe7 Nd4 Qf6 f4 Qe7 Ke2 Ng3+ Kd1 Nxh1 Bc4 Nf2+ Kc1 Qe1#","clocks":[18003,18003,17915,17627,17771,16691,17667,16243,17475,15459,17355,14779,17155,13795,16915,13267,14771,11955,14451,10995,14339,10203,13899,9099,12427,8379,12003,7547,11787,6691,11355,6091,11147,5763,10851,5099,10635,4657],"clock":{"initial":180,"increment":0,"totalTime":180}}
+''';
+
+/// A finished game the server has not analysed yet, so the analysis can still be asked for.
+const gameWithoutServerAnalysis = '''
+{"id":"qVChCOTc","rated":false,"source":"lobby","variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673443822389,"lastMoveAt":1673444036416,"status":"mate","players":{"white":{"aiLevel":1},"black":{"user":{"name":"veloce","patron":true,"id":"veloce"},"rating":1435,"provisional":true}},"winner":"black","opening":{"eco":"C20","name":"King's Pawn Game: Wayward Queen Attack, Kiddie Countergambit","ply":4},"moves":"e4 e5 Qh5 Nf6 Qxe5+ Be7 b3 d6 Qb5+ Bd7 Qxb7 Nc6 Ba3 Rb8 Qa6 Nxe4 Bb2 O-O Nc3 Nb4 Nf3 Nxa6 Nd5 Nb4 Nxe7+ Qxe7 Nd4 Qf6 f4 Qe7 Ke2 Ng3+ Kd1 Nxh1 Bc4 Nf2+ Kc1 Qe1#","clocks":[18003,18003,17915,17627,17771,16691,17667,16243,17475,15459,17355,14779,17155,13795,16915,13267,14771,11955,14451,10995,14339,10203,13899,9099,12427,8379,12003,7547,11787,6691,11355,6091,11147,5763,10851,5099,10635,4657],"clock":{"initial":180,"increment":0,"totalTime":180},"division":{"middle":18,"end":42}}
 ''';
 
 Future<void> dragFromTo(WidgetTester tester, String from, String to) async {
