@@ -59,5 +59,40 @@ void main() {
       const plainDate = '2026-10-14';
       expect(parseUtcIso(plainDate), DateTime.parse(plainDate).toUtc());
     });
+
+    // SPEC INV-001. The fast path is a shortcut, not a second interpretation:
+    // every string it reads must mean the same instant that DateTime.parse
+    // says it means. A row read back as a different instant than it was
+    // written is a state that did not survive the restart it was supposed to.
+    // The two layouts below are the ones the fast path cannot read whole: a
+    // fractional part longer than milliseconds, and an offset suffix after a
+    // 'Z'-terminated body. Reading either by fixed offsets silently drops the
+    // extra part, so both have to go to DateTime.parse.
+    test('reads every layout as the same instant DateTime.parse reads it', () {
+      for (final input in const [
+        '2026-10-14T12:34:56.789Z',
+        '2026-10-14T12:34:56Z',
+        '2026-10-14T12:34:56.123456Z',
+        '2026-10-14 12:34:56.000Z',
+        '2026-10-14',
+      ]) {
+        expect(parseUtcIso(input), DateTime.parse(input).toUtc(), reason: input);
+      }
+
+      // A 'Z'-terminated body carrying an offset in front of it is a layout
+      // DateTime.parse refuses, so the fast path must refuse it too rather
+      // than read the first nineteen characters and drop the rest.
+      const offsetBeforeZ = '2026-10-14T12:34:56+01:00Z';
+      expect(() => DateTime.parse(offsetBeforeZ), throwsA(isA<FormatException>()));
+      expect(() => parseUtcIso(offsetBeforeZ), throwsA(isA<FormatException>()));
+    });
+
+    // A string no layout claims is DateTime.parse's business, including its
+    // refusal: the parser does not paper over an unreadable timestamp with a
+    // date it invented from the first nineteen characters.
+    test('refuses a timestamp it cannot read instead of inventing one', () {
+      expect(() => parseUtcIso('2026-10-14T12:34:56QQQQZ'), throwsA(isA<FormatException>()));
+      expect(() => parseUtcIso('2026-10-14T12:34:56.ABCZ'), throwsA(isA<FormatException>()));
+    });
   });
 }
