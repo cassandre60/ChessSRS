@@ -417,6 +417,55 @@ void main() {
       // One error for the bad FEN chapter
       expect(result.errors, hasLength(1));
     });
+
+    // SPEC INV-011. Each chapter-fatal path carries the documented sentinel
+    // move index `-1` ("the error applies to the whole chapter", see the
+    // ImportError doc). A fatal path that reported `-2`, or no path reporting
+    // at all, breaks that marker: the error locator surfaces 'move -2' as a
+    // place in a line instead of a whole-chapter refusal. The three reachable
+    // fatal paths are: no games at all, unsupported variant, and a chapter
+    // that parsed but trains nothing. (The fourth — the whole-file catch —
+    // wraps a parser that never throws: malformed text parses as moveless
+    // games; see AUTONOMOUS_WORK_LEDGER 2026-10-20.)
+    test('a chapter-fatal error carries the whole-chapter sentinel move index', () {
+      final noGames = importPgn('');
+      final unsupportedVariant = importPgn('[Variant "Crazyhouse"]\n\n1. e4 e5 *');
+      final nothingTrains = importPgn('[White "A"]\n[Black "B"]\n');
+
+      for (final result in [noGames, unsupportedVariant, nothingTrains]) {
+        expect(result.errors, isNotEmpty);
+        expect(
+          result.errors.first.moveIndex,
+          equals(-1),
+          reason: '-1 is the whole-chapter sentinel, distinct from any in-line move index',
+        );
+      }
+    });
+
+    // SPEC INV-011. The error names the chapter it refused to train on, so the
+    // user can point at the chapter instead of an unnamed study. The chapter
+    // exists even though nothing is lost — a position-only game is a real
+    // chapter — and its derived title ('A vs B' from the player tags) is what
+    // the error must quote.
+    test('the nothing-to-train error names the chapter it refused', () {
+      final result = importPgn('[White "A"]\n[Black "B"]\n');
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.message, contains('No repertoire positions'));
+      expect(result.errors.first.chapterTitle, equals('A vs B'));
+    });
+
+    // SPEC INV-011. In line, the error's move index is the 0-based index of the
+    // move that failed — the locator the user reads to find the offending move.
+    // The index lives in the recursion between moves, so an off-by-one there
+    // mislabels every move past the first.
+    test('an in-line illegal move reports its own move index', () {
+      // 1...e4 is illegal after 1. d4: black's e-pawn is still on e7, which is
+      // blocked, and no single half-move reaches e4.
+      final result = importPgn('1. d4 e4 *');
+      expect(result.errors, hasLength(1));
+      expect(result.errors.first.chapterTitle, equals('Game 1'));
+      expect(result.errors.first.moveIndex, equals(1), reason: '0 = 1.d4, 1 = 1...e4');
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -968,6 +1017,61 @@ void main() {
       expect(result.errors.first.message, contains('Skipping it and 2 following move(s)'));
       // Only 1. e4 survives as a repertoire decision.
       expect(result.decisions.map((d) => d.expectedMoves.first.san), ['e4']);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ImportResult duplicate default & chapter title derivation matrix
+  // ---------------------------------------------------------------------------
+  group('ImportResult — duplicate default', () {
+    // SPEC INV-003. The duplicate gate lives downstream of this flag: the
+    // review controller returns early for a duplicate and the import dialog
+    // switches wording. The importer itself never claims one — a plain import
+    // must report false, or every import disperses into the
+    // 'already imported' branch.
+    test('a plain import is not flagged as a duplicate', () {
+      final result = importPgn('1. e4 e5 2. Nf3 *');
+      expect(result.isDuplicate, isFalse);
+    });
+  });
+
+  group('ImportResult — chapter title derivation', () {
+    // SPEC INV-014. A chapter is named by priority: the dedicated Chapter tag
+    // first, a real player matchup second, then Event/Site, then the auto
+    // 'Game N'. The player tags are the exporter's own sentinel values — they
+    // record which side the chapter is about, never a person pair to display;
+    // that is what made every exported chapter come back as
+    // 'Repertoire vs Opponent'.
+    test('a real name against a placeholder falls through to Event', () {
+      final result = importPgn(
+        '[Event "Challengers"]\n[White "Karpov"]\n[Black "?"]\n\n1. e4 e5 *',
+      );
+      expect(result.chapters.first.title, equals('Challengers'));
+    });
+
+    test('a blank tag is a placeholder, not a name', () {
+      final result = importPgn('[Event "Bled Open"]\n[White ""]\n[Black "Karpov"]\n\n1. e4 e5 *');
+      expect(result.chapters.first.title, equals('Bled Open'));
+    });
+
+    test('two real names are the matchup', () {
+      final result = importPgn('[White "Karpov"]\n[Black "Lasker"]\n\n1. e4 e5 *');
+      expect(result.chapters.first.title, equals('Karpov vs Lasker'));
+    });
+
+    test('exporter placeholder tags never form a matchup title', () {
+      // No dedicated tag, no Event/Site: the auto name is all a chapter whose
+      // tags are the exporter's sentinels deserves.
+      final result = importPgn('[White "Repertoire"]\n[Black "Opponent"]\n\n1. e4 e5 *');
+      expect(result.chapters.first.title, equals('Game 1'));
+    });
+
+    test('the exporter white sentinel is no name even against a real opponent', () {
+      // 'Repertoire' joins the placeholder set by keyword; 'Karpov' is real.
+      // Their names must not combine into a matchup — the side record from the
+      // exporter stays a sentinel even when only one of the pair is synthetic.
+      final result = importPgn('[White "Repertoire"]\n[Black "Karpov"]\n\n1. e4 e5 *');
+      expect(result.chapters.first.title, equals('Game 1'));
     });
   });
 }
