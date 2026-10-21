@@ -57,39 +57,48 @@ class SmallBoardPreview extends ConsumerWidget {
           padding:
               padding ??
               Styles.horizontalBodyPadding.add(const EdgeInsets.symmetric(vertical: 8.0)),
-          child: SizedBox(
-            height: boardSize,
-            child: Row(
-              children: [
-                if (_showLoadingPlaceholder)
-                  Container(
-                    width: boardSize,
-                    height: boardSize,
-                    decoration: const BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: Styles.boardBorderRadius,
-                    ),
-                  )
-                else
-                  StaticChessboard(
-                    size: boardSize,
-                    fen: fen,
-                    orientation: orientation,
-                    lastMove: lastMove,
-                    settings: StaticChessboardSettings(
-                      pieceAssets: boardPrefs.pieceSet.assets,
-                      colorScheme: boardPrefs.boardTheme.colors,
-                      brightness: boardPrefs.brightness,
-                      hue: boardPrefs.hue,
-                      enableCoordinates: false,
-                      borderRadius: Styles.boardBorderRadius,
-                      boxShadow: boardShadows,
-                      animationDuration: const Duration(milliseconds: 150),
-                    ),
+          // The row is as tall as the taller of the board and the description.
+          //
+          // It used to be capped at the board's height, which let a decoration -- the
+          // board -- dictate the box the content beside it had to live in. The
+          // description is content: in the new-game sheet it is a five-line FEN field
+          // and a paste button, 188px between them, and the board's own 121px left
+          // them painted over the settings rows below.
+          child: Row(
+            children: [
+              if (_showLoadingPlaceholder)
+                Container(
+                  width: boardSize,
+                  height: boardSize,
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: Styles.boardBorderRadius,
                   ),
-                const SizedBox(width: 10.0),
-                if (_showLoadingPlaceholder)
-                  Expanded(
+                )
+              else
+                StaticChessboard(
+                  size: boardSize,
+                  fen: fen,
+                  orientation: orientation,
+                  lastMove: lastMove,
+                  settings: StaticChessboardSettings(
+                    pieceAssets: boardPrefs.pieceSet.assets,
+                    colorScheme: boardPrefs.boardTheme.colors,
+                    brightness: boardPrefs.brightness,
+                    hue: boardPrefs.hue,
+                    enableCoordinates: false,
+                    borderRadius: Styles.boardBorderRadius,
+                    boxShadow: boardShadows,
+                    animationDuration: const Duration(milliseconds: 150),
+                  ),
+                ),
+              const SizedBox(width: 10.0),
+              if (_showLoadingPlaceholder)
+                Expanded(
+                  // The placeholder stands in for the board, so it keeps the board's
+                  // height: the blocks it draws are spread over it.
+                  child: SizedBox(
+                    height: boardSize,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -134,11 +143,11 @@ class SmallBoardPreview extends ConsumerWidget {
                         ),
                       ],
                     ),
-                  )
-                else
-                  Expanded(child: description),
-              ],
-            ),
+                  ),
+                )
+              else
+                Expanded(child: description),
+            ],
           ),
         );
       },
