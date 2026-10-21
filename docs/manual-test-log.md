@@ -108,6 +108,37 @@ since #106 on 2026-09-30, and the guard has been dead in every build.
 
 ---
 
+### 4. The board editor drew its status panel twice in a band of window sizes
+
+**What changed.** The editor decided its layout from the shape of the *area left to
+the editor* and decided whether to show the status panel (the live FEN and the
+side-to-move control) in the bottom bar from the shape of the *screen*. The chrome
+around the board takes height off that area and no width off it, so the area's shape
+is always wider than the screen's. In the band where the screen is taller than it is
+wide but the area left to the editor is wider than it is tall, the two disagreed and
+the panel was drawn **twice**: once in a column beside the board, once in the bottom
+bar. Both decisions now read the screen's shape.
+
+**What the tests prove.** That at an 800×900 window the panel is drawn exactly once
+(a new widget test that fails on the base code with two copies of the live FEN), and
+that the rest of the editor's tests are unchanged. What they do not prove is how the
+editor *looks* in that band: the test counts widgets and measures rectangles, it does
+not look at the screen.
+
+**What only you can check.** Resize the window to something taller than it is wide
+but not by much — 810×1080 (a tablet in portrait) or 800×900 — and open the board
+editor. The live FEN and the "White to play / Black to play" control should each
+appear **once**, under the board. On the base build each appeared twice. The board
+should also come out bigger than it did in that band, because the side column no
+longer squeezes it.
+
+**How to test it.** On Linux desktop, `fvm flutter run -d linux`, open the board
+editor, and resize the window to 810×1080 and then to 844×390 (a landscape phone):
+in the first the panel sits under the board, in the second beside it, and in both it
+appears exactly once.
+
+---
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)
