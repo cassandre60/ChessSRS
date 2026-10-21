@@ -534,4 +534,51 @@ void main() {
     expect(find.byType(SrsSegmented<int>), findsNothing);
     expect(find.byType(TabBarView), findsOneWidget);
   });
+
+  testWidgets('the landscape board fits the height of the column it is laid out in', (
+    WidgetTester tester,
+  ) async {
+    // A 480 x 300 window with the 56px bottom bar leaves a 480 x 244 area, so
+    // the side width is 236: under the 250 threshold, the board follows the
+    // golden ratio of the width (480 / 1.618 - 32 = 264.67 px) while the
+    // column it is laid out in only has 244 - 2 x 16 = 212 px of height.
+    //
+    // The overflow is invisible to the suite: the shared provider scope
+    // swallows every "A RenderFlex overflowed by" error, so this test asserts
+    // the geometry and not the absence of an exception.
+    const surface = Size(480, 300);
+    final app = await makeTestProviderScope(
+      tester,
+      child: MaterialApp(
+        home: DefaultTabController(
+          length: 1,
+          child: AnalysisLayout(
+            pov: Side.white,
+            sideToMove: Side.white,
+            boardBuilder: (context, boardSize, boardRadius) {
+              return StaticChessboard(
+                size: boardSize,
+                fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR',
+                orientation: Side.white,
+              );
+            },
+            bottomBar: const SizedBox(height: kBottomBarHeight),
+            children: const [Center(child: Text('Analysis tab'))],
+          ),
+        ),
+      ),
+      surfaceSize: surface,
+    );
+    await tester.pumpWidget(app);
+
+    final board = find.byType(StaticChessboard);
+    // The column that holds the board: the closest Column above it.
+    final column = find.ancestor(of: board, matching: find.byType(Column)).first;
+
+    expect(
+      tester.getSize(board).height,
+      lessThanOrEqualTo(tester.getSize(column).height),
+      reason: 'the board must fit the height of the column it is laid out in',
+    );
+  });
 }
