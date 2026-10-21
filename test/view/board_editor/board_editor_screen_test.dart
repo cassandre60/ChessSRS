@@ -865,6 +865,373 @@ void main() {
       expect(endgamesFirst, isNot(openingsFirst));
     });
   });
+
+  // The tests below pin the behaviours a mutation round on
+  // lib/src/view/board_editor/board_editor_screen.dart found unprotected: each one
+  // fails when the named mutation is applied to the screen and passes on the
+  // committed source.
+  group('Board editor surface', () {
+    testWidgets('the piece palette tiles the board width, so the erase tool ends flush with it', (
+      tester,
+    ) async {
+      // SPEC INV-062.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The palette holds one tool per file -- the drag toggle, the six roles, the
+      // erase tool -- so its eight tools tile the board's eight files exactly. A
+      // palette that does not fit its own box is clipped by its own
+      // `Clip.hardEdge`, and the erase button is the tool that disappears: the
+      // control becomes unreachable with no error and no failing test.
+      final board = tester.getRect(find.byType(ChessboardEditor));
+      final drag = tester.getRect(find.byKey(const Key('drag-button-white')));
+      final erase = tester.getRect(find.byKey(const Key('delete-button-white')));
+
+      expect(drag.left, moreOrLessEquals(board.left, epsilon: 0.01));
+      expect(erase.right, moreOrLessEquals(board.right, epsilon: 0.01));
+    });
+
+    testWidgets('the status panel is shown once, in the narrow and in the wide layout', (
+      tester,
+    ) async {
+      // SPEC INV-062.
+      // This viewport leaves a square area under the header, which is exactly the
+      // threshold between the stacked and the side-by-side layout.
+      const narrow = Size(390, 786);
+      var app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(),
+        surfaceSize: narrow,
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Precondition: the area left to the editor is square. If the chrome around
+      // the board changes height, this fails loudly instead of the test quietly
+      // checking a layout it no longer sits on the threshold of.
+      expect(tester.getRect(find.byType(LayoutBuilder)).height, narrow.width);
+
+      // The narrow layout stacks the palettes above and below the board.
+      final board = tester.getRect(find.byType(ChessboardEditor));
+      final palette = tester.getRect(find.byKey(const Key('drag-button-white')));
+      expect(palette.top, greaterThan(board.bottom));
+
+      // The status panel -- the live FEN and the side-to-move control -- is shown
+      // once, not twice and not never.
+      expect(find.textContaining(' w KQkq '), findsOneWidget);
+      expect(find.byType(SrsSegmented<Side>), findsOneWidget);
+
+      // The wide layout puts the same panel beside the board, and still shows it
+      // exactly once.
+      const wide = Size(844, 390);
+      app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(),
+        surfaceSize: wide,
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining(' w KQkq '), findsOneWidget);
+      expect(find.byType(SrsSegmented<Side>), findsOneWidget);
+    });
+
+    testWidgets('the board fits the height the wide layout gives it', (tester) async {
+      // SPEC INV-062.
+      const wide = Size(844, 390);
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(),
+        surfaceSize: wide,
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // In the wide layout the board is limited by the height of the area left to
+      // the editor, not by its width. A board sized from the width is squashed
+      // into a rectangle that is no longer a board.
+      final available = tester.getRect(find.byType(LayoutBuilder));
+      final board = tester.getRect(find.byType(ChessboardEditor));
+      expect(board.width, moreOrLessEquals(board.height, epsilon: 0.01));
+      expect(board.height, lessThanOrEqualTo(available.height));
+    });
+
+    testWidgets('the narrow layout keeps the status panel content off the screen edge', (
+      tester,
+    ) async {
+      // SPEC INV-062.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The panel under the board insets its content from the screen edge, so the
+      // FEN is not cut by a rounded corner or a gesture bar.
+      final fen = tester.getRect(find.textContaining(' w KQkq '));
+      expect(fen.left, greaterThanOrEqualTo(16));
+    });
+
+    testWidgets('the board is drawn over the SRS board background', (tester) async {
+      // SPEC INV-061.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The SRS board theme paints transparent squares, so the light and dark
+      // squares the user reads come from the background behind the board. Without
+      // it the board has no squares at all.
+      expect(find.byType(SrsBoardBackground), findsOneWidget);
+    });
+
+    testWidgets('the active tool is marked and the other tools are not', (tester) async {
+      // SPEC INV-061.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final c = SrsTheme.of(tester.element(find.byType(BoardEditorScreen)));
+
+      // The drag tool is the live tool on start, so it is the filled one.
+      final drag = find.byKey(const Key('drag-button-white'));
+      expect(tester.widget<ColoredBox>(drag).color, c.accentSoft);
+      expect(
+        tester.widget<Icon>(find.descendant(of: drag, matching: find.byType(Icon))).color,
+        c.accent,
+      );
+
+      // The erase tool is not, and neither is a piece.
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byKey(const Key('delete-button-white')),
+                matching: find.byType(Icon),
+              ),
+            )
+            .color,
+        c.ink3,
+      );
+      expect(
+        tester.widget<ColoredBox>(find.byKey(const Key('piece-button-white-queen'))).color,
+        Colors.transparent,
+      );
+
+      // Picking a piece marks that tool, and only that tool.
+      await tester.tap(find.byKey(const Key('piece-button-white-queen')));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<ColoredBox>(find.byKey(const Key('piece-button-white-queen'))).color,
+        c.accentSoft,
+      );
+      expect(
+        tester.widget<ColoredBox>(find.byKey(const Key('piece-button-white-knight'))).color,
+        Colors.transparent,
+      );
+    });
+
+    testWidgets('the side-to-move control shows the side to move', (tester) async {
+      // SPEC INV-015.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SrsSegmented<Side>>(find.byType(SrsSegmented<Side>)).value, Side.white);
+
+      await tester.tap(find.text('Black to play'));
+      await tester.pumpAndSettle();
+
+      // The control follows the position: a control stuck on "White to play" while
+      // the FEN reads "b" contradicts the position it edits.
+      expect(tester.widget<SrsSegmented<Side>>(find.byType(SrsSegmented<Side>)).value, Side.black);
+    });
+
+    testWidgets('the scene title names the variant in force', (tester) async {
+      // SPEC INV-012.
+      var app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The standard variant needs no label of its own.
+      expect(find.text('Board editor'), findsOneWidget);
+
+      // A variant with its own rules is named, so a position built under them is
+      // not mistaken for a standard one.
+      app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(
+          params: (initialVariant: Variant.horde, initialFen: null, initialOrientation: null),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Board editor'), findsNothing);
+      expect(find.textContaining('Horde'), findsOneWidget);
+    });
+  });
+
+  group('Board editor FEN handling', () {
+    testWidgets('a pasted FEN is normalised before it is loaded', (tester) async {
+      // SPEC INV-012.
+      // The en passant square of this FEN cannot be true of the board: no black
+      // pawn could have made it. The editor loads what is true, so the square is
+      // dropped rather than carried into the position.
+      const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 0 1';
+      _mockClipboard(fen);
+
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Paste from clipboard'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(BoardEditorScreen)));
+      expect(
+        container.read(boardEditorControllerProvider(null)).fen,
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      );
+    });
+
+    testWidgets('the FEN field cannot be typed into', (tester) async {
+      // SPEC INV-012.
+      // The field is read-only: the position enters the editor by pasting, so that
+      // it always arrives through the normalising path.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '4k3/8/8/8/8/8/8/8 w - - 0 1');
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TextField>(find.byType(TextField)).controller?.text, isEmpty);
+    });
+  });
+
+  group('Board editor Chess960 dialog', () {
+    Future<void> openDialog(WidgetTester tester) async {
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Chess960 Position'));
+      await tester.pumpAndSettle();
+    }
+
+    SrsPillButton loadButton(WidgetTester tester) =>
+        tester.widget<SrsPillButton>(find.widgetWithText(SrsPillButton, 'Load position'));
+
+    testWidgets('the position ID is validated against the 0-959 range', (tester) async {
+      // SPEC INV-012.
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(
+          params: (initialVariant: Variant.chess960, initialFen: null, initialOrientation: null),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+      await openDialog(tester);
+
+      // Nothing typed yet: no complaint, and nothing to load.
+      expect(find.textContaining('Max ID'), findsNothing);
+      expect(loadButton(tester).onPressed, isNull);
+
+      // 959 is the highest position there is.
+      await tester.enterText(find.byType(TextField), '959');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Max ID'), findsNothing);
+      expect(loadButton(tester).onPressed, isNotNull);
+
+      // 960 is not a position.
+      await tester.enterText(find.byType(TextField), '960');
+      await tester.pumpAndSettle();
+      expect(find.text('Max ID is 959'), findsOneWidget);
+      expect(loadButton(tester).onPressed, isNull);
+    });
+
+    testWidgets('the random button fills a position ID that can be loaded', (tester) async {
+      // SPEC INV-012.
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(
+          params: (initialVariant: Variant.chess960, initialFen: null, initialOrientation: null),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+      await openDialog(tester);
+
+      await tester.tap(find.textContaining('Random'));
+      await tester.pumpAndSettle();
+
+      final id = int.tryParse(tester.widget<TextField>(find.byType(TextField)).controller!.text);
+      expect(id, isNotNull);
+      expect(id, inInclusiveRange(0, 959));
+      expect(find.textContaining('Max ID'), findsNothing);
+      expect(loadButton(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('the Chess960 menu offers the Chess960 loader, not the standard ones', (
+      tester,
+    ) async {
+      // SPEC INV-012.
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(
+          params: (initialVariant: Variant.chess960, initialFen: null, initialOrientation: null),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle();
+
+      // Chess960 has no single starting position, and the positions library is
+      // built for the standard rules, so neither action is offered for it.
+      expect(find.text('Chess960 Position'), findsOneWidget);
+      expect(find.text('Starting position'), findsNothing);
+      expect(find.text('Load position'), findsNothing);
+    });
+  });
+
+  group('Board editor menu actions', () {
+    testWidgets('"Continue from here" is not offered for an illegal position', (tester) async {
+      // SPEC INV-012.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The white queen takes the white king: a position no game can be played from.
+      await dragFromTo(tester, 'd1', 'e1');
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue from here'), findsNothing);
+    });
+
+    testWidgets('"Continue from here" is not offered for an empty board', (tester) async {
+      // SPEC INV-012.
+      final app = await makeTestProviderScopeApp(tester, home: const BoardEditorScreen());
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear board'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue from here'), findsNothing);
+    });
+  });
 }
 
 Future<void> dragFromTo(WidgetTester tester, String from, String to) async {
