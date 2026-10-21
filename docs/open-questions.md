@@ -15,6 +15,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q5 | G07 approval attribution | — | **answered 2026-10-14: one account for both, accepted.** No action |
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
+| Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
 
 ---
 
@@ -209,3 +210,36 @@ sentence.
 
 **Found.** 2026-10-16 spec-conformance audit
 (`docs/spec-conformance-audit-2026-10-16.md`, F1).
+
+---
+
+## Q8 — A corrupt timestamp in a row: roll over silently, or refuse?
+
+**Known.** `parseUtcIso` (`lib/src/persistence/fast_date_parser.dart`) reads a
+stored timestamp two ways: a fast path for the two layouts it documents
+(`YYYY-MM-DDTHH:MM:SSZ` and `YYYY-MM-DDTHH:MM:SS.mmmZ`), and `DateTime.parse`
+for everything else. The fast path trusts the digits it reads, so a field
+outside the calendar — a 13th month, a 32nd day — is not rejected: Dart's
+`DateTime.utc(2026, 13, 14)` rolls over to 2027-01-14, and the row reads back
+as a date nobody wrote. `DateTime.parse` refuses the same string.
+
+**Why it is a question and not a bug I fixed.** Both outcomes are defensible and
+the product has never said which it wants. Today the row reads as a rolled-over
+date (a `nextDueAt` a month out reads a month out, and the card is due or not
+due accordingly). The alternative is to refuse the value, which turns a corrupt
+row into a read that throws. The mutation audit could not settle it either: a
+mutant that disables the fast path is killed only by a test that pins the
+roll-over, and a test that pins the refusal requires the behaviour change. I
+would not bless either without your word.
+
+**Not known.** Which of the two a corrupt row should produce. Nothing in the
+codebase writes such a value — every writer stores a UTC ISO string produced by
+`toUtc().toIso8601String()` — so this is about a row that is already broken, not
+about a path the app takes.
+
+**Needed.** One word: *roll over* (today's behaviour, left alone) or *refuse*
+(the fast path validates each field and hands the string to `DateTime.parse`,
+which raises `FormatException` on the read).
+
+**Found.** 2026-10-21 mutation audit of `lib/src/persistence/fast_date_parser.dart`
+#337).
