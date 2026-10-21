@@ -2046,6 +2046,24 @@ void main() {
   // the right kind of score, the right depth, every variation the engine reported. A wrong number
   // here is a wrong number on the player's screen, and nothing else in the file would notice.
   group('PositionEvaluator evaluation arithmetic', () {
+    test("the engine's evaluation reaches the screen", () async {
+      // SPEC INV-020. The whole point of the evaluator: the engine's verdict has to arrive. The
+      // wait is bounded, so an evaluator that never publishes fails this test instead of hanging
+      // the suite — the difference between a red build and a stuck one.
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final service = readEvaluator(container);
+        final results = <EvalResult>[];
+        service.evaluate(makeWork())!.listen(results.add);
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+
+        expect(results, isNotEmpty, reason: "the engine's evaluation must reach the screen");
+      });
+    });
+
     test('a cached cloud evaluation is reused instead of searching again', () async {
       // SPEC INV-020. The engine's evaluation is advisory, so a good enough one is simply shown
       // again rather than paid for twice.
