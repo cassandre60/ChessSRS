@@ -1,6 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031.
+// SPEC coverage: INV-060, INV-062, INV-063, INV-030, INV-031, INV-068, INV-020.
 
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
@@ -2404,6 +2404,379 @@ void main() {
       expect(find.text('Daily limit reached.'), findsOneWidget);
       expect(find.textContaining('White and Black combined'), findsOneWidget);
       expect(find.textContaining('Review Black'), findsNothing);
+    });
+
+    // SPEC INV-068. The all-caught-up screen reads the scope's three states off
+    // one progress record: retained (scheduled), learning (due), new (fresh).
+    // INV-068 requires them to be disjoint and to partition the scope, so the
+    // bar and the legend must report the same three numbers — a screen that
+    // filed a due position under "retained" would describe a library the user
+    // does not have.
+    testWidgets('the all-caught-up view reports the scope three states, and they partition it', (
+      tester,
+    ) async {
+      final importResult = importPgn(
+        '1. e4 e5 2. Nf3 *',
+        studyTitle: 'Partition Test Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      // Work through the queue: 1.e4 (with the ...e5 reply auto-played), then
+      // 2.Nf3. Both positions are presented and scheduled afterwards.
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
+      await playMove(tester, 'g1', 'f3');
+      await pumpAsyncUntil(tester, () => tester.any(find.text('Nothing due.')));
+
+      // The screen is the all-caught-up one and the drawer is closed, so the
+      // only memory bar on it is the scope's.
+      expect(find.text('Nothing due.'), findsOneWidget);
+      expect(find.byType(SrsMemoryBar), findsOneWidget);
+
+      final bar = tester.widget<SrsMemoryBar>(find.byType(SrsMemoryBar));
+      expect(bar.retained, 2, reason: 'both positions were presented and are scheduled');
+      expect(bar.learning, 0, reason: 'nothing is due any more');
+      expect(bar.fresh, 0, reason: 'both positions have been presented, so neither is new');
+
+      // The legend reads the same three numbers, so the two readings on the
+      // screen cannot drift apart.
+      expect(find.text('2 retained'), findsOneWidget);
+      expect(find.text('0 learning'), findsOneWidget);
+      expect(find.text('0 new'), findsOneWidget);
+    });
+
+    // SPEC INV-063. Nothing about the answer may be on screen while the prompt
+    // is open. The board's shapes are withheld (INV-063 proper), and so is the
+    // answer slot of the notation line: it would otherwise print the very move
+    // the learner is being asked to find.
+    testWidgets('the notation line holds the answer back until the move is graded', (tester) async {
+      final importResult = importPgn(
+        '1. Nf3 Nc6 2. d4 *',
+        studyTitle: 'Answer Slot Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(SrsNotationLine));
+
+      // While the prompt is open the line's decision slot is a blank: the
+      // expected move is the answer, and the answer is not on screen.
+      var line = tester.widget<SrsNotationLine>(find.byType(SrsNotationLine));
+      expect(line.answerSan, isNull, reason: 'the answer must not be printed before it is graded');
+      expect(line.showBlank, isTrue);
+
+      // A wrong move grades the prompt, and only then does the answer join
+      // the line.
+      await playMove(tester, 'e2', 'e4');
+      await pumpUntilFound(
+        tester,
+        find.text('Play this move to continue. The position will come back soon.'),
+      );
+
+      line = tester.widget<SrsNotationLine>(find.byType(SrsNotationLine));
+      expect(line.answerSan, 'Nf3', reason: 'a graded prompt shows the move that was expected');
+      expect(line.showBlank, isFalse);
+    });
+
+    // SPEC INV-063. A comment that belongs to the *position* — rather than to
+    // the move being answered — is study material too: it is withheld while
+    // the prompt is open and joins the board only once the move has been
+    // graded. Nothing else on the screen judges that case, so it is pinned
+    // here.
+    testWidgets('a comment on the position is revealed only after the move is graded', (
+      tester,
+    ) async {
+      // The comment sits on the position after 1...e5, which is where the
+      // second decision (2.Nf3) is asked from: the position carries it, not
+      // the move that is answered.
+      final importResult = importPgn(
+        '1. e4 e5 {Attacks the centre [%cal Gf3e5]} 2. Nf3 *',
+        studyTitle: 'Position Comment Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(BoardWidget));
+
+      // First prompt: 1.e4, asked from the start position.
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
+
+      // Second prompt: 2.Nf3, asked from the position that carries the
+      // comment. The comment must not be on the board yet.
+      var board = tester.widget<BoardWidget>(find.byType(BoardWidget));
+      expect(
+        board.shapes,
+        isEmpty,
+        reason: 'the position comment must not leak onto the board during recall',
+      );
+
+      // Answer it correctly: the position's comment now joins the board.
+      await playMove(tester, 'g1', 'f3');
+      await pumpUntilFound(tester, find.text('Attacks the centre'));
+
+      board = tester.widget<BoardWidget>(find.byType(BoardWidget));
+      expect(
+        board.shapes.any((s) => s is Arrow && s.orig == Square.f3 && s.dest == Square.e5),
+        isTrue,
+        reason: 'a graded prompt shows the shapes the position carried',
+      );
+    });
+
+    // SPEC INV-060. The verdict is announced through a live region, which is
+    // what makes it spoken as it happens instead of only being findable by
+    // exploring the screen.
+    testWidgets('the verdict is announced through a live region', (tester) async {
+      final sem = tester.ensureSemantics();
+
+      // The move carries a note, which pauses auto-advancement and so holds
+      // the verdict on screen long enough to read.
+      final importResult = importPgn(
+        '1. e4 {Attacks the centre} e5 2. Nf3 {Develops} Nc6 *',
+        studyTitle: 'Live Region Flag Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      await playMove(tester, 'e2', 'e4');
+      await pumpUntilFound(tester, find.bySemanticsLabel('Correct. e4.'));
+
+      final verdict = tester.getSemantics(find.bySemanticsLabel('Correct. e4.'));
+      expect(
+        verdict.flagsCollection.isLiveRegion,
+        isTrue,
+        reason: 'the verdict must be announced when it happens, not only be found by exploring',
+      );
+
+      // flutter_test checks at end of test that every handle was disposed, so this cannot be an
+      // addTearDown.
+      sem.dispose();
+    });
+
+    // SPEC INV-062. The practice control on the all-caught-up screen advertises
+    // its "P" shortcut, so the key has to reach it: a control that shows its
+    // shortcut and ignores the key is a control that does not work.
+    testWidgets('the P shortcut on the all-caught-up screen starts practice mode', (tester) async {
+      final importResult = importPgn(
+        '1. e4 e5 2. Nf3 *',
+        studyTitle: 'Practice Shortcut Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+        // Everything scheduled in the future, so nothing is due and the
+        // screen is the all-caught-up one.
+        for (final d in importResult.decisions) {
+          await repo.saveReviewState(
+            ReviewState(decisionId: d.id, nextDueAt: DateTime.utc(2026, 10, 1), repetitionCount: 3),
+          );
+        }
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.text('Nothing due.'));
+
+      // The screen is the all-caught-up one, and the practice control is on it.
+      expect(find.text('Nothing due.'), findsOneWidget);
+      expect(find.widgetWithText(SrsPillButton, 'Practice'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP, physicalKey: PhysicalKeyboardKey.keyP);
+      // The practice reload crosses the database; poll for the board rather
+      // than sleeping a fixed window that a longer load outlasts.
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      expect(find.byType(Chessboard), findsOneWidget);
+    });
+
+    // SPEC INV-020. A played move is graded against the position on screen,
+    // so the board has to settle on the position the next prompt is asked
+    // from. A board left on the previous position still accepts the tap, so
+    // nothing but the picture on the board says the answer was asked from the
+    // wrong place.
+    testWidgets('the board shows the position the prompt is asking about', (tester) async {
+      final importResult = importPgn(
+        '1. e4 e5 2. Nf3 *',
+        studyTitle: 'Board Position Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(BoardWidget));
+
+      // The first prompt asks for 1.e4 from the start position.
+      var board = tester.widget<BoardWidget>(find.byType(BoardWidget));
+      expect(
+        board.controller.fen,
+        startsWith('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w'),
+        reason: 'the board must open on the position the first prompt asks from',
+      );
+
+      // Play 1.e4. The opponent's ...e5 reply is auto-played, and the next
+      // prompt (2.Nf3) is asked from the position after it.
+      final promptBefore = ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScreen)),
+      ).read(reviewControllerProvider).value?.currentPrompt;
+      await playMove(tester, 'e2', 'e4');
+      await pumpAsyncUntil(tester, () {
+        final prompt = ProviderScope.containerOf(
+          tester.element(find.byType(ReviewScreen)),
+        ).read(reviewControllerProvider).value?.currentPrompt;
+        return prompt != promptBefore;
+      });
+
+      board = tester.widget<BoardWidget>(find.byType(BoardWidget));
+      expect(
+        board.controller.fen,
+        startsWith('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w'),
+        reason: 'the board must settle on the position the next prompt asks from',
+      );
+    });
+
+    // SPEC INV-062. The welcome view goes side by side at 1100px and not one
+    // pixel earlier: the row needs ~1056px (500 of copy, a 64px gap, ~412 for
+    // the board and its outside coordinates, 80 of page padding), and at 900px
+    // it overflowed by ~150px. The breakpoint is a computed constant, so it is
+    // pinned at its edge — a layout that starts overflowing at 1101px is as
+    // broken as one that overflows at 900px.
+    testWidgets('the welcome view goes side by side at exactly 1100px', (tester) async {
+      Future<void> pumpNoStudies(Size size) async {
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          surfaceSize: size,
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
+        await tester.pumpWidget(app);
+        await pumpUntilFound(tester, find.text('Bring your study.'));
+      }
+
+      await pumpNoStudies(const Size(1099, 800));
+      expect(
+        find.byType(SrsBoardBackground),
+        findsNothing,
+        reason: 'one pixel below the breakpoint the copy and the board cannot sit side by side',
+      );
+
+      await pumpNoStudies(const Size(1100, 800));
+      expect(
+        find.byType(SrsBoardBackground),
+        findsOneWidget,
+        reason: 'at the breakpoint the side-by-side row fits the window it asked for',
+      );
     });
   });
 }
