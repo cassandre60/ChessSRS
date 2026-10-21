@@ -55,3 +55,7 @@ chesssrs-design-package/
 .agent/
 *.html
 skills-lock.json
+
+# Python bytecode caches (the mutation engine imports the ledger/orchestrator helpers)
+__pycache__/
+*.pyc
