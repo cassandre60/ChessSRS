@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
+import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/common/speed.dart';
@@ -9,7 +10,10 @@ import 'package:chess_srs/src/model/common/time_increment.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
 import 'package:chess_srs/src/model/game/game_status.dart';
+import 'package:chess_srs/src/model/game/material_diff.dart';
 import 'package:chess_srs/src/model/game/offline_computer_game.dart';
+import 'package:chess_srs/src/model/game/player.dart';
+import 'package:chess_srs/src/model/user/user.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -291,6 +295,522 @@ void main() {
 
       expect(restored.steps.length, game.steps.length);
       expect(restored.clocks, isNull);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // The contracts below are the ones a consumer of the live-game model is
+  // entitled to rely on. They are pinned here because the mutation audit of
+  // lib/src/model/game/game.dart found the model able to lose them silently.
+  // ---------------------------------------------------------------------
+
+  /// The steps of a game played from the standard position.
+  IList<GameStep> stepsFor(List<String> sans) {
+    Position position = Chess.initial;
+    final steps = <GameStep>[
+      GameStep(position: position, diff: MaterialDiff.fromPosition(position)),
+    ];
+    for (final san in sans) {
+      final move = position.parseSan(san)!;
+      position = position.playUnchecked(move);
+      steps.add(
+        GameStep(
+          position: position,
+          sanMove: SanMove(san, move),
+          diff: MaterialDiff.fromPosition(position),
+        ),
+      );
+    }
+    return steps.lock;
+  }
+
+  GameMeta metaWith({
+    bool rated = false,
+    Duration? initial,
+    Duration? increment,
+    LightOpening? opening,
+  }) => GameMeta(
+    createdAt: DateTime.utc(2026, 1, 2),
+    rated: rated,
+    variant: Variant.standard,
+    speed: Speed.blitz,
+    perf: Perf.blitz,
+    clock: initial == null
+        ? null
+        : (
+            initial: initial,
+            increment: increment ?? Duration.zero,
+            emergency: null,
+            moreTime: null,
+          ),
+    opening: opening,
+  );
+
+  const veloce = Player(
+    user: LightUser(id: UserId('veloce'), name: 'veloce'),
+    rating: 1789,
+    ratingDiff: 9,
+  );
+
+  const chabrot = Player(
+    user: LightUser(id: UserId('chabrot'), name: 'chabrot'),
+    rating: 1810,
+    ratingDiff: -9,
+  );
+
+  ExportedGame exportedGame({
+    GameStatus status = GameStatus.started,
+    Side? youAre,
+    Side? winner,
+    IList<GameStep>? steps,
+    IList<ExternalEval>? evals,
+    IList<Duration>? clocks,
+    Player? white,
+    Player? black,
+    GameMeta? meta,
+    String? initialFen,
+  }) {
+    final gameSteps = steps ?? stepsFor(const ['e4', 'e5']);
+    final whitePlayer = white ?? veloce;
+    final blackPlayer = black ?? chabrot;
+    final gameMeta = meta ?? metaWith();
+    return ExportedGame(
+      id: const GameId('CCW6EEru'),
+      meta: gameMeta,
+      data: LightExportedGame(
+        id: const GameId('CCW6EEru'),
+        rated: gameMeta.rated,
+        speed: gameMeta.speed,
+        perf: gameMeta.perf,
+        createdAt: gameMeta.createdAt,
+        lastMoveAt: gameMeta.createdAt,
+        status: status,
+        white: whitePlayer,
+        black: blackPlayer,
+        variant: gameMeta.variant,
+      ),
+      steps: gameSteps,
+      initialFen: initialFen,
+      status: status,
+      source: GameSource.lobby,
+      youAre: youAre,
+      winner: winner,
+      white: whitePlayer,
+      black: blackPlayer,
+      evals: evals,
+      clocks: clocks,
+    );
+  }
+
+  group('game status', () {
+    // SPEC INV-011. A game that has ended must not be half-applied as still
+    // running: the status getters are what every screen reads to decide
+    // whether the game can be moved, resigned or aborted.
+    test('a game that ended is finished and not aborted', () {
+      for (final status in [
+        GameStatus.mate,
+        GameStatus.resign,
+        GameStatus.stalemate,
+        GameStatus.timeout,
+        GameStatus.draw,
+        GameStatus.outoftime,
+      ]) {
+        final game = exportedGame(status: status);
+
+        expect(game.finished, isTrue, reason: '$status must be finished');
+        expect(game.aborted, isFalse, reason: '$status must not be aborted');
+      }
+    });
+
+    test('an aborted game is aborted and not finished', () {
+      final game = exportedGame(status: GameStatus.aborted);
+
+      expect(game.aborted, isTrue);
+      expect(game.finished, isFalse);
+    });
+
+    test('only a game that has not ended is playable', () {
+      expect(exportedGame(status: GameStatus.created).playable, isTrue);
+      expect(exportedGame(status: GameStatus.started).playable, isTrue);
+      expect(exportedGame(status: GameStatus.aborted).playable, isFalse);
+      expect(exportedGame(status: GameStatus.mate).playable, isFalse);
+      expect(exportedGame(status: GameStatus.unknown).playable, isFalse);
+    });
+  });
+
+  group('point of view', () {
+    // SPEC INV-013. The side a player sits on decides the point of view of
+    // the whole app, so the two players are never swapped and a spectator
+    // has neither of them.
+    test('me and opponent are null while spectating', () {
+      final game = exportedGame();
+
+      expect(game.me, isNull);
+      expect(game.opponent, isNull);
+    });
+
+    test('me and opponent follow the point of view', () {
+      final asWhite = exportedGame(youAre: Side.white);
+      expect(asWhite.me?.user?.name, 'veloce');
+      expect(asWhite.opponent?.user?.name, 'chabrot');
+
+      final asBlack = exportedGame(youAre: Side.black);
+      expect(asBlack.me?.user?.name, 'chabrot');
+      expect(asBlack.opponent?.user?.name, 'veloce');
+    });
+
+    test('playerSideOf names the side of a player and null for a stranger', () {
+      final game = exportedGame();
+
+      expect(game.playerSideOf(const UserId('veloce')), Side.white);
+      expect(game.playerSideOf(const UserId('chabrot')), Side.black);
+      expect(game.playerSideOf(const UserId('someone')), isNull);
+    });
+
+    test('playerOf returns the player sitting on the given side', () {
+      final game = exportedGame();
+
+      expect(game.playerOf(Side.white).user?.name, 'veloce');
+      expect(game.playerOf(Side.black).user?.name, 'chabrot');
+    });
+  });
+
+  group('post game analysis', () {
+    // SPEC INV-014. The analysis summary is part of the record the game
+    // keeps, and it is only a summary when both sides have one.
+    test('the analysis summary needs both sides to have one', () {
+      const analysis = PlayerAnalysis(inaccuracies: 1, mistakes: 2, blunders: 3);
+
+      final both = exportedGame(
+        white: const Player(
+          user: LightUser(id: UserId('veloce'), name: 'veloce'),
+          analysis: analysis,
+        ),
+        black: const Player(
+          user: LightUser(id: UserId('chabrot'), name: 'chabrot'),
+          analysis: analysis,
+        ),
+      );
+      expect(both.playersAnalysis, isNotNull);
+      expect(both.playersAnalysis!.white, analysis);
+      expect(both.playersAnalysis!.black, analysis);
+
+      final onlyWhite = exportedGame(
+        white: const Player(
+          user: LightUser(id: UserId('veloce'), name: 'veloce'),
+          analysis: analysis,
+        ),
+      );
+      expect(onlyWhite.playersAnalysis, isNull);
+
+      expect(exportedGame().playersAnalysis, isNull);
+    });
+  });
+
+  group('the exported tree', () {
+    // SPEC INV-014. The tree the game exports is rooted at the position the
+    // game started from and follows the moves that were played.
+    test('the exported tree is rooted at the initial position', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'e5', 'Nf3']));
+
+      final tree = game.makeTree();
+      expect(tree.position.fen, Chess.initial.fen);
+      expect(tree.children.length, 1);
+      expect(tree.children.first.sanMove.san, 'e4');
+      expect(tree.mainline.map((branch) => branch.sanMove.san), ['e4', 'e5', 'Nf3']);
+      expect(tree.mainline.last.position.fen, game.lastPosition.fen);
+    });
+
+    // SPEC INV-010. An evaluation variation is a first-class branch of the
+    // tree, not a flattened annotation.
+    test('an evaluation variation becomes a branch of the tree', () {
+      final game = exportedGame(
+        steps: stepsFor(const ['e4', 'e5']),
+        evals: IList(const [
+          ExternalEval(cp: 30, mate: null),
+          ExternalEval(cp: 25, mate: null, variation: 'c5 Nf3'),
+        ]),
+      );
+
+      final tree = game.makeTree();
+      expect(tree.children.length, 1);
+
+      final afterE4 = tree.children.first;
+      expect(afterE4.children.length, 2);
+      expect(afterE4.children.map((branch) => branch.sanMove.san), containsAll(['e5', 'c5']));
+
+      final variation = afterE4.children.firstWhere((b) => b.sanMove.san == 'c5');
+      expect(variation.children.length, 1);
+      expect(variation.children.single.sanMove.san, 'Nf3');
+
+      final afterE4Position = Chess.initial.playUnchecked(Chess.initial.parseSan('e4')!);
+      expect(
+        variation.position.fen,
+        afterE4Position.playUnchecked(afterE4Position.parseSan('c5')!).fen,
+      );
+    });
+
+    test('an evaluation without clocks still reaches the exported game', () {
+      final game = exportedGame(
+        steps: stepsFor(const ['e4', 'e5', 'Nf3', 'Nc6']),
+        evals: IList(const [
+          ExternalEval(cp: 30, mate: null),
+          ExternalEval(cp: 25, mate: null),
+          ExternalEval(cp: 20, mate: null),
+          ExternalEval(cp: 15, mate: null),
+        ]),
+      );
+
+      expect(game.makePgn(), contains('[%eval 0.30]'));
+    });
+  });
+
+  group('the exported pgn', () {
+    test('the export names the engine when a side is the computer', () {
+      final game = exportedGame(white: const Player(aiLevel: 3), black: const Player(aiLevel: 1));
+
+      expect(game.makePgn(), contains('[White "Stockfish level 3"]'));
+      expect(game.makePgn(), contains('[Black "Stockfish level 1"]'));
+    });
+
+    // SPEC INV-014. The result of the export is the result of the game: a
+    // finished game is never exported as still running, and a draw is never
+    // exported as a win.
+    test('a game that ended exports its result, not a running marker', () {
+      expect(
+        exportedGame(status: GameStatus.mate, winner: Side.white).makePgn(),
+        contains('[Result "1-0"]'),
+      );
+      expect(
+        exportedGame(status: GameStatus.resign, winner: Side.black).makePgn(),
+        contains('[Result "0-1"]'),
+      );
+      expect(exportedGame(status: GameStatus.draw).makePgn(), contains('[Result "½-½"]'));
+      expect(exportedGame(status: GameStatus.started).makePgn(), contains('[Result "*"]'));
+    });
+
+    test('an unrated game is not exported as rated', () {
+      expect(
+        exportedGame(meta: metaWith(rated: true)).makePgn(),
+        contains('[Event "Rated Blitz game"]'),
+      );
+      expect(exportedGame(meta: metaWith(rated: false)).makePgn(), isNot(contains('Rated')));
+    });
+
+    test('a zero rating difference is written without a plus sign', () {
+      final game = exportedGame(
+        white: const Player(
+          user: LightUser(id: UserId('veloce'), name: 'veloce'),
+          rating: 1789,
+          ratingDiff: 0,
+        ),
+      );
+
+      expect(game.makePgn(), contains('[WhiteRatingDiff "0"]'));
+      expect(game.makePgn(), isNot(contains('[WhiteRatingDiff "+0"]')));
+    });
+  });
+
+  group('the step accessors', () {
+    test('sanMoves lists the moves of the game', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'e5', 'Nf3']));
+
+      expect(game.sanMoves, 'e4 e5 Nf3');
+    });
+
+    test('the last move is the move of the last step', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'e5', 'Nf3']));
+
+      expect(game.lastMove?.uci, 'g1f3');
+    });
+
+    test('the initial position and ply come from the first step', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'e5', 'Nf3']));
+
+      expect(game.initialPosition.fen, Chess.initial.fen);
+      expect(game.initialPly, 0);
+    });
+
+    test('the last position and ply come from the last step', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'e5', 'Nf3']));
+
+      expect(game.lastPosition.fen, game.steps.last.position.fen);
+      expect(game.lastPly, 3);
+    });
+
+    test('the last material diff comes from the last step', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'd5', 'exd5']));
+
+      expect(game.lastMaterialDiffAt(Side.white)?.score, 1);
+      expect(game.lastMaterialDiffAt(Side.black)?.score, -1);
+    });
+
+    test('the step accessors read the step at the given cursor', () {
+      final game = exportedGame(steps: stepsFor(const ['e4', 'd5', 'exd5']));
+
+      expect(game.stepAt(2).sanMove?.san, 'd5');
+      expect(game.fenAt(2), game.steps[2].position.fen);
+      expect(game.moveAt(2)?.uci, 'd7d5');
+      expect(game.positionAt(2).fen, game.steps[2].position.fen);
+      // The last step is the one where the material changed, so a diff read
+      // from the wrong step is visible.
+      expect(game.materialDiffAt(3, Side.white)?.score, 1);
+      expect(game.materialDiffAt(3, Side.black)?.score, -1);
+    });
+
+    test('the archived clock accessors read the step at the given cursor', () {
+      final steps = <GameStep>[
+        const GameStep(position: Chess.initial),
+        const GameStep(
+          position: Chess.initial,
+          archivedWhiteClock: Duration(minutes: 4),
+          archivedBlackClock: Duration(minutes: 3),
+        ),
+        const GameStep(
+          position: Chess.initial,
+          archivedWhiteClock: Duration(minutes: 2),
+          archivedBlackClock: Duration(minutes: 1),
+        ),
+      ];
+      final game = exportedGame(steps: steps.lock);
+
+      expect(game.archivedWhiteClockAt(1), const Duration(minutes: 4));
+      expect(game.archivedBlackClockAt(1), const Duration(minutes: 3));
+      expect(game.archivedWhiteClockAt(2), const Duration(minutes: 2));
+      expect(game.archivedBlackClockAt(2), const Duration(minutes: 1));
+      expect(game.archivedClockOf(Side.white, 1), const Duration(minutes: 4));
+      expect(game.archivedClockOf(Side.black, 1), const Duration(minutes: 3));
+      expect(game.archivedClockOf(Side.white, 2), const Duration(minutes: 2));
+      expect(game.archivedClockOf(Side.black, 2), const Duration(minutes: 1));
+    });
+  });
+
+  group('the game source', () {
+    test('only the import sources count as imported games', () {
+      expect(GameSource.import.isImport, isTrue);
+      expect(GameSource.importLive.isImport, isTrue);
+      expect(GameSource.lobby.isImport, isFalse);
+      expect(GameSource.ai.isImport, isFalse);
+      expect(GameSource.unknown.isImport, isFalse);
+    });
+  });
+
+  group('the tournament clock', () {
+    test('a tournament is finished exactly when its clock has run out', () {
+      TournamentMeta tournament(Duration timeLeft) => TournamentMeta(
+        id: const TournamentId('abcd1234'),
+        name: 'Arena',
+        clock: (timeLeft: timeLeft, at: DateTime.utc(2026)),
+        berserkable: true,
+      );
+
+      expect(tournament(const Duration(days: 2)).isOngoing, isTrue);
+      expect(tournament(const Duration(days: 2)).isFinished, isFalse);
+      expect(tournament(Duration.zero).isOngoing, isFalse);
+      expect(tournament(Duration.zero).isFinished, isTrue);
+    });
+  });
+
+  group('the correspondence clock', () {
+    test('forSide reads the clock of the given side', () {
+      const data = CorrespondenceClockData(white: Duration(days: 2), black: Duration(days: 1));
+
+      expect(data.forSide(Side.white), const Duration(days: 2));
+      expect(data.forSide(Side.black), const Duration(days: 1));
+    });
+  });
+
+  group('the move times', () {
+    // SPEC INV-011. A move time is never negative: lag compensation can hand
+    // a player time, and the record must not show a negative duration.
+    test('a negative move time is clamped to zero', () {
+      final times = moveTimesFromClocks(
+        IList(const [Duration(seconds: 60), Duration(seconds: 60), Duration(seconds: 90)]),
+        Duration.zero,
+      );
+
+      expect(times, const [Duration.zero, Duration.zero, Duration.zero]);
+    });
+
+    test('a move time is the difference between the clock before and after it', () {
+      final clocks = IList(const [
+        Duration(seconds: 60),
+        Duration(seconds: 55),
+        Duration(seconds: 45),
+        Duration(seconds: 50),
+      ]);
+
+      final times = moveTimesFromClocks(clocks, Duration.zero);
+
+      expect(times.length, clocks.length);
+      expect(times, const [
+        Duration.zero,
+        Duration.zero,
+        Duration(seconds: 15),
+        Duration(seconds: 5),
+      ]);
+    });
+  });
+
+  group('the time control', () {
+    test('a game without a time control has an infinite time increment', () {
+      expect(exportedGame().timeIncrement.isInfinite, isTrue);
+      expect(clockMetaOf(const TimeIncrement.infinite()), isNull);
+    });
+
+    test('a game with a time control reports it', () {
+      final game = exportedGame(
+        meta: metaWith(initial: const Duration(minutes: 5), increment: const Duration(seconds: 3)),
+      );
+
+      expect(game.timeIncrement.time, 300);
+      expect(game.timeIncrement.increment, 3);
+      expect(clockMetaOf(const TimeIncrement(300, 3))?.initial, const Duration(seconds: 300));
+      expect(clockMetaOf(const TimeIncrement(300, 3))?.increment, const Duration(seconds: 3));
+    });
+  });
+
+  group('the stored steps', () {
+    // SPEC INV-012. A game that starts from a custom position stores that
+    // position, so it is restored from the position it was played from.
+    test('a game from a custom position keeps that position', () {
+      const fen = '4k3/8/8/8/8/8/8/4K2R w K - 0 1';
+      var position = Position.setupPosition(Rule.chess, Setup.parseFen(fen));
+      final steps = <GameStep>[GameStep(position: position)];
+      for (final san in const ['O-O']) {
+        final move = position.parseSan(san)!;
+        position = position.playUnchecked(move);
+        steps.add(GameStep(position: position, sanMove: SanMove(san, move)));
+      }
+
+      final restored = stepsFromJson(stepsToJson(steps.lock));
+
+      expect(restored.first.position.fen, fen);
+      expect(restored.length, 2);
+    });
+
+    // SPEC INV-033. A castling move is stored in its king-takes-rook form
+    // (e1h1), so storing and restoring it must give the same position back.
+    test('a castling move survives a storage round trip', () {
+      final steps = stepsFor(const ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'O-O']);
+
+      final restored = stepsFromJson(stepsToJson(steps));
+
+      expect(restored.length, steps.length);
+      expect(restored.last.sanMove?.san, 'O-O');
+      expect(restored.last.position.fen, steps.last.position.fen);
+    });
+
+    // SPEC INV-011. A stored game that has been corrupted is truncated at
+    // the broken move instead of being half-applied.
+    test('a stored game with a broken move is truncated at that move', () {
+      final objs = jsonDecode(stepsToJson(stepsFor(const ['e4', 'e5', 'Nf3']))) as List<dynamic>;
+      (objs[2] as Map<String, dynamic>)['uci'] = null;
+
+      final restored = stepsFromJson(jsonEncode(objs));
+
+      expect(restored.length, 2);
+      expect(restored.last.sanMove?.san, 'e4');
     });
   });
 }
