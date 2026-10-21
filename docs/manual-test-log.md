@@ -137,6 +137,30 @@ editor, and resize the window to 810×1080 and then to 844×390 (a landscape pho
 in the first the panel sits under the board, in the second beside it, and in both it
 appears exactly once.
 
+### 5. A shape drawn in a study chapter no longer survives a chapter switch
+
+**What changed.** The study board's shape-clearing guard watched the loading
+flag, which never flips on a chapter switch — `goToChapter` assigns the new
+state directly — so a shape the user drew in one chapter stayed on the board in
+the next one, pointing at a position that had nothing to do with it. The guard
+now watches the chapter identity, which is what a chapter switch changes.
+
+**What the tests prove.** That the drawn shape is gone after the chapter
+switch, and that it is still there after an unrelated rebuild of the same
+chapter (a widget test that drives the real two-pointer draw gesture on the
+real board). What they do not prove is how the board looks on a device.
+
+**What only you can check.** The draw gesture is a two-finger *touch* gesture:
+chessground locks the draw mode with the first pointer and drags the shape out
+with a second one, so a mouse cannot draw a shape at all — the Linux desktop
+build has no touch input, and this change was therefore never exercised in the
+running app here.
+
+**How to test it.** On a phone or a tablet, open a study with at least two
+chapters, draw an arrow on the board (hold one finger on an empty square, drag
+a second finger away from it), then switch to the next chapter with the chapter
+dialog. The arrow must not follow you to the new chapter.
+
 ---
 
 ## Closed
