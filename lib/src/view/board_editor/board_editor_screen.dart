@@ -63,7 +63,7 @@ class BoardEditorScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final boardEditorState = ref.watch(boardEditorControllerProvider(params));
     final c = context.srs;
-    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final landscape = _isWideLayout(context);
 
     // Quiet scene-title line under the header (demo meta treatment).
     // Carries the variant name the old app bar title showed as an icon.
@@ -124,10 +124,18 @@ class BoardEditorScreen extends ConsumerWidget {
               child: Center(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final aspectRatio = constraints.biggest.aspectRatio;
-
                     final isTablet = isTabletOrLarger(context);
-                    final direction = aspectRatio > 1 ? Axis.horizontal : Axis.vertical;
+                    // The *screen's* shape decides the layout, not the shape of the area left to
+                    // the editor: the chrome around the board -- the head, the scene title and the
+                    // bottom bar -- takes height off that area and no width off it, so the area's
+                    // ratio is always wider than the screen's and the two disagree in the band
+                    // between them. The status panel was placed by this decision and hidden by
+                    // the other one, so in that band it was drawn twice.
+                    //
+                    // It has to be the screen's shape because the bottom bar is laid out before
+                    // the body: it cannot know how tall the area left to the editor turned out to
+                    // be, and that height depends on whether the panel is in it.
+                    final direction = _isWideLayout(context) ? Axis.horizontal : Axis.vertical;
 
                     // The board is square, so it can only be as large as the *shorter* side allows --
                     // but the two palettes are rows of eight square tools laid along the cross axis,
@@ -240,6 +248,14 @@ class BoardEditorScreen extends ConsumerWidget {
   }
 }
 
+/// Whether the editor is in its wide layout: the status panel beside the board rather than
+/// under it.
+///
+/// The *screen's* aspect ratio, and not the aspect ratio of the area left to the editor: the
+/// chrome around the board always makes that area wider than the screen is wide, so the two
+/// disagree for every screen that is taller than it is wide by less than the chrome's height.
+/// The panel is placed by one of those two shapes and hidden by the other, so in that band it
+/// was drawn twice.
 bool _isWideLayout(BuildContext context) => MediaQuery.sizeOf(context).aspectRatio > 1;
 
 /// The demo `editor` side column's lower half, promoted out of the places it was buried in.

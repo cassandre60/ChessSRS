@@ -61,6 +61,37 @@ void main() {
       expect(find.textContaining(' b KQkq '), findsOneWidget);
     });
 
+    testWidgets('Status panel is shown once when the window is tall but the editor area is wide', (
+      tester,
+    ) async {
+      // SPEC INV-062.
+      // A window taller than it is wide, whose area left to the editor is wider than it is
+      // tall: the head, the scene title and the bottom bar take height off that area and no
+      // width off it, so the two shapes disagree in this band.
+      const size = Size(800, 900);
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const BoardEditorScreen(),
+        surfaceSize: size,
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Precondition: the two shapes really do disagree here. If the chrome around the board
+      // changes height, this fails loudly instead of the test quietly checking a layout it no
+      // longer sits on.
+      final editorArea = tester.getRect(
+        find.ancestor(of: find.byType(LayoutBuilder), matching: find.byType(Center)).first,
+      );
+      expect(size.width / size.height, lessThanOrEqualTo(1));
+      expect(editorArea.width / editorArea.height, greaterThan(1));
+
+      // The panel is drawn once: the live FEN and the side-to-move control, not two of each.
+      // Drawn twice it takes the room the board needs, and the two copies edit the same state.
+      expect(find.textContaining(' w KQkq '), findsOneWidget);
+      expect(find.byType(SrsSegmented<Side>), findsOneWidget);
+    });
+
     testWidgets('Copy FEN writes the live FEN to the clipboard', (tester) async {
       final copied = <String>[];
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
