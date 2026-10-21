@@ -43,6 +43,26 @@ void main() {
       expect(resolveChapterOrientation({'White': 'Ruy Lopez', 'Black': '?'}), Side.white);
     });
 
+    // The title-keyword search is documented case-insensitive. White is also
+    // the fallthrough default, so a mixed-case white keyword is only
+    // observable where losing it flips the answer: a start position with
+    // Black to move, where the keyword is what says White is at home.
+    test('a mixed-case white title keyword wins over the starting side', () {
+      expect(
+        resolveChapterOrientation({
+          'ChapterName': 'Marshall Attack (White)',
+        }, startTurn: Side.black),
+        Side.white,
+      );
+    });
+
+    // An empty tag is a placeholder too: it means no name, so the context
+    // decides. Plain-white context answering White proves the empty tag rides
+    // the placeholder branch instead of counting as Black's named opponent.
+    test('an empty player tag is a placeholder', () {
+      expect(resolveChapterOrientation({'White': '?', 'Black': ''}), Side.white);
+    });
+
     test('detects orientation when player contains repertoire keyword', () {
       expect(resolveChapterOrientation({'ChapterName': "King's Indian [Black]"}), Side.black);
       expect(
