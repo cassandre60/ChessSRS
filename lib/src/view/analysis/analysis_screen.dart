@@ -708,7 +708,9 @@ class _EngineToggleButtonState extends State<_EngineToggleButton> {
           onTap: widget.enabled && snapshot.connectionState != ConnectionState.waiting
               ? () async {
                   final future = widget.onToggle();
-                  setState(() => _toggleFuture = future);
+                  setState(() {
+                    _toggleFuture = future;
+                  });
                   try {
                     await future;
                   } finally {

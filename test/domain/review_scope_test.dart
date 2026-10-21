@@ -60,9 +60,75 @@ void main() {
     });
 
     test('a side scope is aggregate, so transpositions are deduplicated', () {
+      // SPEC INV-030: `white()`/`black()` aggregate across active studies, so
+      // they are not aggregate-blocking; a scope naming a study or a chapter
+      // is, while an opening family still aggregates.
       expect(const ReviewScope.white().isAggregate, isTrue);
       expect(const ReviewScope.black().isAggregate, isTrue);
       expect(const ReviewScope.study('s').isAggregate, isFalse);
+      expect(const ReviewScope.chapter(studyId: 's', chapterId: 'c').isAggregate, isFalse);
+      expect(const ReviewScope.opening('French Defense').isAggregate, isTrue);
+    });
+
+    test('INV-030: study and chapter scopes filter by their identifiers', () {
+      // SPEC INV-030: `chapter()` isolates one chapter; a scope naming a study
+      // must not admit another study's chapters.
+      const study = ReviewScope.study('study-alpha');
+      expect(study.matches(studyId: 'study-alpha', chapterId: 'ch-1'), isTrue);
+      expect(study.matches(studyId: 'study-beta', chapterId: 'ch-1'), isFalse);
+
+      const chapter = ReviewScope.chapter(studyId: 'study-alpha', chapterId: 'ch-1');
+      expect(chapter.matches(studyId: 'study-alpha', chapterId: 'ch-1'), isTrue);
+      expect(chapter.matches(studyId: 'study-beta', chapterId: 'ch-1'), isFalse);
+      expect(chapter.matches(studyId: 'study-alpha', chapterId: 'ch-2'), isFalse);
+    });
+
+    test('INV-030: equality and hashCode verify each field with runtime-constructed operands', () {
+      // SPEC INV-030: a scope identifies one filter exactly, so two scopes that
+      // differ in any dimension are different filters. Must verify each
+      // dimension without short-circuiting via const identical().
+      final base = ReviewScope.chapter(
+        studyId: 's'.trim(),
+        chapterId: 'c'.trim(),
+        side: Side.white,
+      );
+      final same = ReviewScope.chapter(
+        studyId: 's'.trim(),
+        chapterId: 'c'.trim(),
+        side: Side.white,
+      );
+      expect(identical(base, same), isFalse);
+      expect(base, equals(same));
+      expect(base.hashCode, equals(same.hashCode));
+
+      final diffStudy = ReviewScope.chapter(
+        studyId: 's2'.trim(),
+        chapterId: 'c'.trim(),
+        side: Side.white,
+      );
+      final diffChapter = ReviewScope.chapter(
+        studyId: 's'.trim(),
+        chapterId: 'c2'.trim(),
+        side: Side.white,
+      );
+      final diffSide = ReviewScope.chapter(
+        studyId: 's'.trim(),
+        chapterId: 'c'.trim(),
+        side: Side.black,
+      );
+      final diffOpening = ReviewScope.opening('Sicilian Defense'.trim());
+      final sameOpening = ReviewScope.opening('Sicilian Defense'.trim());
+
+      expect(base, isNot(equals(diffStudy)));
+      expect(base, isNot(equals(diffChapter)));
+      expect(base, isNot(equals(diffSide)));
+      expect(base, isNot(equals(diffOpening)));
+      expect(base, isNot(equals(Object())));
+
+      expect(identical(diffOpening, sameOpening), isFalse);
+      expect(diffOpening, equals(sameOpening));
+      expect(diffOpening.hashCode, equals(sameOpening.hashCode));
+      expect(diffOpening, isNot(equals(ReviewScope.opening('French Defense'.trim()))));
     });
 
     test('study and opening scopes carry the drawer colour', () {
