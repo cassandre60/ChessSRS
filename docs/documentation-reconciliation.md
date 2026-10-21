@@ -2,7 +2,8 @@
 
 Class: spec-change/documentation only. No product source, tests, gate scripts,
 CI configuration, ratchets, dependencies or INV clauses changed.
-Draft for owner review; protected-file approval and remote verification pending.
+Owner approved this documentation-only diff and publication on 2026-10-21.
+Remote verification remains pending; Q7–Q10 are not settled by that approval.
 
 ## Scope and method
 
@@ -62,8 +63,10 @@ that rubber-stamps whatever code happens to do.
 - Historical ledger and incident evidence retained and visibly superseded.
 - Local validation: git diff --check, invariant-definition/citation checks and
   local path checks; results reported with the draft, not invented CI evidence.
-- G07 rejection is expected for this protected diff until explicit owner approval.
-- Remote push/PR/approval labeling and full CI are not performed without consent.
+- G07 rejected the unapproved committed diff; after owner consent the local
+  approved fast check passed. The protected-path guard was not changed.
+- Owner consent covers publishing/labeling this documentation-only change;
+  unresolved behavioral contracts need separate decisions.
 - No release: the outcome is documentation/agent navigation, not app behavior.
 
 ## Observed local validation
@@ -78,3 +81,6 @@ that rubber-stamps whatever code happens to do.
 - `python3 scripts/gates/banned_apis_check.py --config .gates/banned-apis.json --root .`:
   **clean**. Product code is unchanged.
 - Full remote suite and independent red-team recall: pending; no local wide run.
+- After merging current origin/main without conflicts, `APPROVED=1
+  ./scripts/gates.sh t1` passed: G03 clean, G07 approved under explicit owner
+  consent, G08 clean, G05 45/45, G10 ratchet OK. No local Flutter run.

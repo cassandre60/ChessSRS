@@ -33,8 +33,9 @@ today's inventory or a fresh runtime pass.
   Lichess: Firebase was removed. Backend/auth/format choices remain undecided.
 - Local full-suite/verify recipes below are historical: TEST_STRATEGY §2 now
   governs verification with no local wide-suite exception.
-- Documentation reconciliation: draft in docs/documentation-reconciliation.md;
-  no product code or INV clauses changed; approval and remote CI pending.
+- Documentation reconciliation: docs/documentation-reconciliation.md;
+  no product code or INV clauses changed; owner approved publication and this
+  documentation-only diff on 2026-10-21; remote CI pending. Q7–Q10 remain open.
 
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
