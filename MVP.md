@@ -1,76 +1,56 @@
-# MVP Scope & Specifications
+# Current Beta Scope
 
-## 1. MVP Goal
+Authority: included and deferred capabilities. `PRODUCT.md` owns intent;
+`SPEC.md` owns exact acceptance behavior; `IMPLEMENTATION_PLAN.md` owns
+delivery status and evidence. This is the evolved beta, not the original
+Phase 2-only scope. See `docs/documentation-map.md`.
 
-Deliver a functional, local-first Flutter application (built on the Lichess
-Mobile foundation) that executes the complete loop:
+## 1. Goal
 
-**PGN Import → Normalized Repertoire Tree → Active Review Scene → Local SRS Persistence**.
+Deliver and refine the local-first loop:
+**PGN import → normalized repertoire tree → active recall → durable local SRS**.
+The owner is the beta tester. The technical foundation is Lichess Mobile;
+the visual identity is Diagram (`design/README.md`).
 
----
+## 2. Included capabilities
 
-## 2. Included Capabilities
+| Capability | Scope / contract |
+|---|---|
+| PGN import | Local file/text, multi-game chapters, RAVs, comments, NAGs, custom FENs; structured quarantine (INV-010/011/012) |
+| Lichess study import | URL/ID import and bulk owned-study import; optional Lichess sign-in for protected sources; local snapshots, not live synchronization |
+| Repertoire normalization | Study → Chapter → branching tree → player decisions; per-chapter orientation and shared position memory (INV-013/015/016/017) |
+| Active review | Interactive board, repertoire grading, configurable transposition acceptance, non-blocking lapse/reguess/re-test (INV-020/021/033/065) |
+| Traversal and presentation | Due-aware opponent replies, due-only/full-line continuity; Due date/By line/Random order (INV-022/066) |
+| Review scopes | Active pool, side, study, chapter and cross-study opening hubs (INV-030) |
+| SRS | Three selectable schedulers behind Scheduler; exact math in the scheduling architecture; fresh introduction and daily caps (INV-024–029/031/068) |
+| Practice | Non-destructive rehearsal (INV-023) |
+| Local persistence and PGN export | Incremental durable answers and study/chapter export; PGN export does not back up SRS history (INV-001/002/014) |
+| Review UX/settings | Diagram surfaces, quiet feedback, spoiler-free annotations, board/piece/sound and SRS controls (INV-060–063) |
+| Explore/analysis tools | Retained inherited tools; optional network/engine assistance outside local review; cuts governed by CUT_PROPOSALS |
 
-| Capability | Description | Status |
-|---|---|---|
-| **Local PGN Import** | Multi-game, multi-chapter PGN import (via dartchess `PgnParser`) supporting recursive variations (RAVs), comments, NAGs, and starting FENs. | Phase 2 |
-| **Repertoire Normalization** | Converts PGN trees into domain `Study` → `Chapter` → repertoire tree graphs with deterministic FEN keys. | Phase 2 |
-| **Decision Point Derivation** | Derives `RepertoireDecision` units for positions requiring user recall (player's perspective). | Phase 2 |
-| **Active Recall Review** | Lichess-quality interactive board scene where users input moves to answer due repertoire positions. | Phase 2 |
-| **Move Validation** | Immediate local validation against expected repertoire continuation moves (any valid branch accepted). | Phase 2 |
-| **Automatic Traversal** | Automated traversal through opponent replies and already-learned user moves until the next due decision (never a permanent exclusion). | Phase 2 |
-| **Replaceable SRS Scheduler** | `Scheduler` contract + `SimpleScheduler` exponential interval ladder with lapse recovery and deterministic testing support. | Phase 2 |
-| **Local Persistence** | sqflite-backed repository storing studies, decisions, review states, and review events. | Phase 2 |
-| **Lichess-derived UX foundation** | Lichess Mobile theme, board (chessground/dartchess), navigation, settings. | Phase 1 |
+## 3. Deferred / excluded
 
-## 3. Excluded Capabilities (unchanged)
+- Full-library backup **and restore of SRS history**: P-EXPORT-ALL; needs a
+  persisted-format decision. Current PGN export is not that feature.
+- Cross-device content/history sync and an owned cloud/account backend: P-SYNC.
+  Optional existing Lichess authentication is included; mandatory accounts are not.
+- Automatic synchronization of imported studies with remote edits.
+- Advisory import health check: future optional work, never a prerequisite.
+- Scheduling proposals such as tournament mode, fitted personal weights,
+  confusion-registry interleaving and prerequisite priors: not current scope.
+- Tactics training, multiplayer, social feeds/leaderboards, gamification and
+  dashboards unrelated to repertoire recall (PRODUCT §6).
 
-```text
-PRODUCT SCOPE
-├── Local PGN Import               [MVP / Phase 2]
-├── Recursive Variation Trees      [MVP / Phase 2]
-├── Review-First Active Recall     [MVP / Phase 2]
-├── Automatic Traversal            [MVP / Phase 2]
-├── Replaceable SRS Engine         [MVP / Phase 2]
-├── Local Persistence              [MVP / Phase 2]
-├── Listudy training behaviors     [Phase 4 — isolated module]
-├── chessrs scheduler behaviors    [Phase 5 — isolated module]
-├── Advisory Engine Health Check   [later, isolated at import]
-├── Cross-Study Opening Filter     [later]
-├── Lichess study import/sync      [EXCLUDED for MVP]
-├── Cloud sync / accounts / social [EXCLUDED]
-└── Tactics / Social / Gamify      [EXCLUDED]
-```
+## 4. Acceptance and verification
 
-## 4. Acceptance Criteria (unchanged product requirements)
+The exact contracts are in SPEC, not restated here. Clean import, durable
+memory, bounded latency and non-modal review remain required. Fresh material
+is introduced after due work, not counted as already due (INV-068). Runtime
+acceptance follows `TEST_STRATEGY.md`; a green suite alone is not a visual or
+real-device pass.
 
-1. **Clean Import**: Importing a PGN containing multiple chapters and nested
-   variations produces a fully intact hierarchy where no variation branch is
-   discarded.
-2. **Deterministic Correctness**: Playing a move that matches an active
-   repertoire branch is accepted immediately; playing any other move (even
-   legal chess moves) is marked incorrect.
-3. **SRS Interval Progression**:
-   - A position is due only after it has been presented. New items are
-     **not** due; they are introduced gradually, after due work, and
-     only then enter the SRS ladder (SPEC INV-068).
-   - Successful recalls increase the interval (1 day → 2 days → 4 days → ...).
-   - Failed recalls reset the repetition streak and schedule a
-     short-interval retry.
-4. **Zero-Lag Interaction**: Move legality and repertoire lookup happen
-   synchronously in memory without blocking UI rendering.
-5. **No Modal Interruptions**: Incorrect moves reveal the expected line and
-   allow progression without requiring modal dismissals.
-6. **Persistence Durability**: Review states and study structures survive
-   application restarts.
-7. **Runtime-Verified UX**: The review scene must look and feel like a
-   coherent Lichess-derived mobile application (runtime validation, not just
-   tests).
+## 5. Limitations
 
-## 5. Known Limitations (MVP)
-
-- Default player orientation heuristic is White unless specified in chapter
-  metadata or custom FEN; per-chapter orientation from PGN metadata follows
-  in refinement.
-- Import sources are local PGN files only (Lichess import is an explicit
-  future horizon, never a dependency).
+Repertoires are local snapshots. Mobile email-code sign-in still needs real-device
+confirmation (F-MOBILELOGIN in IMPLEMENTATION_PLAN). Supported release artifacts
+and platform limitations live in `docs/releases.md`.

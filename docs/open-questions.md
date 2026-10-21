@@ -15,6 +15,9 @@ Each one states what is known, what is not, and what I would need from you.
 | Q5 | G07 approval attribution | — | **answered 2026-10-14: one account for both, accepted.** No action |
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
+| Q8 | 16 ms budget: validation only or durable answer, typical or every frame? | Contract scope | open 2026-10-21 |
+| Q9 | FSRS lapse repetition count versus INV-025 | Contract choice | open 2026-10-21 |
+| Q10 | Stored null-date state: due or fresh? | Legacy-edge contract | open 2026-10-21 |
 
 ---
 
@@ -209,3 +212,48 @@ sentence.
 
 **Found.** 2026-10-16 spec-conformance audit
 (`docs/spec-conformance-audit-2026-10-16.md`, F1).
+
+---
+
+## Q8 — What exactly must fit inside 16 ms?
+
+**Known.** QUALITY §4.1 bounds legality/lookup at <16 ms. INV-050 includes
+grading and persistence in a single frame. The actual oracle
+`test/review/move_latency_test.dart` times awaited `ReviewService.submitMove`
+on a small fixture and asserts the **median** <16 ms, printing p90/max. It does
+not measure every rendered frame or performance on pinned mobile/desktop
+devices. Session startup is off this path.
+
+**Decision needed.** Keep the stronger durable-answer target and define its
+reference device/dataset and percentile, or keep the validation/lookup target
+and specify durability responsiveness separately. The former needs reliable
+device/runner measurement; the latter narrows the current SPEC promise and
+requires explicit approval. Either way, a passing batch median alone is not
+evidence about every frame. No threshold or assertion changed in reconciliation.
+
+## Q9 — Should a ChessFSRS lapse erase the repetition count?
+
+**Known.** INV-025 says lapses reset the streak. Simple/EaseScaling reset
+repetitionCount to zero. ChessFSRS deliberately preserves it, increments lapses
+and recalculates stability; its tests assert preservation. The code/report
+describes a retained review counter, while SPEC describes a streak.
+This was already recorded in the conformance audit F6, not newly invented.
+
+**Decision needed.** Document the scheduler-specific meanings (matching existing
+behavior), or require a reset for every scheduler (behavioral change with
+scheduling/diagnostic implications). Matching code is not automatic authority
+to amend INV-025. No counter behavior or invariant was changed here.
+
+## Q10 — Does a stored state with no due date count as due?
+
+**Known.** INV-068 says a scheduled date must have arrived and distinguishes
+fresh items without a review state. `domain/review/due_status.dart` classifies
+a **missing state** as fresh but an **existing state with null nextDueAt** as
+due; `test/domain/due_status_test.dart` intentionally covers that legacy edge.
+The specification does not explicitly include it. A cold helper's isDueAt in
+isolation is not the whole application's fresh/due classifier.
+
+**Decision needed.** Explicitly allow stored null-date states as due (matching
+the compatibility behavior), or classify/repair them as fresh/scheduled with
+a data-handling decision. The latter changes counts/introduction and may need
+migration evidence. Reconciliation changes neither code nor INV-068.
