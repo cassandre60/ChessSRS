@@ -108,6 +108,47 @@ void main() {
       expect(a, equals(b));
     });
 
+    // SPEC INV-020. A move matches the repertoire move and nothing else:
+    // a different promotion is a different move (a knight promotion is not
+    // the repertoire's queen promotion), and a different square is a
+    // different move. This is the check the grader stands on — a move that
+    // matched when it should not would be graded correct and written into
+    // the owner's memory.
+    test('matches() rejects a different promotion on the same squares', () {
+      const queen = RepertoireMove(from: 'e7', to: 'e8', promotion: 'q');
+      const knight = RepertoireMove(from: 'e7', to: 'e8', promotion: 'n');
+      const plain = RepertoireMove(from: 'e7', to: 'e8');
+
+      expect(queen.matches(knight), isFalse);
+      expect(knight.matches(queen), isFalse);
+      expect(queen.matches(plain), isFalse);
+      expect(plain.matches(queen), isFalse);
+    });
+
+    test('matches() rejects a different square', () {
+      const e4 = RepertoireMove(from: 'e2', to: 'e4');
+      const e5 = RepertoireMove(from: 'e2', to: 'e5');
+      const otherFrom = RepertoireMove(from: 'd2', to: 'e4');
+      const d4 = RepertoireMove(from: 'd2', to: 'd4');
+
+      // Same origin, different target.
+      expect(e4.matches(e5), isFalse);
+      expect(e5.matches(e4), isFalse);
+      // Same target, different origin.
+      expect(e4.matches(otherFrom), isFalse);
+      expect(otherFrom.matches(e4), isFalse);
+      // Neither square shared.
+      expect(e4.matches(d4), isFalse);
+      expect(d4.matches(e4), isFalse);
+    });
+
+    test('matches() compares squares without regard to case', () {
+      const lower = RepertoireMove(from: 'e2', to: 'e4');
+      const upper = RepertoireMove(from: 'E2', to: 'E4');
+      expect(lower.matches(upper), isTrue);
+      expect(upper.matches(lower), isTrue);
+    });
+
     test('different moves are not equal', () {
       const a = RepertoireMove(from: 'e2', to: 'e4');
       const b = RepertoireMove(from: 'd2', to: 'd4');
