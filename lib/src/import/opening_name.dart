@@ -228,15 +228,15 @@ String? detectOpeningFamilyFromFen(String fen) {
     if (d5Black && e4White && !d4White) {
       return 'Scandinavian Defense';
     }
-    // Queen's Gambit / Slav: White has d4 and c4, Black has d5
-    if (d4White && c4White && d5Black) {
-      if (c6Black) return 'Slav Defense';
-      return "Queen's Gambit";
-    }
     // Indian defenses: White has d4 and c4, Black has g6
     if (d4White && c4White && g6Black) {
       if (d5Black) return 'Grünfeld Defense';
       return "King's Indian Defense";
+    }
+    // Queen's Gambit / Slav: White has d4 and c4, Black has d5
+    if (d4White && c4White && d5Black) {
+      if (c6Black) return 'Slav Defense';
+      return "Queen's Gambit";
     }
   } catch (_) {
     return null;
