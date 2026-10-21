@@ -79,6 +79,66 @@ for the current scope should be read as "selected".
 
 ---
 
+### 3. The engine button toggles the engine again (#315)
+
+**What changed.** Pressing the engine button in the analysis board raised
+`setState() callback argument returned a Future` and did nothing. The callback
+that holds the in-flight future returned the future it assigned, and `setState`
+requires a void callback; the callback now assigns in a block.
+
+**What the tests prove.** That a press of the real `EngineButton` raises no
+Flutter assertion, and that the button is disabled while a toggle is in flight
+(a widget test with a slow preference write, so the toggle outlives the frame
+that follows the press). What they do not prove is that the engine really
+starts and stops: the widget test drives a fake engine and fake preferences.
+
+**What only you can check.** Open an analysis board with the engine allowed and
+press the engine button (the micro-chip at the foot of the board). The engine
+should start and the chip should show a depth; press it again and it should
+stop. Then press it twice quickly: the engine should toggle **once**, not twice
+and back to where it started — the in-flight guard is what swallows the second
+press, and it only exists now because the assignment happens outside the
+assertion.
+
+**For the record.** A release build skips the assertion, so the press worked
+there; but the guard was dead there too, because the assignment lived inside
+the assertion — which only runs when assertions are enabled. The button has
+been dead in debug builds (anything started with `flutter run`, and every test)
+since #106 on 2026-09-30, and the guard has been dead in every build.
+
+---
+
+### 4. The board editor drew its status panel twice in a band of window sizes
+
+**What changed.** The editor decided its layout from the shape of the *area left to
+the editor* and decided whether to show the status panel (the live FEN and the
+side-to-move control) in the bottom bar from the shape of the *screen*. The chrome
+around the board takes height off that area and no width off it, so the area's shape
+is always wider than the screen's. In the band where the screen is taller than it is
+wide but the area left to the editor is wider than it is tall, the two disagreed and
+the panel was drawn **twice**: once in a column beside the board, once in the bottom
+bar. Both decisions now read the screen's shape.
+
+**What the tests prove.** That at an 800×900 window the panel is drawn exactly once
+(a new widget test that fails on the base code with two copies of the live FEN), and
+that the rest of the editor's tests are unchanged. What they do not prove is how the
+editor *looks* in that band: the test counts widgets and measures rectangles, it does
+not look at the screen.
+
+**What only you can check.** Resize the window to something taller than it is wide
+but not by much — 810×1080 (a tablet in portrait) or 800×900 — and open the board
+editor. The live FEN and the "White to play / Black to play" control should each
+appear **once**, under the board. On the base build each appeared twice. The board
+should also come out bigger than it did in that band, because the side column no
+longer squeezes it.
+
+**How to test it.** On Linux desktop, `fvm flutter run -d linux`, open the board
+editor, and resize the window to 810×1080 and then to 844×390 (a landscape phone):
+in the first the panel sits under the board, in the second beside it, and in both it
+appears exactly once.
+
+---
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)

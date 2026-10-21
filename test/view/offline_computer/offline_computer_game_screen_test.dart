@@ -20,6 +20,7 @@ import 'package:chess_srs/src/model/offline_computer/offline_computer_game_prefe
 import 'package:chess_srs/src/model/offline_computer/offline_computer_game_storage.dart';
 import 'package:chess_srs/src/model/offline_computer/practice_analyser.dart';
 import 'package:chess_srs/src/model/offline_computer/practice_comment.dart';
+import 'package:chess_srs/src/model/settings/board_preferences.dart';
 import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
@@ -30,6 +31,7 @@ import 'package:chess_srs/src/widgets/pockets.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -72,6 +74,14 @@ void main() {
     );
     registerFallbackValue(game);
     registerFallbackValue(SavedOfflineComputerGame(game: game));
+  });
+
+  tearDown(() {
+    // The paste test mocks the clipboard; the mock is per-test, not per-file.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    );
   });
 
   group('Offline computer game', () {
@@ -375,6 +385,68 @@ void main() {
       expect(find.text('New game'), findsWidgets);
     });
 
+    testWidgets('The result dialog is dismissed by tapping outside it', (tester) async {
+      // The result of the game is a dialog the player can be done with, not a wall:
+      // tapping outside it is the same as pressing Close.
+      await initOfflineComputerGame(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await playMove(tester, 'd2', 'd4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Resign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yes'));
+      await tester.pump(Duration.zero);
+      await tester.pump();
+
+      // The result is not thrown at the player the instant the game ends: the board
+      // they were reading is still theirs for half a second.
+      expect(find.text('Game Over'), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('Game Over'), findsOneWidget);
+
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Game Over'), findsNothing);
+    });
+
+    testWidgets('The result dialog starts a new game', (tester) async {
+      await initOfflineComputerGame(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await playMove(tester, 'd2', 'd4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Resign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yes'));
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('New game'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Play'),
+        findsOneWidget,
+        reason: 'the sheet to start the next game is there',
+      );
+    });
+
     testWidgets('New game option in menu opens bottom sheet', (tester) async {
       await initOfflineComputerGame(tester);
 
@@ -440,6 +512,50 @@ void main() {
         expect(find.text('Blindfold'), findsOneWidget);
       },
     );
+
+    // SPEC INV-023, INV-063. Practice mode writes nothing; comment shapes never leak.
+    testWidgets('The settings sheet switches write the preferences they show', (tester) async {
+      // The sheet is the only place these preferences are set, so a switch that does
+      // not write what it shows leaves the player with a setting that does nothing.
+      await initPracticeModeGame(tester);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OfflineComputerGameScreen)),
+      );
+
+      final hideBestMove = find.byWidgetPredicate(
+        // The label is "Hide best move" in English and "Hide the best move" in
+        // en-US, so the switch is matched on what it says rather than on how.
+        (w) => w is SrsSwitch && w.semanticLabel.toLowerCase().contains('best move'),
+      );
+      expect(tester.widget<SrsSwitch>(hideBestMove).value, isFalse);
+      await tester.tap(hideBestMove);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SrsSwitch>(hideBestMove).value, isTrue);
+      expect(container.read(offlineComputerGamePreferencesProvider).hideBestMove, isTrue);
+
+      final hideEvaluation = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Hide evaluation',
+      );
+      expect(tester.widget<SrsSwitch>(hideEvaluation).value, isFalse);
+      await tester.tap(hideEvaluation);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SrsSwitch>(hideEvaluation).value, isTrue);
+      expect(container.read(offlineComputerGamePreferencesProvider).hideEvaluation, isTrue);
+
+      final blindfold = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel.toLowerCase().contains('blindfold'),
+      );
+      expect(tester.widget<SrsSwitch>(blindfold).value, isFalse);
+      await tester.tap(blindfold);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SrsSwitch>(blindfold).value, isTrue);
+      expect(container.read(offlineComputerGamePreferencesProvider).blindfoldMode, isTrue);
+    });
 
     testWidgets('Playing as black shows board from black perspective', (tester) async {
       await initOfflineComputerGame(tester, side: Side.black);
@@ -2043,6 +2159,92 @@ void main() {
       final animatedOpacity = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
       expect(animatedOpacity.opacity, 0.5);
     });
+
+    // SPEC INV-061. Feedback stays readable in both themes.
+    testWidgets('a card with nothing to say is not dimmed', (tester) async {
+      // The dimming marks a verdict that is being replaced. With no evaluation in
+      // flight there is nothing to replace, and the card is simply the feedback.
+      await _pumpWithState(tester, _statePlayerTurn());
+      final animatedOpacity = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      expect(animatedOpacity.opacity, 1.0);
+    });
+
+    // SPEC INV-060. Every verdict is announced to screen readers.
+    testWidgets("the card says it is the player's turn", (tester) async {
+      // The player is told when the board is theirs.
+      await _pumpWithState(
+        tester,
+        _stateWithPracticeComment(const PracticeComment(verdict: MoveVerdict.mistake)),
+      );
+      expect(find.text('Your turn'), findsOneWidget);
+    });
+
+    // SPEC INV-060. Every verdict is announced to screen readers.
+    testWidgets("the card does not claim it is the player's turn when it is not", (tester) async {
+      // The opponent's turn is not announced as the player's.
+      await _pumpWithState(tester, _stateOpponentToMove());
+      expect(find.text('Your turn'), findsNothing);
+    });
+
+    // SPEC INV-060. Every verdict is announced to screen readers.
+    testWidgets('the suggested move is highlighted once it is on the board', (tester) async {
+      // The move the card offers and the arrow on the board are the same move, and
+      // the card says so by colouring it.
+      final move = Move.parse('e7e5')! as NormalMove;
+
+      await _pumpWithState(
+        tester,
+        _stateWithPracticeComment(
+          PracticeComment(verdict: MoveVerdict.mistake, moveSuggestion: SanMove('e5', move)),
+        ).copyWith(showingSuggestedMove: move),
+      );
+
+      final text = tester.widget<Text>(find.textContaining('e5'));
+      final card = text.textSpan! as TextSpan;
+      final moveSpan = card.children!.whereType<TextSpan>().firstWhere((span) => span.text == 'e5');
+      expect(
+        moveSpan.style?.color,
+        LichessColors.mistake,
+        reason: 'the move that is on the board is the one the card highlights',
+      );
+    });
+
+    // SPEC INV-060. Every verdict is announced to screen readers.
+    testWidgets('the last verdict stays on the card while the next move is judged', (tester) async {
+      final controller = _MutablePracticeController(
+        _stateWithPracticeComment(
+          const PracticeComment(verdict: MoveVerdict.mistake, evalAfter: '+0.3'),
+        ),
+      );
+
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+          offlineComputerGameControllerProvider: offlineComputerGameControllerProvider.overrideWith(
+            () => controller,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mistake'), findsOneWidget);
+
+      // The next move is being judged: the verdict of the last one is still on the
+      // card, dimmed rather than gone.
+      controller.newState = _stateEvaluatingMove();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mistake'), findsOneWidget);
+      expect(tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity, 0.5);
+    });
   });
 
   group('Practice mode', () {
@@ -2175,12 +2377,594 @@ void main() {
       expect(comment!.verdict, isNot(MoveVerdict.goodMove));
     });
   });
+  group('New game sheet', () {
+    setUp(() {
+      fakeEngine = LegalMoveEngine();
+    });
+
+    /// The sheet, on a screen that has nothing saved to restore.
+    Future<Widget> openSheet(
+      WidgetTester tester, {
+      String? initialFen,
+      OfflineComputerGamePrefs? prefs,
+    }) {
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+      when(() => gameStorage.save(any())).thenAnswer((_) async {});
+
+      return makeTestProviderScopeApp(
+        tester,
+        home: OfflineComputerGameScreen(initialFen: initialFen),
+        defaultPreferences: prefs == null
+            ? null
+            : {PrefCategory.offlineComputerGame.storageKey: jsonEncode(prefs.toJson())},
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+    }
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('a saved game with no moves does not replace the new game dialog', (tester) async {
+      // A game that was started and abandoned before the first move is not a game to
+      // resume: what the player gets is the sheet to start a real one.
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer(
+        (_) async => SavedOfflineComputerGame(
+          game: OfflineComputerGame(
+            id: const StringId('test-game-id'),
+            steps: [const GameStep(position: Chess.initial)].lock,
+            meta: GameMeta(
+              createdAt: kFixedGameCreatedAt,
+              rated: false,
+              variant: Variant.standard,
+              speed: Speed.classical,
+              perf: Perf.classical,
+            ),
+            initialFen: null,
+            status: GameStatus.started,
+            playerSide: Side.white,
+            opponentSpec: const StockfishOpponentSpec(StockfishLevel.level1),
+            humanPlayer: const Player(onGame: true),
+            enginePlayer: enginePlayerFor(const StockfishOpponentSpec(StockfishLevel.level1)),
+          ),
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Play'), findsOneWidget);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('a preferred from-position variant falls back to standard without a FEN', (
+      tester,
+    ) async {
+      // The from-position variant plays the position the player pastes. With no
+      // position to paste there is nothing to play, so the sheet starts on standard.
+      final app = await openSheet(
+        tester,
+        prefs: OfflineComputerGamePrefs.defaults.copyWith(variant: Variant.fromPosition),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(settingsRowValue(tester, 'Variant'), 'Standard');
+      expect(find.byType(SrsTextInput), findsNothing);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('the FEN input appears only for the from-position variant', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Standard chess has no position to paste.
+      expect(find.byType(SrsTextInput), findsNothing);
+      expect(find.text('Paste from clipboard'), findsNothing);
+
+      await selectVariant(tester, 'From Position');
+
+      expect(find.byType(SrsTextInput), findsOneWidget);
+      expect(find.text('Paste from clipboard'), findsOneWidget);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('the game cannot start from the from-position variant without a position', (
+      tester,
+    ) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      final play = tester.widget<SrsPillButton>(find.widgetWithText(SrsPillButton, 'Play'));
+      expect(play.onPressed, isNull, reason: 'there is no position to play from yet');
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('the game starts once a position is pasted in the from-position variant', (
+      tester,
+    ) async {
+      const customFen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      // Tapping the field pastes the clipboard into it, which is the only way a
+      // position gets in.
+      mockClipboard(customFen);
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+
+      expect(find.text(customFen), findsOneWidget, reason: 'the position is in the field');
+      expect(
+        tester.widget<SrsTextInput>(find.byType(SrsTextInput)).readOnly,
+        isTrue,
+        reason: 'the position is pasted, not typed',
+      );
+
+      final play = tester.widget<SrsPillButton>(find.widgetWithText(SrsPillButton, 'Play'));
+      expect(play.onPressed, isNotNull, reason: 'a position is there to play from');
+
+      await selectSide(tester, Side.white);
+      await tester.ensureVisible(find.text('Play'));
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(Chessboard)));
+      expect(container.read(offlineComputerGameControllerProvider).game.initialFen, customFen);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('the side picker offers "Next to play" for a custom position', (tester) async {
+      final app = await openSheet(
+        tester,
+        initialFen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Next to play'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Side'));
+      await tester.tap(find.text('Side'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: find.byType(SrsDialog), matching: find.text('Next to play')),
+        findsOneWidget,
+        reason: 'the side to move is one of the choices when a position is given',
+      );
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('the mini board says which side plays in the custom position', (tester) async {
+      // Black to move.
+      final app = await openSheet(
+        tester,
+        initialFen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Black to play'), findsOneWidget);
+      expect(find.text('White to play'), findsNothing);
+      expect(
+        tester.widget<StaticChessboard>(find.byType(StaticChessboard)).settings.enableCoordinates,
+        isFalse,
+        reason: 'the preview is a picture of the position, not a board to play on',
+      );
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('a custom position keeps the from-position variant in the sheet', (tester) async {
+      // A position means the game is played from it, and the sheet says so: the
+      // variant row is not quietly standard while the game is not.
+      final app = await openSheet(
+        tester,
+        initialFen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        prefs: OfflineComputerGamePrefs.defaults.copyWith(variant: Variant.fromPosition),
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(settingsRowValue(tester, 'Variant'), 'From Position');
+
+      final play = tester.widget<SrsPillButton>(find.widgetWithText(SrsPillButton, 'Play'));
+      expect(play.onPressed, isNotNull, reason: 'a position is there to play from');
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    testWidgets('switching away from the from-position variant drops the pasted position', (
+      tester,
+    ) async {
+      // The position belongs to the from-position variant. A game in another variant
+      // is played from that variant's own start, not from a position the sheet no
+      // longer shows.
+      const customFen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      mockClipboard(customFen);
+      await tester.ensureVisible(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      expect(find.text(customFen), findsOneWidget);
+
+      await selectVariant(tester, 'Atomic');
+
+      await selectSide(tester, Side.white);
+      await tester.ensureVisible(find.text('Play'));
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(Chessboard)));
+      final game = container.read(offlineComputerGameControllerProvider).game;
+      expect(game.meta.variant, Variant.atomic);
+      expect(game.initialFen, isNull);
+    });
+
+    // SPEC INV-023. Practice mode writes nothing.
+    testWidgets('a practice-mode game is a casual game', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // A game that is not casual has no takebacks and no hints.
+      final casualSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Casual',
+      );
+      await tester.tap(casualSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SrsSwitch>(casualSwitch).value, isFalse);
+
+      final practiceSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
+      );
+      await tester.ensureVisible(find.text('Practice mode'));
+      await tester.tap(practiceSwitch);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<SrsSwitch>(casualSwitch).value,
+        isTrue,
+        reason: 'a practice game is played casually, so the casual switch reads on',
+      );
+
+      await selectSide(tester, Side.white);
+      await tester.ensureVisible(find.text('Play'));
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(Chessboard)));
+      expect(
+        container.read(offlineComputerGameControllerProvider).game.casual,
+        isTrue,
+        reason: 'and the game it starts is a casual one',
+      );
+    });
+
+    // SPEC INV-023. Practice mode writes nothing.
+    testWidgets('crazyhouse turns practice mode off, other variants keep it', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final practiceSwitch = find.byWidgetPredicate(
+        (w) => w is SrsSwitch && w.semanticLabel == 'Practice mode',
+      );
+      await tester.ensureVisible(find.text('Practice mode'));
+      await tester.tap(practiceSwitch);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SrsSwitch>(practiceSwitch).value, isTrue);
+
+      // A variant that is not crazyhouse leaves practice mode alone.
+      await selectVariant(tester, 'Atomic');
+      expect(tester.widget<SrsSwitch>(practiceSwitch).value, isTrue);
+
+      // Crazyhouse cannot be practised.
+      await selectVariant(tester, 'Crazyhouse');
+      expect(tester.widget<SrsSwitch>(practiceSwitch).value, isFalse);
+    });
+
+    // SPEC INV-041. Scheduling and review paths take time only through Clock.
+    testWidgets('the clock sliders are shown only for a clock time control', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // An unlimited game has no clock to set.
+      expect(find.textContaining('Minutes per side'), findsNothing);
+      expect(find.textContaining('Increment in seconds'), findsNothing);
+
+      await selectTimeControl(tester, 'Clock');
+
+      expect(find.textContaining('Minutes per side'), findsOneWidget);
+      expect(find.textContaining('Increment in seconds'), findsOneWidget);
+    });
+
+    // SPEC INV-041. Scheduling and review paths take time only through Clock.
+    testWidgets('the clock asked for in the sheet is the clock the game has', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectTimeControl(tester, 'Clock');
+      await selectSide(tester, Side.white);
+      await tester.ensureVisible(find.text('Play'));
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Clock), findsNWidgets(2));
+    });
+
+    // SPEC INV-041. Scheduling and review paths take time only through Clock.
+    testWidgets('the clock warns before a minute game is up', (tester) async {
+      // The clock turns red when the time left is a fraction of what it was: an
+      // eighth of it, and never less than ten seconds.
+      await initTimedOfflineComputerGame(tester, const TimeIncrement(60, 0));
+
+      expect(findPlayerClock(tester).emergencyThreshold, const Duration(seconds: 10));
+    });
+
+    // SPEC INV-041. Scheduling and review paths take time only through Clock.
+    testWidgets('the clock warns no later than a minute before a long game is up', (tester) async {
+      await initTimedOfflineComputerGame(tester, const TimeIncrement(600, 3));
+
+      expect(findPlayerClock(tester).emergencyThreshold, const Duration(seconds: 60));
+    });
+
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the Play button fills the width of the sheet', (tester) async {
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final sheet = tester.getRect(find.byKey(SrsSheetSurface.surfaceKey));
+      // The pill itself, not the pressable around it: the pressable fills the sheet
+      // either way, and the pill is what the player sees.
+      final pill = find
+          .descendant(
+            of: find.widgetWithText(SrsPillButton, 'Play'),
+            matching: find.byType(Container),
+          )
+          .first;
+
+      expect(
+        tester.getRect(pill).width,
+        greaterThan(sheet.width * 0.8),
+        reason: 'the sheet has one action, and it fills the sheet',
+      );
+    });
+  });
+  group('Board feedback', () {
+    setUp(() {
+      fakeEngine = MultiPvEngine();
+    });
+
+    // SPEC INV-011. Malformed input is quarantined, never half-applied.
+    testWidgets('the board is not interactive while the opponent is to move', (tester) async {
+      // The engine's reply waits for the piece animation. Until it starts, the board
+      // must not offer the player a second move: a move made out of turn would be
+      // applied to a game that is not the player's to move in.
+      //
+      // The piece animation is what makes the window observable, so this one test asks
+      // for it; the rest of the suite turns it off to keep the board simple.
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+      when(() => gameStorage.save(any())).thenAnswer((_) async {});
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(),
+        defaultPreferences: {
+          PrefCategory.board.storageKey: jsonEncode(
+            BoardPrefs.defaults.copyWith(pieceAnimation: true).toJson(),
+          ),
+        },
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectSide(tester, Side.white);
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      await playMove(tester, 'e2', 'e4');
+
+      final board = tester.widget<Chessboard>(find.byType(Chessboard));
+      expect(board.interactive, isFalse);
+
+      // Let the engine's reply run out, so nothing is left pending behind the test.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+    });
+
+    // SPEC INV-011. Malformed input is quarantined, never half-applied.
+    testWidgets('the board is not interactive once the game is over', (tester) async {
+      // A game that has ended is not one the player keeps moving in.
+      await initOfflineComputerGame(tester);
+
+      await playMove(tester, 'e2', 'e4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await playMove(tester, 'd2', 'd4');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Resign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Yes'));
+      await tester.pumpAndSettle();
+
+      final board = tester.widget<Chessboard>(find.byType(Chessboard));
+      expect(board.interactive, isFalse);
+
+      // Let the result dialog's timer run out, so nothing is left pending.
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+    });
+
+    // SPEC INV-063. Comment shapes never leak during recall.
+    testWidgets('the hint is drawn on the board as a circle', (tester) async {
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+      when(() => gameStorage.save(any())).thenAnswer((_) async {});
+
+      late WidgetRef ref;
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: Consumer(
+          builder: (context, r, _) {
+            ref = r;
+            return const OfflineComputerGameScreen();
+          },
+        ),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectSide(tester, Side.white);
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      // The hints are computed while the player thinks.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      final state = ref.read(offlineComputerGameControllerProvider);
+      expect(state.hintMoves, isNotNull);
+      expect(state.hintMoves, isNotEmpty);
+
+      await tester.tap(find.text('Get a hint'));
+      await tester.pump();
+
+      final shown = ref.read(offlineComputerGameControllerProvider);
+      expect(shown.hintSquare, isNotNull);
+
+      final board = tester.widget<Chessboard>(find.byType(Chessboard));
+      final circles = board.shapes.whereType<Circle>().toList();
+      expect(circles, hasLength(1), reason: 'the hint is drawn on the square it starts from');
+      expect(circles.single.orig, shown.hintSquare);
+    });
+
+    // SPEC INV-063. Comment shapes never leak during recall.
+    testWidgets('the suggested move is drawn on the board as an arrow', (tester) async {
+      final move = Move.parse('e7e5')! as NormalMove;
+
+      await _pumpWithState(
+        tester,
+        _stateWithPracticeComment(
+          PracticeComment(verdict: MoveVerdict.mistake, moveSuggestion: SanMove('e5', move)),
+        ).copyWith(showingSuggestedMove: move),
+      );
+
+      final board = tester.widget<Chessboard>(find.byType(Chessboard));
+      final arrows = board.shapes.whereType<Arrow>().toList();
+      expect(arrows, hasLength(1));
+      expect(arrows.single.orig, move.from);
+      expect(arrows.single.dest, move.to);
+    });
+
+    // SPEC INV-020. Correctness means matching the repertoire.
+    testWidgets('a threefold repetition is offered as a draw, and only once', (tester) async {
+      // The player is asked whether to claim the draw. Having said no, they are not
+      // asked again the next time the screen hears about the repetition.
+      final controller = _MutablePracticeController(_stateWithRepetition(false, 'game-1'));
+
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+          offlineComputerGameControllerProvider: offlineComputerGameControllerProvider.overrideWith(
+            () => controller,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      controller.newState = _stateWithRepetition(true, 'game-2');
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Threefold repetition'), findsOneWidget);
+      expect(find.text('Claim a draw'), findsOneWidget);
+
+      await tester.tap(find.text('No'));
+      await tester.pumpAndSettle();
+      expect(find.text('Threefold repetition'), findsNothing);
+
+      // The screen hears about the repetition again, and the player is left alone.
+      controller.newState = _stateWithRepetition(true, 'game-3');
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Threefold repetition'), findsNothing);
+    });
+  });
 }
 
 /// A fake controller that returns a preset state, used to inject specific practice comments.
 class _FakePracticeController extends OfflineComputerGameController {
   _FakePracticeController(this._initialState);
   final OfflineComputerGameState _initialState;
+
+  @override
+  OfflineComputerGameState build() => _initialState;
+}
+
+/// A fake controller whose state can be replaced, so that a rebuild of the card is observable.
+class _MutablePracticeController extends OfflineComputerGameController {
+  _MutablePracticeController(this._initialState);
+  final OfflineComputerGameState _initialState;
+
+  /// The state the screen is given, and the way to give it a new one.
+  OfflineComputerGameState get newState => state;
+  set newState(OfflineComputerGameState value) => state = value;
 
   @override
   OfflineComputerGameState build() => _initialState;
@@ -2334,6 +3118,66 @@ OfflineComputerGameState _statePlayerTurn({ComputerAnalysis? analysis}) {
   return OfflineComputerGameState(game: game, stepCursor: 0);
 }
 
+/// Builds a game state whose threefold repetition flag is [isThreefoldRepetition].
+///
+/// The game id carries [id], so that two states with the same flag are still two
+/// different states and the screen hears about the change.
+OfflineComputerGameState _stateWithRepetition(bool isThreefoldRepetition, String id) {
+  final game = OfflineComputerGame(
+    id: StringId(id),
+    steps: [const GameStep(position: Chess.initial)].lock,
+    meta: GameMeta(
+      createdAt: kFixedGameCreatedAt,
+      rated: false,
+      variant: Variant.standard,
+      speed: Speed.classical,
+      perf: Perf.classical,
+    ),
+    initialFen: kInitialFEN,
+    status: GameStatus.started,
+    playerSide: Side.white,
+    opponentSpec: const StockfishOpponentSpec(StockfishLevel.level1),
+    humanPlayer: const Player(onGame: true),
+    enginePlayer: enginePlayerFor(const StockfishOpponentSpec(StockfishLevel.level1)),
+    isThreefoldRepetition: isThreefoldRepetition,
+  );
+  return OfflineComputerGameState(game: game, stepCursor: 0);
+}
+
+/// Builds a state where it is the opponent's turn, with the player on white.
+///
+/// Practice mode is on, so the card is on screen and the status line above it has
+/// something to say — or not to say.
+OfflineComputerGameState _stateOpponentToMove() {
+  final afterE4 = Position.setupPosition(
+    Rule.chess,
+    Setup.parseFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'),
+  );
+  final game = OfflineComputerGame(
+    id: const StringId('test-opponent-to-move'),
+    steps: [
+      const GameStep(position: Chess.initial),
+      GameStep(position: afterE4, sanMove: SanMove('e4', Move.parse('e2e4')!)),
+    ].lock,
+    meta: GameMeta(
+      createdAt: kFixedGameCreatedAt,
+      rated: false,
+      variant: Variant.standard,
+      speed: Speed.classical,
+      perf: Perf.classical,
+    ),
+    initialFen: kInitialFEN,
+    status: GameStatus.started,
+    playerSide: Side.white,
+    opponentSpec: const StockfishOpponentSpec(StockfishLevel.level1),
+    humanPlayer: const Player(onGame: true),
+    enginePlayer: enginePlayerFor(const StockfishOpponentSpec(StockfishLevel.level1)),
+    practiceMode: true,
+    casual: true,
+  );
+  return OfflineComputerGameState(game: game, stepCursor: 1);
+}
+
 /// Builds a state where the player has just moved and evaluation is in progress.
 ///
 /// [isEvaluatingMove] is true and no practice comment is set yet, causing
@@ -2424,6 +3268,23 @@ Future<void> selectTimeControl(WidgetTester tester, String choice) async {
   await tester.tap(find.text(choice).last);
   await tester.pumpAndSettle();
 }
+
+/// Picks [label] (a variant name) in the new game bottom sheet's variant picker.
+Future<void> selectVariant(WidgetTester tester, String label) async {
+  await tester.ensureVisible(find.text('Variant'));
+  await tester.tap(find.text('Variant'));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text(label).last);
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+/// The value shown on the settings row labelled [label] in the new game bottom sheet.
+String? settingsRowValue(WidgetTester tester, String label) => tester
+    .widget<SrsSettingsRow>(
+      find.ancestor(of: find.text(label), matching: find.byType(SrsSettingsRow)).first,
+    )
+    .value;
 
 /// Initializes an offline computer game played with [timeIncrement], with the player as white.
 Future<Rect> initTimedOfflineComputerGame(WidgetTester tester, TimeIncrement timeIncrement) async {
