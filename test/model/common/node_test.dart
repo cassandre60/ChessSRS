@@ -867,6 +867,428 @@ void main() {
       }
     });
   });
+
+  // The contracts below are the ones a consumer of the game tree is entitled to
+  // rely on. They are pinned here because the mutation audit of
+  // lib/src/model/common/node.dart found the tree able to lose them silently.
+  group('Node.merge', () {
+    // SPEC INV-010.
+    test('copies the opening of the merged tree', () {
+      const opening = LightOpening(eco: 'C50', name: 'Italian Game');
+      final source = Root.fromPgnMoves('e4 e5');
+      source.opening = opening;
+
+      final target = Root.fromPgnMoves('e4 e5');
+      target.merge(source);
+      expect(target.opening, equals(opening));
+
+      // Merging a tree that has no opening leaves the target's opening alone.
+      const other = LightOpening(eco: 'C60', name: 'Ruy Lopez');
+      final target2 = Root.fromPgnMoves('e4 e5');
+      target2.opening = other;
+      target2.merge(Root.fromPgnMoves('e4 e5'));
+      expect(target2.opening, equals(other));
+    });
+
+    Branch branchWith({
+      List<PgnComment>? lichessAnalysisComments,
+      List<PgnComment>? startingComments,
+      List<PgnComment>? comments,
+      List<int>? nags,
+    }) => Branch(
+      sanMove: SanMove('e4', Move.parse('e2e4')!),
+      position: Chess.initial,
+      lichessAnalysisComments: lichessAnalysisComments,
+      startingComments: startingComments,
+      comments: comments,
+      nags: nags,
+    );
+
+    // SPEC INV-014.
+    test('merges the lichess analysis comments without duplicating the same text', () {
+      final target = branchWith(lichessAnalysisComments: [const PgnComment(text: 'shared')]);
+      final source = branchWith(
+        lichessAnalysisComments: [
+          const PgnComment(text: 'shared'),
+          const PgnComment(text: 'fresh'),
+        ],
+      );
+
+      target.merge(source);
+
+      expect(
+        target.lichessAnalysisComments?.map((c) => c.text).toList(),
+        equals(['shared', 'fresh']),
+      );
+    });
+
+    // SPEC INV-014.
+    test('merges the starting comments without duplicating the same text', () {
+      final target = branchWith(startingComments: [const PgnComment(text: 'shared')]);
+      final source = branchWith(
+        startingComments: [
+          const PgnComment(text: 'shared'),
+          const PgnComment(text: 'fresh'),
+        ],
+      );
+
+      target.merge(source);
+
+      expect(target.startingComments?.map((c) => c.text).toList(), equals(['shared', 'fresh']));
+    });
+
+    // SPEC INV-014.
+    test('merges the comments without dropping the ones the target already has', () {
+      final target = branchWith(comments: [const PgnComment(text: 'kept')]);
+      final source = branchWith(comments: [const PgnComment(text: 'added')]);
+      target.merge(source);
+      expect(target.comments?.map((c) => c.text).toList(), equals(['kept', 'added']));
+
+      // A comment the target already carries is not duplicated.
+      final target2 = branchWith(comments: [const PgnComment(text: 'same')]);
+      final source2 = branchWith(
+        comments: [
+          const PgnComment(text: 'same'),
+          const PgnComment(text: 'other'),
+        ],
+      );
+      target2.merge(source2);
+      expect(target2.comments?.map((c) => c.text).toList(), equals(['same', 'other']));
+    });
+
+    // SPEC INV-014.
+    test('takes the nags of the merged branch', () {
+      final target = branchWith(nags: [1]);
+      target.merge(branchWith(nags: [17]));
+      expect(target.nags, equals([17]));
+
+      // A merged branch without nags does not clear the target's nags.
+      final target2 = branchWith(nags: [1]);
+      target2.merge(branchWith());
+      expect(target2.nags, equals([1]));
+    });
+  });
+
+  group('Branch', () {
+    // SPEC INV-010.
+    test('is not collapsed, a computer variation or user added by default', () {
+      final branch = Branch(sanMove: SanMove('e4', Move.parse('e2e4')!), position: Chess.initial);
+      expect(branch.isComputerVariation, isFalse);
+      expect(branch.isCollapsed, isFalse);
+      expect(branch.isUserAdded, isFalse);
+    });
+
+    // SPEC INV-014.
+    test('takes the clock of the first comment that carries one', () {
+      final branch = Branch(
+        sanMove: SanMove('e4', Move.parse('e2e4')!),
+        position: Chess.initial,
+        comments: [
+          const PgnComment(text: 'no clock'),
+          const PgnComment(text: 'with clock', clock: Duration(minutes: 2)),
+        ],
+      );
+      expect(branch.clock, equals(const Duration(minutes: 2)));
+    });
+  });
+
+  // SPEC INV-010.
+  test('addNodeAt reports that nothing was added when the path does not exist', () {
+    final root = Root.fromPgnMoves('e4 e5');
+    final branch = Branch(sanMove: SanMove('Nc3', Move.parse('b1c3')!), position: Chess.initial);
+
+    final (newPath, isNewNode) = root.addNodeAt(
+      UciPath.fromId(UciCharPair.fromUci('b1c3')),
+      branch,
+    );
+
+    expect(newPath, isNull);
+    expect(isNewNode, isFalse);
+    expect(root.children.length, equals(1));
+  });
+
+  // SPEC INV-014.
+  test('addMoveAt records the clock on the new branch, and no comment without one', () {
+    final root = Root.fromPgnMoves('e4 e5');
+    const clock = Duration(minutes: 3, seconds: 2);
+    final (withClock, _) = root.addMoveAt(root.mainlinePath, Move.parse('g1f3')!, clock: clock);
+    final branch = root.branchAt(withClock!)!;
+    expect(branch.clock, equals(clock));
+    expect(branch.comments?.length, equals(1));
+
+    final root2 = Root.fromPgnMoves('e4 e5');
+    final (withoutClock, _) = root2.addMoveAt(root2.mainlinePath, Move.parse('g1f3')!);
+    final branch2 = root2.branchAt(withoutClock!)!;
+    expect(branch2.comments, isNull);
+    expect(branch2.clock, isNull);
+  });
+
+  // SPEC INV-010.
+  test('addMovesAt appends the moves after the existing children', () {
+    final root = Root.fromPgnMoves('e4 e5');
+    final newPath = root.addMovesAt(UciPath.fromId(UciCharPair.fromUci('e2e4')), [
+      Move.parse('b8c6')!,
+    ]);
+    expect(newPath, isNotNull);
+
+    final e4Node = root.nodeAt(UciPath.fromId(UciCharPair.fromUci('e2e4')));
+    expect(e4Node.children.map((c) => c.sanMove.san).toList(), equals(['e5', 'Nc6']));
+  });
+
+  group('Node.makePgn', () {
+    // SPEC INV-014.
+    test('the exported PGN keeps the headers, the root and the branch comments', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 e5 (1... {start} c5) {hello}'));
+      final pgn = root.makePgn(
+        IMap(const {
+          'Event': 'Test',
+          'FEN': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        }),
+        IList(const [PgnComment(text: 'root comment')]),
+      );
+
+      expect(pgn, contains('[Event "Test"]'));
+      expect(pgn, contains('[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]'));
+      expect(pgn, contains('{ root comment }'));
+      expect(pgn, contains('{ start }'));
+      expect(pgn, contains('{ hello }'));
+      expect(pgn, contains('1. e4 e5'));
+    });
+
+    // SPEC INV-014.
+    test('the exported PGN keeps the numeric annotation glyphs', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn(r'1. e4 $1 e5'));
+      expect(root.makePgn(), contains(r'e4 $1'));
+    });
+  });
+
+  group('Root.fromPgnGame', () {
+    // SPEC INV-014.
+    test('a plain import keeps the comments in `comments`', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 {hello} e5'));
+      final branch = root.children.first;
+      expect(branch.comments?.map((c) => c.text).toList(), equals(['hello']));
+      expect(branch.lichessAnalysisComments, isNull);
+      expect(branch.startingComments, isNull);
+    });
+
+    // SPEC INV-010.
+    test('a plain import does not collapse the variations', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 (1. d4)'));
+      expect(root.children[0].isCollapsed, isFalse);
+      expect(root.children[1].isCollapsed, isFalse);
+    });
+
+    // SPEC INV-010.
+    test('hideVariations collapses the variations but not the mainline', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 (1. d4)'), hideVariations: true);
+      expect(root.children[0].isCollapsed, isFalse);
+      expect(root.children[1].isCollapsed, isTrue);
+    });
+
+    // SPEC INV-010.
+    test('a lichess analysis import flags the variations as computer variations', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 (1. d4)'), isLichessAnalysis: true);
+      expect(root.children[0].isComputerVariation, isFalse);
+      expect(root.children[1].isComputerVariation, isTrue);
+    });
+
+    // SPEC INV-010.
+    test('onVisitNode tells the mainline from the variations', () {
+      final mainline = <String>[];
+      final sidelines = <String>[];
+      Root.fromPgnGame(
+        PgnGame.parsePgn('1. e4 e5 (1... c5 2. Nf3) 2. Nf3'),
+        onVisitNode: (root, branch, isMainline) =>
+            (isMainline ? mainline : sidelines).add(branch.sanMove.san),
+      );
+      expect(mainline, equals(['e4', 'e5', 'Nf3']));
+      expect(sidelines, equals(['c5', 'Nf3']));
+    });
+
+    // SPEC INV-014.
+    test('a lichess analysis import gives a mate evaluation to a mainline checkmate', () {
+      final root = Root.fromPgnGame(
+        PgnGame.parsePgn('1. f3 e5 2. g4 Qh4# {mate}'),
+        isLichessAnalysis: true,
+      );
+      final mate = root.mainline.last;
+      expect(mate.position.isCheckmate, isTrue);
+
+      final eval = mate.lichessAnalysisComments?.first.eval;
+      expect(eval?.mate, equals(-1));
+      expect(eval?.depth, equals(1));
+    });
+
+    // SPEC INV-014.
+    test('a plain import does not invent a mate evaluation for a checkmate', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. f3 e5 2. g4 Qh4# {mate}'));
+      final mate = root.mainline.last;
+      expect(mate.position.isCheckmate, isTrue);
+      expect(mate.comments?.first.eval, isNull);
+    });
+
+    // SPEC INV-010.
+    test('collapses the branches nested deeper than the second ply of a variation', () {
+      // The variation is nested three plies deep, the mainline sibling is not.
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 (1. d4 d5 (1... c6) Nf3)'));
+      final d4 = root.children[1];
+      expect(d4.sanMove.san, equals('d4'));
+      final d5 = d4.children.first;
+      expect(d5.sanMove.san, equals('d5'));
+      expect(d5.isCollapsed, isFalse);
+      expect(d5.children.first.sanMove.san, equals('Nf3'));
+      expect(d5.children.first.isCollapsed, isTrue);
+    });
+
+    // SPEC INV-010.
+    test('does not collapse a variation nested one ply deep', () {
+      final root = Root.fromPgnGame(PgnGame.parsePgn('1. e4 (1. d4 d5 Nf3)'));
+      final d5 = root.children[1].children.first;
+      expect(d5.sanMove.san, equals('d5'));
+      expect(d5.isCollapsed, isFalse);
+      expect(d5.children.first.sanMove.san, equals('Nf3'));
+      expect(d5.children.first.isCollapsed, isFalse);
+    });
+  });
+
+  group('ViewBranch', () {
+    Branch branchWith({
+      List<PgnComment>? lichessAnalysisComments,
+      List<PgnComment>? startingComments,
+      List<PgnComment>? comments,
+    }) => Branch(
+      sanMove: SanMove('e4', Move.parse('e2e4')!),
+      position: Chess.initial,
+      lichessAnalysisComments: lichessAnalysisComments,
+      startingComments: startingComments,
+      comments: comments,
+    );
+
+    // SPEC INV-014.
+    test('the view carries the flags and the comments of the branch', () {
+      final position = Chess.initial.playUnchecked(Move.parse('e2e4')!);
+      final localEval = LocalEval(
+        position: position,
+        searchTime: const Duration(seconds: 10),
+        cp: 100,
+        depth: 10,
+        nodes: 1000,
+        millis: 1000,
+        pvs: IList([
+          PvData(moves: IList(const ['e2e4'])),
+        ]),
+        threatMode: false,
+      );
+      const opening = LightOpening(eco: 'C50', name: 'Italian Game');
+      final branch = Branch(
+        sanMove: SanMove('e4', Move.parse('e2e4')!),
+        position: position,
+        eval: localEval,
+        opening: opening,
+        isCollapsed: true,
+        isComputerVariation: true,
+        isUserAdded: true,
+        lichessAnalysisComments: [const PgnComment(text: 'analysis')],
+        startingComments: [const PgnComment(text: 'starting')],
+        comments: [const PgnComment(text: 'comment')],
+        nags: [17],
+      );
+      branch.addChild(Branch(sanMove: SanMove('e5', Move.parse('e7e5')!), position: position));
+
+      final view = branch.view;
+      expect(view.id, equals(branch.id));
+      expect(view.sanMove, equals(branch.sanMove));
+      expect(view.position, equals(position));
+      expect(view.eval, equals(localEval));
+      expect(view.opening, equals(opening));
+      expect(view.isCollapsed, isTrue);
+      expect(view.isComputerVariation, isTrue);
+      expect(view.isUserAdded, isTrue);
+      expect(view.nags?.toList(), equals([17]));
+      expect(view.startingComments?.map((c) => c.text).toList(), equals(['starting']));
+      expect(view.comments?.map((c) => c.text).toList(), equals(['comment']));
+      expect(view.lichessAnalysisComments?.map((c) => c.text).toList(), equals(['analysis']));
+      expect(view.children.length, equals(1));
+      expect(view.children.first.sanMove, equals(SanMove('e5', Move.parse('e7e5')!)));
+    });
+
+    // SPEC INV-014.
+    test('textComments keeps only the non empty comment texts', () {
+      final branch = branchWith(
+        comments: [
+          const PgnComment(text: 'first'),
+          const PgnComment(text: null),
+          const PgnComment(text: 'second'),
+        ],
+      );
+      expect(branch.view.textComments.toList(), equals(['first', 'second']));
+    });
+
+    // SPEC INV-014.
+    test('hasStartingTextComment tells a starting comment from a comment without text', () {
+      final withText = branchWith(startingComments: [const PgnComment(text: 'before')]);
+      expect(withText.view.hasStartingTextComment, isTrue);
+
+      final withoutText = branchWith(startingComments: [const PgnComment(text: null)]);
+      expect(withoutText.view.hasStartingTextComment, isFalse);
+
+      final withoutComments = branchWith();
+      expect(withoutComments.view.hasStartingTextComment, isFalse);
+    });
+
+    // SPEC INV-014.
+    test('hasTextComment tells a commented branch from an uncommented one', () {
+      final commented = branchWith(comments: [const PgnComment(text: 'after')]);
+      expect(commented.view.hasTextComment, isTrue);
+
+      final uncommented = branchWith();
+      expect(uncommented.view.hasTextComment, isFalse);
+    });
+
+    // SPEC INV-014.
+    test('clock is the one of the first comment that carries it', () {
+      final branch = branchWith(
+        comments: [
+          const PgnComment(text: 'no clock'),
+          const PgnComment(text: 'with clock', clock: Duration(minutes: 2)),
+        ],
+      );
+      expect(branch.view.clock, equals(const Duration(minutes: 2)));
+    });
+
+    // SPEC INV-014.
+    test('elapsedMoveTime is the one of the first comment that carries it', () {
+      final branch = branchWith(
+        comments: [
+          const PgnComment(text: 'no emt'),
+          const PgnComment(text: 'with emt', emt: Duration(seconds: 7)),
+        ],
+      );
+      expect(branch.view.elapsedMoveTime, equals(const Duration(seconds: 7)));
+    });
+
+    // SPEC INV-014.
+    test('serverEval only trusts the eval of the lichess analysis comments', () {
+      final branch = branchWith(
+        lichessAnalysisComments: [
+          const PgnComment(text: 'no eval'),
+          const PgnComment(text: 'with eval', eval: PgnEvaluation.mate(mate: 3, depth: 10)),
+        ],
+      );
+      final serverEval = branch.view.serverEval;
+      expect(serverEval?.mate, equals(3));
+      expect(serverEval?.depth, equals(10));
+
+      // The same eval in a plain comment is not a server eval.
+      final plain = branchWith(
+        comments: [
+          const PgnComment(text: 'with eval', eval: PgnEvaluation.mate(mate: 3, depth: 10)),
+        ],
+      );
+      expect(plain.view.serverEval, isNull);
+    });
+  });
 }
 
 const fisherSpasskyPgn = '''
