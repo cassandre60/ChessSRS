@@ -25,6 +25,7 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/offline_computer/offline_computer_game_screen.dart';
+import 'package:chess_srs/src/widgets/board_preview.dart';
 import 'package:chess_srs/src/widgets/clock.dart';
 import 'package:chess_srs/src/widgets/move_list.dart';
 import 'package:chess_srs/src/widgets/pockets.dart';
@@ -2479,6 +2480,42 @@ void main() {
 
       expect(find.byType(SrsTextInput), findsOneWidget);
       expect(find.text('Paste from clipboard'), findsOneWidget);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the FEN field and its paste button fit the box beside the board', (tester) async {
+      // The board preview is a decoration beside the FEN field. It used to cap the
+      // height of the column the field lives in at the board's own height -- 34% of
+      // the sheet's width, 121px on a 390px phone -- while the field and the button
+      // need 188px between them. The button was therefore painted over the settings
+      // rows below the preview.
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      final preview = tester.getRect(find.byType(SmallBoardPreview));
+      final field = tester.getRect(find.byType(SrsTextInput));
+      final button = tester.getRect(find.widgetWithText(SrsTextButton, 'Paste from clipboard'));
+      final rowBelow = tester.getRect(
+        find.ancestor(of: find.text('Side'), matching: find.byType(SrsSettingsRow)),
+      );
+
+      // The field is inside the box it was given, not spilling out of it.
+      expect(field.top, greaterThanOrEqualTo(preview.top));
+      expect(field.bottom, lessThanOrEqualTo(preview.bottom));
+      expect(field.right, lessThanOrEqualTo(preview.right));
+
+      // The button is inside the same box -- and it does not reach into the row
+      // below, which is what a user sees when the two are painted over each other.
+      expect(button.bottom, lessThanOrEqualTo(preview.bottom));
+      expect(button.bottom, lessThanOrEqualTo(rowBelow.top));
+
+      // And the field is not squeezed to make room: it still shows the five lines
+      // it was asked for (five lines of 24px, plus the field's own padding).
+      expect(field.height, greaterThanOrEqualTo(5 * 24));
     });
 
     // SPEC INV-012. Custom starting positions are honored and normalized.
