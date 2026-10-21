@@ -573,6 +573,17 @@ void main() {
       expect(game.makePgn(), contains('[Black "Stockfish level 1"]'));
     });
 
+    test('the export names a player by their account name', () {
+      final game = exportedGame(
+        white: const Player(
+          user: LightUser(id: UserId('veloce'), name: 'veloce'),
+          name: 'veloce (1789)',
+        ),
+      );
+
+      expect(game.makePgn(), contains('[White "veloce"]'));
+    });
+
     // SPEC INV-014. The result of the export is the result of the game: a
     // finished game is never exported as still running, and a draw is never
     // exported as a win.
@@ -749,6 +760,19 @@ void main() {
         Duration(seconds: 15),
         Duration(seconds: 5),
       ]);
+    });
+
+    // SPEC INV-011. A game that has clock readings but no time control adds
+    // no increment to them: the increment of a game that has none is zero.
+    test('a game with clock readings but no time control adds no increment', () {
+      final game = exportedGame(
+        steps: stepsFor(const ['e4', 'e5', 'Nf3']),
+        meta: metaWith(),
+        clocks: IList(const [Duration(seconds: 60), Duration(seconds: 60), Duration(seconds: 45)]),
+      );
+
+      expect(game.moveTimes, const [Duration.zero, Duration.zero, Duration(seconds: 15)]);
+      expect(game.makePgn(), contains('[%emt 0:00:15]'));
     });
   });
 
