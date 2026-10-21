@@ -7,7 +7,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../test_provider_scope.dart';
+import 'top_bar_test_app.dart';
 
 /// Leaving Practice mode, per design/docs/00-agent-brief.md open decision 3 (resolved 2026-09-28):
 /// a tappable `Practice` label with semantics `Exit practice` and a 44dp target.
@@ -19,7 +19,7 @@ import '../test_provider_scope.dart';
 void main() {
   Future<void> showPracticeTopBar(WidgetTester tester, {VoidCallback? onExitPractice}) async {
     await tester.pumpWidget(
-      await makeTestProviderScopeApp(
+      await makeTopBarTestApp(
         tester,
         home: Center(
           child: SrsTopBar(
@@ -87,7 +87,7 @@ void main() {
     // the assertion that the fix did not cost board space.
     testWidgets('the taller target does not overflow the top bar row', (tester) async {
       await tester.pumpWidget(
-        await makeTestProviderScopeApp(
+        await makeTopBarTestApp(
           tester,
           surfaceSize: const Size(390, 844),
           home: Center(
@@ -96,6 +96,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byType(SrsTopBar), findsOneWidget);
 
       // `SrsTopBar` is a `Row`; a child taller than the row is the overflow this could cause.
       expect(tester.takeException(), isNull);

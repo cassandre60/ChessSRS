@@ -9,7 +9,7 @@ import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../test_provider_scope.dart';
+import 'top_bar_test_app.dart';
 
 /// `SrsTopBar` inside the narrow bar padding, at the narrowest window the Linux runner
 /// permits.
@@ -32,7 +32,7 @@ void main() {
 
   Future<void> pumpNarrowBar(WidgetTester tester, {required int dueCount}) async {
     await tester.pumpWidget(
-      await makeTestProviderScopeApp(
+      await makeTopBarTestApp(
         tester,
         surfaceSize: const Size(narrowestWindow, 720),
         home: Padding(
@@ -47,6 +47,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(SrsTopBar), findsOneWidget);
   }
 
   Finder square(Side side) {
@@ -79,5 +80,30 @@ void main() {
     await pumpNarrowBar(tester, dueCount: 9999);
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the layout harness reports real RenderFlex overflow', (tester) async {
+    final testErrorHandler = FlutterError.onError;
+    await tester.pumpWidget(
+      await makeTopBarTestApp(
+        tester,
+        surfaceSize: const Size(narrowestWindow, 720),
+        home: const Row(children: [SizedBox(width: 1000, height: 48)]),
+      ),
+    );
+
+    // This fails if the shared provider harness's overflow-swallowing handler is reintroduced.
+    final overflow = tester.takeException();
+    // Restore before asserting: otherwise a swallowed overflow also blinds the test framework
+    // to this assertion's failure and can hang the runner while it reports the broken harness.
+    FlutterError.onError = testErrorHandler;
+    expect(
+      overflow,
+      isA<FlutterError>().having(
+        (error) => error.toString(),
+        'diagnostic',
+        contains('A RenderFlex overflowed by'),
+      ),
+    );
   });
 }
