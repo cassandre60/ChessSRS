@@ -1,11 +1,14 @@
-// SPEC coverage: INV-006.
+// SPEC coverage: INV-006, INV-007.
 
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_srs/src/model/auth/auth_repository.dart';
+import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
+import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +68,23 @@ Future<ProviderContainer> emailLoginContainer(MockClientHandler handler) {
     },
   );
 }
+
+/// Container for the session calls (token check, sign-out), which need no [FlutterAppAuth].
+Future<ProviderContainer> sessionContainer(MockClientHandler handler) {
+  return makeContainer(
+    overrides: {
+      httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
+        return FakeHttpClientFactory(() => MockClient(handler));
+      }),
+    },
+  );
+}
+
+/// The account that owns [token], built from the same JSON the server answers with.
+AuthUser authUserFor(String token) => AuthUser(
+  token: token,
+  user: User.fromServerJson(jsonDecode(_accountResponse) as Map<String, dynamic>).lightUser,
+);
 
 Future<ProviderContainer> appAuthContainer(MockClient mockClient, FlutterAppAuth appAuth) {
   return makeContainer(
@@ -247,6 +267,45 @@ void main() {
     });
   });
 
+  group('AuthRepository.signIn on a desktop platform', () {
+    // The mobile flow (flutter_appauth) answers on a custom URI scheme that only a phone
+    // can route back, so a desktop build has to take the loopback branch instead. Picking
+    // the wrong branch leaves the owner unable to sign in on the desktop app at all, and
+    // nothing else in the file notices: the mobile tests all run on the phone platform.
+    //
+    // No SPEC invariant names the platform branch; what is pinned here is that the desktop
+    // build opens the desktop session and not the mobile one.
+    test('uses the desktop loopback flow, not the mobile app-auth flow', () async {
+      final savedPlatform = debugDefaultTargetPlatformOverride;
+      addTearDown(() => debugDefaultTargetPlatformOverride = savedPlatform);
+
+      for (final platform in [TargetPlatform.linux, TargetPlatform.windows, TargetPlatform.macOS]) {
+        debugDefaultTargetPlatformOverride = platform;
+        var mobileFlowUsed = false;
+        final container = await appAuthContainer(
+          accountClient(),
+          FakeFlutterAppAuth((request) async {
+            mobileFlowUsed = true;
+            return tokenResponse();
+          }),
+        );
+
+        // The desktop flow needs a system browser, which a test cannot open, so it ends in
+        // a failure. Which branch was taken is the subject, not the outcome.
+        await expectLater(
+          container.read(authRepositoryProvider).signIn(),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(
+          mobileFlowUsed,
+          isFalse,
+          reason: 'on $platform the sign-in must open the desktop OAuth session',
+        );
+      }
+    });
+  });
+
   group('AuthRepository.requestEmailLoginCode', () {
     test('posts the email and username in the body', () async {
       Uri? requestedUrl;
@@ -288,12 +347,53 @@ void main() {
       );
     });
 
+    test('reports a rejected request instead of pretending the code was sent', () async {
+      // A 400 that survives the query-string fallback means Lichess refused the request.
+      // Reporting success would tell the user a login code is on its way that never comes.
+      //
+      // No SPEC invariant names this; INV-006 covers what the request carries, not how a
+      // refusal is reported.
+      final container = await emailLoginContainer((request) => mockResponse('', 400));
+
+      await expectLater(
+        container
+            .read(authRepositoryProvider)
+            .requestEmailLoginCode(username: 'johndoe', email: 'johndoe@lichess.org'),
+        throwsA(isA<ServerException>()),
+      );
+    });
+
     test('falls back to query parameters if the server returns 404 to body-only request', () async {
       final requests = <Uri>[];
       final container = await emailLoginContainer((request) {
         requests.add(request.url);
         if (!request.url.hasQuery) {
           return mockResponse('', 404);
+        }
+        return mockResponse('', 204);
+      });
+
+      await container
+          .read(authRepositoryProvider)
+          .requestEmailLoginCode(username: 'johndoe', email: 'johndoe@lichess.org');
+
+      expect(requests, hasLength(2));
+      expect(requests.first.hasQuery, isFalse);
+      expect(requests.last.queryParameters, {
+        'email': 'johndoe@lichess.org',
+        'username': 'johndoe',
+      });
+    });
+
+    test('falls back to query parameters if the server returns 400 to body-only request', () async {
+      // Lila reads these values from the query string, so a server that refuses the
+      // body-only request with a 400 is answered again with the values in the URL. A refusal
+      // of any other kind is a refusal, and is reported as one.
+      final requests = <Uri>[];
+      final container = await emailLoginContainer((request) {
+        requests.add(request.url);
+        if (!request.url.hasQuery) {
+          return mockResponse('', 400);
         }
         return mockResponse('', 204);
       });
@@ -396,6 +496,56 @@ void main() {
       );
     });
 
+    test('a rejected code exchange is not mistaken for a token', () async {
+      // The bearer endpoint answers a refused code with an error body. Reading that body as
+      // the access token would sign the user in with a string that is not a token, and the
+      // account fetch would then be made with it.
+      //
+      // No SPEC invariant names this; INV-006 covers what the request carries, not how a
+      // refusal is reported.
+      final container = await emailLoginContainer((request) {
+        switch (request.url.path) {
+          case '/auth/mobile-code/bearer':
+            return mockResponse('not-a-token', 400);
+          case '/api/account':
+            return mockResponse(_accountResponse, 200);
+          default:
+            return mockResponse('', 404);
+        }
+      });
+
+      await expectLater(
+        container
+            .read(authRepositoryProvider)
+            .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'expire'),
+        throwsA(isA<ServerException>()),
+      );
+    });
+
+    test('trims the token before it is used', () async {
+      // The bearer the app signs is computed over the token the server issued, so padding
+      // around it produces a signature the server does not recognise.
+      String? authorization;
+      final container = await emailLoginContainer((request) {
+        switch (request.url.path) {
+          case '/auth/mobile-code/bearer':
+            return mockResponse('  lio_token\n', 200);
+          case '/api/account':
+            authorization = request.headers['Authorization'];
+            return mockResponse(_accountResponse, 200);
+          default:
+            return mockResponse('', 404);
+        }
+      });
+
+      final authUser = await container
+          .read(authRepositoryProvider)
+          .signInWithEmailCode(username: 'johndoe', email: 'johndoe@lichess.org', code: 'xxxxxx');
+
+      expect(authUser.token, 'lio_token');
+      expect(authorization, 'Bearer ${signBearerToken('lio_token')}');
+    });
+
     test('falls back to query parameters if the server returns 404 to body-only request', () async {
       final requests = <Uri>[];
       final container = await emailLoginContainer((request) {
@@ -425,6 +575,102 @@ void main() {
         'code': 'xxxxxx',
       });
       expect(authUser.token, 'lio_token');
+    });
+  });
+
+  group('AuthRepository.checkToken', () {
+    // The verdict the whole session hangs on. `/api/token/test` answers with a map keyed by
+    // the token it was asked about, so only the entry for *this* token means the session is
+    // still good. A check that reads anything else -- another token's entry, the mere
+    // presence of a body -- keeps a revoked session alive.
+    //
+    // SPEC INV-007: the controller fences this verdict on generation and session identity,
+    // but the verdict itself is the repository's, and fencing cannot rescue a verdict that is
+    // wrong: reporting an unknown token as valid leaves a revoked session alive.
+    test('reports a session the server recognises as valid', () async {
+      final container = await sessionContainer(
+        (request) => mockResponse('{"lio_token": {"scope": "study:read"}}', 200),
+      );
+
+      final valid = await container
+          .read(authRepositoryProvider)
+          .checkToken(authUserFor('lio_token'));
+
+      expect(valid, isTrue);
+    });
+
+    test('reports a session the server does not know as invalid', () async {
+      // The server answers about the token it was asked about; an entry for some other
+      // token says nothing about this one.
+      final container = await sessionContainer(
+        (request) => mockResponse('{"other_token": {"scope": "study:read"}}', 200),
+      );
+
+      final valid = await container
+          .read(authRepositoryProvider)
+          .checkToken(authUserFor('lio_token'));
+
+      expect(valid, isFalse);
+    });
+
+    test('sends the token in the body so the server has something to judge', () async {
+      // The token is the thing being checked, so it has to reach the server. Without it the
+      // answer is about nothing, and every session would look invalid.
+      String? method;
+      Uri? url;
+      String? body;
+      final container = await sessionContainer((request) {
+        method = request.method;
+        url = request.url;
+        body = request.body;
+        return mockResponse('{"lio_token": {"scope": "study:read"}}', 200);
+      });
+
+      await container.read(authRepositoryProvider).checkToken(authUserFor('lio_token'));
+
+      expect(method, 'POST');
+      expect(url?.path, '/api/token/test');
+      expect(body, 'lio_token');
+    });
+  });
+
+  group('AuthRepository.signOut', () {
+    // Signing out revokes the token server-side; the local session is cleared by the
+    // controller afterwards. A sign-out that does not send the token leaves a live token
+    // behind, and the app reports a sign-out that did not happen.
+    //
+    // No SPEC invariant names the revocation; what is pinned here is that the token being
+    // signed out is the one that is revoked.
+    test('revokes the token of the session being signed out', () async {
+      String? method;
+      Uri? url;
+      String? authorization;
+      final container = await sessionContainer((request) {
+        method = request.method;
+        url = request.url;
+        authorization = request.headers['Authorization'];
+        return mockResponse('', 200);
+      });
+
+      await container.read(authRepositoryProvider).signOut(authUserFor('lio_token'));
+
+      expect(method, 'DELETE');
+      expect(url?.path, '/api/token');
+      expect(authorization, 'Bearer ${signBearerToken('lio_token')}');
+    });
+
+    test('sends no bearer of its own when no session is given', () async {
+      // Without a session there is no token to revoke: the request must not carry a bearer
+      // for some other session.
+      String? authorization;
+      final container = await sessionContainer((request) {
+        authorization = request.headers['Authorization'];
+        return mockResponse('', 200);
+      });
+
+      await container.read(authRepositoryProvider).signOut();
+
+      expect(authorization, isNull);
     });
   });
 

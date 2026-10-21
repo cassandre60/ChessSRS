@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:chess_srs/src/design/design.dart';
@@ -9,15 +10,20 @@ import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart';
 import 'package:chess_srs/src/model/user/user.dart';
+import 'package:chess_srs/src/view/engine/engine_lines.dart';
+import 'package:chess_srs/src/view/explorer/explorer_view.dart';
+import 'package:chess_srs/src/view/explorer/tablebase_view.dart';
 import 'package:chess_srs/src/view/study/study_screen.dart';
+import 'package:chess_srs/src/widgets/pgn.dart';
 import 'package:chess_srs/src/widgets/variations_bar.dart';
 import 'package:chessground/chessground.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../../model/auth/fake_auth_storage.dart';
 import '../../test_helpers.dart';
 import '../../test_provider_scope.dart';
 
@@ -30,15 +36,11 @@ StudyChapter makeChapter({
   Side orientation = Side.white,
   bool gamebook = false,
   StudyChapterFeatures? features,
+  Variant variant = Variant.standard,
 }) {
   return StudyChapter(
     id: id,
-    setup: StudyChapterSetup(
-      id: null,
-      orientation: orientation,
-      variant: Variant.standard,
-      fromFen: null,
-    ),
+    setup: StudyChapterSetup(id: null, orientation: orientation, variant: variant, fromFen: null),
     conceal: null,
     features: features ?? (computer: false, explorer: false),
     gamebook: gamebook,
@@ -703,6 +705,147 @@ void main() {
     });
   });
 
+  group('Drawn shapes', () {
+    // Every shape currently painted on the board, drawn by the user or not.
+    List<Shape> boardShapes(WidgetTester tester) => tester
+        .widgetList<BoardShapeWidget>(find.byType(BoardShapeWidget))
+        .map((w) => w.shape)
+        .toList();
+
+    testWidgets('A shape drawn in a chapter does not survive the switch to the next chapter', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names this behaviour: it is a view-level rule of the
+      // study board, stated by the comment above its shape-clearing guard.
+      final mockRepository = MockStudyRepository();
+
+      final studyChapter1 = makeStudy(
+        chapter: makeChapter(id: const StudyChapterId('1')),
+        chapters: IList(const [
+          StudyChapterMeta(id: StudyChapterId('1'), name: 'Chapter 1', fen: null),
+          StudyChapterMeta(id: StudyChapterId('2'), name: 'Chapter 2', fen: null),
+        ]),
+      );
+
+      final studyChapter2 = studyChapter1.copyWith(
+        chapter: makeChapter(id: const StudyChapterId('2')),
+      );
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (studyChapter1, null, '1. e4 e5'));
+      when(
+        () => mockRepository.getStudy(id: testId, chapterId: const StudyChapterId('1')),
+      ).thenAnswer((_) async => (studyChapter1, null, '1. e4 e5'));
+      when(
+        () => mockRepository.getStudy(id: testId, chapterId: const StudyChapterId('2')),
+      ).thenAnswer((_) async => (studyChapter2, null, '1. d4 d5'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Draw an arrow on the empty board: the first pointer locks the draw mode
+      // on an empty square, the second one drags the shape out of it.
+      final boardRect = tester.getRect(find.byType(Chessboard));
+      final first = await tester.startGesture(
+        squareOffset(Square.e4, boardRect, orientation: Side.white),
+        pointer: 1,
+      );
+      await tester.pump();
+      final second = await tester.startGesture(
+        squareOffset(Square.a3, boardRect, orientation: Side.white),
+        pointer: 2,
+      );
+      await tester.pump();
+      await second.moveTo(squareOffset(Square.a4, boardRect, orientation: Side.white));
+      await tester.pump();
+      await second.up();
+      await tester.pump();
+      await first.up();
+      await tester.pump();
+
+      expect(boardShapes(tester), hasLength(1));
+      expect(boardShapes(tester).single, isA<Arrow>());
+
+      // Switch to the next chapter.
+      await tester.tap(find.text('2 Chapters'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2 Chapter 2', findRichText: true));
+      await tester.pumpAndSettle();
+
+      // The shape drawn in the previous chapter must not survive the switch.
+      expect(boardShapes(tester), isEmpty);
+    });
+
+    testWidgets('A shape drawn in a chapter survives an unrelated rebuild of the same chapter', (
+      WidgetTester tester,
+    ) async {
+      // The other half of the contract: only a change of chapter clears the shapes.
+      // This one passes on the unfixed code as well — it guards the fix against
+      // clearing the shapes on every rebuild of the board.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, '1. e4 e5'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final boardRect = tester.getRect(find.byType(Chessboard));
+      final first = await tester.startGesture(
+        squareOffset(Square.e4, boardRect, orientation: Side.white),
+        pointer: 1,
+      );
+      await tester.pump();
+      final second = await tester.startGesture(
+        squareOffset(Square.a3, boardRect, orientation: Side.white),
+        pointer: 2,
+      );
+      await tester.pump();
+      await second.moveTo(squareOffset(Square.a4, boardRect, orientation: Side.white));
+      await tester.pump();
+      await second.up();
+      await tester.pump();
+      await first.up();
+      await tester.pump();
+
+      expect(boardShapes(tester), hasLength(1));
+
+      // Flip the board: the board is rebuilt, but the chapter did not change.
+      await tester.tap(find.text('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Flip board'));
+      await tester.pumpAndSettle();
+
+      expect(boardShapes(tester), hasLength(1));
+    });
+  });
+
   testWidgets('Displays annotations on the correct square', (WidgetTester tester) async {
     final mockRepository = MockStudyRepository();
     when(() => mockRepository.getStudy(id: testId)).thenAnswer(
@@ -955,6 +1098,502 @@ void main() {
       expect(find.text('Current chapter URL'), findsOneWidget);
       expect(find.text('Study PGN'), findsOneWidget);
       expect(find.text('Chapter PGN'), findsOneWidget);
+    });
+  });
+
+  group('Study screen behaviours', () {
+    // The arrows the study board draws for the continuations of the current node.
+    List<Arrow> boardArrows(WidgetTester tester) => tester
+        .widgetList<BoardShapeWidget>(find.byType(BoardShapeWidget))
+        .map((w) => w.shape)
+        .whereType<Arrow>()
+        .toList();
+
+    testWidgets('Scene title names the variant of a non-standard chapter', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the scene title: the variant of a chapter
+      // is only ever spelled out here.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(id: const StudyChapterId('1'), variant: Variant.kingOfTheHill),
+            chapters: IList(const [
+              StudyChapterMeta(id: StudyChapterId('1'), name: 'Chapter 1', fen: null),
+            ]),
+          ),
+          null,
+          '[Variant "King of the hill"]\n\n1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The scene title names the variant in words, then the chapter title.
+      expect(find.text('King of the Hill • 1. Chapter 1'), findsOneWidget);
+    });
+
+    testWidgets('Study menu offers the like toggle to a signed-in user', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the study menu rows: the like toggle is the
+      // only action the study screen offers to a signed-in user.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, 'e4 e5 Nf3 Nc6'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        authUser: fakeAuthUser,
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Study menu'));
+      await tester.pumpAndSettle();
+
+      // Only a signed-in user gets the like toggle.
+      expect(find.text('Like'), findsOneWidget);
+    });
+
+    testWidgets('Study menu offers a screenshot of the current position', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the study menu rows: the screenshot row
+      // exports the position that is on screen.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, 'e4 e5 Nf3 Nc6'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.bySemanticsLabel('Study menu'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Screenshot current position'), findsOneWidget);
+    });
+
+    testWidgets('Engine lines stay hidden when the study preference disables them', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the engine-lines panel: which of the four
+      // conditions may switch it on is a study-screen presentation rule.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: true, explorer: false),
+            ),
+          ),
+          null,
+          '1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.study.storageKey: jsonEncode(
+            StudyPrefs.defaults.copyWith(showEngineLines: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // The chapter allows computer analysis and the engine is on, but the user
+      // turned the engine lines off: the panel must not be built.
+      expect(find.byType(EngineLines), findsNothing);
+    });
+
+    testWidgets('Engine lines stay hidden when the engine is disabled', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the engine-lines panel: which of the four
+      // conditions may switch it on is a study-screen presentation rule.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: true, explorer: false),
+            ),
+          ),
+          null,
+          '1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(isEnabled: false).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EngineLines), findsNothing);
+    });
+
+    testWidgets('Engine lines stay hidden when no eval line is configured', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the engine-lines panel: which of the four
+      // conditions may switch it on is a study-screen presentation rule.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: true, explorer: false),
+            ),
+          ),
+          null,
+          '1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.engineEvaluation.storageKey: jsonEncode(
+            EngineEvaluationPrefState.defaults.copyWith(numEvalLines: 0).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EngineLines), findsNothing);
+    });
+
+    testWidgets('Explorer tab shows the explorer when the chapter enables it', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the explorer tab: the tab must show the
+      // explorer the chapter allows, not a placeholder.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: false, explorer: true),
+            ),
+          ),
+          null,
+          '1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Explorer'), findsOneWidget);
+      await tester.tap(find.text('Explorer'));
+      await tester.pumpAndSettle();
+
+      // The chapter allows the opening explorer and the position exists, so the
+      // explorer is shown rather than the "not available" placeholder.
+      expect(find.byType(ExplorerView), findsOneWidget);
+      expect(find.text('Opening explorer not available.'), findsNothing);
+    });
+
+    testWidgets('Explorer tab shows the tablebase for an endgame position', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the explorer tab: the explorer offers the
+      // tablebase for a position the tablebase covers.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: false, explorer: true),
+            ),
+          ),
+          null,
+          '[FEN "8/8/8/8/8/8/4k3/3R2K1 w - - 0 1"]\n\n1. Rf1',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Explorer'));
+      await tester.pumpAndSettle();
+
+      // A three-piece endgame is covered by the tablebase, and the explorer
+      // offers it because computer analysis is allowed for this screen.
+      expect(find.byType(TablebaseView), findsOneWidget);
+    });
+
+    testWidgets('Variation arrows appear only where the node branches', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the on-board variation arrows: the branches
+      // themselves are covered at the import layer, not by this screen.
+      final mockRepository = MockStudyRepository();
+
+      // '1. e4 e5 (1... c5)': the root has one continuation, the e4 node has two.
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, '1. e4 e5 (1... c5)'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.study.storageKey: jsonEncode(
+            StudyPrefs.defaults.copyWith(showVariationArrows: true).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // A single continuation is the main line, not a variation: no arrow.
+      expect(find.byType(BoardShapeWidget), findsNothing);
+
+      await tester.tap(find.textContaining('e4'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      final arrows = boardArrows(tester);
+      expect(arrows.length, 2);
+      // The main continuation is drawn brighter than the sideline.
+      final byDest = {for (final arrow in arrows) arrow.dest: arrow};
+      expect(byDest[Square.e5]!.color.a, closeTo(0.9, 0.001));
+      expect(byDest[Square.c5]!.color.a, closeTo(0.5, 0.001));
+    });
+
+    testWidgets('Variation arrows stay hidden when the preference is off', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the on-board variation arrows: the
+      // preference that governs them belongs to the study screen alone.
+      final mockRepository = MockStudyRepository();
+
+      when(
+        () => mockRepository.getStudy(id: testId),
+      ).thenAnswer((_) async => (makeStudy(), null, '1. e4 e5 (1... c5)'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('e4'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // The node branches, but the user turned the variation arrows off.
+      expect(find.byType(BoardShapeWidget), findsNothing);
+    });
+
+    testWidgets('Variation arrows stay hidden in a gamebook chapter', (WidgetTester tester) async {
+      // No SPEC invariant names the on-board variation arrows: a gamebook
+      // chapter must not give away its alternatives.
+      final mockRepository = MockStudyRepository();
+
+      // '1. e4 (1. d4) e5': the root of this gamebook chapter branches.
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(chapter: makeChapter(id: const StudyChapterId('1'), gamebook: true)),
+          null,
+          '1. e4 (1. d4) e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+        defaultPreferences: {
+          PrefCategory.study.storageKey: jsonEncode(
+            StudyPrefs.defaults.copyWith(showVariationArrows: true).toJson(),
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // A gamebook chapter must not give away the alternatives.
+      expect(find.byType(BoardShapeWidget), findsNothing);
+    });
+
+    testWidgets('The PGN tree draws a top divider only when it is the only tab', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the tree divider: the tree keeps it only
+      // when it is the whole bottom pane.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer(
+        (_) async => (
+          makeStudy(
+            chapter: makeChapter(
+              id: const StudyChapterId('1'),
+              features: (computer: false, explorer: false),
+            ),
+          ),
+          null,
+          '1. e4 e5',
+        ),
+      );
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      // Without the explorer tab the tree is the whole bottom pane, so it keeps
+      // the divider that separates it from the board.
+      expect(
+        tester.widget<DebouncedPgnTreeView>(find.byType(DebouncedPgnTreeView)).showTopDivider,
+        isTrue,
+      );
+    });
+
+    testWidgets('A failed study load shows the error screen', (WidgetTester tester) async {
+      // No SPEC invariant names the load-failure screen: it is the study
+      // screen's only fallback, and it must render a real board.
+      final mockRepository = MockStudyRepository();
+
+      when(() => mockRepository.getStudy(id: testId)).thenThrow(Exception('boom'));
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Failed to load study.'), findsOneWidget);
+
+      // The fallback board is the same hatched SRS board as the real one.
+      expect(find.byType(SrsBoardBackground), findsOneWidget);
+      final staticBoard = tester.widget<StaticChessboard>(find.byType(StaticChessboard));
+      // ... and it carries no drop shadow, because it is not laid out as a
+      // rounded board.
+      expect(staticBoard.settings.boxShadow, isEmpty);
+    });
+
+    testWidgets('A study that is still loading shows the loading screen', (
+      WidgetTester tester,
+    ) async {
+      // No SPEC invariant names the load-in-progress screen: it is the study
+      // screen's only fallback, and it must render a real board.
+      final mockRepository = MockStudyRepository();
+
+      // A load that never answers: the screen stays in its loading state.
+      when(() => mockRepository.getStudy(id: testId)).thenAnswer((_) async {
+        await Completer<void>().future;
+        return (makeStudy(), null, '');
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const StudyScreen(options: (id: testId, initialChapter: null)),
+        overrides: {
+          studyRepositoryProvider: studyRepositoryProvider.overrideWith((ref) => mockRepository),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Failed to load study.'), findsNothing);
+
+      // The placeholder board is the same hatched SRS board as the real one.
+      expect(find.byType(SrsBoardBackground), findsOneWidget);
+      final staticBoard = tester.widget<StaticChessboard>(find.byType(StaticChessboard));
+      // ... and it carries no drop shadow, because it is not laid out as a
+      // rounded board.
+      expect(staticBoard.settings.boxShadow, isEmpty);
     });
   });
 }
