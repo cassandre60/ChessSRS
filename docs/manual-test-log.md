@@ -79,6 +79,35 @@ for the current scope should be read as "selected".
 
 ---
 
+### 3. The engine button toggles the engine again (#315)
+
+**What changed.** Pressing the engine button in the analysis board raised
+`setState() callback argument returned a Future` and did nothing. The callback
+that holds the in-flight future returned the future it assigned, and `setState`
+requires a void callback; the callback now assigns in a block.
+
+**What the tests prove.** That a press of the real `EngineButton` raises no
+Flutter assertion, and that the button is disabled while a toggle is in flight
+(a widget test with a slow preference write, so the toggle outlives the frame
+that follows the press). What they do not prove is that the engine really
+starts and stops: the widget test drives a fake engine and fake preferences.
+
+**What only you can check.** Open an analysis board with the engine allowed and
+press the engine button (the micro-chip at the foot of the board). The engine
+should start and the chip should show a depth; press it again and it should
+stop. Then press it twice quickly: the engine should toggle **once**, not twice
+and back to where it started — the in-flight guard is what swallows the second
+press, and it only exists now because the assignment happens outside the
+assertion.
+
+**For the record.** A release build skips the assertion, so the press worked
+there; but the guard was dead there too, because the assignment lived inside
+the assertion — which only runs when assertions are enabled. The button has
+been dead in debug builds (anything started with `flutter run`, and every test)
+since #106 on 2026-09-30, and the guard has been dead in every build.
+
+---
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)
