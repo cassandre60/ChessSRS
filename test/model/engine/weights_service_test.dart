@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/engine/opponent_level.dart';
 import 'package:chess_srs/src/model/engine/weights_service.dart';
+import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,9 +20,23 @@ import '../../network/fake_http_client_factory.dart';
 Future<List<int>> bundledWeightsBytes() =>
     File('assets/maia/${MaiaRating.defaultRating.fileName}').readAsBytes();
 
+/// A connectivity plugin that always reports the same thing.
+class _FakeConnectivity implements Connectivity {
+  _FakeConnectivity([this.result = ConnectivityResult.wifi]);
+
+  final ConnectivityResult result;
+
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() => Future.value([result]);
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => Stream.value([result]);
+}
+
 ProviderContainer makeWeightsContainer({
   required Directory? appSupportDirectory,
   MockClient? mockClient,
+  Connectivity? connectivity,
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -44,6 +60,7 @@ ProviderContainer makeWeightsContainer({
         httpClientFactoryProvider.overrideWith((ref) {
           return FakeHttpClientFactory(() => mockClient);
         }),
+      if (connectivity != null) connectivityPluginProvider.overrideWith((_) => connectivity),
     ],
   );
   addTearDown(container.dispose);
@@ -317,6 +334,297 @@ void main() {
 
       expect(await service.isAvailable(MaiaRating.maia1700), isFalse);
       expect(await service.download(MaiaRating.maia1700), isNull);
+    });
+
+    // SPEC INV-020.
+    test('each rating has a file of its own', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final bundled = service.weightsFile(MaiaRating.defaultRating);
+      final other = service.weightsFile(MaiaRating.maia1700);
+
+      // Two ratings that share a file would overwrite each other: one of them would be played
+      // with the other's network.
+      expect(bundled.path, '${dir.path}/maia/${MaiaRating.defaultRating.fileName}');
+      expect(other.path, '${dir.path}/maia/${MaiaRating.maia1700.fileName}');
+      expect(other.path, isNot(bundled.path));
+    });
+
+    // SPEC INV-020.
+    test('the download asks for the network of the rating that was asked for', () async {
+      final dir = await makeTempDir();
+      final requested = <Uri>[];
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((request) async {
+          requested.add(request.url);
+          return http.Response('not a network', 200);
+        }),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      await service.download(MaiaRating.maia1700);
+
+      expect(requested.single.path, endsWith('/maia-1700.pb.gz'));
+    });
+
+    // SPEC INV-020.
+    test('a network is checked against the checksum of its own rating', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // The bundled network's bytes, stored under another rating's name: a valid network, but
+      // not this rating's network.
+      final file = service.weightsFile(MaiaRating.maia1700);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(await bundledWeightsBytes());
+
+      expect(await service.isAvailable(MaiaRating.maia1700), isFalse);
+      expect(await file.exists(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('a network downloaded over a verified one is checked again', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async => http.Response('not a network', 200)),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // The bundled network is written out and verified in this session.
+      final (:path, rating: _) = await service.ensureWeights(MaiaRating.defaultRating);
+      expect(await File(path).exists(), isTrue);
+
+      // A download that does not check out is thrown away, even though the network was
+      // verified a moment ago: what landed on disk is what has to be checked.
+      expect(await service.download(MaiaRating.defaultRating), isNull);
+      expect(await File(path).exists(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('a download can be started again once the first one has finished', () async {
+      final dir = await makeTempDir();
+      final bytes = await bundledWeightsBytes();
+      var requests = 0;
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async {
+          requests++;
+          return http.Response.bytes(bytes, 200);
+        }),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      await service.download(MaiaRating.defaultRating);
+      await service.download(MaiaRating.defaultRating);
+
+      // The second download is a new one, not the finished first one handed out again.
+      expect(requests, 2);
+      expect(service.downloading, isNull);
+    });
+
+    // SPEC INV-020.
+    test('the download reports its progress and resets it when it ends', () async {
+      final dir = await makeTempDir();
+      final bytes = await bundledWeightsBytes();
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async => http.Response.bytes(bytes, 200)),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final progress = <double>[];
+      service.downloadProgress.addListener(() {
+        progress.add(service.downloadProgress.value);
+      });
+
+      await service.download(MaiaRating.defaultRating);
+
+      expect(progress, isNotEmpty);
+      expect(progress.any((value) => value > 0.0), isTrue);
+      // The download is over: the progress is back to zero, not left at a hundred per cent.
+      expect(service.downloadProgress.value, 0.0);
+    });
+
+    // SPEC INV-020.
+    test('a file that is not a network is not reported as an unusable one', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final (:path, rating: _) = await service.ensureWeights(MaiaRating.defaultRating);
+      final stray = File('${dir.path}/maia/notes.txt');
+      await stray.writeAsString('not a network');
+
+      expect(await service.unusableWeights(), (count: 0, bytes: 0));
+      expect(await File(path).exists(), isTrue);
+    });
+
+    // SPEC INV-020.
+    test('a directory named like a network does not hide the ones to clean up', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final stray = File('${dir.path}/maia/maia-4200.pb.gz');
+      await stray.parent.create(recursive: true);
+      await stray.writeAsString('a network from another era');
+      await Directory('${dir.path}/maia/maia-4300.pb.gz').create();
+
+      // The directory is not a network, and it must not stop the network that is one from
+      // being reported: a stray network nothing claims is space the app can give back.
+      expect(await service.unusableWeights(), (count: 1, bytes: await stray.length()));
+    });
+
+    // SPEC INV-020.
+    test('the bundled network is written out again after the networks are deleted', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final (:path, rating: _) = await service.ensureWeights(MaiaRating.defaultRating);
+      await service.deleteWeights();
+      expect(await File(path).exists(), isFalse);
+
+      await service.ensureWeights(MaiaRating.defaultRating);
+
+      // The network was deleted, so it has to be written out again: a path to a file that is
+      // not there is a path LC0 cannot read.
+      expect(await File(path).exists(), isTrue);
+    });
+  });
+
+  group('StockfishNnueService', () {
+    // SPEC INV-020.
+    test('an app support directory with no net in it holds no outdated net', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      expect(await service.hasOutdatedNNUEFiles(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('a file that is not a net is not an outdated net', () async {
+      final dir = await makeTempDir();
+      await File('${dir.path}/notes.txt').writeAsString('hello');
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      expect(await service.hasOutdatedNNUEFiles(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('the net on disk is reported', () async {
+      final dir = await makeTempDir();
+      await File('${dir.path}/some.net.nnue').writeAsString('a net');
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      expect(await service.hasNNUEFilesOnDisk(), isTrue);
+    });
+
+    // SPEC INV-020.
+    test('an app support directory with no net in it holds no net', () async {
+      final dir = await makeTempDir();
+      await File('${dir.path}/notes.txt').writeAsString('hello');
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      expect(await service.hasNNUEFilesOnDisk(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('no net on disk is reported as none when there is nowhere to put one', () async {
+      final container = makeWeightsContainer(appSupportDirectory: null);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      expect(await service.hasNNUEFilesOnDisk(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('deleting the nets leaves a directory that looks like one alone', () async {
+      final dir = await makeTempDir();
+      final lookalike = Directory('${dir.path}/old-net.nnue');
+      await lookalike.create();
+      final net = File('${dir.path}/real.nnue');
+      await net.writeAsString('a net');
+
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      await service.deleteNNUEFiles();
+
+      // Only files are nets: a directory that is named like one is not one, and deleting the
+      // nets does not delete it.
+      expect(await lookalike.exists(), isTrue);
+      expect(await net.exists(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('a download that cannot ask for confirmation is refused', () async {
+      final dir = await makeTempDir();
+      var requests = 0;
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async {
+          requests++;
+          return http.Response('', 404);
+        }),
+        connectivity: _FakeConnectivity(ConnectivityResult.mobile),
+      );
+      final service = container.read(stockfishNnueServiceProvider);
+
+      // There is no navigator in a test, so the confirmation the user has to give cannot be
+      // asked for, and a download that cannot ask is not a download that happened.
+      expect(await service.downloadNNUEFile(inBackground: false), isFalse);
+      expect(requests, 0);
+    });
+
+    // SPEC INV-020.
+    test('a net that cannot be read is not a net that checks out', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      final file = service.nnueFile;
+      await file.writeAsString('a net');
+      // Take the read permission away, so that reading the net fails instead of returning
+      // bytes. (A no-op where the platform has no such permission: the test then checks the
+      // readable case, which is the same contract.)
+      await Process.run('chmod', ['000', file.path]);
+
+      // A net that cannot be read is not a net that checks out: the failure to read it must
+      // not be read as "the net is fine".
+      expect(await service.checkNNUEFile(), isFalse);
+    });
+
+    // SPEC INV-020.
+    test('the download is not in progress once every byte has arrived', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async => http.Response('not a net', 200)),
+        connectivity: _FakeConnectivity(),
+      );
+      final service = container.read(stockfishNnueServiceProvider);
+
+      final seen = <bool>[];
+      service.nnueDownloadProgress.addListener(() {
+        if (service.nnueDownloadProgress.value == 1.0) {
+          seen.add(service.isDownloadingNNUEFile);
+        }
+      });
+
+      await service.downloadNNUEFile(inBackground: true);
+
+      // Every byte has arrived, so the download is no longer in progress.
+      expect(seen, isNotEmpty);
+      expect(seen, everyElement(isFalse));
     });
   });
 }
