@@ -581,14 +581,18 @@ class _StudyAnalysisBoardState
   Widget build(BuildContext context) {
     // Clear shapes when switching to a new chapter.
     // This avoids "leftover" shapes from the previous chapter when the engine has not evaluated the new position yet.
-    ref.listen(studyControllerProvider(widget.options).select((state) => state.hasValue), (
-      prev,
-      next,
-    ) {
-      if (prev != next) {
-        clearDrawnShapes();
-      }
-    });
+    // The chapter identity is what a chapter switch changes: `goToChapter` assigns the new
+    // state directly, so the loading flag never flips and watching it left the shapes of
+    // the previous chapter on the board. Any other update of the same chapter (a move, an
+    // engine evaluation) keeps the identity, so the shapes the user drew survive it.
+    ref.listen(
+      studyControllerProvider(widget.options).select((state) => state.value?.study.chapter.id),
+      (prev, next) {
+        if (prev != next) {
+          clearDrawnShapes();
+        }
+      },
+    );
 
     return super.build(context);
   }
