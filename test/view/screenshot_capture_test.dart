@@ -45,7 +45,6 @@ import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:chess_srs/src/view/settings/srs_settings_screen.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override, ProviderOrFamily;
@@ -57,6 +56,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../binding.dart';
 import '../test_provider_scope.dart';
+import '../utils/app_fonts.dart';
 
 /// Set to anything truthy to run. Skipped otherwise, so CI leaves the tree alone.
 final bool _enabled = switch (Platform.environment['SRS_CAPTURE_SCREENSHOTS']) {
@@ -101,31 +101,18 @@ const _analysisOptions = AnalysisOptions.pgn(
 ///
 /// `flutter test` ships no fonts, so every glyph falls back to a filled box. That is fine
 /// for a layout assertion and useless for a design review: you cannot judge a type scale,
-/// a line height, a truncation, or whether an icon is the right icon. These are the
-/// families the app declares in pubspec, registered under the same names its styles use.
-Future<void> _loadDesignFonts() async {
-  // The icon faces matter as much as the text ones: without them every glyph in the
-  // analysis bottom bar and the engine panel renders as a filled box, which is precisely
-  // the kind of thing a capture is supposed to be checking.
-  for (final (family, path) in const [
-    ('InstrumentSans', 'assets/fonts/InstrumentSans[wdth,wght].ttf'),
-    ('Newsreader', 'assets/fonts/Newsreader[opsz,wght].ttf'),
-    ('LichessIcons', 'assets/fonts/LichessIcons.ttf'),
-    ('SocialIcons', 'assets/fonts/SocialIcons.ttf'),
-    ('ChessFont', 'assets/fonts/ChessSansPiratf.ttf'),
-    ('LichessPuzzleIcons', 'assets/fonts/PuzzleIcons.ttf'),
-  ]) {
-    final loader = FontLoader(family)..addFont(rootBundle.load(path));
-    await loader.load();
-  }
-
-  // Known gap: the `MaterialSymbolsRounded` family, which every `Symbols.*` icon in the app
-  // draws with, is not registered here, so those glyphs capture as filled boxes. The families
-  // above are app assets; this one lives in the `material_symbols_icons` package, so loading it
-  // means addressing a package asset. That is left alone on purpose: registering the family
-  // would redraw every icon in all fifty-odd existing captures, which is its own change with its
-  // own review. Judge these captures for text and layout, not for icon shapes.
-}
+/// a line height, a truncation, or whether an icon is the right icon.
+///
+/// The families and the assets they load come from the app's own `FontManifest.json`, so
+/// this file holds no list of its own and cannot drift from what the app declares.
+///
+/// Known gap: the `MaterialSymbolsRounded` family, which every `Symbols.*` icon in the app
+/// draws with, is not registered here, so those glyphs capture as filled boxes. The families
+/// above are app assets; this one lives in the `material_symbols_icons` package, so loading it
+/// means addressing a package asset. That is left alone on purpose: registering the family
+/// would redraw every icon in all fifty-odd existing captures, which is its own change with its
+/// own review. Judge these captures for text and layout, not for icon shapes.
+Future<void> _loadDesignFonts() => loadAppFonts();
 
 void main() {
   setUpAll(() async {

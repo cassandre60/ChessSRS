@@ -204,17 +204,25 @@ void main() {
         reason: 'bottom palette must hug the board',
       );
 
-      // ...and the block fills the slot rather than leaving slack for an alignment to spread.
+      // ...and the block is centred in the slot rather than spread through it.
       //
       // This is the spaceEvenly regression from the other side. With `spaceEvenly` the leftover
-      // height became four equal ~51px gaps, so `above` was ~51; centred and height-bound, the board
-      // claims the slack and `above` goes to ~0. Both are "not spread", and the earlier
-      // `above > 16` assertion could only be satisfied by a board too small to fill the screen --
-      // which is a bug, not slack.
+      // height became four *equal* ~51px gaps, so `above` was ~51 and the palettes floated as
+      // far from the board they act on as from the screen edge. Centred, the block leaves the
+      // same margin above and below instead.
+      //
+      // A square board is width-bound, though: it cannot claim the leftover height, so the
+      // centred block leaves a margin rather than nothing. That margin is what is left over,
+      // not a spread -- a spread is the gaps *inside* the block, and the two assertions above
+      // already hold those tight.
       final above = topPalette.top - slot.top;
       final below = slot.bottom - bottomPalette.bottom;
-      expect(above, lessThanOrEqualTo(16), reason: 'no slack above the block to spread');
-      expect(below, lessThanOrEqualTo(16), reason: 'no slack below the block to spread');
+      expect(above, moreOrLessEquals(below, epsilon: 0.01), reason: 'the block is centred');
+      expect(
+        above,
+        lessThan(bottomPalette.height),
+        reason: 'the leftover is a margin, not a spread',
+      );
     });
 
     // The palette test above used to set `tester.view.physicalSize` and believe it was resizing the
