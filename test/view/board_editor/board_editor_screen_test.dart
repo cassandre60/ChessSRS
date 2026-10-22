@@ -919,8 +919,14 @@ void main() {
       final drag = tester.getRect(find.byKey(const Key('drag-button-white')));
       final erase = tester.getRect(find.byKey(const Key('delete-button-white')));
 
-      expect(drag.left, moreOrLessEquals(board.left, epsilon: 0.01));
-      expect(erase.right, moreOrLessEquals(board.right, epsilon: 0.01));
+      // The palette draws a 1px border inside its own box, so its tools fill the
+      // *inner* width and sit one pixel inside the board's edge. What has to hold
+      // is that they tile the palette's width -- so the erase tool is not clipped
+      // by the palette's own `Clip.hardEdge` -- and that they do not reach past
+      // the board.
+      expect(erase.right - drag.left, moreOrLessEquals(erase.width * 8, epsilon: 0.01));
+      expect(drag.left, greaterThanOrEqualTo(board.left));
+      expect(erase.right, lessThanOrEqualTo(board.right));
     });
 
     testWidgets('the status panel is shown once, in the narrow and in the wide layout', (
@@ -929,7 +935,13 @@ void main() {
       // SPEC INV-062.
       // This viewport leaves a square area under the header, which is exactly the
       // threshold between the stacked and the side-by-side layout.
-      const narrow = Size(390, 786);
+      //
+      // 684 is the height that leaves a square area with the app's real fonts:
+      // the chrome above and below the editor is 294px tall, and 294 + 390 = 684.
+      // With the test suite's fallback glyphs -- one em per character, whatever
+      // the letter -- the header's action buttons wrapped onto three rows and
+      // stole 102px more, so the square viewport used to be 786.
+      const narrow = Size(390, 684);
       var app = await makeTestProviderScopeApp(
         tester,
         home: const BoardEditorScreen(),

@@ -16,6 +16,9 @@ Each one states what is known, what is not, and what I would need from you.
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
+| Q9 | The fail-to-pass gate script detaches the caller's worktree | — | open 2026-10-22 |
+| Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
+| Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | **answered 2026-10-22: guard it — the tool now refuses to say "nothing to do" when it is not configured** |
 
 ---
 
@@ -243,3 +246,109 @@ which raises `FormatException` on the read).
 
 **Found.** 2026-10-21 mutation audit of `lib/src/persistence/fast_date_parser.dart`
 #337).
+
+---
+
+## Q9 — The fail-to-pass gate script runs `git checkout --detach` in the caller's directory
+
+**Known.** `scripts/gates/fail_to_pass_check.sh` checks out the head ref with
+
+    git checkout -q --detach "$HEAD_REF"
+
+**in the caller's current directory**, not inside the temporary worktree the
+script creates for itself. On 2026-10-22 the mutation round that fixed the
+move-path id encoding ran the gate, and the script detached *that agent's*
+worktree HEAD and left two of its commits off the branch. The agent repaired it
+with a soft reset and a merge — no force-push, nothing lost — but the trap is
+still there for the next caller.
+
+The same hazard has bitten twice more in this repo's session: a
+`git checkout --detach` in a shared tree, and a `git reset --hard` in a tree
+another agent was working in (which destroyed 17 files of uncommitted work
+once). This script is the third instance of the same shape, and it is the one
+that is *shipped*, so it will fire again.
+
+**Why the fleet did not fix it.** `scripts/gates/*` is a protected path
+(`.gates/protected-paths.txt`): a change to it edits the referee — what
+"passing" means — so it needs a human approval and a gate-change PR. The fleet
+may not touch it on its own initiative.
+
+**Not known.** Whether the intended contract is "the script never touches the
+caller's tree" (the checkout moves inside the temp worktree, and the script
+restores the caller's original state on exit) or "the caller must be a clean,
+disposable checkout" (the script refuses to run when the caller's HEAD is not
+on its branch, and says so).
+
+**Needed.** One word, and then the fleet can cut the gate-change PR:
+*isolate* (the checkout runs inside the script's own temp worktree, and the
+caller's HEAD is never touched) or *refuse* (the script detects that the
+caller's HEAD is detached or off-branch and exits with an explanation instead
+of running).
+
+**Found.** 2026-10-22, by the mutation round on `lib/src/model/common/uci.dart`
+(#364) while running the gate after committing.
+
+---
+
+## Q10 — Should the shared test scope FAIL on a layout overflow?
+
+**Known.** The shared widget-test scope (`test/test_provider_scope.dart`)
+swallowed every RenderFlex overflow error for months, so the 270 "overflow
+sites" it reported were mostly the harness's own mis-measurement. Two fixes
+have now landed: the scope **reports** the overflows instead of swallowing them
+(#339), and it **measures like the app** — the app's own `srsThemeData`, a
+`Material` ancestor, and the app's font families registered from the app's own
+`FontManifest.json` (#357).
+
+Measured after both, one file at a time over all 59 files that use the scope:
+**268 → 78 overflow occurrences, and ZERO of them in production code.** The 78
+are 76 in `game_layout_test.dart`'s own bare-`Text` scaffold (a fixture that
+builds its own `MaterialApp` with no `Scaffold`, so the board's top table gets
+Material's 48 px monospace error style) and 2 deliberate ones in the scope's
+own test. The two candidate production defects the earlier triage had named
+(`offline_computer_game_screen.dart:503`, `primitives.dart:216`) turned out to
+be test-font artefacts and are **gone** on the corrected base.
+
+**What a 0 px threshold would cost.** It would redden **8 tests in 2 files**,
+both of them test scaffolds, and no production site. In other words: the
+harness can now be made honest without reddening the world.
+
+**Why it is your call.** This changes what "green" means for the whole suite.
+Today a layout defect can still pass CI as long as the widget does not throw.
+Making the scope fail at 0 px turns every future overflow into a red build —
+which is the point, but it is a change in policy for the whole project, not a
+fix to one screen.
+
+**Not known.** Whether you want the 8 remaining scaffold failures fixed first
+(the `game_layout_test.dart` fixture could be given the app's theme and a
+`Scaffold`, like the shared scope now has) so the threshold can be set to 0
+immediately, or the threshold set to 0 now with those 8 known-red tests
+excluded by name until the fixture is fixed. The first is cleaner; the second
+is one PR instead of two.
+
+**Needed.** One word: *fail now* (the scope throws on any overflow; the 8
+scaffold tests are red and get fixed in the same PR) or *fix then fail* (the
+scaffold is repaired first, then the scope throws at 0 px with a clean suite).
+
+**Found.** 2026-10-22, by the harness-measurement work (#355/#357) and the
+triage of the overflow blind spot (issues #334, #336).
+
+---
+
+## Q11 — The queue tool reported an empty queue, and the dedup law could not see the ledger
+
+**Known.** Two of the fleet's own instruments have been reporting "nothing to do" while there was plenty to do. Both were measured with the tools' own parsers, not by eye.
+
+**First: the queue tool proposed nothing.** `scripts/autonomous/ledger.py next --stream 1` answered *"No eligible targets remain for this stream at their current hashes."* The reason is in `candidate_paths()`: when the config's `candidates.<stream>.include` list is empty it returns `[]`. The repo's `scripts/autonomous/config.json` is **gitignored on purpose** (`.gitignore`: *"The fleet config is project-local: it names this repo's test/analyze/gate commands"*), so it only exists where somebody created it — and in the primary checkout nobody had. The tooling then ran on its built-in defaults, where the include list is empty and the queue is empty by construction. The fleet's work list has been coming from a hand-written script, not from the tool that is supposed to produce it.
+
+**Second: the mapping guessed the wrong path.** With no config, the Dart mapping guesses `test/<path-with-lib/-stripped>_test.dart`, so `lib/src/view/analysis/analysis_screen.dart` maps to `test/src/view/analysis/analysis_screen_test.dart` — and this repo's test tree has no `src/` segment. The tool therefore found an existing companion test for **0 of 329** lib files, while the real convention (`lib/src/<rest>.dart` ↔ `test/<rest>_test.dart`) has one for 119.
+
+**Third: the ledger itself was invisible to the dedup law.** 54 of its 85 rows carried a decorated status cell (`COMPLETED (second round: …)`) where the tool accepts only exactly `COMPLETED` or `SOUND`, so they were skipped; and for six files the bugfix row sat below its round row, recording a pre-change blob. The tool saw **27 rows** and would have re-audited **34 of the 48** lib files the ledger names — including files audited and fixed hours earlier. That part is fixed (PR #376).
+
+**What I did about it.** The local config now exists in the primary checkout (it is gitignored, so it never appears in `git status` — that is the repo's convention, and I did not change it). With it, the queue tool proposes **79 eligible targets** — the same 79 the hand-written script had been producing — each with its correct mapped test and composite `source:companion` hash.
+
+**Not known.** Whether the tooling should **fail loudly** when the project-local config is missing, instead of silently reporting an empty queue. Today the failure mode is the worst kind: a green answer that means "I was not configured". A one-line guard in `candidate_paths()` — no config, or an empty `include`, is an error with a message that says which file to create — would have caught this the first time it ran. That file is under `scripts/autonomous/`, which is a protected path, so the fleet may not change it on its own initiative.
+
+**Needed.** ~~One word~~ — **answered 2026-10-22: *guard*.** The tooling now refuses to report an empty queue without a config: it exits with a message naming the key and the file to create, and a candidate list that matches no file is reported separately from an exhausted queue. The committed example config also describes THIS repo (Dart globs, the `lib/src/<rest>.dart` ↔ `test/<rest>_test.dart` mapping, the real commands) instead of a generic Python template, so a fresh clone starts from something that works.
+
+**Found.** 2026-10-22, by the fleet's own consistency check after a ledger correction: measuring the ledger's visibility with the tool's parser surfaced the queue tool reporting an empty queue.
