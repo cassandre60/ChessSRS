@@ -86,6 +86,10 @@ class ReviewSession {
         GraphAwareReviewCoordinator(
           scheduler: scheduler,
           repo: _SessionReviewStateRepository(this),
+          // The session's clock decides which day an instant falls on, so the
+          // store's UTC instants and the clock's local time are compared in
+          // one frame (INV-028).
+          localDayKey: clock.localDayKey,
           initialExposureThrottle: initialExposureThrottle,
         );
 
