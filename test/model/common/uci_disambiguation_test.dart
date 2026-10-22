@@ -41,8 +41,11 @@ void main() {
       // apart, so two different indices may never produce the same id.
       final ids = <UciCharPair>{};
       for (var index = 1; index <= _duplicateIndices; index++) {
-        expect(ids.add(UciCharPair.disambiguated(base, index)), isTrue,
-            reason: 'duplicate index $index reused an id');
+        expect(
+          ids.add(UciCharPair.disambiguated(base, index)),
+          isTrue,
+          reason: 'duplicate index $index reused an id',
+        );
       }
     });
 
@@ -50,8 +53,11 @@ void main() {
       // SPEC INV-010. A disambiguated id is the base pair plus its duplicate
       // index, so the base pair has to come back out of it.
       for (var index = 1; index <= _duplicateIndices; index++) {
-        expect(UciCharPair.disambiguated(base, index).basePair, base,
-            reason: 'duplicate index $index');
+        expect(
+          UciCharPair.disambiguated(base, index).basePair,
+          base,
+          reason: 'duplicate index $index',
+        );
       }
     });
 
@@ -60,8 +66,7 @@ void main() {
       // has to survive the trip through its own text.
       for (var index = 1; index <= _duplicateIndices; index++) {
         final id = UciCharPair.disambiguated(base, index);
-        expect(UciCharPair.fromStringId(id.toString()), id,
-            reason: 'duplicate index $index');
+        expect(UciCharPair.fromStringId(id.toString()), id, reason: 'duplicate index $index');
       }
     });
 
@@ -83,10 +88,7 @@ void main() {
       // second character and left the first character alone. Those ids stay
       // readable, so an id written before the encoding changed still names
       // the same move.
-      expect(
-        UciCharPair.fromStringId('T\uE164').basePair,
-        const UciCharPair('T', 'd'),
-      );
+      expect(UciCharPair.fromStringId('T\uE164').basePair, const UciCharPair('T', 'd'));
     });
 
     test('refuses a duplicate index it cannot encode', () {
@@ -95,17 +97,11 @@ void main() {
       // refusal is deliberate (an ArgumentError), not an overflow.
       expect(
         () => UciCharPair.disambiguated(base, _duplicateIndices + 1),
-        throwsA(
-          isA<ArgumentError>()
-              .having((e) => e.runtimeType, 'runtimeType', ArgumentError),
-        ),
+        throwsA(isA<ArgumentError>().having((e) => e.runtimeType, 'runtimeType', ArgumentError)),
       );
       expect(
         () => UciCharPair.disambiguated(base, 1000000000),
-        throwsA(
-          isA<ArgumentError>()
-              .having((e) => e.runtimeType, 'runtimeType', ArgumentError),
-        ),
+        throwsA(isA<ArgumentError>().having((e) => e.runtimeType, 'runtimeType', ArgumentError)),
       );
     });
   });
