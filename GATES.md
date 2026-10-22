@@ -1,12 +1,15 @@
 # GATES: the registry of everything that can reject a change
 
-Protected path. If a gate is not in this file, it does not exist.
-Local entry point (same as CI): `./scripts/gates.sh [t0|t1|t2]`.
+Protected path. Authority: gate registry, change-class evidence and approval.
+See `docs/documentation-map.md`. An undocumented executable check still rejects
+a change: document it, do not ignore it because this registry is stale.
+Local entry point: `./scripts/gates.sh [t0|t1|t2]`. CI uses trusted-base scripts
+and configuration; the local wrapper uses checkout copies, not independent judges.
 
-Product suite entry point `./verify` (analyze + full `flutter test`) is owned
-by `test.yml` and stays the authority on whether the suite is green. The gates
-below do not duplicate it; they enforce what it cannot: referee integrity,
-spec coverage of intent, and check strength.
+Product-suite authority is the Tests job in test.yml (format/analyze/full tests
+and script checks). `verify` is a convenience wrapper, not CI's literal command.
+Local budgets/runtime acceptance live in TEST_STRATEGY. T1 runs no Flutter tests;
+t2 can be expensive and requires narrow scoping/remote execution under that budget.
 
 | ID | Gate | Tier | Runtime | Catches | Known blind spots | Local command | Owner |
 |----|------|------|---------|---------|-------------------|---------------|-------|
@@ -15,7 +18,7 @@ spec coverage of intent, and check strength.
 | G03 | banned APIs in core | T0 | s | hidden clocks, layer rot | aliased/bracketed call sites; `Random()` fallback (documented, injected) | `scripts/gates.sh t0` | gates PR |
 | G04 | unit + property + widget tests | T1 | min | regressions, invariant breaks | unspecified behavior; load-sensitive review tests (see Blind spots) | owned by `test.yml` | CI |
 | G05 | spec traceability | T1 | s | invariants with no test; tests citing unknown IDs | weak tests that cite IDs (needs G06) | `python3 scripts/gates/spec_trace_check.py --spec SPEC.md --tests test` | gates PR |
-| G06 | hand-picked mutants (local T2) | T2 | min | tests that do not check scheduler boundaries | unlisted lines; equivalent mutants | `./scripts/gates.sh t2` | contributor |
+| G06 | hand-picked mutants (opt-in T2) | T2 | min | missing boundary/state/graph assertions | unlisted lines; equivalent mutants; t2 runs only scheduler_test.dart despite the expanded catalogue | manual_mutation_runner.py with matching narrow test command; inspect before using t2 | contributor |
 | G07 | protected paths | T1 | s | referee edits without human approval | uncommitted local edits (CI judges commits) | `python3 scripts/gates/protected_paths_check.py --base origin/main` | owner |
 | G08 | test-weakening tripwire | T1 | s | removed asserts/tests, new `skip:`/suppressions in live code | subtle weakening (renamed expectations, padded tolerances); `redteam/` + `scripts/gates/` excluded (inert corpus data / self-naming patterns — both G07-guarded) | `python3 scripts/gates/test_weakening_check.py --base origin/main` (an `Ack-G08: <reason>` commit trailer records reviewed intent; findings still print — the trailer is a line of its own starting with `Ack-G08:`, matched as `^Ack-G08:`, so a mention inside another line does not count) | owner |
 | G09 | fail-to-pass (bugfix PRs) | T2 | min | tests that cannot fail | wrong-reason failures (use EXPECT_PATTERN); reviewer-enforced until CI-wired | `bash scripts/gates/fail_to_pass_check.sh <base> "<test cmd>"` | reviewer |
@@ -30,23 +33,25 @@ spec coverage of intent, and check strength.
 | bugfix | regression test failing on base, passing here (G09 script output pasted; EXPECT_PATTERN for the right reason) |
 | perf | before/after numbers on the pinned harness + equivalence test vs old implementation |
 | refactor | no test files modified (G08 verifies), behavior-equivalence evidence |
-| feature | SPEC.md updated first in a spec-change PR; property tests per new invariant (G05 verifies) |
+| feature | new contracts approved in a dedicated spec-change PR first; reuse existing INVs when sufficient; property tests for new invariants (G05 checks citations, not strength) |
 | test-only | names the mutant, invariant, or ratchet it improves |
 | dependency | written reason + pubspec.yaml approval (G07); size/startup note |
-| docs | no code changes (fast CI lane stays cheap) |
+| docs | no product code; Markdown currently triggers both CI workflows, including the full remote suite |
 | gate-change / spec-change | separate PR, no product code, human approval (G07), red-team recall not reduced |
 
 ## Blind spots (known, accepted)
 
 - Uncommitted local edits bypass G07/G08 locally; CI judges pushed commits.
-- Several review controller tests are load-sensitive (`pumpAsync` fixed 80ms
-  waits): they can flake under CPU contention in wide runs and pass in
-  isolation. Re-run the file alone before blaming a change; the real fix is
-  condition-polling helpers (see AGENTS.md lessons 2026-09-28).
-- `build_runner` rewrites `lib/l10n/*.dart` formatting in fresh worktrees;
-  run `dart format lib/l10n/` after codegen and do not commit the churn.
-- G05 proves intent coverage, not test quality; G06 covers six scheduler
-  boundaries only. Full mutation and crash-consistency are Phase 2.
+- The review-controller fixed-wait helper was replaced by condition polling
+  (task 19, #52). Timing failures still need case-specific diagnosis; the old
+  blanket pumpAsync-80ms explanation is historical, not a current finding.
+- Generated l10n Dart is committed raw with format:false, not hand-formatted.
+  Follow CLAUDE; the old formatter workaround is obsolete.
+- G05 proves intent coverage, not test quality. G06's expanded catalogue is not
+  fully exercised by its scheduler-only wrapper. Blocking mutation,
+  crash-consistency and pinned performance gates remain planned (GATES_PLAN).
+- G07 sees a label, not human identity. A shared account permits technical
+  self-approval; explicit per-item consent is operational (AGENTS §10, Q5).
 
 ## Gate health (review quarterly)
 | Gate | Rejections | False positives | Flaky reruns | Escapes traced | Action |
@@ -56,7 +61,6 @@ spec coverage of intent, and check strength.
 ## Escapes log
 | Date | What escaped | Root cause | New gate / invariant / red-team case |
 |------|--------------|------------|--------------------------------------|
-| (none recorded since gates introduced 2026-10-01) | | |
 | 2026-10-02 | Every lichess socket handshake was refused with HTTP 400, so cloud evaluation, study sync and the ping indicator were dead while the suite stayed green | The fake channels key on path alone, so no test could see that the sri was missing from the connect URL, and no fast gate reads a wire format | Regression test shipped in #129. SPEC INV-064 and its test citation added in the escape PR (this row's "not added" stood until G-BASEINV was fixed by #135/#137). Red-team case rt-08 guards the trace link; the wire-behavior link is guarded by the required Tests lane (G04) — t1 recall runs no flutter tests, so a reintroduced wire bug escapes t1 by construction | |
 | 2026-10-19 | The v14/v16 canonical rekeys left 67 `srs_review_state` mirrors stranded on the owner's live database — rows keyed to ids that no decision (`id`/`canonicalStateId`) and no knowledge row (`canonicalId`) named any more — while every gate stayed green | No oracle read `srs_review_state` after an upgrade: the rekey tests checked knowledge rows and decisions, the mirror was never asserted to follow, and no fast gate reads cross-table reachability | Regression tests shipped in #239 (`orphaned_review_state_sweep_test.dart`; the two rekey mirror tests). SPEC INV-069, its citations, and red-team case rt-10 added in the escape PR. rt-10 also closed a G08 blind spot found while building it: the tripwire promised "removed test files" yet exited 0 on a whole-file deletion, and now reports one finding per deleted test file. The behaviour link (reverting the mirror carry or the sweep) is guarded by the required Tests lane (G04) — t1 recall runs no flutter tests | |
 
@@ -65,7 +69,19 @@ escape loop, after the regression test, SPEC invariant, and red-team case.
 
 ## Operator checklist (owner actions, not automatable here)
 
-1. GitHub branch protection on `main`: required status checks (`Tests`,
-   `Gates`), required human review, no direct pushes, no force pushes.
-2. Confirm SPEC.md T0/T1 invariants by merging (they transcribe QUALITY.md).
+1. Preserve main protection: required contexts are Tests and **T1 fast gates**,
+   not the workflow name Gates. Confirm live settings before changing contexts;
+   no direct/force pushes.
+2. Protected edits need a dedicated spec-change/gate-change PR, no product code,
+   and explicit owner consent for that diff before applying gate-approved.
+   The executable protected set is `.gates/protected-paths.txt`.
 3. Quarterly: review this file's health tables, tighten ratchets, delete dead gates.
+
+## Committed-branch fast check
+
+Run `./scripts/gates.sh t1` **after committing**, before an authorized push.
+G07/G08 read base...HEAD and see no uncommitted changes. Use BASE_REF for the
+intended base; an empty diff does not verify work still unstaged.
+For protected-file work G07 rejects until explicit owner consent. Only after
+consent may APPROVED=1 exercise the remaining local checks. The initial task
+request is not approval of the resulting diff.

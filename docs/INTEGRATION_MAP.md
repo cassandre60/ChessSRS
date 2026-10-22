@@ -1,7 +1,8 @@
 # Integration Map — Listudy & chessrs Extraction Plan
 
-Status: **Phase 0 map.** No integration happens until the Lichess Mobile
-foundation is stable (Phase 1) and the vertical slice ships (Phase 2/3).
+Authority: reference-source provenance and extraction boundaries. The phase
+labels below describe the original sequence; integrations have shipped (see
+IMPLEMENTATION_PLAN Phases 4–6), and MVP owns what remains in scope.
 
 The reset directive is explicit: do not merge repositories. Extract behavior
 and proven solutions into **isolated modules** inside our domain boundary.
@@ -19,7 +20,10 @@ Lichess Mobile (UI/app foundation)
         +-- local persistence/import infrastructure (sqflite, PGN via dartchess)
 ```
 
-## License constraints (hard)
+## Licensing pointer
+
+ARCHITECTURE §6 owns the binding licensing rules. The source inventory below
+explains provenance, not a second policy:
 
 | Source | License | Rule |
 |---|---|---|
@@ -62,7 +66,7 @@ Source: `backend/src/main/kotlin/com/zackmurry/chessrs/` (entity, service),
 | SRS interval ladder: `ease × scaling^numReviews` (minutes), user-tunable ease/scaling | `service/SpacedRepetitionService.kt` | second `Scheduler` impl | complements our SimpleScheduler ladder |
 | Fields: `lastReviewed`, `numReviews`, `due`, `timeCreated` | `entity/Move.kt` | ReviewState | subset of our state (we add lapses/stability for FSRS-upgrade path) |
 | Review queue prefetching: fetch N due items, refill when 1 remains | `PracticeMainPanel.tsx` | review session engine | avoids per-item latency in UI |
-| Wrong answer → show correct move on the board, pause ~3s, reset; correct → advance | `PracticeMainPanel.tsx`, `boardSlice` | review feedback UX | aligns with our quiet-feedback principle |
+| Wrong answer → show correct move on the board, pause ~3s, reset; correct → advance | `PracticeMainPanel.tsx`, `boardSlice` | review feedback UX reference | reference behavior only; our immediate reguess/re-test contract is INV-021, not a mandatory 3s lock |
 | Per-move board perspective (isWhite flips board) | `PracticeMainPanel.tsx` | review scene | board orientation from repertoire side |
 | `cleanFen` normalized position identity | `Move.kt` | position keys | matches QUALITY.md position identity invariant |
 | `opening` string on moves for grouping | `Move.kt`, `OpeningService.kt` | Opening cross-study dimension | Phase 4/5+ |
@@ -80,3 +84,7 @@ OAuth/Lichess auth, accounts, engine service.
    behind the `Scheduler` contract, selected in settings.
 
 Each integration is one isolated module + tests; no cross-cutting rewrites.
+
+Reference concepts such as sibling reset, single-move scheduling keys, hints
+or progress presentation are not authorization to override SPEC or expand MVP.
+Graph effects/identity follow the current scheduling architecture and SPEC.
