@@ -43,6 +43,7 @@ import 'model/engine/fake_weights_service.dart';
 import 'network/fake_http_client_factory.dart';
 import 'network/fake_websocket_channel.dart';
 import 'test_helpers.dart';
+import 'utils/app_fonts.dart';
 import 'utils/fake_connectivity.dart';
 
 final mockClient = MockClient((request) async {
@@ -210,8 +211,9 @@ class _FakeAppState extends ConsumerState<_FakeApp> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = SrsColors.forBrightness(widget.brightness, kSrsDefaultAccent);
     return SrsTheme(
-      colors: SrsColors.forBrightness(widget.brightness, kSrsDefaultAccent),
+      colors: colors,
       child: MaterialApp(
         // Mirror production (see app.dart): [AppLocalizations.localizationsDelegates] would pull in
         // the `flutter_localizations` delegates, which localize the Flutter material and cupertino
@@ -224,6 +226,19 @@ class _FakeAppState extends ConsumerState<_FakeApp> {
           MaterialLocalizationsEo.delegate,
           CupertinoLocalizationsEo.delegate,
         ],
+        // The app's own theme, built the same way the app builds it (see app.dart): the same
+        // `srsThemeData` over the same palette. Without it the suite measures text in the
+        // framework's default type scale and font family, which is neither the app's font nor
+        // the app's sizes — every string came out about twice as wide as it is on a device.
+        theme: srsThemeData(colors),
+        // A `Material` ancestor, which the app always has: every production screen is a
+        // `Scaffold`, and a `Scaffold` puts its body inside a `Material` (see the Flutter SDK's
+        // scaffold.dart). A `Material` is what gives a `Text` with no style of its own the
+        // app's `bodyMedium` instead of `MaterialApp`'s fallback style — 48 px monospace, red
+        // and underlined, the framework's debugging aid for "you forgot a Material". A test
+        // that builds a screen without a `Scaffold` used to measure that 48 px glyph.
+        builder: (context, child) =>
+            Material(type: MaterialType.transparency, child: child ?? const SizedBox.shrink()),
         home: widget.home,
         // Mirror production (see app.dart) so navigation logic relying on the
         // route stack observer behaves the same in tests.
@@ -281,6 +296,13 @@ Future<Widget> makeTestProviderScope(
   final binding = TestLichessBinding.ensureInitialized();
 
   addTearDown(binding.reset);
+
+  // The app's fonts, so text is measured the way it is on a device. The engine
+  // runs the test suite with `--use-test-fonts --disable-asset-fonts`, which
+  // leaves every string in the fallback test glyphs — one em per character —
+  // and therefore about twice as wide as the app draws it. Loaded here, before
+  // anything is pumped, because the measurement is what the suite is for.
+  await loadAppFonts();
 
   rootNavRouteStackObserver.clear();
   addTearDown(rootNavRouteStackObserver.clear);
