@@ -60,19 +60,6 @@ const _entryPoint = 'lib/main.dart';
 /// `game_common_widgets` caveat about class-name heuristics is kept above, where it still
 /// applies to the traversal's own limits.
 const _knownUnreachable = <String, String>{
-  'lib/src/model/clock/chess_clock.dart':
-      'Imported only by its own test. Chess-clock logic from the cut game surfaces; no live '
-      'screen drives it.',
-  'lib/src/model/common/game.dart':
-      'Zero references in lib/ or test/. Shared game types left behind by the game cuts.',
-  'lib/src/model/game/game_preferences.dart':
-      'Zero references in lib/ or test/. Superseded by the offline-computer preferences.',
-  'lib/src/styles/social_icons.dart':
-      'Zero references. Lichess iconography, replaced per D016 (visual identity is '
-      'independent of Lichess Mobile).',
-  'lib/src/utils/image.dart':
-      'Zero references. Image colour extraction for a cut feature; nothing calls '
-      'imageWorkerFactoryProvider or extractColorsFromImageProvider.',
   'lib/chess_srs.dart':
       'Dartdoc library entry point for the domain API. Not imported by the app; '
       'exists solely so dartdoc can generate documentation for the domain layer.',
