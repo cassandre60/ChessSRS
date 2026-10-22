@@ -7,7 +7,7 @@ Recorded 2026-10-22. Handoff checkout starts at
 
 The owner requested a rule-by-rule `SPEC.md` audit targeting checkbox tests,
 then requested fixes. **The work is partial and now published as separate
-pull requests:** ten repairs are open as their own PRs against `main`; none
+pull requests:** eleven repairs are open as their own PRs against `main`; none
 was merged or released by this work.
 
 | PR | Audit item | Branch |
@@ -22,6 +22,7 @@ was merged or released by this work.
 | [#390](https://github.com/cassandre60/ChessSRS/pull/390) | F4 / INV-023 practice mode writes nothing | `test/audit-practice-writes` |
 | [#391](https://github.com/cassandre60/ChessSRS/pull/391) | INV-030 opening scope queues what its summary counts | `fix/audit-opening-scope` |
 | [#394](https://github.com/cassandre60/ChessSRS/pull/394) | INV-065 a transposition that arrived another way | `fix/audit-transposition-arrival` |
+| [#397](https://github.com/cassandre60/ChessSRS/pull/397) | INV-028 the exposure throttle reads days in the reader's frame | `fix/audit-exposure-day-frame` |
 
 The current status of each, with the observed proof and the scope limits, is in
 [`spec-audit-fix-status.md`](spec-audit-fix-status.md).
@@ -75,6 +76,7 @@ are named for the record.
 | INV-023: practice mode writes nothing | [#390](https://github.com/cassandre60/ChessSRS/pull/390) | `test/audit-practice-writes` — `a0cf8e3bc` | `chesssrs-audit-fresh-cap` | The service's no-write guard removed: the test fails with a knowledge state written. With the guard in place, 96 controller tests passed. |
 | INV-030: opening scope queues what its summary counts | [#391](https://github.com/cassandre60/ChessSRS/pull/391) | `fix/audit-opening-scope` — `aaf7d70ce` | `chesssrs-audit-fresh-cap` | The new service test fails on the base code with the summary counting 1 and the session queueing 0. 143 service/scope/controller and 53 review screen tests passed. |
 | INV-065: a transposition that arrived another way | [#394](https://github.com/cassandre60/ChessSRS/pull/394) | `fix/audit-transposition-arrival` — `42a5f2e98` | `chesssrs-audit-fresh-cap` | The new test fails on the base code (`isCorrect` false) and passes with the fix. 8 transposition, 271 review and 123 review view tests passed. |
+| INV-028: the exposure throttle reads days in the reader's frame | [#397](https://github.com/cassandre60/ChessSRS/pull/397) | `fix/audit-exposure-day-frame` — `9d2f732ed` | `chesssrs-audit-fresh-cap` | The new test fails on the base code (stability compounded to 466560000 where the cap says 432000000) and passes with the fix. 434 domain and review tests, 933 model and review-view tests passed. |
 
 The transposition test change is `ed33259d59cc4b2d847fe7561e39f5d616f9d3e7`;
 `009be92` is an authorization-only follow-up. Both were preserved when that
@@ -124,6 +126,12 @@ corresponding audit section, confirm current code, then write a failing test.
 
 ### Done since the handoff
 
+- **INV-028, the exposure throttle reads days in the reader's frame** —
+  repaired in [#397](https://github.com/cassandre60/ChessSRS/pull/397). The
+  frame is now explicit and injectable rather than ambient: `Clock.localDayKey`
+  defaults to the UTC day, and `SystemClock` overrides it with the reader's
+  wall clock. The test pins the offset, because a test that took the frame
+  from the machine would pass on a UTC CI runner and fail on this one.
 - **INV-065, a transposition that arrived another way** — repaired in
   [#394](https://github.com/cassandre60/ChessSRS/pull/394). A move that
   reaches an in-scope position by a route the repertoire does not record is
@@ -160,20 +168,7 @@ adding example-count padding:
   through platform/direct link ingress rather than only linkify.
 - INV-005: old canonical-keyed review events can remain stored but disappear
   from current-ID history lookup after rekey; historical schema coverage is partial.
-- INV-028: **analysed, not repaired — it needs a design decision, not an
-  edit.** The store reloads the exposure and review timestamps as UTC
-  instants while the coordinator compares them against the clock's local time
-  with raw year/month/day fields, so in a non-UTC zone the two sides are in
-  different frames and the "once per calendar day" throttle can grant twice
-  in one local day near midnight. The local day has to be decided in one
-  frame, and Dart's `DateTime` offers only two (UTC and the ambient system
-  zone). `toLocal()` is correct in production but makes the suite's outcome
-  depend on the ambient zone — the contributor's machine is CET, CI is UTC —
-  so a test written against it would pass in CI and fail locally. The
-  alternatives are an injectable local-day frame on the `Clock` contract, or
-  storing a local day key beside the timestamp (a persisted-format change,
-  which needs migration discipline). Both are architectural and want review
-  before they land. See `docs/spec-audit-fix-status.md` for the full note.
+
 - INV-051: SQL-level read/delete bounds and actual database prefetch remain
   unproven; >800-ID reads full-scan and large chapter deletes are unchunked.
 
