@@ -16,7 +16,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
-| Q9 | The fail-to-pass gate script detaches the caller's worktree | — | open 2026-10-22 |
+| Q9 | The fail-to-pass gate script detaches the caller's worktree | — | **answered 2026-10-22: fix it — both legs now run in throwaway worktrees** |
 | Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
 
 ---
@@ -279,10 +279,15 @@ disposable checkout" (the script refuses to run when the caller's HEAD is not
 on its branch, and says so).
 
 **Needed.** One word, and then the fleet can cut the gate-change PR:
-*isolate* (the checkout runs inside the script's own temp worktree, and the
+~~*isolate* (the checkout runs inside the script's own temp worktree, and the
 caller's HEAD is never touched) or *refuse* (the script detects that the
 caller's HEAD is detached or off-branch and exits with an explanation instead
-of running).
+of running).~~ **Answered 2026-10-22: *isolate*.** The script now creates TWO
+throwaway worktrees — one at the base with the PR's test files dropped in, one
+at the head — and runs both legs inside them, so the caller's checkout is
+never touched and the "must pass on the change" leg really tests the head
+commit. A self-test (`scripts/gates/fail_to_pass_check_test.sh`) proves it, and
+fails against the previous version of the script.
 
 **Found.** 2026-10-22, by the mutation round on `lib/src/model/common/uci.dart`
 (#364) while running the gate after committing.
