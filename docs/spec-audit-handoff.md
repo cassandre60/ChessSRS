@@ -6,8 +6,21 @@ Recorded 2026-10-22. Handoff checkout starts at
 ## Mission and current state
 
 The owner requested a rule-by-rule `SPEC.md` audit targeting checkbox tests,
-then requested fixes. **The work is partial:** four repairs are implemented and
-committed locally; none was pushed, merged, or released by this work.
+then requested fixes. **The work is partial and now published as separate
+pull requests:** six repairs are open as their own PRs against `main`; none
+was merged or released by this work.
+
+| PR | Audit item | Branch |
+|---|---|---|
+| [#381](https://github.com/cassandre60/ChessSRS/pull/381) | F5 / INV-006 durable log redaction | `fix/audit-log-errors` |
+| [#382](https://github.com/cassandre60/ChessSRS/pull/382) | F1 / INV-016 imported-transposition oracle | `test/audit-transposition-identity` |
+| [#383](https://github.com/cassandre60/ChessSRS/pull/383) | F12 / INV-026 ladder lapse cap | `fix/audit-lapse-interval-bounds` |
+| [#384](https://github.com/cassandre60/ChessSRS/pull/384) | F2 / INV-062 top-bar overflow oracles | `test/audit-topbar-overflow` |
+| [#385](https://github.com/cassandre60/ChessSRS/pull/385) | F11 / INV-032 stale answer publication | `fix/audit-answer-publication` |
+| [#386](https://github.com/cassandre60/ChessSRS/pull/386) | F12 / INV-068 answer-driven fresh-cap bypass | `fix/audit-fresh-cap-bypass` |
+
+The current status of each, with the observed proof and the scope limits, is in
+[`spec-audit-fix-status.md`](spec-audit-fix-status.md).
 
 The original audit covers **45 invariants** at
 `8c2d9b67871fbef355e7beb847cfe385e08790c5`. Main has advanced since then.
@@ -27,32 +40,37 @@ green traceability count is not evidence that a test rejects wrong behavior.
    git show docs/spec-enforcement-audit:docs/spec-enforcement-audit-2026-10-21.md
    ```
 
-   They are committed in `9ce9257cadd5168575761d52eee7758f174c0e26`, not yet on
-   main. Their worktree is
+   They are committed in `9ce9257cadd5168575761d52eee7758f174c0e26` and are
+   now open as a PR. Their worktree is
    `/home/mohamed/Desktop/Github/chesssrs-spec-enforcement-audit`.
-4. Preserve the ready branches below. Inspect live tips and working-tree status
-   before adopting or publishing any existing branch. They were clean at handoff.
-   Obtain explicit authorization before pushing; the owner's previous review
-   delegation was not blanket publishing or gate-approval permission.
+4. The ready branches listed below are now **published as the six PRs in the
+   table above**. Inspect live tips and working-tree status before adopting or
+   publishing any further branch. Obtain explicit authorization before pushing
+   anything further; the owner's previous review delegation was not blanket
+   publishing or gate-approval permission.
 5. For new fixes, create a separate task worktree from current `origin/main`.
    Start with one failing regression, make one minimal repair, and record the
    observed failure/pass, touched-file analysis, and post-commit gates.
 
-## Ready local repairs
+## Published repairs
 
 Worktrees below are under `/home/mohamed/Desktop/Github/`. The changes are
-independent, not four commits on one integrated branch.
+independent, not six commits on one integrated branch. The tips moved when each
+branch was merged onto current `main` before publication; the original commits
+are named for the record.
 
-| Scope | Branch / tip | Worktree | Observed verification |
-|---|---|---|---|
-| INV-006: durable error-log credentials | `fix/audit-log-errors` — `11aedd40bae7684e389b2439ecfb619d0a9d2e46` | `chesssrs-audit-log-errors` | Real stored-error regression failed before the fix; **7** log-redaction tests passed afterward. Analysis and post-commit T1 passed. |
-| INV-016: empty imported-transposition oracle | `test/audit-transposition-identity` — `009be927830f120bbc1d4db37849ec4e9c99ce5b` | `chesssrs-audit-transposition-test` | Occurrence-ID mutant failed the repaired equality; **85** importer tests passed normally. Analysis and post-commit T1 passed with the specific acknowledgement below. |
-| INV-026: ladder lapse retry cap | `fix/audit-lapse-interval-bounds` — `c16e9c8ffd6ee13836d1c762f24d844df4f7aee1` | `chesssrs-audit-lapse-bounds` | 48-hour retry / 24-hour maximum regression failed before the fix; **2** tests passed afterward for both ladder schedulers. Analysis and post-commit T1 passed. |
-| INV-062: three blinded top-bar overflow tests | `test/audit-topbar-overflow` — `60883979998778b1cf1cc508e79a46250dd824e7` | `chesssrs-audit-topbar-overflow` | **4** narrow-bar and **5** practice-exit tests passed. Swallowing the deliberately generated overflow made the control fail with `Actual: null`. Analysis and post-commit T1 passed. |
+| Scope | PR | Branch / original tip | Worktree | Observed verification |
+|---|---|---|---|---|
+| INV-006: durable error-log credentials | [#381](https://github.com/cassandre60/ChessSRS/pull/381) | `fix/audit-log-errors` — `11aedd40bae7684e389b2439ecfb619d0a9d2e46` | `chesssrs-audit-log-errors` | Real stored-error regression failed before the fix (**6 of 7** fail with the secret in the raw row); **7** log-redaction tests passed afterward. Analysis and post-commit T1 passed. |
+| INV-016: empty imported-transposition oracle | [#382](https://github.com/cassandre60/ChessSRS/pull/382) | `test/audit-transposition-identity` — `009be927830f120bbc1d4db37849ec4e9c99ce5b` | `chesssrs-audit-transposition-test` | Occurrence-ID mutant failed the repaired equality; **85** importer tests passed normally. Analysis and post-commit T1 passed with the specific acknowledgement below. |
+| INV-026: ladder lapse retry cap | [#383](https://github.com/cassandre60/ChessSRS/pull/383) | `fix/audit-lapse-interval-bounds` — `c16e9c8ffd6ee13836d1c762f24d844df4f7aee1` | `chesssrs-audit-lapse-bounds` | 48-hour retry / 24-hour maximum regression failed before the fix; **2** tests passed afterward for both ladder schedulers. Analysis and post-commit T1 passed. |
+| INV-062: three blinded top-bar overflow tests | [#384](https://github.com/cassandre60/ChessSRS/pull/384) | `test/audit-topbar-overflow` — `60883979998778b1cf1cc508e79a46250dd824e7` | `chesssrs-audit-topbar-overflow` | **4** narrow-bar and **5** practice-exit tests passed. Swallowing the deliberately generated overflow made the control fail with `Actual: null`. Analysis and post-commit T1 passed. |
+| INV-032: stale answer publication | [#385](https://github.com/cassandre60/ChessSRS/pull/385) | `fix/audit-answer-publication` — `849f5dedf` | `chesssrs-audit-answer-fence` | All **6** scenarios failed on the pre-fix code (`the stale answer republished its old scope`); all 6 passed after the fix. |
+| INV-068: answer-driven fresh-cap bypass | [#386](https://github.com/cassandre60/ChessSRS/pull/386) | `fix/audit-fresh-cap-bypass` — `7d085e8bc` | `chesssrs-audit-fresh-cap` | **3 of 5** new tests failed on the pre-fix code; the other 2 pin the exemptions. 49 session tests, and 203 across the four shared-session suites, passed. |
 
 The transposition test change is `ed33259d59cc4b2d847fe7561e39f5d616f9d3e7`;
-`009be92` is an authorization-only follow-up. Preserve both if transferring that
-branch's committed history.
+`009be92` is an authorization-only follow-up. Both were preserved when that
+branch was published.
 
 ### Scope limits that matter
 
@@ -96,39 +114,17 @@ Their red-team/escape-log follow-ups still need a separate protected-file change
 These are source-supported audit leads, not executed reproductions. Read the
 corresponding audit section, confirm current code, then write a failing test.
 
-### 1. Stale answer publication — INV-032
+### Done since the handoff
 
-Inspect `ReviewController.onUserMove`, `_handleCorrectAdvancement`, and
-`_executeAdvancement` in `lib/src/review/review_controller.dart`.
+- **INV-032, stale answer publication** — repaired in
+  [#385](https://github.com/cassandre60/ChessSRS/pull/385). `onUserMove` now
+  captures its generation before grading and abandons the publication of a
+  superseded answer, while the answer is still persisted.
+- **INV-068, answer-driven fresh-cap bypass** — repaired in
+  [#386](https://github.com/cassandre60/ChessSRS/pull/386). The allowance and
+  the due-before-fresh ordering are enforced at the walk's prompt site.
 
-Reproduction: block scope A's `saveAnswerBatch`; submit an answer in A; finish
-loading scope B; release A's write. Assert controller scope/prompt/board and the
-service's active session remain B. Exercise stale correct, incorrect, and error
-restoration paths. Existing tests switch during loading or after grading reaches
-animation, not while answer persistence is pending.
-
-The observed source path captures A's state before an await, republishes it
-without the original generation fence, and captures the animation generation
-too late. The service captures A's answered decision before writing: this is a
-**publication/takeover** lead, not proof that the answer is stored under B's ID.
-Preserve acknowledged-answer durability while fixing stale UI state.
-
-### 2. Answer-driven fresh-cap bypass — INV-068
-
-Inspect `ReviewSession` construction, `_continueWithCorrectMove`, and
-`_isDecisionDue` in `lib/src/domain/review/review_session.dart`.
-
-Use a connected legal tree: due ancestor → opponent reply → fresh descendant,
-plus another due question elsewhere. Set `remainingNewQuota: 0` and leave daily
-quota available. Answer the ancestor correctly. Assert the fresh descendant is
-not introduced and remaining due work stays ahead. Constructor-only and
-`skip()`-driven tests miss this path. Practice is explicitly exempt.
-
-Keep this separate from INV-066's off-queue **due** traversal, which existing
-tests/documentation deliberately endorse despite the strict written same-set
-rule. Do not silently remove that behavior to solve the fresh-cap case.
-
-### 3. Remaining checkbox tests and behavior gaps
+### 1. Remaining checkbox tests and behavior gaps
 
 The full matrix/status documents carry details; prioritize named failures over
 adding example-count padding:
@@ -167,25 +163,33 @@ states. Boundary/traceability referee changes also require their own approval.
   Reuse recorded evidence for unchanged tips rather than rerunning it simply
   because a new session started; changed code needs fresh scoped verification.
 - Run `./scripts/gates.sh t1` **after committing**, with the intended base. The
-  ready branches' proof bases were `aec3c201` (logs), `40f46c5f` (identity), and
-  `711020032` (lapse/overflow). Recheck against the live base before publishing;
-  those historical passes do not prove a later diff.
+  published branches' proof bases were the ones they were merged onto, and each
+  was re-verified after that merge: `fix/audit-log-errors`,
+  `test/audit-transposition-identity`, `fix/audit-lapse-interval-bounds` and
+  `test/audit-topbar-overflow` were merged onto `5b46b8ed`,
+  `fix/audit-answer-publication` onto `9247ff15`, and
+  `fix/audit-fresh-cap-bypass` onto `9247ff15`. A historical pass on an older
+  base does not prove a later diff.
 - The available worktrees already have generated code. A fresh code worktree
   needs pinned-toolchain `pub get` and codegen; generated Dart stays uncommitted.
   Keep `lib/l10n/` out of broad formatting, per the current repo instructions.
 - SQLite native-asset download stalled during setup. For the **exact sqlite3
-  3.5.2 Linux x64 pin**, the package-verified artifact remains at
+  3.5.2 Linux x64 pin**, the package-verified artifact was at
   `/tmp/opencode/chesssrs-sqlite3.Hgzdex`, SHA-256:
   `b17729184e5a2818055ecbddd5ed6642521bfe6e56aafa472330e483c0e2e0d2`.
-  If it still exists and the pin matches, verify the digest and copy it only into
-  your worktree's ignored
+  That file is **gone** as of this update; a worktree that needs it must obtain
+  the package-defined release artifact and verify the recorded hash, and copy it
+  only into the worktree's ignored
   `.dart_tool/hooks_runner/shared/sqlite3/build/download-b1772918/libsqlite3.so`.
-  Otherwise obtain the package-defined release artifact and verify its recorded
-  hash. No dependency override or protected-config change was needed.
+  A sibling worktree's copy can be reused after verifying its digest. No
+  dependency override or protected-config change was needed.
 - When testing a broken Flutter error handler, capture the exception and restore
   the framework handler **before `expect`**. Otherwise the failed expectation
   itself can hit `_pendingExceptionDetails` assertions and hang reporting. The
   final overflow control demonstrates the working pattern.
+- A `git checkout <ref> -- <path>` inside a worktree stages that revision into
+  the index. After restoring the file, `git reset HEAD -- <path>` puts the index
+  back, or the next commit picks up the reverted code.
 
 ## CI warning at handoff
 
@@ -193,8 +197,8 @@ At recording, main's Tests run **39690091963** passed on `5c26b4f3`.
 The newer failed Gates run **39691089208** belongs to another agent's
 `refactor/remove-zero-reference-lib-files` branch at `8b6164e0`: G08 reports
 deletion of `test/model/clock/chess_clock_test.dart`. This is **not** a failure of
-the four local repair branches or evidence that main is red. Read its live state
-before any action and preserve that agent's work.
+the repair branches or evidence that main is red. That branch was not this
+work's to touch; its live state is the next agent's to read.
 
 ## Completion bar for continuation
 
