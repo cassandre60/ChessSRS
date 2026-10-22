@@ -148,10 +148,35 @@ sealed class User with _$User {
     );
   }
 
-  String get initials =>
-      profile?.realName?.split(' ').take(2).map((e) => e[0]).join().toUpperCase() ??
-      username[0].toUpperCase();
+  /// The initials painted in the user's avatar.
+  ///
+  /// Total by construction: it never throws, whatever the profile or the
+  /// username holds. The real name wins when it holds at least one usable
+  /// word, the username otherwise, and a placeholder when neither does.
+  String get initials {
+    final realName = profile?.realName;
+    if (realName != null) {
+      final fromRealName = realName
+          .split(_whitespace)
+          .where((word) => word.isNotEmpty)
+          .take(2)
+          .map((word) => word[0])
+          .join()
+          .toUpperCase();
+      if (fromRealName.isNotEmpty) return fromRealName;
+    }
+
+    final trimmedUsername = username.trim();
+    return trimmedUsername.isEmpty ? _unknownInitials : trimmedUsername[0].toUpperCase();
+  }
 }
+
+/// Matches a run of whitespace, so splitting a name on it never yields an
+/// empty word.
+final _whitespace = RegExp(r'\s+');
+
+/// The mark painted in the avatar of a user who has no usable name at all.
+const _unknownInitials = '?';
 
 @freezed
 sealed class UserGameCount with _$UserGameCount {
