@@ -19,7 +19,6 @@ Each one states what is known, what is not, and what I would need from you.
 | Q9 | The fail-to-pass gate script detaches the caller's worktree | — | open 2026-10-22 |
 | Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
 | Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | **answered 2026-10-22: guard it — the tool now refuses to say "nothing to do" when it is not configured** |
-| Q11 | The queue tool cannot see the queue, and the dedup law could not see the ledger | — | open 2026-10-22 |
 
 ---
 
@@ -333,26 +332,6 @@ scaffold is repaired first, then the scope throws at 0 px with a clean suite).
 
 **Found.** 2026-10-22, by the harness-measurement work (#355/#357) and the
 triage of the overflow blind spot (issues #334, #336).
-
----
-
-## Q11 — The fleet's queue tool cannot see the queue, and the dedup law could not see the ledger
-
-**Known.** Two of the fleet's own instruments have been reporting "nothing to do" while there was plenty to do. Both were measured with the tools' own parsers, not by eye.
-
-**First: the queue tool proposes nothing.** `scripts/autonomous/ledger.py next --stream 1` answers *"No eligible targets remain for this stream at their current hashes."* The reason is in `candidate_paths()`: when the config's `candidates.<stream>.include` list is empty it returns `[]` — and the repo has **no `scripts/autonomous/config.json` at all**, so the tooling runs on its built-in defaults, where that list is empty. The fleet's queue has been coming from a hand-written script, not from the tool that is supposed to produce it.
-
-**Second: the mapping is wrong for 329 of the 329 lib files.** With no config, the Dart mapping guesses `test/<path-with-lib/-stripped>_test.dart` — so `lib/src/view/analysis/analysis_screen.dart` maps to `test/src/view/analysis/analysis_screen_test.dart`, and this repo's test tree has no `src/` segment. The tool therefore finds an existing companion test for **0 of 329** lib files, and the real convention (`lib/src/<rest>.dart` ↔ `test/<rest>_test.dart`) has one for 119.
-
-**Third: the ledger itself was invisible to the dedup law.** 54 of its 85 rows carried a decorated status cell (`COMPLETED (second round: …)`) where the tool accepts only exactly `COMPLETED` or `SOUND`, so they were skipped; and for six files the bugfix row sat below its round row, recording a pre-change blob. The tool saw **27 rows** and would have re-audited **34 of the 48** lib files the ledger names — including files audited and fixed hours earlier. That part is fixed already (PR #376).
-
-**The effect.** With the config in place, the queue tool proposes **79 eligible targets** — the same 79 the hand-written script had been producing — each with its correct mapped test and composite `source:companion` hash.
-
-**Not known.** Whether the repo's copy of the config should live under `scripts/autonomous/` (protected: it is part of how the fleet proposes and records work) or outside the repo, where the fleet passes it with `--config`. The copy outside the repo already works and touches nothing protected; the in-repo copy is what lets any other agent — and you — use the tooling without knowing a flag.
-
-**Needed.** One word: *in-repo* (the config lands under `scripts/autonomous/`, the tool works for everyone with no flag) or *outside* (the fleet keeps passing `--config`, and the repo stays untouched). The PR is open either way; say the word and I will merge the version you want.
-
-**Found.** 2026-10-22, by the fleet's own consistency check after a ledger correction: measuring the ledger's visibility with the tool's parser surfaced the queue tool reporting an empty queue.
 
 ---
 
