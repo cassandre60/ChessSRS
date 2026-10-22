@@ -241,6 +241,38 @@ void main() {
 
       expect(user.initials, 'T');
     });
+
+    test('takes the initials of a real name with a double space', () {
+      expect(build(username: 'jd', realName: 'John  Doe').initials, 'JD');
+    });
+
+    test('takes the initials of a real name padded with spaces', () {
+      expect(build(username: 'jd', realName: '  John Doe  ').initials, 'JD');
+    });
+
+    test('takes the initials of a real name separated by a tab', () {
+      expect(build(username: 'jd', realName: 'John\tDoe').initials, 'JD');
+    });
+
+    test('falls back to the username when the real name is empty', () {
+      expect(build(username: testUsername, realName: '').initials, 'T');
+    });
+
+    test('falls back to the username when the real name holds only spaces', () {
+      expect(build(username: testUsername, realName: '   ').initials, 'T');
+    });
+
+    test('renders a placeholder when the username is empty', () {
+      expect(build(username: '').initials, '?');
+    });
+
+    test('renders a placeholder when the username holds only spaces', () {
+      expect(build(username: '  ').initials, '?');
+    });
+
+    test('takes the initials of the real name even when the username is empty', () {
+      expect(build(username: '', realName: 'John Doe').initials, 'JD');
+    });
   });
 
   group('User.fromServerJson', () {
