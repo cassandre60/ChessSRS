@@ -7,7 +7,7 @@ Recorded 2026-10-22. Handoff checkout starts at
 
 The owner requested a rule-by-rule `SPEC.md` audit targeting checkbox tests,
 then requested fixes. **The work is partial and now published as separate
-pull requests:** six repairs are open as their own PRs against `main`; none
+pull requests:** seven repairs are open as their own PRs against `main`; none
 was merged or released by this work.
 
 | PR | Audit item | Branch |
@@ -18,6 +18,7 @@ was merged or released by this work.
 | [#384](https://github.com/cassandre60/ChessSRS/pull/384) | F2 / INV-062 top-bar overflow oracles | `test/audit-topbar-overflow` |
 | [#385](https://github.com/cassandre60/ChessSRS/pull/385) | F11 / INV-032 stale answer publication | `fix/audit-answer-publication` |
 | [#386](https://github.com/cassandre60/ChessSRS/pull/386) | F12 / INV-068 answer-driven fresh-cap bypass | `fix/audit-fresh-cap-bypass` |
+| [#389](https://github.com/cassandre60/ChessSRS/pull/389) | F12 / INV-031 displayed distinct daily counting | `fix/audit-daily-count` |
 
 The current status of each, with the observed proof and the scope limits, is in
 [`spec-audit-fix-status.md`](spec-audit-fix-status.md).
@@ -67,6 +68,7 @@ are named for the record.
 | INV-062: three blinded top-bar overflow tests | [#384](https://github.com/cassandre60/ChessSRS/pull/384) | `test/audit-topbar-overflow` — `60883979998778b1cf1cc508e79a46250dd824e7` | `chesssrs-audit-topbar-overflow` | **4** narrow-bar and **5** practice-exit tests passed. Swallowing the deliberately generated overflow made the control fail with `Actual: null`. Analysis and post-commit T1 passed. |
 | INV-032: stale answer publication | [#385](https://github.com/cassandre60/ChessSRS/pull/385) | `fix/audit-answer-publication` — `849f5dedf` | `chesssrs-audit-answer-fence` | All **6** scenarios failed on the pre-fix code (`the stale answer republished its old scope`); all 6 passed after the fix. |
 | INV-068: answer-driven fresh-cap bypass | [#386](https://github.com/cassandre60/ChessSRS/pull/386) | `fix/audit-fresh-cap-bypass` — `7d085e8bc` | `chesssrs-audit-fresh-cap` | **3 of 5** new tests failed on the pre-fix code; the other 2 pin the exemptions. 49 session tests, and 203 across the four shared-session suites, passed. |
+| INV-031: displayed distinct daily counting | [#389](https://github.com/cassandre60/ChessSRS/pull/389) | `fix/audit-daily-count` — `c44eb43bd` | `chesssrs-audit-fresh-cap` | Both new tests failed on the pre-fix code, in opposite directions: behind after a lapse, ahead after a repeat. 97 controller, 49 persistence, 89 review screen/service and 39 mock-repository tests passed. |
 
 The transposition test change is `ed33259d59cc4b2d847fe7561e39f5d616f9d3e7`;
 `009be92` is an authorization-only follow-up. Both were preserved when that
@@ -116,6 +118,10 @@ corresponding audit section, confirm current code, then write a failing test.
 
 ### Done since the handoff
 
+- **INV-031, displayed distinct daily counting** — repaired in
+  [#389](https://github.com/cassandre60/ChessSRS/pull/389). The count follows
+  the persisted distinct-position rule, so a position reviewed several times
+  counts once.
 - **INV-032, stale answer publication** — repaired in
   [#385](https://github.com/cassandre60/ChessSRS/pull/385). `onUserMove` now
   captures its generation before grading and abandons the publication of a
@@ -134,8 +140,6 @@ adding example-count padding:
 - INV-028: persisted exposure timestamps reload as UTC but calendar comparison
   uses raw date fields against local time. Test a restart across representations
   within the same local day.
-- INV-031: retry → correct re-test can increment the controller's optimistic
-  daily count twice; database/domain distinct counting is separately protected.
 - INV-007/008: delayed storage deletion versus a newer sign-in; hostile hosts
   through platform/direct link ingress rather than only linkify.
 - INV-005: old canonical-keyed review events can remain stored but disappear
