@@ -919,12 +919,11 @@ void main() {
       // The avatar must stop showing a flair it cannot load: the error
       // handler drops the foreground image and rebuilds around the initial.
       //
-      // That rebuild currently trips CircleAvatar's
-      // `foregroundImage != null || onForegroundImageError == null` assert,
-      // because lib/src/widgets/user.dart:331 keeps `onForegroundImageError`
-      // while the rebuild has already dropped `foregroundImage` - a
-      // production defect reported separately, so the reaction is observed
-      // through the assert the rebuild raises.
+      // That rebuild must not raise: CircleAvatar asserts
+      // `foregroundImage != null || onForegroundImageError == null`, so the
+      // error handler has to go with the image it belonged to
+      // (lib/src/widgets/user.dart:331). The avatar falls back to the
+      // initial instead.
       //
       // The flair name differs from the one the loading test uses, so the
       // image cache cannot hand this test the image that test loaded.
@@ -937,7 +936,11 @@ void main() {
       await tester.pumpWidget(app);
       await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isA<AssertionError>());
+      expect(tester.takeException(), isNull);
+      final avatar = tester.widget<CircleAvatar>(find.byType(CircleAvatar));
+      expect(avatar.foregroundImage, isNull);
+      expect(avatar.onForegroundImageError, isNull);
+      expect(find.text('A'), findsOneWidget);
     });
 
     testWidgets('colours the initial from its letter in light mode', (WidgetTester tester) async {
