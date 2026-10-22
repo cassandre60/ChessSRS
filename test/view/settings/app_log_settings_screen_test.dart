@@ -460,6 +460,32 @@ void main() {
     },
   );
 
+  testWidgets('AppLogSettingsScreen keeps the engine own logs under the Engine category', (
+    tester,
+  ) async {
+    // The contract: the "Engine" chip selects the engine's own loggers, so the entries they
+    // logged stay on the list when the chip is tapped. A category that hides the subsystem it
+    // names is the defect this pins: the chip used to filter on "fish", which matches the
+    // stockfish transport and none of the engine's own loggers.
+    final ref = await pumpAppLogScreen(tester);
+    await showLogs(tester, ref, [
+      _entry(message: 'engine own log line', loggerName: 'EngineOpponent'),
+      _entry(message: 'engine evaluator log line', loggerName: 'PositionEvaluator'),
+      _entry(message: 'network log line', loggerName: 'HttpClient'),
+      _entry(message: 'review log line', loggerName: 'ReviewEngine'),
+    ]);
+
+    await tester.tap(find.text('Engine'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('engine own log line'), findsOneWidget);
+    expect(find.text('engine evaluator log line'), findsOneWidget);
+    // The network loggers have a chip of their own, and the review session's logger is the
+    // review's: neither of them is the engine's, so neither belongs under "Engine".
+    expect(find.text('network log line'), findsNothing);
+    expect(find.text('review log line'), findsNothing);
+  });
+
   testWidgets('AppLogSettingsScreen says so when a search matched nothing', (tester) async {
     // The contract: "no logs" and "no logs match this" are different sentences, and the
     // search is named in the second one so the reader knows what was looked for.
