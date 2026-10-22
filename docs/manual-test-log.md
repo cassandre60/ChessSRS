@@ -137,6 +137,61 @@ editor, and resize the window to 810×1080 and then to 844×390 (a landscape pho
 in the first the panel sits under the board, in the second beside it, and in both it
 appears exactly once.
 
+### 5. A shape drawn in a study chapter no longer survives a chapter switch
+
+**What changed.** The study board's shape-clearing guard watched the loading
+flag, which never flips on a chapter switch — `goToChapter` assigns the new
+state directly — so a shape the user drew in one chapter stayed on the board in
+the next one, pointing at a position that had nothing to do with it. The guard
+now watches the chapter identity, which is what a chapter switch changes.
+
+**What the tests prove.** That the drawn shape is gone after the chapter
+switch, and that it is still there after an unrelated rebuild of the same
+chapter (a widget test that drives the real two-pointer draw gesture on the
+real board). What they do not prove is how the board looks on a device.
+
+**What only you can check.** The draw gesture is a two-finger *touch* gesture:
+chessground locks the draw mode with the first pointer and drags the shape out
+with a second one, so a mouse cannot draw a shape at all — the Linux desktop
+build has no touch input, and this change was therefore never exercised in the
+running app here.
+
+**How to test it.** On a phone or a tablet, open a study with at least two
+chapters, draw an arrow on the board (hold one finger on an empty square, drag
+a second finger away from it), then switch to the next chapter with the chapter
+dialog. The arrow must not follow you to the new chapter.
+### 6. The new-game sheet's FEN field and the accent picker no longer overrun
+
+**What changed.** Two layout defects that issue #336 measured, and that survived
+every correction of the test environment's fonts:
+
+- the "From Position" variant of the new-game sheet put the FEN field and the
+  "Paste from clipboard" button in a box as tall as the *board* beside them
+  (121px on a 390px phone), while the two need 188px between them: the button
+  was painted over the "Side" and "Practice mode" rows below. The box is now as
+  tall as the content in it;
+- the accent picker on the settings screen put four fixed 44px targets and three
+  fixed 8px gaps into whatever column the page had left after the label, so on a
+  narrow screen the rightmost target was clipped to 40px. The gap now gives way
+  before the target does.
+
+**What the tests prove.** The geometry, in the two places the defects were
+measured: the FEN field and the paste button are inside the box the preview gives
+them and do not reach into the row below (a new test that fails on the base
+code), and every accent target is still 44px and inside the picker's own box on a
+208px column (a new test that fails on the base code). What they do not prove is
+how the two look: the tests measure rectangles, they do not look at the screen.
+
+**What only you can check.** That the FEN field, its paste button and the board
+preview sit together without the button landing on the rows below, and that the
+accent row still reads as a row of four dots.
+
+**How to test it.** On Linux desktop, `fvm flutter run -d linux`, open the offline
+computer screen, start a new game, set the variant to "From Position", and look at
+the field and the button beside the board preview. Then open Settings → Appearance
+→ Accent, narrow the window to about 240px wide, and check that the four dots are
+all there and that the rightmost one is not cut off.
+
 ---
 
 ## Closed

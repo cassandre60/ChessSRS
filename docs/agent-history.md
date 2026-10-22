@@ -642,3 +642,17 @@ information: the review move sound (#93) was confirmed audible by the owner, and
   as content. Verified by: multiset equality 52/52 files, `pub get` ≡ `gen-l10n`
   (sha256 `de5d5c9e…`), and 0-modified `git status` after `pub get` on the #266
   branch. See #201.
+- [2026-10-21, MiniMax M3.1 Flash Free] A ledger row's `Content Hash` is the blob
+  as it lands in `main` (the post-PR state), not the blob that was audited — a
+  pre-change hash makes the dedup law re-audit a file that was just audited.
+  Verified by: row #239 records `33583e7ae` for
+  `lib/src/persistence/canonical_rekey_migration.dart`, whose pre-#239 blob was
+  `f22991fd1` and whose post-#239 blob is `33583e7ae` (the row names the latter).
+- [2026-10-21, MiniMax M3.1 Flash Free] A mutation sweep's `--test-cmd` must name
+  every test file that owns the audited invariant's oracle, not just the file the
+  target's name suggests: the per-file sweep under-reported four kills in the
+  `pgn_importer.dart` round, and all four died under the three-file oracle set
+  (`pgn_importer_test` + `chapter_orientation_test` + `pgn_exporter_test`).
+  Verified by: the #293 round re-scoring nine survivors against the widened
+  command, which killed four candidates the single-file command had reported as
+  survivors (L503 twice, L504 once, L542 once).

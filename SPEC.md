@@ -20,7 +20,7 @@ them. See `docs/documentation-map.md` for the other document responsibilities.
 
 Documentation reconciliation leaves every INV sentence and ID unchanged.
 Known unresolved conflicts (INV-025, INV-050, INV-060 and the null-date edge of
-INV-068) are tracked in `docs/open-questions.md` Q7–Q10. Their existence is not
+INV-068) are tracked in `docs/open-questions.md` Q7, Q12–Q14. Their existence is not
 permission to weaken a test or silently interpret current code as approval.
 
 ---

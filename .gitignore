@@ -55,3 +55,8 @@ chesssrs-design-package/
 .agent/
 *.html
 skills-lock.json
+
+# The fleet config is project-local: it names this repo's test/analyze/gate commands.
+/scripts/autonomous/config.json
+__pycache__/
+*.pyc

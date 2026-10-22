@@ -90,7 +90,7 @@ an empty committed diff as proof of an uncommitted change.
 incremental persistence on a small seeded path. It asserts median **<16 ms** and
 prints p90/max. It is neither a pinned-device frame measurement nor a tail
 latency guarantee. QUALITY §4.1 and INV-050 retain their requirements; their
-scope mismatch is recorded as Q8 in `docs/open-questions.md`.
+scope mismatch is recorded as Q12 in `docs/open-questions.md`.
 
 For performance changes, report dataset, mode, warmups, sample spread and
 harness; prove equivalence. Read `docs/performance-handoff.md` and the linked

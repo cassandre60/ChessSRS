@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/design/tokens.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -442,9 +444,14 @@ class _GameLayoutState extends ConsumerState<GameLayout> {
           final defaultBoardSize =
               constraints.biggest.shortestSide - (kTabletBoardTableSidePadding * 2);
           final sideWidth = constraints.biggest.longestSide - defaultBoardSize;
+          final goldenRatioBoardSize =
+              constraints.biggest.longestSide / kGoldenRatio - (kTabletBoardTableSidePadding * 2);
+          // The board must fit the height of the area it is laid out in. The
+          // golden ratio of the width can be taller than the area itself, so
+          // it is capped at the height the default branch already uses.
           final boardSize = sideWidth >= 250
               ? defaultBoardSize
-              : constraints.biggest.longestSide / kGoldenRatio - (kTabletBoardTableSidePadding * 2);
+              : math.min(goldenRatioBoardSize, defaultBoardSize);
 
           return Padding(
             padding: const EdgeInsets.all(kTabletBoardTableSidePadding),

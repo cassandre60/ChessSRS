@@ -27,18 +27,32 @@ if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
 fi
 echo "test files from the change:"; printf '  %s\n' "${TEST_FILES[@]}"
 
-WT="$(mktemp -d)"
-cleanup() { git worktree remove --force "$WT" >/dev/null 2>&1 || rm -rf "$WT"; }
+# TWO worktrees, both throwaway: one at the BASE (with the PR's test files
+# dropped in) and one at the head. The caller's checkout is never touched.
+#
+# It used to be touched: the "must pass" leg ran `git checkout --detach
+# "$HEAD_REF"` in the CALLER's directory, which detached the caller's HEAD
+# and left the caller's branch off-branch - and then ran the test command in
+# the caller's working tree, so the "must pass on the change" leg did not
+# actually check out the change. A gate that disturbs the caller is a gate
+# that will be run from a shared tree, where it does real damage.
+WT_BASE="$(mktemp -d)"
+WT_HEAD="$(mktemp -d)"
+cleanup() {
+  git worktree remove --force "$WT_BASE" >/dev/null 2>&1 || rm -rf "$WT_BASE"
+  git worktree remove --force "$WT_HEAD" >/dev/null 2>&1 || rm -rf "$WT_HEAD"
+}
 trap cleanup EXIT
-git worktree add --detach "$WT" "$BASE" >/dev/null 2>&1 || { echo "cannot create worktree at $BASE" >&2; exit 2; }
+git worktree add --detach "$WT_BASE" "$BASE" >/dev/null 2>&1 || { echo "cannot create worktree at $BASE" >&2; exit 2; }
+git worktree add --detach "$WT_HEAD" "$HEAD_REF" >/dev/null 2>&1 || { echo "cannot create worktree at $HEAD_REF" >&2; exit 2; }
 
 for f in "${TEST_FILES[@]}"; do
-  mkdir -p "$WT/$(dirname "$f")"
-  git show "$HEAD_REF:$f" > "$WT/$f" || { echo "cannot read $f at $HEAD_REF" >&2; exit 2; }
+  mkdir -p "$WT_BASE/$(dirname "$f")"
+  git show "$HEAD_REF:$f" > "$WT_BASE/$f" || { echo "cannot read $f at $HEAD_REF" >&2; exit 2; }
 done
 
 echo "== running tests against OLD source + NEW tests (must fail) =="
-OUT_BASE="$(cd "$WT" && bash -c "$CMD" 2>&1)"; RC_BASE=$?
+OUT_BASE="$(cd "$WT_BASE" && bash -c "$CMD" 2>&1)"; RC_BASE=$?
 echo "$OUT_BASE" | tail -n 40
 if [[ $RC_BASE -eq 0 ]]; then
   echo "FAIL: tests pass on the base code, so they do not demonstrate the bug." >&2; exit 1
@@ -49,8 +63,7 @@ if [[ -n "${EXPECT_PATTERN:-}" ]] && ! grep -Eq "$EXPECT_PATTERN" <<<"$OUT_BASE"
 fi
 
 echo "== running tests on the change itself (must pass) =="
-git checkout -q --detach "$HEAD_REF" 2>/dev/null || true
-bash -c "$CMD" >/tmp/f2p_head.log 2>&1; RC_HEAD=$?
+( cd "$WT_HEAD" && bash -c "$CMD" ) >/tmp/f2p_head.log 2>&1; RC_HEAD=$?
 tail -n 20 /tmp/f2p_head.log
 if [[ $RC_HEAD -ne 0 ]]; then echo "FAIL: tests do not pass on the change." >&2; exit 1; fi
 echo "OK: fail-to-pass verified"

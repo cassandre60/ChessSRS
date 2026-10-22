@@ -9,20 +9,31 @@ part 'app_log_paginator.freezed.dart';
 /// The number of app logs to fetch per page.
 const _pageSize = 20;
 
+/// The query the app log is read with.
+///
+/// [search] is the free-text filter the reader typed; [loggerPrefixes] are the logger-name
+/// prefixes of the selected category. The screen offers one or the other, never both: what
+/// the reader typed wins over the chip.
+@freezed
+sealed class AppLogQuery with _$AppLogQuery {
+  const factory AppLogQuery({String? search, @Default(<String>[]) List<String> loggerPrefixes}) =
+      _AppLogQuery;
+}
+
 /// A provider for [AppLogPaginator].
 ///
-/// The family argument is the optional search query string.
+/// The family argument is the query the log is read with.
 final appLogPaginatorProvider = AsyncNotifierProvider.autoDispose
-    .family<AppLogPaginator, AppLogState, String?>(
+    .family<AppLogPaginator, AppLogState, AppLogQuery>(
       AppLogPaginator.new,
       name: 'AppLogPaginatorProvider',
     );
 
 /// A Riverpod controller for managing paginated app log entries.
 class AppLogPaginator extends AsyncNotifier<AppLogState> {
-  AppLogPaginator(this._searchQuery);
+  AppLogPaginator(this._query);
 
-  final String? _searchQuery;
+  final AppLogQuery _query;
 
   /// Set while a page is being fetched. See [next].
   bool _isFetchingPage = false;
@@ -37,7 +48,8 @@ class AppLogPaginator extends AsyncNotifier<AppLogState> {
           () => storage.page(
             limit: _pageSize,
             minLevelValue: minLevelValue,
-            searchQuery: _searchQuery,
+            searchQuery: _query.search,
+            loggerNamePrefixes: _query.loggerPrefixes,
           ),
         ),
       ]),
@@ -62,7 +74,8 @@ class AppLogPaginator extends AsyncNotifier<AppLogState> {
           limit: _pageSize,
           cursor: state.requireValue.nextPage,
           minLevelValue: minLevelValue,
-          searchQuery: _searchQuery,
+          searchQuery: _query.search,
+          loggerNamePrefixes: _query.loggerPrefixes,
         ),
       );
       // The paginator can be disposed while the read is out — a refresh, or the log level

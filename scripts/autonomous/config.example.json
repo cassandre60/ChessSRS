@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "THIS REPO'S FLEET CONFIG - the project-local copy (scripts/autonomous/config.json) is",
+    "gitignored on purpose, so this file is what a fresh clone starts from.",
+    "Copy it, then check the two repo-specific things: the candidate globs, and the",
+    "source-to-test mapping. The mapping decides the companion half of the dedup hash,",
+    "so a rule that resolves to nothing makes every audit look stale.",
+    "Verify it once:  python3 scripts/autonomous/ledger.py next --stream 1 --limit 3",
+    "It prints the mapped test for each candidate; a mapped path that does not exist",
+    "means the rule is wrong for this repo."
+  ],
+  "base_ref": "origin/main",
+  "ledger_path": "docs/AUTONOMOUS_WORK_LEDGER.md",
+  "mutant_ledger_path": "docs/AUTONOMOUS_MUTANTS.md",
+  "origin_url": null,
+  "setup_cmds": [
+    ["fvm", "flutter", "pub", "get"],
+    ["fvm", "dart", "run", "build_runner", "build", "--delete-conflicting-outputs"]
+  ],
+  "format_check_cmd": [
+    "fvm", "dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test"
+  ],
+  "analyze_cmd": ["fvm", "flutter", "analyze"],
+  "analyze_extensions": [".dart"],
+  "gate_cmd": ["./scripts/gates.sh", "t1"],
+  "test_cmd": ["fvm", "flutter", "test"],
+  "test_for_source": [
+    {
+      "src": "^lib/src/(.*)\\.dart$",
+      "test": "test/\\1_test.dart"
+    }
+  ],
+  "candidates": {
+    "A": {
+      "include": ["lib/src/**/*.dart"],
+      "exclude": ["lib/src/**/*.g.dart", "lib/src/**/*.freezed.dart"],
+      "require_test": true,
+      "priority_paths": []
+    },
+    "B": {
+      "include": ["test/**/*_test.dart"],
+      "exclude": [],
+      "require_test": false,
+      "priority_paths": []
+    }
+  },
+  "machine_budget": {
+    "max_concurrent_tests": 1
+  },
+  "pr_required": {
+    "COMPLETED": true,
+    "SOUND": false
+  },
+  "fleet": {
+    "max_open_prs": 5,
+    "max_new_prs_per_day": 6,
+    "min_acceptance_rate_14d": 0.5,
+    "kill_switch_file": ".autonomous/STOP",
+    "merge_policy": "never",
+    "ledger_mode": "batched"
+  }
+}

@@ -47,6 +47,6 @@ not a second definition: follow its normative home.
    including persistence on its reference path. The current oracle measures
    a batch median, not every frame on every device (TEST_STRATEGY §3).
    This is not a session-start/import budget. The conflicting scope of these
-   claims awaits a decision in `docs/open-questions.md` Q8; neither bound is
+   claims awaits a decision in `docs/open-questions.md` Q12; neither bound is
    relaxed by this documentation change.
 2. Incremental state writes: SPEC INV-002.
