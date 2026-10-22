@@ -25,6 +25,7 @@ import 'package:chess_srs/src/model/settings/preferences_storage.dart';
 import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/utils/navigation.dart';
 import 'package:chess_srs/src/view/offline_computer/offline_computer_game_screen.dart';
+import 'package:chess_srs/src/widgets/board_preview.dart';
 import 'package:chess_srs/src/widgets/clock.dart';
 import 'package:chess_srs/src/widgets/move_list.dart';
 import 'package:chess_srs/src/widgets/pockets.dart';
@@ -473,6 +474,57 @@ void main() {
 
       // Verify action sheet with options
       expect(find.text('New game'), findsWidgets);
+    });
+
+    // No SPEC invariant names the analysis action: it is part of what the player
+    // may do with the game they are playing, not a promise about the repertoire.
+    testWidgets('a casual game can be analysed from the menu', (tester) async {
+      await initOfflineComputerGame(tester);
+
+      // The game is casual, so the moves are the player's own and the engine may
+      // look at them: the menu offers the analysis board.
+      await tester.tap(find.text('Menu'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Analysis board'),
+        findsOneWidget,
+        reason: 'a casual game may be analysed, and the menu says so',
+      );
+    });
+
+    // No SPEC invariant names the board flip: it is a display preference of the
+    // game screen.
+    testWidgets('flipping the board puts the player at the top', (tester) async {
+      // A timed game, so that both sides have a clock to follow.
+      await initTimedOfflineComputerGame(tester, const TimeIncrement(60, 0));
+
+      final playerClock = find.byKey(const ValueKey('playerClock'));
+      final engineClock = find.byKey(const ValueKey('engineClock'));
+
+      expect(
+        tester.getRect(playerClock).top,
+        greaterThan(tester.getRect(engineClock).top),
+        reason: 'the player sits under the board, the engine over it',
+      );
+
+      await tester.tap(find.text('Menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Flip board'));
+      await tester.pumpAndSettle();
+
+      // The board is turned, and the player follows it: the rows swap, so the
+      // player is now the one at the top.
+      expect(
+        tester.getRect(playerClock).top,
+        lessThan(tester.getRect(engineClock).top),
+        reason: 'a flipped board puts the player at the top',
+      );
+      expect(
+        tester.widget<Chessboard>(find.byType(Chessboard)).orientation,
+        Side.black,
+        reason: 'and the board is seen from the other side',
+      );
     });
 
     testWidgets(
@@ -1572,6 +1624,49 @@ void main() {
       expect(find.byType(StaticChessboard), findsNothing);
     });
 
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the custom-position board is square and fills its box', (tester) async {
+      // The board is drawn in a box of its own. A board that is not square shows
+      // the position stretched, and a board that does not fill its box is either
+      // cropped by it or leaves a gap beside it.
+      const customFen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(initialFen: customFen),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      final boardWidget = tester.widget<StaticChessboard>(find.byType(StaticChessboard));
+      final box = tester.getRect(
+        find.ancestor(of: find.byType(StaticChessboard), matching: find.byType(SizedBox)).first,
+      );
+
+      // The board is asked for the size of the box it is given, so it fills it: a
+      // smaller board leaves a gap beside the position, a bigger one is cropped
+      // by the box.
+      expect(
+        boardWidget.size,
+        box.width,
+        reason: 'the board fills the width of the box it was given',
+      );
+      expect(
+        boardWidget.size,
+        box.height,
+        reason: 'and the height of it, so the position is not stretched',
+      );
+    });
+
     testWidgets('Can start game from custom position as white', (tester) async {
       final gameStorage = MockOfflineComputerGameStorage();
       when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
@@ -2169,6 +2264,28 @@ void main() {
       expect(animatedOpacity.opacity, 1.0);
     });
 
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the practice card is shorter on a short screen', (tester) async {
+      // A short screen has no room to spare: the card gives some of its height
+      // back so that the board above it still fits. A card that kept its full
+      // height there would push the board off the screen.
+      const comment = PracticeComment(verdict: MoveVerdict.goodMove);
+
+      await _pumpWithState(tester, _stateWithPracticeComment(comment));
+      final tall = _commentCardHeight(tester);
+
+      // 390x600 leaves 98px beside a 390px board, which is below the 200px the
+      // screen treats as a short one.
+      await _pumpWithState(
+        tester,
+        _stateWithPracticeComment(comment),
+        surfaceSize: const Size(390, 600),
+      );
+      final short = _commentCardHeight(tester);
+
+      expect(short, lessThan(tall), reason: 'a short screen has no room for the full-height card');
+    });
+
     // SPEC INV-060. Every verdict is announced to screen readers.
     testWidgets("the card says it is the player's turn", (tester) async {
       // The player is told when the board is theirs.
@@ -2479,6 +2596,65 @@ void main() {
 
       expect(find.byType(SrsTextInput), findsOneWidget);
       expect(find.text('Paste from clipboard'), findsOneWidget);
+    });
+
+    // SPEC INV-012. Custom starting positions are honored and normalized.
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the FEN field and its paste button fit the box beside the board', (tester) async {
+      // The board preview is a decoration beside the FEN field. It used to cap the
+      // height of the column the field lives in at the board's own height -- 34% of
+      // the sheet's width, 121px on a 390px phone -- while the field and the button
+      // need 188px between them. The button was therefore painted over the settings
+      // rows below the preview.
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      final preview = tester.getRect(find.byType(SmallBoardPreview));
+      final field = tester.getRect(find.byType(SrsTextInput));
+      final button = tester.getRect(find.widgetWithText(SrsTextButton, 'Paste from clipboard'));
+      final rowBelow = tester.getRect(
+        find.ancestor(of: find.text('Side'), matching: find.byType(SrsSettingsRow)),
+      );
+
+      // The field is inside the box it was given, not spilling out of it.
+      expect(field.top, greaterThanOrEqualTo(preview.top));
+      expect(field.bottom, lessThanOrEqualTo(preview.bottom));
+      expect(field.right, lessThanOrEqualTo(preview.right));
+
+      // The button is inside the same box -- and it does not reach into the row
+      // below, which is what a user sees when the two are painted over each other.
+      expect(button.bottom, lessThanOrEqualTo(preview.bottom));
+      expect(button.bottom, lessThanOrEqualTo(rowBelow.top));
+
+      // And the field is not squeezed to make room: it still shows the five lines
+      // it was asked for (five lines of 24px, plus the field's own padding).
+      expect(field.height, greaterThanOrEqualTo(5 * 24));
+    });
+
+    // SPEC INV-062. Interactive targets stay tappable.
+    testWidgets('the from-position sheet is nine tenths of the screen tall', (tester) async {
+      // The sheet is capped at nine tenths of the screen, so that it never hides
+      // the board it is configuring. In the from-position variant its content --
+      // the board preview, the FEN field and six settings rows -- is taller than
+      // that cap, so the cap is what decides the sheet's height.
+      //
+      // The cap is nine tenths of the screen's HEIGHT. Read from the width it
+      // would be 351px, a strip across the bottom of a 390px phone.
+      final app = await openSheet(tester);
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectVariant(tester, 'From Position');
+
+      final sheet = tester.getRect(find.byKey(SrsSheetSurface.surfaceKey));
+      expect(
+        sheet.height,
+        closeTo(kTestSurfaceSize.height * 0.9, 0.5),
+        reason: 'the sheet is capped at nine tenths of the screen height',
+      );
     });
 
     // SPEC INV-012. Custom starting positions are honored and normalized.
@@ -2883,6 +3059,49 @@ void main() {
       expect(circles.single.orig, shown.hintSquare);
     });
 
+    // SPEC INV-061. Feedback stays readable in both themes.
+    testWidgets('the hint circle is green on a board that is not green', (tester) async {
+      // The circle is drawn in the colour that stands out against the board: a
+      // green board gets a blue circle, every other board a green one. The board
+      // here is the default brown one, which is not green -- a blue circle on it
+      // is the colour of a hint on the wrong board.
+      final gameStorage = MockOfflineComputerGameStorage();
+      when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
+      when(() => gameStorage.save(any())).thenAnswer((_) async {});
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const OfflineComputerGameScreen(),
+        overrides: {
+          offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
+            (_) => gameStorage,
+          ),
+        },
+      );
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+
+      await selectSide(tester, Side.white);
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+
+      // The hints are computed while the player thinks.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Get a hint'));
+      await tester.pump();
+
+      final board = tester.widget<Chessboard>(find.byType(Chessboard));
+      final circles = board.shapes.whereType<Circle>().toList();
+      expect(circles, hasLength(1), reason: 'the hint is drawn on the square it starts from');
+      expect(
+        circles.single.color,
+        const Color(0x994D9E4D),
+        reason: 'a green circle is what stands out on a board that is not green',
+      );
+    });
+
     // SPEC INV-063. Comment shapes never leak during recall.
     testWidgets('the suggested move is drawn on the board as an arrow', (tester) async {
       final move = Move.parse('e7e5')! as NormalMove;
@@ -2980,10 +3199,14 @@ class _FakeGamePreferences extends OfflineComputerGamePreferences {
 }
 
 /// Pumps [OfflineComputerGameScreen] with a specific [state] and optional [prefs] override.
+///
+/// [surfaceSize] is the size of the screen the game is laid out on: a short one
+/// makes the screen take its compact measurements.
 Future<void> _pumpWithState(
   WidgetTester tester,
   OfflineComputerGameState state, {
   OfflineComputerGamePrefs? prefs,
+  Size surfaceSize = kTestSurfaceSize,
 }) async {
   final gameStorage = MockOfflineComputerGameStorage();
   when(() => gameStorage.fetchGame()).thenAnswer((_) async => null);
@@ -2991,6 +3214,7 @@ Future<void> _pumpWithState(
   final app = await makeTestProviderScopeApp(
     tester,
     home: const OfflineComputerGameScreen(),
+    surfaceSize: surfaceSize,
     overrides: {
       offlineComputerGameStorageProvider: offlineComputerGameStorageProvider.overrideWith(
         (_) => gameStorage,
@@ -3018,6 +3242,17 @@ Container _findCommentCardContainer(WidgetTester tester, IconData icon) {
     (c) => c.decoration is BoxDecoration && (c.decoration! as BoxDecoration).borderRadius != null,
   );
 }
+
+/// The height the practice comment card was given, as its own box declares it.
+///
+/// The card is a [Container] with a fixed height, so the height it was given is
+/// the box's own constraint. The rendered rect would add the card's margin.
+double _commentCardHeight(WidgetTester tester) => tester
+    .widget<Container>(
+      find.ancestor(of: find.byIcon(Icons.check_circle), matching: find.byType(Container)).first,
+    )
+    .constraints!
+    .maxHeight;
 
 /// Builds a game state with the given [comment] on the last step.
 ///

@@ -635,6 +635,17 @@ class SrsRowRule extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // SrsAccentDots — accent colour picker
 // ---------------------------------------------------------------------------
+
+/// The touch target every accent dot carries: 44px, the minimum for an
+/// interactive control (04 §6).
+const double _kAccentDotTarget = 44;
+
+/// The gap between two accent dots, at the width the picker would like.
+const double _kAccentDotGap = 8;
+
+/// The picker's own chrome on each side: 5px of padding and a 1px border.
+const double _kAccentDotChrome = 6;
+
 class SrsAccentDots extends StatelessWidget {
   const SrsAccentDots({super.key, required this.value, required this.onChanged});
   final SrsAccent value;
@@ -642,7 +653,8 @@ class SrsAccentDots extends StatelessWidget {
 
   /// Estimated width of the accent dots control (including padding and border).
   double estimatedWidth([TextScaler textScaler = TextScaler.noScaling]) {
-    return (SrsAccent.values.length * 44.0) + 34.0;
+    final count = SrsAccent.values.length;
+    return (count * _kAccentDotTarget) + ((count - 1) * _kAccentDotGap) + (2 * _kAccentDotChrome);
   }
 
   @override
@@ -655,56 +667,79 @@ class SrsAccentDots extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: c.hairline, width: 1),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final a in SrsAccent.values) ...[
-            SrsPressable(
-              onPressed: () => onChanged(a),
-              semanticLabel: a.name,
-              semanticsToggled: a == value,
-              builder: (_, _, _) {
-                final color = c.isDark ? kSrsAccents[a]!.dark : kSrsAccents[a]!.light;
-                // The dot stays 24px, but the target is 44: every interactive control meets
-                // the 44px minimum (04 §6), like the switch's expanded hit area (round-6 R6-F4).
-                return SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned.fill(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                            ),
-                          ),
-                          if (a == value)
-                            Positioned(
-                              left: -3.5,
-                              top: -3.5,
-                              right: -3.5,
-                              bottom: -3.5,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: c.ink, width: 1.5),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // The gap gives way before the target does. The 44px target is the
+          // accessibility floor and the gap is decoration, so a column too narrow
+          // for the picker at its natural width gets a tighter picker rather than
+          // a clipped one. A column too narrow even for a gapless row gets the
+          // dots wrapped onto a second row -- still 44px each, never clipped.
+          final count = SrsAccent.values.length;
+          final gaps = count - 1;
+          final dots = count * _kAccentDotTarget;
+          final available = constraints.maxWidth;
+          // The gap the column can afford, in whole pixels: the row of dots has to
+          // fit the width it was given exactly, and a fractional gap would put the
+          // dots on half-pixels.
+          var gap = _kAccentDotGap;
+          if (gaps > 0 && available < dots + (gaps * _kAccentDotGap)) {
+            gap = math.max(0.0, ((available - dots) / gaps).floorToDouble());
+            // A rounding error must not leave the row a fraction over the width it
+            // was given, or the last dot would wrap onto a second row.
+            while (gap > 0 && dots + (gaps * gap) > available) {
+              gap -= 1;
+            }
+          }
+          return Wrap(
+            spacing: gap,
+            children: [
+              for (final a in SrsAccent.values)
+                SrsPressable(
+                  onPressed: () => onChanged(a),
+                  semanticLabel: a.name,
+                  semanticsToggled: a == value,
+                  builder: (_, _, _) {
+                    final color = c.isDark ? kSrsAccents[a]!.dark : kSrsAccents[a]!.light;
+                    // The dot stays 24px, but the target is 44: every interactive control meets
+                    // the 44px minimum (04 §6), like the switch's expanded hit area (round-6 R6-F4).
+                    return SizedBox(
+                      width: _kAccentDotTarget,
+                      height: _kAccentDotTarget,
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned.fill(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                                 ),
                               ),
-                            ),
-                        ],
+                              if (a == value)
+                                Positioned(
+                                  left: -3.5,
+                                  top: -3.5,
+                                  right: -3.5,
+                                  bottom: -3.5,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: c.ink, width: 1.5),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            if (a != SrsAccent.values.last) const SizedBox(width: 8),
-          ],
-        ],
+                    );
+                  },
+                ),
+            ],
+          );
+        },
       ),
     );
   }
