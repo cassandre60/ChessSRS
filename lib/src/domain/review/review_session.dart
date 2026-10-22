@@ -184,6 +184,10 @@ class ReviewSession {
           'allowance ($remainingNewQuota); holding back ${freshBucket.length - introduced.length}',
         );
       }
+      // The positions this session may introduce. The ones the allowance held
+      // back are not in the queue, and a walk that reaches one must not ask it
+      // either (INV-068).
+      _admittedFreshIds.addAll(introduced.map((d) => d.canonicalId));
 
       _unbufferedQueue
         ..addAll(dueBucket)
@@ -410,6 +414,33 @@ class ReviewSession {
 
   /// Whether [canonicalId] entered this session as a fresh introduction.
   bool wasFreshAtQueueTime(String canonicalId) => _freshAtQueueTime.contains(canonicalId);
+
+  /// Canonical ids the new-position allowance admitted into this session (INV-068).
+  ///
+  /// The allowance decides how many never-presented positions the session may
+  /// introduce. The ones it held back are not queued, and a walk that reaches
+  /// one must not ask it either — otherwise the cap is bypassed by answering
+  /// the position above it.
+  final Set<String> _admittedFreshIds = {};
+
+  /// Whether the session still holds due work (INV-068).
+  ///
+  /// Fresh introductions come after the due work, so a walk that reaches a
+  /// fresh position while due work is still queued stops there instead of
+  /// asking it. Only positions the queue holds count: a position already
+  /// answered, or one the daily quota set aside, is not work in front of the
+  /// user.
+  bool _hasQueuedDueWork(DateTime now) {
+    for (final d in _dueQueue) {
+      final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
+      if (dueStatusOf(state, now).isDue) return true;
+    }
+    for (final d in _unbufferedQueue) {
+      final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
+      if (dueStatusOf(state, now).isDue) return true;
+    }
+    return false;
+  }
 
   void _refillPrefetchBuffer() {
     if (prefetchBatchSize == null) {
@@ -760,6 +791,11 @@ class ReviewSession {
     final dueCountMemo = <String, int>{};
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
+    // Whether the session still holds due work (INV-068). Scanned once per
+    // walk and reused: the queue does not change while the walk runs, and the
+    // scan is O(queue), so re-reading it per step would cost O(steps x queue)
+    // on the move path (INV-050).
+    bool? hasQueuedDueWorkCached;
     // A transposed acceptance traverses from the reached line instead.
     var activeNode = startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
 
@@ -803,6 +839,29 @@ class ReviewSession {
         // branches end the walk: unchosen moves must never be quizzed.
         if (mode == ReviewMode.srs && dynamicRepertoireMode && !isUnlocked) break;
         if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
+        // INV-068: a position that was never presented is fresh, not due. The
+        // session introduces fresh positions under the day's new-position
+        // allowance, so a walk that reaches one asks it only if the allowance
+        // admitted it.
+        final isFreshPosition = mode == ReviewMode.srs && dueStatusOf(decState, now).isFresh;
+        final freshHeldBack =
+            isFreshPosition && !_admittedFreshIds.contains(nextDecision.canonicalId);
+        // Fresh also waits for the due work: the session serves recall work
+        // before introductions. Two modes are exempt from that ordering, each
+        // because the user asked for the material explicitly: dynamic mode
+        // (an unlocked line is the user's own request) and full-line
+        // continuity (every line is played whole). The allowance cap still
+        // applies to both.
+        final freshOvertakesDueWork =
+            isFreshPosition &&
+            !dynamicRepertoireMode &&
+            continuity != ReviewContinuity.fullLine &&
+            (hasQueuedDueWorkCached ??= _hasQueuedDueWork(now));
+        if (freshHeldBack || freshOvertakesDueWork) {
+          // The line stops where the user still owes recall work, rather than
+          // asking a position the session may not introduce.
+          break;
+        }
         final shouldPrompt =
             (isDue || continuity == ReviewContinuity.fullLine) && !isQuotaExhausted;
         if (shouldPrompt) {

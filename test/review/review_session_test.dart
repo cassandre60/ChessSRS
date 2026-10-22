@@ -334,6 +334,201 @@ void main() {
       expect(session.isComplete, isTrue);
     });
 
+    test(
+      'answering a due ancestor does not introduce a fresh descendant when new allowance is zero (INV-068)',
+      () {
+        // Tree A has due ancestor dec-1 (1. e4) -> opponent 1... e5 -> fresh descendant dec-2 (2. Nf3).
+        // Tree B has due question dec-other (1. d4).
+        const rootOther = RepertoireNode(
+          id: 'node-other-root',
+          fen: _fenStart,
+          fenKey: _fenKeyStart,
+        );
+        final decOther = _decision(
+          id: 'dec-other',
+          nodeId: 'node-other-root',
+          expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+          chapterId: 'ch-other',
+        );
+        final session = _session(
+          studies: [_studyOf()],
+          chapters: [
+            _chapterOf(_lRoot),
+            _chapterOf(rootOther, chapterId: 'ch-other'),
+          ],
+          decisions: [_dec1(), _dec2(), decOther],
+          reviewStates: {
+            'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2)),
+            'dec-other': _dueState('dec-other', overdue: const Duration(hours: 1)),
+          },
+          remainingNewQuota: 0,
+        );
+
+        // Dec-1 and dec-other are due; fresh descendant dec-2 is not introduced.
+        expect(session.initialDueCount, 2);
+        expect(session.initialQueueCount, 2);
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+
+        // Answer dec-1 correctly.
+        final result = session.submitMove(from: 'e2', to: 'e4');
+        expect(result.isCorrect, isTrue);
+        // Opponent replies with 1... e5.
+        expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5']);
+
+        // SPEC INV-068: fresh descendant dec-2 must NOT be introduced when remainingNewQuota is 0,
+        // and remaining due work (dec-other) must stay ahead!
+        expect(result.nextPrompt?.decision.id, 'dec-other');
+        expect(session.currentPrompt?.decision.id, 'dec-other');
+      },
+    );
+
+    test(
+      'answering ancestor with zero new allowance and no other due work completes session without introducing fresh descendant (INV-068)',
+      () {
+        final session = _session(
+          studies: [_studyOf()],
+          chapters: [_chapterOf(_lRoot)],
+          decisions: [_dec1(), _dec2()],
+          reviewStates: {'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2))},
+          remainingNewQuota: 0,
+        );
+
+        expect(session.initialDueCount, 1);
+        expect(session.initialQueueCount, 1);
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+
+        final result = session.submitMove(from: 'e2', to: 'e4');
+        expect(result.isCorrect, isTrue);
+        expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5']);
+
+        expect(result.nextPrompt, isNull);
+        expect(session.currentPrompt, isNull);
+        expect(session.isComplete, isTrue);
+      },
+    );
+
+    test(
+      'due work stays ahead of admitted fresh introductions down an answered line (INV-068)',
+      () {
+        const rootOther = RepertoireNode(
+          id: 'node-other-root',
+          fen: _fenStart,
+          fenKey: _fenKeyStart,
+        );
+        final decOther = _decision(
+          id: 'dec-other',
+          nodeId: 'node-other-root',
+          expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+          chapterId: 'ch-other',
+        );
+        final session = _session(
+          studies: [_studyOf()],
+          chapters: [
+            _chapterOf(_lRoot),
+            _chapterOf(rootOther, chapterId: 'ch-other'),
+          ],
+          decisions: [_dec1(), _dec2(), decOther],
+          reviewStates: {
+            'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2)),
+            'dec-other': _dueState('dec-other', overdue: const Duration(hours: 1)),
+          },
+          remainingNewQuota: 5,
+        );
+
+        // 2 due questions and 1 admitted fresh introduction.
+        expect(session.initialDueCount, 2);
+        expect(session.initialQueueCount, 3);
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+
+        // Answering dec-1 must NOT prompt fresh dec-2 yet; due dec-other must stay ahead.
+        final res1 = session.submitMove(from: 'e2', to: 'e4');
+        expect(res1.isCorrect, isTrue);
+        expect(res1.nextPrompt?.decision.id, 'dec-other');
+        expect(session.currentPrompt?.decision.id, 'dec-other');
+
+        // After all due work is complete, the admitted fresh introduction is served.
+        final res2 = session.submitMove(from: 'd2', to: 'd4');
+        expect(res2.isCorrect, isTrue);
+        expect(res2.nextPrompt?.decision.id, 'dec-2');
+        expect(session.currentPrompt?.decision.id, 'dec-2');
+      },
+    );
+
+    test('full-line continuity is exempt from the due-before-fresh ordering (INV-068)', () {
+      // "Full line" means every line is played whole: the walk asks the
+      // fresh step below the answered one even though due work is queued
+      // elsewhere. The introduction allowance still caps it.
+      const rootOther = RepertoireNode(id: 'node-other-root', fen: _fenStart, fenKey: _fenKeyStart);
+      final decOther = _decision(
+        id: 'dec-other',
+        nodeId: 'node-other-root',
+        expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+        chapterId: 'ch-other',
+      );
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(_lRoot),
+          _chapterOf(rootOther, chapterId: 'ch-other'),
+        ],
+        decisions: [_dec1(), _dec2(), decOther],
+        reviewStates: {
+          'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2)),
+          'dec-other': _dueState('dec-other', overdue: const Duration(hours: 1)),
+        },
+        continuity: ReviewContinuity.fullLine,
+        remainingNewQuota: 5,
+      );
+
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+
+      final result = session.submitMove(from: 'e2', to: 'e4');
+      expect(result.isCorrect, isTrue);
+      // The fresh step below the answered one is asked, not deferred behind
+      // dec-other: that is what "every line whole" means.
+      expect(result.nextPrompt?.decision.id, 'dec-2');
+    });
+
+    test(
+      'practice mode is explicitly exempt from fresh introduction cap during traversal (INV-068)',
+      () {
+        const rootOther = RepertoireNode(
+          id: 'node-other-root',
+          fen: _fenStart,
+          fenKey: _fenKeyStart,
+        );
+        final decOther = _decision(
+          id: 'dec-other',
+          nodeId: 'node-other-root',
+          expectedMoves: const [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+          chapterId: 'ch-other',
+        );
+        final session = _session(
+          studies: [_studyOf()],
+          chapters: [
+            _chapterOf(_lRoot),
+            _chapterOf(rootOther, chapterId: 'ch-other'),
+          ],
+          decisions: [_dec1(), _dec2(), decOther],
+          reviewStates: {
+            'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2)),
+            'dec-other': _dueState('dec-other', overdue: const Duration(hours: 1)),
+          },
+          mode: ReviewMode.practice,
+          remainingNewQuota: 0,
+        );
+
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+
+        // In practice mode, rehearsal walks fresh descendant dec-2 immediately.
+        final result = session.submitMove(from: 'e2', to: 'e4');
+        expect(result.isCorrect, isTrue);
+        expect(result.autoPlayedMoves.map((m) => m.move.san), ['e5']);
+        expect(result.nextPrompt?.decision.id, 'dec-2');
+        expect(session.currentPrompt?.decision.id, 'dec-2');
+      },
+    );
+
     test('an undated due position is prompted before dated ones (three-way queue)', () {
       // mutant L170: dueA == null && dueB == null -> dueA != null && dueB == null
       final session = _session(
