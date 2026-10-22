@@ -151,7 +151,7 @@ const _firstCharacterIndexSteps = _privateUseSize ~/ _firstCharacterValues;
 
 /// The number of duplicate index steps the second character of a disambiguated
 /// id can carry: it holds the step in its high byte, and the private use area
-/// ends 25 code points after it starts.
+/// spans 25 high bytes (0xE0..0xF8).
 const _secondCharacterIndexSteps = (_privateUseEnd - _privateUseStart) ~/ 256 + 1;
 
 /// Compact representation of a path to a game node made from concatenated
