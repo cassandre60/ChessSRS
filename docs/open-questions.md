@@ -16,10 +16,10 @@ Each one states what is known, what is not, and what I would need from you.
 | Q6 | Docs-only PRs merging alone | — | **fixed 2026-10-14** |
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
-| Q9 | The fail-to-pass gate script detaches the caller's worktree | — | open 2026-10-22 |
+| Q9 | The fail-to-pass gate script detaches the caller's worktree | — | **answered 2026-10-22: fix it — both legs now run in throwaway worktrees** |
 | Q10 | Should the shared test scope FAIL on a layout overflow? | — | **answered 2026-10-22: fix the scaffolding first, then fail — done in this PR** |
-| Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | open 2026-10-22 |
-| Q11 | The queue tool cannot see the queue, and the dedup law could not see the ledger | — | open 2026-10-22 |
+| Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | **answered 2026-10-22: guard it — the tool now refuses to say "nothing to do" when it is not configured** |
+
 
 ---
 
@@ -281,10 +281,15 @@ disposable checkout" (the script refuses to run when the caller's HEAD is not
 on its branch, and says so).
 
 **Needed.** One word, and then the fleet can cut the gate-change PR:
-*isolate* (the checkout runs inside the script's own temp worktree, and the
+~~*isolate* (the checkout runs inside the script's own temp worktree, and the
 caller's HEAD is never touched) or *refuse* (the script detects that the
 caller's HEAD is detached or off-branch and exits with an explanation instead
-of running).
+of running).~~ **Answered 2026-10-22: *isolate*.** The script now creates TWO
+throwaway worktrees — one at the base with the PR's test files dropped in, one
+at the head — and runs both legs inside them, so the caller's checkout is
+never touched and the "must pass on the change" leg really tests the head
+commit. A self-test (`scripts/gates/fail_to_pass_check_test.sh`) proves it, and
+fails against the previous version of the script.
 
 **Found.** 2026-10-22, by the mutation round on `lib/src/model/common/uci.dart`
 (#364) while running the gate after committing.
@@ -334,26 +339,6 @@ triage of the overflow blind spot (issues #334, #336).
 
 ---
 
-## Q11 — The fleet's queue tool cannot see the queue, and the dedup law could not see the ledger
-
-**Known.** Two of the fleet's own instruments have been reporting "nothing to do" while there was plenty to do. Both were measured with the tools' own parsers, not by eye.
-
-**First: the queue tool proposes nothing.** `scripts/autonomous/ledger.py next --stream 1` answers *"No eligible targets remain for this stream at their current hashes."* The reason is in `candidate_paths()`: when the config's `candidates.<stream>.include` list is empty it returns `[]` — and the repo has **no `scripts/autonomous/config.json` at all**, so the tooling runs on its built-in defaults, where that list is empty. The fleet's queue has been coming from a hand-written script, not from the tool that is supposed to produce it.
-
-**Second: the mapping is wrong for 329 of the 329 lib files.** With no config, the Dart mapping guesses `test/<path-with-lib/-stripped>_test.dart` — so `lib/src/view/analysis/analysis_screen.dart` maps to `test/src/view/analysis/analysis_screen_test.dart`, and this repo's test tree has no `src/` segment. The tool therefore finds an existing companion test for **0 of 329** lib files, and the real convention (`lib/src/<rest>.dart` ↔ `test/<rest>_test.dart`) has one for 119.
-
-**Third: the ledger itself was invisible to the dedup law.** 54 of its 85 rows carried a decorated status cell (`COMPLETED (second round: …)`) where the tool accepts only exactly `COMPLETED` or `SOUND`, so they were skipped; and for six files the bugfix row sat below its round row, recording a pre-change blob. The tool saw **27 rows** and would have re-audited **34 of the 48** lib files the ledger names — including files audited and fixed hours earlier. That part is fixed already (PR #376).
-
-**The effect.** With the config in place, the queue tool proposes **79 eligible targets** — the same 79 the hand-written script had been producing — each with its correct mapped test and composite `source:companion` hash.
-
-**Not known.** Whether the repo's copy of the config should live under `scripts/autonomous/` (protected: it is part of how the fleet proposes and records work) or outside the repo, where the fleet passes it with `--config`. The copy outside the repo already works and touches nothing protected; the in-repo copy is what lets any other agent — and you — use the tooling without knowing a flag.
-
-**Needed.** One word: *in-repo* (the config lands under `scripts/autonomous/`, the tool works for everyone with no flag) or *outside* (the fleet keeps passing `--config`, and the repo stays untouched). The PR is open either way; say the word and I will merge the version you want.
-
-**Found.** 2026-10-22, by the fleet's own consistency check after a ledger correction: measuring the ledger's visibility with the tool's parser surfaced the queue tool reporting an empty queue.
-
----
-
 ## Q11 — The queue tool reported an empty queue, and the dedup law could not see the ledger
 
 **Known.** Two of the fleet's own instruments have been reporting "nothing to do" while there was plenty to do. Both were measured with the tools' own parsers, not by eye.
@@ -368,6 +353,6 @@ triage of the overflow blind spot (issues #334, #336).
 
 **Not known.** Whether the tooling should **fail loudly** when the project-local config is missing, instead of silently reporting an empty queue. Today the failure mode is the worst kind: a green answer that means "I was not configured". A one-line guard in `candidate_paths()` — no config, or an empty `include`, is an error with a message that says which file to create — would have caught this the first time it ran. That file is under `scripts/autonomous/`, which is a protected path, so the fleet may not change it on its own initiative.
 
-**Needed.** One word: *guard* (the tooling refuses to report an empty queue without a config, and says which file to create) or *leave it* (the local config is enough, and the silent-empty behaviour stays). If *guard*, I will cut it as its own PR with the label, and it touches only the error path.
+**Needed.** ~~One word~~ — **answered 2026-10-22: *guard*.** The tooling now refuses to report an empty queue without a config: it exits with a message naming the key and the file to create, and a candidate list that matches no file is reported separately from an exhausted queue. The committed example config also describes THIS repo (Dart globs, the `lib/src/<rest>.dart` ↔ `test/<rest>_test.dart` mapping, the real commands) instead of a generic Python template, so a fresh clone starts from something that works.
 
 **Found.** 2026-10-22, by the fleet's own consistency check after a ledger correction: measuring the ledger's visibility with the tool's parser surfaced the queue tool reporting an empty queue.
