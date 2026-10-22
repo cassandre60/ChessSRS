@@ -61,55 +61,78 @@ class SrsDialog extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      // The card's width is the demo's `.dlg` rule -- min(400px, 100% - 32px) -- and Material's
+      // default `minWidth: 280` is dropped to reach it. The floor used to put a 280px card
+      // around a narrower content column, and the actions were right-aligned against that
+      // column rather than against the card, so they stopped short of the card's own padding
+      // edge (and, on a wide body, sat at the left of the content).
+      constraints: const BoxConstraints(minWidth: 0, maxWidth: 400),
       child: Material(
         // The card is a Material, not just a coloured box: Material widgets such as TextField
         // require a Material ancestor within the closest LookupBoundary, and the rename dialog
         // puts a TextField here. It also carries the spec's "card on `surface`, radius 16".
         key: SrsDialog.cardKey,
         type: MaterialType.transparency,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: DecoratedBox(
-            decoration: BoxDecoration(color: c.surface, borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (titleWidget != null)
-                    titleWidget!
-                  else if (title != null)
-                    Text(
-                      title!,
-                      style: SrsText.titleSmall(
-                        c.ink,
-                      ).copyWith(fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                  if (content != null) ...[
-                    if (title != null || titleWidget != null) const SizedBox(height: 14),
-                    content!,
-                  ] else if (body != null) ...[
-                    if (title != null) const SizedBox(height: 10),
-                    // 15px, per the spec's "body 15 ink2". SrsText.body is 17 on a narrow
-                    // measure, which is the reading column's size rather than a dialog's.
-                    Text(body!, style: SrsText.body(false, c.ink2).copyWith(fontSize: 15)),
-                  ],
-                  if (actions != null && actions!.isNotEmpty) ...[
-                    const SizedBox(height: 22),
-                    // Right-aligned, 6px apart, wrapping on a narrow dialog: demo `.dlg-act`.
-                    Wrap(
-                      alignment: WrapAlignment.end,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: actions!,
-                    ),
-                  ],
-                ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // The Dialog has already taken the 16px inset off each side and capped the card at
+            // 400, so the width it allows is exactly the rule's min(400px, 100% - 32px). The
+            // card takes all of it, rather than shrink-wrapping around its content.
+            return SizedBox(
+              width: constraints.maxWidth,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (titleWidget != null)
+                        titleWidget!
+                      else if (title != null)
+                        Text(
+                          title!,
+                          style: SrsText.titleSmall(
+                            c.ink,
+                          ).copyWith(fontSize: 20, fontWeight: FontWeight.w600),
+                        ),
+                      if (content != null) ...[
+                        if (title != null || titleWidget != null) const SizedBox(height: 14),
+                        content!,
+                      ] else if (body != null) ...[
+                        if (title != null) const SizedBox(height: 10),
+                        // 15px, per the spec's "body 15 ink2". SrsText.body is 17 on a narrow
+                        // measure, which is the reading column's size rather than a dialog's.
+                        Text(body!, style: SrsText.body(false, c.ink2).copyWith(fontSize: 15)),
+                      ],
+                      if (actions != null && actions!.isNotEmpty) ...[
+                        const SizedBox(height: 22),
+                        // Right-aligned against the card's own padding edge, which is the spec's
+                        // "actions right-aligned": the Align gives the row the card's content
+                        // width and puts the actions at its end, so they no longer hug the
+                        // content column. 6px apart, wrapping on a narrow dialog: demo
+                        // `.dlg-act`.
+                        Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: Wrap(
+                            alignment: WrapAlignment.end,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: actions!,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

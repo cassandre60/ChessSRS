@@ -101,12 +101,24 @@ void main() {
     return find.byWidget(containers.evaluate().first.widget);
   }
 
-  /// The distance from the top of the row [label] to the top of its label text.
+  /// The row that holds the label [label] -- the first Row ancestor of the label
+  /// text, which is the label's own row inside the setting's row.
+  Finder labelTextRow(WidgetTester tester, String label) {
+    return find.ancestor(of: find.text(label), matching: find.byType(Row)).first;
+  }
+
+  /// The distance from the top of the row [label] to the top of its label row.
   ///
   /// The row's own vertical padding is part of it, and the padding is what
   /// tells the wide layout (18px) from the narrow one (8px).
+  ///
+  /// The label *row*, not the label *text*: the text is centred in that row,
+  /// and how far it sits from the row's top depends on the font's line height
+  /// and on the 44px info button the narrow layout puts next to the label. The
+  /// row's own top is the row's padding, whatever the font measures.
   double labelInset(WidgetTester tester, String label) {
-    return tester.getRect(find.text(label)).top - tester.getRect(labelRow(tester, label)).top;
+    return tester.getRect(labelTextRow(tester, label)).top -
+        tester.getRect(labelRow(tester, label)).top;
   }
 
   /// The chevron painter in the row labelled [label].

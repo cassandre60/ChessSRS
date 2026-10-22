@@ -24,17 +24,30 @@ final Logger _logger = Logger('AppLogSettingsScreen');
 
 final _logDateFormatter = DateFormat.yMd().add_Hms();
 
+/// The categories the app log can be filtered by.
+///
+/// A chip names a subsystem, so it selects the loggers of that subsystem: the filter is
+/// matched against the logger's name, never against the text it logged.
 enum LogCategory {
-  all('All', null),
-  review('Review', 'Review'),
-  repository('Repo / DB', 'StudyRepository'),
-  importer('Import', 'StudyImporter'),
-  network('Network', 'Http'),
-  engine('Engine', 'fish');
+  all('All', []),
+  review('Review', ['Review']),
+  repository('Repo / DB', ['StudyRepository']),
+  importer('Import', ['StudyImporter']),
+  network('Network', ['Http']),
+  engine('Engine', ['Engine', 'PositionEvaluator']);
 
-  const LogCategory(this.label, this.filterKey);
+  const LogCategory(this.label, this.loggerPrefixes);
+
   final String label;
-  final String? filterKey;
+
+  /// The logger-name prefixes this category selects; empty for the "All" category, which
+  /// selects every logger.
+  ///
+  /// The engine's own loggers are the ones whose name starts with "Engine" — Engine,
+  /// EngineFactory, EngineFailure, EngineOpponent, EngineProvider and EngineWeightsService
+  /// — plus PositionEvaluator, the engine's evaluator, whose name does not start with
+  /// "Engine".
+  final List<String> loggerPrefixes;
 }
 
 class AppLogSettingsScreen extends ConsumerStatefulWidget {
@@ -71,31 +84,36 @@ class _AppLogSettingsScreenState extends ConsumerState<AppLogSettingsScreen> {
     super.dispose();
   }
 
-  String? get _effectiveSearchQuery {
-    if (_searchQuery != null && _searchQuery!.isNotEmpty) {
-      return _searchQuery;
+  /// The query the log is read with.
+  ///
+  /// What the reader typed wins over the chip: the search is the narrower question, and the
+  /// category's filter applies when they typed nothing.
+  AppLogQuery get _effectiveQuery {
+    final search = _searchQuery;
+    if (search != null && search.isNotEmpty) {
+      return AppLogQuery(search: search);
     }
-    return _selectedCategory.filterKey;
+    return AppLogQuery(loggerPrefixes: _selectedCategory.loggerPrefixes);
   }
 
   void _scrollListener() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
-      final currentState = ref.read(appLogPaginatorProvider(_effectiveSearchQuery));
+      final currentState = ref.read(appLogPaginatorProvider(_effectiveQuery));
       if (currentState.hasValue && !currentState.isLoading && currentState.requireValue.hasMore) {
-        ref.read(appLogPaginatorProvider(_effectiveSearchQuery).notifier).next();
+        ref.read(appLogPaginatorProvider(_effectiveQuery).notifier).next();
       }
     }
   }
 
   Future<void> _onRefresh() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    return await ref.read(appLogPaginatorProvider(_effectiveSearchQuery).notifier).refresh();
+    return await ref.read(appLogPaginatorProvider(_effectiveQuery).notifier).refresh();
   }
 
   @override
   Widget build(BuildContext context) {
     final currentLevel = ref.watch(logPreferencesProvider.select((prefs) => prefs.level));
-    final asyncState = ref.watch(appLogPaginatorProvider(_effectiveSearchQuery));
+    final asyncState = ref.watch(appLogPaginatorProvider(_effectiveQuery));
     final logs = asyncState.value?.logs ?? [];
     final c = context.srs;
 
@@ -129,9 +147,7 @@ class _AppLogSettingsScreenState extends ConsumerState<AppLogSettingsScreen> {
                           title: const Text('Delete all logs'),
                           onConfirm: () {
                             ref.read(appLogServiceProvider).clear();
-                            ref
-                                .read(appLogPaginatorProvider(_effectiveSearchQuery).notifier)
-                                .deleteAll();
+                            ref.read(appLogPaginatorProvider(_effectiveQuery).notifier).deleteAll();
                           },
                         );
                       },
