@@ -17,7 +17,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
 | Q9 | The fail-to-pass gate script detaches the caller's worktree | — | open 2026-10-22 |
-| Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
+| Q10 | Should the shared test scope FAIL on a layout overflow? | — | **answered 2026-10-22: fix the scaffolding first, then fail — done in this PR** |
 | Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | open 2026-10-22 |
 | Q11 | The queue tool cannot see the queue, and the dedup law could not see the ledger | — | open 2026-10-22 |
 
@@ -327,9 +327,7 @@ immediately, or the threshold set to 0 now with those 8 known-red tests
 excluded by name until the fixture is fixed. The first is cleaner; the second
 is one PR instead of two.
 
-**Needed.** One word: *fail now* (the scope throws on any overflow; the 8
-scaffold tests are red and get fixed in the same PR) or *fix then fail* (the
-scaffold is repaired first, then the scope throws at 0 px with a clean suite).
+**Needed.** ~~One word~~ — **answered 2026-10-22: *fix then fail*.** The scaffolding was repaired first and the scope now fails: the one test file whose own fixture overflowed (76 occurrences) was given the app's theme and a `Material` ancestor instead of being exempted, and the shared scope now forwards a `RenderFlex` overflow to the test framework instead of swallowing it, while still printing the greppable marker. A layout overflow in a widget test is now a red test.
 
 **Found.** 2026-10-22, by the harness-measurement work (#355/#357) and the
 triage of the overflow blind spot (issues #334, #336).
