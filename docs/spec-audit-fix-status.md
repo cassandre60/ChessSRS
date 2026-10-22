@@ -6,7 +6,7 @@ Source: [the 45-rule audit](spec-enforcement-audit-2026-10-21.md), snapshot
 ## Delivered as separate pull requests
 
 Each change is isolated on its own branch, and each is now open as its own PR
-against `main` — ten so far. Nothing was merged as a batch and no release
+against `main` — eleven so far. Nothing was merged as a batch and no release
 was cut: the
 results below are targeted checks on separate branches, **not a full regression
 result on an integrated tree**, and they say nothing about the suite as a
@@ -20,6 +20,7 @@ whole until CI has run each PR.
 | F2 / INV-062, the three named top-bar overflow oracles only | [#384](https://github.com/cassandre60/ChessSRS/pull/384) `test/audit-topbar-overflow` | Use an actual localized/themed stateless top-bar fixture without the shared provider harness's error swallowing. Retain size/tap/semantics assertions and add a deliberate-overflow control. App layout is unchanged. | **4** narrow-bar and **5** practice-exit tests passed. The final control was also checked after its error-handler restoration guard; reintroducing swallowing then failed with `Actual: null`. The helper was restored byte-for-byte; analysis and post-commit T1 passed. |
 | F11 / INV-032, stale answer publication | [#385](https://github.com/cassandre60/ChessSRS/pull/385) `fix/audit-answer-publication` | Fence the answer's UI publication on the controller generation, so an answer that finishes persisting after a scope change cannot repaint the new scope. The answer is still persisted. | All **6** scenarios fail on the pre-fix code (`the stale answer republished its old scope`); all 6 pass after the fix. |
 | F12 / INV-068, answer-driven fresh-cap bypass | [#386](https://github.com/cassandre60/ChessSRS/pull/386) `fix/audit-fresh-cap-bypass` | Apply the new-position allowance and the due-before-fresh ordering at the walk's prompt site, not only at queue construction. | **3 of 5** new tests fail on the pre-fix code; the other 2 pin the exemptions. 49 session tests and 203 tests across the four shared-session suites pass. |
+| INV-028, the exposure throttle reads days in the reader's frame | [#397](https://github.com/cassandre60/ChessSRS/pull/397) `fix/audit-exposure-day-frame` | The store reloads the exposure timestamp as a UTC instant while the clock reports local time, and the two were compared with raw calendar fields. `Clock.localDayKey` decides the day in one frame, defaulting to the UTC day so nothing else changes; `SystemClock` overrides it with the reader's wall clock. | The new test fails on the base code (stability compounded to 466560000 where the cap says it must stay at 432000000) and passes with the fix. 434 domain and review tests, 933 model and review-view tests pass. |
 | INV-065, a transposition that arrived another way | [#394](https://github.com/cassandre60/ChessSRS/pull/394) `fix/audit-transposition-arrival` | Accept a move that reaches an in-scope position by a route the repertoire does not record, preferring the node whose arrival move matches. The fallback reports the move the user played. | The new test fails on the base code (`isCorrect` false) and passes with the fix; 8 transposition tests, 271 review tests and 123 review view tests pass. |
 | INV-030, opening scope queues what its summary counts | [#391](https://github.com/cassandre60/ChessSRS/pull/391) `fix/audit-opening-scope` | One rule for "the same opening family": `ReviewScope.openingKey` is now the only place the comparison is written, and the service's two chapter prefilters use it instead of an exact comparison. The scope's own matching behaviour is unchanged. | The new service test fails on the base code with the summary counting 1 and the session queueing 0 — the disagreement isolated. 143 service/scope/controller tests and 53 review screen tests pass. |
 | F4 / INV-023, practice mode writes nothing | [#390](https://github.com/cassandre60/ChessSRS/pull/390) `test/audit-practice-writes` | Drive a real practice answer — a wrong move and a right one — through the controller, the service and the store, and assert the store is left empty. The service's no-write guard had no oracle: the engine test sits above it and the controller test never submitted a practice answer. | With the service's `if (session.mode != ReviewMode.practice)` guard replaced by an unconditional write, the test fails (`Expected: empty, Actual: [knowledge state]`). With it in place, 96 controller tests pass. |
@@ -60,26 +61,17 @@ may have changed it since the audit. These are not claims that every item below
 is still a live defect on a later commit.
 
 - **Next core behavior work:** none with a source-level understanding
-  remaining. The two open items are the INV-028 design decision (above) and
-  INV-051's SQL-level read and delete bounds, which needs a measurement
-  harness before it can be a repair.
-- **Mixed UTC/local exposure throttling (INV-028) — analysed, not repaired.**
-  The defect is real and confirmed by reading the code: the store reloads
+  remaining. The one open item is INV-051's SQL-level read and delete
+  bounds, which needs a measurement harness before it can be a repair.
+- **Mixed UTC/local exposure throttling (INV-028) — repaired.** The defect
+  was real and confirmed by reading the code: the store reloads
   `lastExposedAt` and `lastReviewedAt` as UTC instants
-  (`sqlite_study_repository.dart`, `parseUtcIso`), while the coordinator
-  compares them against the clock's local time with raw year/month/day fields
-  (`graph_aware_review_coordinator.dart`, `_isSameCalendarDay`). In a
-  non-UTC zone the two sides are in different frames, so the "once per
-  calendar day" throttle can grant twice in one local day near midnight.
-  Repairing it needs a *design* decision, not a mechanical edit: the local
-  day has to be decided in one frame, and Dart's `DateTime` offers only two
-  (UTC and the ambient system zone). `toLocal()` would be correct in
-  production but makes the suite's outcome depend on the ambient zone — the
-  contributor's machine is CET, CI is UTC — so a test written against it
-  would pass in CI and fail locally. The alternatives are an injectable
-  local-day frame on the `Clock` contract, or storing a local day key
-  alongside the timestamp (a persisted-format change, which needs migration
-  discipline). Both are architectural and want review before they land.
+  (`sqlite_stree_repository.dart`, `parseUtcIso`), while the coordinator
+  compared them against the clock's local time with raw year/month/day
+  fields. In a non-UTC zone the two sides are in different frames, so the
+  "once per calendar day" throttle could grant twice in one local day near
+  midnight. The repair makes the frame explicit and injectable rather than
+  ambient — see the row above.
 - **Other integrity/security work:** delayed auth-storage deletion (INV-007),
   platform/direct link host validation (INV-008), historical canonical event
   lookup after rekey (INV-005), and legacy accepted-set separation (INV-017).
