@@ -336,6 +336,29 @@ void main() {
       expect(await service.download(MaiaRating.maia1700), isNull);
     });
 
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('the unusable networks are reported as none when there is nowhere to put one', () async {
+      final container = makeWeightsContainer(appSupportDirectory: null);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // The settings screen asks this question every time it opens, so it has to have an answer
+      // even when there is nowhere to put a network: "nothing to clean up" is an answer, and an
+      // exception is not one.
+      expect(await service.unusableWeights(), (count: 0, bytes: 0));
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('deleting the unusable networks does nothing when there is nowhere to put one', () async {
+      final container = makeWeightsContainer(appSupportDirectory: null);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // There is nothing to delete, and the caller's request has been carried out: the same
+      // answer [deleteWeights] gives when there is nowhere to put a network.
+      await expectLater(service.deleteUnusableWeights(), completes);
+    });
+
     // SPEC INV-020.
     test('each rating has a file of its own', () async {
       final dir = await makeTempDir();
