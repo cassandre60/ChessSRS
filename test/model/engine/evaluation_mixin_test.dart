@@ -97,6 +97,9 @@ class _FakePositionEvaluator extends PositionEvaluator {
   /// How many times the evaluation was stopped.
   int stopCount = 0;
 
+  /// How many times the evaluator was released.
+  int releaseCount = 0;
+
   @override
   EngineEvaluationState build() => PositionEvaluator.defaultState;
 
@@ -112,6 +115,12 @@ class _FakePositionEvaluator extends PositionEvaluator {
   void stop() {
     stopCount++;
     super.stop();
+  }
+
+  @override
+  void release() {
+    releaseCount++;
+    super.release();
   }
 }
 
@@ -149,6 +158,7 @@ class _TestState with EvaluationMixinState<_TestState> {
     this.currentPath = UciPath.empty,
     this.engineInThreatMode = false,
     this.alwaysRequestCloudEval = false,
+    this.engineAvailable = true,
   });
 
   @override
@@ -164,8 +174,14 @@ class _TestState with EvaluationMixinState<_TestState> {
   @override
   final bool alwaysRequestCloudEval;
 
+  /// Whether the screen offers the engine at all.
+  ///
+  /// The real screen offers it when the analysis allows a computer, when the engine is supported
+  /// and when the user has turned it on, so the availability follows the preferences.
+  final bool engineAvailable;
+
   @override
-  bool isEngineAvailable(EngineEvaluationPrefState prefs) => true;
+  bool isEngineAvailable(EngineEvaluationPrefState prefs) => engineAvailable && prefs.isEnabled;
 
   @override
   EvaluationContext get evaluationContext => _testContext;
@@ -176,6 +192,7 @@ class _TestState with EvaluationMixinState<_TestState> {
     currentPath: currentPath,
     engineInThreatMode: engineInThreatMode,
     alwaysRequestCloudEval: alwaysRequestCloudEval,
+    engineAvailable: engineAvailable,
   );
 }
 
@@ -189,6 +206,7 @@ class _TestController extends AsyncNotifier<_TestState> with EngineEvaluationMix
       currentPath: testPath,
       engineInThreatMode: testThreatMode,
       alwaysRequestCloudEval: testAlwaysRequestCloudEval,
+      engineAvailable: testEngineAvailable,
     );
   }
 
@@ -226,6 +244,9 @@ late bool testThreatMode;
 
 /// Whether the screen always asks for a cloud evaluation.
 late bool testAlwaysRequestCloudEval;
+
+/// Whether the screen offers the engine at all.
+late bool testEngineAvailable;
 
 /// Holds the screen's state back, so a test can make the socket arrive first.
 Completer<void>? buildGate;
@@ -278,6 +299,7 @@ void main() {
     testPath = UciPath.empty;
     testThreatMode = false;
     testAlwaysRequestCloudEval = false;
+    testEngineAvailable = true;
     buildGate = null;
     evalChanges = [];
   });
@@ -330,6 +352,25 @@ void main() {
       container.read(_testControllerProvider.notifier).toggleEngineThreatMode();
 
       expect(container.read(_testControllerProvider).requireValue.engineInThreatMode, isFalse);
+    });
+
+    test('the local evaluation of a threat-mode search is not written to the tree', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      // In threat mode the engine searches from the opponent's point of view, so what it says
+      // is not about the position the screen is on.
+      testThreatMode = true;
+      final container = await readyContainer(
+        await makeTestContainer(body: _cloudEvalBody(depth: 0)),
+      );
+      final controller = container.read(_testControllerProvider.notifier);
+
+      controller.requestEval();
+      await waitUntil(() => fakeEvaluator.works.isNotEmpty);
+      fakeEvaluator.streams.last.add((fakeEvaluator.works.last, _localEval()));
+
+      await pumpEventQueue();
+      expect(testTree.eval, isNull);
     });
   });
 
@@ -434,6 +475,29 @@ void main() {
       await waitUntil(() => httpRequests.isNotEmpty);
       expect(httpRequests.single.url.queryParameters.containsKey('variant'), isFalse);
     });
+
+    test(
+      'an evaluation request names the position and the path, and asks for the evaluation to be sent back',
+      () async {
+        // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+        // nearest one: the engine's verdict is published as it is, and never as a judgement.
+        testTree = Root.fromPgnMoves('e4 e5');
+        testPath = testTree.mainlinePath;
+        final position = testTree.nodeAt(testPath).position;
+        testPosition = position;
+        final container = await readyContainer(await makeTestContainer());
+        final controller = container.read(_testControllerProvider.notifier);
+
+        controller.requestEval();
+
+        await waitUntil(() => fakeSocket.sent.isNotEmpty);
+        final payload = fakeSocket.sent.first.$2! as Map<String, Object?>;
+        expect(payload['fen'], position.fen);
+        expect(payload['path'], testPath.value);
+        // The server sends the evaluation back whenever it updates, not only once.
+        expect(payload['up'], isTrue);
+      },
+    );
   });
 
   group('cloud evaluation', () {
@@ -526,6 +590,149 @@ void main() {
       await waitUntil(() => evalChanges.isNotEmpty);
       expect(evalChanges, everyElement(isTrue));
     });
+
+    test(
+      'a cloud evaluation over HTTP without a score reads as no evaluation, not as a zero score',
+      () async {
+        // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+        // nearest one: the engine's verdict is published as it is, and never as a judgement.
+        final container = await readyContainer(
+          await makeTestContainer(
+            body: '{"depth": 20, "knodes": 1000, "pvs": [{"moves": "e2e4 e7e5"}]}',
+          ),
+        );
+        final controller = container.read(_testControllerProvider.notifier);
+
+        controller.requestEval();
+
+        await waitUntil(() => testTree.eval != null);
+        final eval = testTree.eval! as CloudEval;
+        // A missing score is no score, not a score of zero.
+        expect(eval.cp, isNull);
+        expect(eval.mate, isNull);
+        expect(eval.evalString, '-');
+      },
+    );
+
+    test('a cloud evaluation is applied to the node it belongs to, not to every node', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      testTree = Root.fromPgnMoves('e4 e5');
+      testPath = testTree.mainlinePath;
+      testPosition = testTree.nodeAt(testPath).position;
+      await readyContainer(await makeTestContainer(body: _cloudEvalBody(depth: 0)));
+
+      fakeSocket.events.add(
+        SocketEvent(
+          topic: 'evalHit',
+          data: {
+            'path': testPath.value,
+            'knodes': 1000,
+            'depth': 20,
+            'pvs': [
+              {'moves': 'e7e5', 'cp': 25},
+            ],
+          },
+        ),
+      );
+
+      await waitUntil(() => testTree.nodeAt(testPath).eval != null);
+      expect(testTree.nodeAt(testPath).eval, isA<CloudEval>());
+      // The root is another position: it gets no evaluation of its own.
+      expect(testTree.eval, isNull);
+    });
+  });
+
+  group('cloud evaluation over the socket', () {
+    test(
+      'a cloud evaluation from the socket records the score, the depth, the node count and the moves',
+      () async {
+        // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+        // nearest one: the engine's verdict is published as it is, and never as a judgement.
+        await readyContainer(await makeTestContainer(body: _cloudEvalBody(depth: 0)));
+
+        fakeSocket.events.add(
+          const SocketEvent(
+            topic: 'evalHit',
+            data: {
+              'path': '',
+              'knodes': 1000,
+              'depth': 20,
+              'pvs': [
+                {'moves': 'e2e4 e7e5', 'cp': 25},
+              ],
+            },
+          ),
+        );
+
+        await waitUntil(() => testTree.eval != null);
+        final eval = testTree.eval! as CloudEval;
+        expect(eval.depth, 20);
+        expect(eval.cp, 25);
+        expect(eval.mate, isNull);
+        // The server counts the nodes in thousands.
+        expect(eval.nodes, 1000 * 1000);
+        // The moves of a variation are separated by spaces.
+        expect(eval.pvs.first.moves, ['e2e4', 'e7e5']);
+      },
+    );
+
+    test('a cloud evaluation from the socket keeps the mate distance and its sign', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      await readyContainer(await makeTestContainer(body: _cloudEvalBody(depth: 0)));
+
+      fakeSocket.events.add(
+        const SocketEvent(
+          topic: 'evalHit',
+          data: {
+            'path': '',
+            'knodes': 1000,
+            'depth': 20,
+            'pvs': [
+              {'moves': 'e2e4', 'mate': -3},
+            ],
+          },
+        ),
+      );
+
+      await waitUntil(() => testTree.eval != null);
+      final eval = testTree.eval! as CloudEval;
+      // A mate distance is not a centipawn score: the two are never mixed up.
+      expect(eval.cp, isNull);
+      expect(eval.mate, -3);
+      expect(eval.evalString, '#-3');
+    });
+
+    test(
+      'a cloud evaluation from the socket without a score reads as no evaluation, not as a zero score',
+      () async {
+        // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+        // nearest one: the engine's verdict is published as it is, and never as a judgement.
+        await readyContainer(await makeTestContainer(body: _cloudEvalBody(depth: 0)));
+
+        fakeSocket.events.add(
+          const SocketEvent(
+            topic: 'evalHit',
+            data: {
+              'path': '',
+              'knodes': 1000,
+              'depth': 20,
+              'pvs': [
+                {'moves': 'e2e4'},
+              ],
+            },
+          ),
+        );
+
+        await waitUntil(() => testTree.eval != null);
+        final eval = testTree.eval! as CloudEval;
+        // A missing score is no score, not a score of zero.
+        expect(eval.cp, isNull);
+        expect(eval.mate, isNull);
+        expect(eval.evalString, '-');
+      },
+    );
   });
 
   group('local evaluation', () {
@@ -738,6 +945,20 @@ void main() {
         4000,
       );
     });
+
+    test('the estimate is rounded to the nearest node', () {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      // Four seconds of 1000 nodes in 600 ms is 6666.67 nodes, which rounds to 6667.
+      expect(
+        likelyNodesFor(
+          targetTime: const Duration(seconds: 4),
+          nodes: 1000,
+          elapsed: const Duration(milliseconds: 600),
+        ),
+        6667,
+      );
+    });
   });
 
   group('evaluation lines', () {
@@ -761,6 +982,17 @@ void main() {
       container.read(_testControllerProvider.notifier).setNumEvalLines(3);
 
       expect(evalChanges, [false]);
+    });
+
+    test('the number of evaluation lines the user chose is remembered', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      final container = await readyContainer(await makeTestContainer());
+
+      container.read(_testControllerProvider.notifier).setNumEvalLines(3);
+
+      await waitUntil(() => container.read(engineEvaluationPreferencesProvider).numEvalLines == 3);
+      expect(container.read(engineEvaluationPreferencesProvider).numEvalLines, 3);
     });
   });
 
@@ -833,6 +1065,48 @@ void main() {
         expect(fakeEvaluator.works, hasLength(1));
         async.flushTimers();
       });
+    });
+
+    test('a deeper search searches for the maximum time', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      final container = await readyContainer(await makeTestContainer());
+      final controller = container.read(_testControllerProvider.notifier);
+
+      controller.requestEval(goDeeper: true);
+
+      await waitUntil(() => fakeEvaluator.works.isNotEmpty);
+      expect(fakeEvaluator.works.single.searchTime, kMaxEngineSearchTime);
+    });
+
+    test('changing the engine settings starts a new evaluation', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      final container = await readyContainer(await makeTestContainer());
+      final controller = container.read(_testControllerProvider.notifier);
+
+      controller.setNumEvalLines(3);
+      await waitUntil(() => fakeEvaluator.works.length == 1);
+
+      controller.setEngineCores(1);
+      await waitUntil(() => fakeEvaluator.works.length == 2);
+
+      controller.setEngineSearchTime(const Duration(seconds: 2));
+      await waitUntil(() => fakeEvaluator.works.length == 3);
+
+      expect(fakeEvaluator.works, hasLength(3));
+    });
+  });
+
+  group('engine availability', () {
+    test('turning the engine off releases the evaluator', () async {
+      // SPEC INV-020. No invariant names the evaluation reporting itself; INV-020 is the
+      // nearest one: the engine's verdict is published as it is, and never as a judgement.
+      final container = await readyContainer(await makeTestContainer());
+
+      await container.read(_testControllerProvider.notifier).toggleEngine();
+
+      expect(fakeEvaluator.releaseCount, 1);
     });
   });
 

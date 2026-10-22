@@ -345,6 +345,10 @@ class MaiaWeightsService {
   /// A rating's own file is deleted the moment it fails its checksum, so what shows up here is a
   /// file left behind by an older version of the app: no rating claims that name any more, and
   /// nothing will ever check it or clean it up.
+  ///
+  /// Reports no unusable network when there is nowhere to put one: this is a question the
+  /// settings screen asks, and it has to have an answer even when there is no directory to look
+  /// in.
   Future<({int count, int bytes})> unusableWeights() async {
     final files = await _unusableFiles();
     var bytes = 0;
@@ -359,6 +363,9 @@ class MaiaWeightsService {
   }
 
   /// Deletes the files [unusableWeights] reports, leaving the usable networks alone.
+  ///
+  /// Deletes nothing when there is nowhere to put a network: there is nothing there to delete,
+  /// so the request is carried out rather than refused.
   Future<void> deleteUnusableWeights() async {
     await _deleteFiles(await _unusableFiles());
   }
@@ -393,7 +400,16 @@ class MaiaWeightsService {
       // A bundled rating always claims its file, whether or not it has been written out yet.
       // An in-flight download also claims its file so it is not reported as unusable while downloading.
       if (rating.isBundled || _inFlight.containsKey(rating) || await isAvailable(rating)) {
-        claimed.add(weightsFile(rating).path);
+        final File file;
+        try {
+          file = weightsFile(rating);
+        } catch (e, st) {
+          // Without an app support directory there is nowhere to put a network, so there is
+          // nothing on disk to claim and nothing to report: the answer is "none", not an error.
+          _logger.warning('Cannot list the Maia networks:', e, st);
+          return const [];
+        }
+        claimed.add(file.path);
       }
     }
 

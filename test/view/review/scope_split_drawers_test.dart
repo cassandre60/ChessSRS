@@ -12,7 +12,6 @@ import 'package:chess_srs/src/review/review_controller.dart';
 import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/view/review/review_scope_drawer.dart';
 import 'package:dartchess/dartchess.dart' show Side;
-import 'package:flutter/material.dart' show CircularProgressIndicator;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show ProviderContainer, ProviderScope;
 import 'package:flutter_test/flutter_test.dart';
@@ -79,33 +78,52 @@ void main() {
     WidgetTester tester,
     Side side, {
     Size surfaceSize = const Size(1400, 900),
+    StudyRepository? repository,
+    bool reloadWhileLoading = false,
   }) async {
+    final drawerRepo = repository ?? repo;
     final app = await makeTestProviderScopeApp(
       tester,
       surfaceSize: surfaceSize,
       home: ReviewScopeDrawer(side: side),
       overrides: {
-        srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+        srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => drawerRepo),
         clockProvider: clockProvider.overrideWithValue(clock),
         reviewServiceProvider: reviewServiceProvider.overrideWith(
-          (ref) => ReviewService(repository: repo, clock: clock),
+          (ref) => ReviewService(repository: drawerRepo, clock: clock),
         ),
       },
     );
     await tester.pumpWidget(app);
+    if (reloadWhileLoading) {
+      // A reload while the first load is still in flight: the load it
+      // overtakes is discarded, and the controller publishes its empty
+      // placeholder — a drawer with no spinner on it and nothing in it.
+      ProviderScope.containerOf(
+        tester.element(find.byType(ReviewScopeDrawer)),
+      ).read(reviewControllerProvider.notifier).reload();
+    }
     // Not pumpAndSettle: the drawer's search field autofocuses on a wide layout
     // and its cursor blinks forever, so settling never completes.
     // The load is complete when the drawer's spinner is gone — this holds for
     // an emptied colour too, which settles onto a row-less drawer.
-    await pumpAsyncUntil(
-      tester,
-      () => !tester.any(
-        find.descendant(
-          of: find.byType(ReviewScopeDrawer),
-          matching: find.byType(CircularProgressIndicator),
-        ),
-      ),
-    );
+    // Wait for the studies to be loaded, not for the spinner to disappear.
+    //
+    // The spinner's absence does not mean the data is there: the controller
+    // publishes an empty placeholder while a load is in flight (a load that a
+    // reload overtook publishes it deliberately), and the drawer then draws a
+    // row-less drawer with no spinner on it. Waiting for the spinner's
+    // absence returned at exactly that moment, and the assertion that follows
+    // — that the White book is listed — failed on a loaded CI machine.
+    //
+    // The condition is the data itself: the controller's studies are non-empty.
+    // A colour with no material still satisfies it, because the controller
+    // holds every study and the drawer filters by colour afterwards.
+    await pumpAsyncUntil(tester, () {
+      final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScopeDrawer)));
+      final state = container.read(reviewControllerProvider).value;
+      return state != null && state.studies.isNotEmpty;
+    }, timeout: const Duration(seconds: 15));
     // Captured before any tap: the drawer pops itself on selection, so its
     // element is gone by the time the resulting scope is read.
     return ProviderScope.containerOf(tester.element(find.byType(ReviewScopeDrawer)));
@@ -125,6 +143,22 @@ void main() {
       reason: 'a Black study in the White drawer is the independence bug this file is for',
     );
     expect(inDrawer(find.text('French Defense')), findsNothing);
+  });
+
+  testWidgets('the drawer lists the studies when a reload overtakes the first load', (
+    tester,
+  ) async {
+    // A reload while the first load is in flight makes the controller publish
+    // its empty placeholder: the drawer then draws no spinner and no rows.
+    // Waiting for the spinner to vanish returned at exactly that moment, so on
+    // a loaded machine the White book was "missing" — the flake this harness
+    // had. The wait is for the studies themselves now, and the studies do
+    // arrive.
+    await pumpDrawer(tester, Side.white, repository: _SlowRepository(db), reloadWhileLoading: true);
+
+    expect(inDrawer(find.text('White book')), findsOneWidget);
+    expect(inDrawer(find.text('Sicilian Defense')), findsOneWidget);
+    expect(inDrawer(find.text('Black book')), findsNothing);
   });
 
   testWidgets('the Black drawer lists only Black material', (tester) async {
@@ -315,4 +349,16 @@ void main() {
       reason: '710 px width should layout as narrow bottom sheet',
     );
   });
+}
+
+/// A repository whose study read is slow, so a reload can overtake the load
+/// that is already in flight.
+class _SlowRepository extends SqliteStudyRepository {
+  _SlowRepository(super.db);
+
+  @override
+  Future<List<Study>> getAllStudies() async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    return await super.getAllStudies();
+  }
 }
