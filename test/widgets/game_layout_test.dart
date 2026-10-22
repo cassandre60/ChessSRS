@@ -943,6 +943,60 @@ void main() {
       expect(board.width, moreOrLessEquals(board.height, epsilon: 0.5));
     });
 
+    testWidgets('the landscape board fits the height of the strip it is laid out in', (
+      tester,
+    ) async {
+      // SPEC INV-062: the layout survives the viewport it is given.
+      // A 480 x 270 viewport: the column left beside the board is
+      // 480 - (270 - 32) = 242 wide, under the 250 threshold, so the board
+      // follows the golden ratio of the width (480 / 1.618 - 32 = 264.66 px).
+      // The strip the board is laid out in is only 270 - 32 = 238 px tall, so
+      // the two rules of the layout disagree about the size of the board.
+      //
+      // The defect is invisible to the suite: the shared provider scope
+      // swallows every "A RenderFlex overflowed by" error, so this test
+      // asserts the geometry and not the absence of an exception.
+      const surface = Size(480, 270);
+      final app = await makeTestProviderScope(
+        tester,
+        child: srsThemed(
+          const MaterialApp(
+            home: GameLayout(
+              orientation: Side.white,
+              boardParams: GameBoardParams.readonly(
+                variant: Variant.standard,
+                position: Chess.initial,
+              ),
+            ),
+          ),
+        ),
+        surfaceSize: surface,
+      );
+      await tester.pumpWidget(app);
+
+      final board = find.byType(Chessboard);
+      // The strip the board is laid out in: the closest Row above it.
+      final strip = find.ancestor(of: board, matching: find.byType(Row)).first;
+      final boardSize = tester.getSize(board);
+      final stripHeight = tester.getSize(strip).height;
+
+      expect(
+        boardSize.width,
+        lessThanOrEqualTo(stripHeight),
+        reason: 'the board must fit the height of the strip it is laid out in',
+      );
+      expect(
+        boardSize.height,
+        lessThanOrEqualTo(stripHeight),
+        reason: 'the board must fit the height of the strip it is laid out in',
+      );
+      expect(
+        boardSize.width,
+        moreOrLessEquals(boardSize.height, epsilon: 0.5),
+        reason: 'a chessboard is square, and a board taller than the strip is not square',
+      );
+    });
+
     testWidgets('the landscape layout shows the user actions bar', (tester) async {
       // SPEC INV-062: the layout survives the viewport it is given.
       const surface = Size(1280, 800);

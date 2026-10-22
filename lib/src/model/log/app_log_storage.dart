@@ -27,10 +27,12 @@ class AppLogStorage {
   ///
   /// [minLevelValue] filters entries at or above the given log level.
   /// [searchQuery] filters entries whose message, logger name, or error contain the query string.
+  /// [loggerNamePrefixes] keeps the entries whose logger name starts with one of the prefixes.
   Future<AppLogPage> page({
     int? cursor,
     int? minLevelValue,
     String? searchQuery,
+    List<String> loggerNamePrefixes = const [],
     int limit = 100,
   }) async {
     final whereParts = <String>[];
@@ -48,6 +50,14 @@ class AppLogStorage {
       whereParts.add('(message LIKE ? OR loggerName LIKE ? OR error LIKE ?)');
       final pattern = '%$searchQuery%';
       args.addAll([pattern, pattern, pattern]);
+    }
+    if (loggerNamePrefixes.isNotEmpty) {
+      // The categories' filter: the loggers of the subsystem a chip names. A prefix and not a
+      // substring, so that "Engine" selects the engine's own loggers and not every logger
+      // that happens to contain the word ("ReviewEngine" is the review session's). The
+      // prefixes are logger names, so they carry no LIKE wildcard of their own.
+      whereParts.add('(${loggerNamePrefixes.map((_) => 'loggerName LIKE ?').join(' OR ')})');
+      args.addAll(loggerNamePrefixes.map((prefix) => '$prefix%'));
     }
 
     final res = await _db.query(

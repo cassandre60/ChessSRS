@@ -336,6 +336,29 @@ void main() {
       expect(await service.download(MaiaRating.maia1700), isNull);
     });
 
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('the unusable networks are reported as none when there is nowhere to put one', () async {
+      final container = makeWeightsContainer(appSupportDirectory: null);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // The settings screen asks this question every time it opens, so it has to have an answer
+      // even when there is nowhere to put a network: "nothing to clean up" is an answer, and an
+      // exception is not one.
+      expect(await service.unusableWeights(), (count: 0, bytes: 0));
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('deleting the unusable networks does nothing when there is nowhere to put one', () async {
+      final container = makeWeightsContainer(appSupportDirectory: null);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // There is nothing to delete, and the caller's request has been carried out: the same
+      // answer [deleteWeights] gives when there is nowhere to put a network.
+      await expectLater(service.deleteUnusableWeights(), completes);
+    });
+
     // SPEC INV-020.
     test('each rating has a file of its own', () async {
       final dir = await makeTempDir();
@@ -496,6 +519,113 @@ void main() {
       // not there is a path LC0 cannot read.
       expect(await File(path).exists(), isTrue);
     });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('the bundled network is produced from the asset bundle, not from the network', () async {
+      final dir = await makeTempDir();
+      final bytes = await bundledWeightsBytes();
+      var requests = 0;
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async {
+          requests++;
+          return http.Response.bytes(bytes, 200);
+        }),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final (:rating, :path) = await service.ensureWeights(MaiaRating.defaultRating);
+
+      expect(rating, MaiaRating.defaultRating);
+      // The bundled network is in the app already: fetching it would cost the user data for a
+      // file the app already carries, and would leave the opponent unplayable offline.
+      expect(requests, 0);
+      // What landed on disk is the whole bundled network.
+      expect(await File(path).length(), MaiaRating.defaultRating.expectedSize);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('the rating being downloaded is reported while the download is in flight', () async {
+      final dir = await makeTempDir();
+      final gate = Completer<void>();
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async {
+          await gate.future;
+          return http.Response('not a network', 200);
+        }),
+      );
+      final service = container.read(maiaWeightsServiceProvider);
+
+      final download = service.download(MaiaRating.maia1700);
+
+      // The download is in flight, and the rating it is for is reported.
+      expect(service.downloading, MaiaRating.maia1700);
+
+      gate.complete();
+      await download;
+
+      // Nothing is in flight any more.
+      expect(service.downloading, isNull);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('a network outside the weights directory is not one of ours to delete', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // A network file in the app support directory itself, not in the weights directory.
+      final stray = File('${dir.path}/maia-4200.pb.gz');
+      await stray.writeAsString('a network from another era');
+
+      expect(await service.unusableWeights(), (count: 0, bytes: 0));
+
+      await service.deleteUnusableWeights();
+
+      // Nothing outside the weights directory is ours to report, or to delete.
+      expect(await stray.exists(), isTrue);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('a link to a network is not a network to clean up', () async {
+      final dir = await makeTempDir();
+      final elsewhere = await makeTempDir();
+      final target = File('${elsewhere.path}/precious.txt');
+      await target.writeAsString('not ours to delete');
+      // A link that looks like a network, pointing at a file that is not the app's.
+      final link = Link('${dir.path}/maia/linked.pb.gz');
+      await link.parent.create(recursive: true);
+      await link.create(target.path);
+
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // The app did not write that file, so it is not space the app can give back.
+      expect(await service.unusableWeights(), (count: 0, bytes: 0));
+
+      await service.deleteUnusableWeights();
+
+      expect(await link.exists(), isTrue);
+      expect(await target.exists(), isTrue);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('a bundled network that cannot be written is an error, not a fallback', () async {
+      final dir = await makeTempDir();
+      // The weights directory cannot be a file, so the bundled network cannot be written out.
+      await File('${dir.path}/maia').writeAsString('not a directory');
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(maiaWeightsServiceProvider);
+
+      // There is no network to fall back to either, and that is an error the caller has to see.
+      await expectLater(service.ensureWeights(MaiaRating.defaultRating), throwsA(isA<Exception>()));
+    });
   });
 
   group('StockfishNnueService', () {
@@ -625,6 +755,76 @@ void main() {
       // Every byte has arrived, so the download is no longer in progress.
       expect(seen, isNotEmpty);
       expect(seen, everyElement(isFalse));
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('the download progress is back to zero when the download ends', () async {
+      final dir = await makeTempDir();
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async => http.Response('not a net', 200)),
+        connectivity: _FakeConnectivity(),
+      );
+      final service = container.read(stockfishNnueServiceProvider);
+
+      final seen = <double>[];
+      service.nnueDownloadProgress.addListener(() {
+        seen.add(service.nnueDownloadProgress.value);
+      });
+
+      await service.downloadNNUEFile(inBackground: true);
+
+      // The bytes arrived, so the progress was reported...
+      expect(seen, isNotEmpty);
+      expect(seen.any((value) => value > 0.0), isTrue);
+      // ...and the download is over: the progress is back to zero, not left at a hundred
+      // per cent.
+      expect(service.nnueDownloadProgress.value, 0.0);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('a download asked for in the background is refused on mobile data', () async {
+      final dir = await makeTempDir();
+      var requests = 0;
+      final container = makeWeightsContainer(
+        appSupportDirectory: dir,
+        mockClient: MockClient((_) async {
+          requests++;
+          return http.Response('', 404);
+        }),
+        connectivity: _FakeConnectivity(ConnectivityResult.mobile),
+      );
+      final service = container.read(stockfishNnueServiceProvider);
+
+      // A download nobody was asked about is not one to make on mobile data.
+      await expectLater(service.downloadNNUEFile(), throwsA(isA<Exception>()));
+      expect(requests, 0);
+    });
+
+    // SPEC INV-020. No invariant names the weights service itself; INV-020 is the
+    // nearest one: the engine is given the network it is meant to play with.
+    test('a link to a net is not a net the app manages', () async {
+      final dir = await makeTempDir();
+      final elsewhere = await makeTempDir();
+      final target = File('${elsewhere.path}/precious.txt');
+      await target.writeAsString('not ours to delete');
+      // A link that looks like a net, pointing at a file that is not the app's.
+      final link = Link('${dir.path}/linked.nnue');
+      await link.create(target.path);
+
+      final container = makeWeightsContainer(appSupportDirectory: dir);
+      final service = container.read(stockfishNnueServiceProvider);
+
+      // The app did not write that file, so it is not a net of ours to count, or to delete.
+      expect(await service.hasNNUEFilesOnDisk(), isFalse);
+      expect(await service.hasOutdatedNNUEFiles(), isFalse);
+
+      await service.deleteNNUEFiles();
+
+      expect(await link.exists(), isTrue);
+      expect(await target.exists(), isTrue);
     });
   });
 }
