@@ -3,20 +3,22 @@
 Source: [the 45-rule audit](spec-enforcement-audit-2026-10-21.md), snapshot
 `8c2d9b67871fbef355e7beb847cfe385e08790c5`.
 
-## Implemented locally, not delivered to main
+## Delivered as separate pull requests
 
-Each change is isolated on its own branch/worktree. No branch was pushed, no PR
-was opened or merged, and no release was cut. The results below are targeted
-checks on separate branches, **not a full regression result on an integrated
-tree**. Main and the owner's running application do not contain these local
-changes merely because the checks passed.
+Each change is isolated on its own branch, and each is now open as its own PR
+against `main`. Nothing was merged as a batch and no release was cut: the
+results below are targeted checks on separate branches, **not a full regression
+result on an integrated tree**, and they say nothing about the suite as a
+whole until CI has run each PR.
 
-| Audit item | Local branch / commit | Change | Observed proof |
+| Audit item | PR / branch | Change | Observed proof |
 |---|---|---|---|
-| F5 / INV-006 | `fix/audit-log-errors`, `11aedd4` | Redact credential-bearing URLs in app-log message/error/stack fields and HTTP-log inserts/error updates at the storage boundary. Share the existing URI policy without an import cycle; preserve repeated parameters and reject the reviewed URL-framing escapes. | The Lichess transport regression failed on the base's actual stored error URI. All **7** tests in `test/model/log/app_log_redaction_test.dart` passed after the fix; touched-file analysis and post-commit T1 gates passed. |
-| F1 / INV-016, imported-transposition oracle only | `test/audit-transposition-identity`, `ed33259`; review authorization `009be92` | Select the shared White `Bb5` question, require both ID sets to contain one item, and preserve identity equality instead of comparing two empty sets. | `canonicalStateId: node.id` makes the repaired named test fail with different IDs. The implementation was restored; all **85** tests in `test/import/pgn_importer_test.dart` passed. Analysis and post-commit T1 passed, with the explicitly authorized formatting-only acknowledgement below. |
-| F12 / INV-026, ladder lapse cap only | `fix/audit-lapse-interval-bounds`, `c16e9c8` | Apply the existing maximum-interval clamp to both the due date and stability on Simple/EaseScaling lapse transitions. Do not change FSRS or counter semantics. | The Simple regression failed with a 48-hour retry against a 24-hour maximum. Both tests in `test/domain/scheduler_lapse_bound_test.dart` passed across 12/24/48-hour vectors; analysis and post-commit T1 passed. |
-| F2 / INV-062, the three named top-bar overflow oracles only | `test/audit-topbar-overflow`, `6088397` | Use an actual localized/themed stateless top-bar fixture without the shared provider harness's error swallowing. Retain size/tap/semantics assertions and add a deliberate-overflow control. App layout is unchanged. | **4** narrow-bar and **5** practice-exit tests passed. The final control was also checked after its error-handler restoration guard; reintroducing swallowing then failed with `Actual: null`. The helper was restored byte-for-byte; analysis and post-commit T1 passed. |
+| F5 / INV-006 | [#381](https://github.com/cassandre60/ChessSRS/pull/381) `fix/audit-log-errors` | Redact credential-bearing URLs in app-log message/error/stack fields and HTTP-log inserts/error updates at the storage boundary. Share the existing URI policy without an import cycle; preserve repeated parameters and reject the reviewed URL-framing escapes. | The Lichess transport regression failed on the base's actual stored error URI; **6 of 7** tests fail on the pre-fix code with the secret visible in the raw stored row. All **7** tests in `test/model/log/app_log_redaction_test.dart` passed after the fix; touched-file analysis and post-commit T1 gates passed. |
+| F1 / INV-016, imported-transposition oracle only | [#382](https://github.com/cassandre60/ChessSRS/pull/382) `test/audit-transposition-identity` | Select the shared White `Bb5` question, require both ID sets to contain one item, and preserve identity equality instead of comparing two empty sets. | `canonicalStateId: node.id` makes the repaired named test fail with different IDs. The implementation was restored; all **85** tests in `test/import/pgn_importer_test.dart` passed. Analysis and post-commit T1 passed, with the explicitly authorized formatting-only acknowledgement below. |
+| F12 / INV-026, ladder lapse cap only | [#383](https://github.com/cassandre60/ChessSRS/pull/383) `fix/audit-lapse-interval-bounds` | Apply the existing maximum-interval clamp to both the due date and stability on Simple/EaseScaling lapse transitions. Do not change FSRS or counter semantics. | The Simple regression failed with a 48-hour retry against a 24-hour maximum; both schedulers fail on the pre-fix code. Both tests in `test/domain/scheduler_lapse_bound_test.dart` passed across 12/24/48-hour vectors; analysis and post-commit T1 passed. |
+| F2 / INV-062, the three named top-bar overflow oracles only | [#384](https://github.com/cassandre60/ChessSRS/pull/384) `test/audit-topbar-overflow` | Use an actual localized/themed stateless top-bar fixture without the shared provider harness's error swallowing. Retain size/tap/semantics assertions and add a deliberate-overflow control. App layout is unchanged. | **4** narrow-bar and **5** practice-exit tests passed. The final control was also checked after its error-handler restoration guard; reintroducing swallowing then failed with `Actual: null`. The helper was restored byte-for-byte; analysis and post-commit T1 passed. |
+| F11 / INV-032, stale answer publication | [#385](https://github.com/cassandre60/ChessSRS/pull/385) `fix/audit-answer-publication` | Fence the answer's UI publication on the controller generation, so an answer that finishes persisting after a scope change cannot repaint the new scope. The answer is still persisted. | All **6** scenarios fail on the pre-fix code (`the stale answer republished its old scope`); all 6 pass after the fix. |
+| F12 / INV-068, answer-driven fresh-cap bypass | [#386](https://github.com/cassandre60/ChessSRS/pull/386) `fix/audit-fresh-cap-bypass` | Apply the new-position allowance and the due-before-fresh ordering at the walk's prompt site, not only at queue construction. | **3 of 5** new tests fail on the pre-fix code; the other 2 pin the exemptions. 49 session tests and 203 tests across the four shared-session suites pass. |
 
 The log change protects **new writes**. Existing diagnostic rows were not erased
 or rewritten. Requests and propagated transport exceptions retain their original
@@ -52,11 +54,10 @@ Recheck the live main implementation before starting any item: other contributor
 may have changed it since the audit. These are not claims that every item below
 is still a live defect on a later commit.
 
-- **Next core behavior work:** answer-driven fresh allowance/due-first traversal
-  (INV-068), stale answer publication across scope changes (INV-032), displayed
-  distinct daily counting (INV-031), mixed UTC/local exposure throttling
-  (INV-028), normalized opening-session selection (INV-030), and different-arrival
-  transposition acceptance (INV-065). Each needs its own failing regression first.
+- **Next core behavior work:** displayed distinct daily counting (INV-031),
+  mixed UTC/local exposure throttling (INV-028), normalized opening-session
+  selection (INV-030), and different-arrival transposition acceptance
+  (INV-065). Each needs its own failing regression first.
 - **Other integrity/security work:** delayed auth-storage deletion (INV-007),
   platform/direct link host validation (INV-008), historical canonical event
   lookup after rekey (INV-005), and legacy accepted-set separation (INV-017).
@@ -80,5 +81,5 @@ is still a live defect on a later commit.
   protected referee, corpus, baseline, or workflow was edited in this batch.
 
 Full regression CI, real-application walkthroughs, and release proof remain
-unverified for these unpublished branches. Local checks are not delivery or a
-declaration that all 45 invariants now hold.
+unverified: the six PRs are open, not merged, and CI has not yet run them.
+Local checks are not a declaration that all 45 invariants now hold.
