@@ -144,5 +144,16 @@ abstract class StudyRepository {
   // Review events (SRS log)
   Future<void> saveReviewEvent(ReviewEvent event);
   Future<List<ReviewEvent>> getReviewEvents(String decisionId);
+
+  /// How many distinct positions were reviewed today (local-midnight boundary).
   Future<int> getTodayReviewedPositionsCount(DateTime now);
+
+  /// The canonical ids of the positions reviewed today (local-midnight boundary).
+  ///
+  /// The same set [getTodayReviewedPositionsCount] counts, returned as the
+  /// identities rather than the number. A caller that shows the count needs to
+  /// know *which* positions it has already counted, so that a position
+  /// answered again today — a lapse and its reguess, or a position reviewed in
+  /// an earlier session — is not counted a second time (INV-031).
+  Future<Set<String>> getTodayReviewedPositionIds(DateTime now);
 }
