@@ -6,7 +6,7 @@ Source: [the 45-rule audit](spec-enforcement-audit-2026-10-21.md), snapshot
 ## Delivered as separate pull requests
 
 Each change is isolated on its own branch, and each is now open as its own PR
-against `main` — nine so far. Nothing was merged as a batch and no release
+against `main` — ten so far. Nothing was merged as a batch and no release
 was cut: the
 results below are targeted checks on separate branches, **not a full regression
 result on an integrated tree**, and they say nothing about the suite as a
@@ -20,6 +20,7 @@ whole until CI has run each PR.
 | F2 / INV-062, the three named top-bar overflow oracles only | [#384](https://github.com/cassandre60/ChessSRS/pull/384) `test/audit-topbar-overflow` | Use an actual localized/themed stateless top-bar fixture without the shared provider harness's error swallowing. Retain size/tap/semantics assertions and add a deliberate-overflow control. App layout is unchanged. | **4** narrow-bar and **5** practice-exit tests passed. The final control was also checked after its error-handler restoration guard; reintroducing swallowing then failed with `Actual: null`. The helper was restored byte-for-byte; analysis and post-commit T1 passed. |
 | F11 / INV-032, stale answer publication | [#385](https://github.com/cassandre60/ChessSRS/pull/385) `fix/audit-answer-publication` | Fence the answer's UI publication on the controller generation, so an answer that finishes persisting after a scope change cannot repaint the new scope. The answer is still persisted. | All **6** scenarios fail on the pre-fix code (`the stale answer republished its old scope`); all 6 pass after the fix. |
 | F12 / INV-068, answer-driven fresh-cap bypass | [#386](https://github.com/cassandre60/ChessSRS/pull/386) `fix/audit-fresh-cap-bypass` | Apply the new-position allowance and the due-before-fresh ordering at the walk's prompt site, not only at queue construction. | **3 of 5** new tests fail on the pre-fix code; the other 2 pin the exemptions. 49 session tests and 203 tests across the four shared-session suites pass. |
+| INV-065, a transposition that arrived another way | [#394](https://github.com/cassandre60/ChessSRS/pull/394) `fix/audit-transposition-arrival` | Accept a move that reaches an in-scope position by a route the repertoire does not record, preferring the node whose arrival move matches. The fallback reports the move the user played. | The new test fails on the base code (`isCorrect` false) and passes with the fix; 8 transposition tests, 271 review tests and 123 review view tests pass. |
 | INV-030, opening scope queues what its summary counts | [#391](https://github.com/cassandre60/ChessSRS/pull/391) `fix/audit-opening-scope` | One rule for "the same opening family": `ReviewScope.openingKey` is now the only place the comparison is written, and the service's two chapter prefilters use it instead of an exact comparison. The scope's own matching behaviour is unchanged. | The new service test fails on the base code with the summary counting 1 and the session queueing 0 — the disagreement isolated. 143 service/scope/controller tests and 53 review screen tests pass. |
 | F4 / INV-023, practice mode writes nothing | [#390](https://github.com/cassandre60/ChessSRS/pull/390) `test/audit-practice-writes` | Drive a real practice answer — a wrong move and a right one — through the controller, the service and the store, and assert the store is left empty. The service's no-write guard had no oracle: the engine test sits above it and the controller test never submitted a practice answer. | With the service's `if (session.mode != ReviewMode.practice)` guard replaced by an unconditional write, the test fails (`Expected: empty, Actual: [knowledge state]`). With it in place, 96 controller tests pass. |
 | F12 / INV-031, displayed distinct daily counting | [#389](https://github.com/cassandre60/ChessSRS/pull/389) `fix/audit-daily-count` | Count a position once per day, following the persisted distinct-position rule: a position counts when the session writes an event for it, and a reguess or re-test adds nothing further. | Both new tests fail on the pre-fix code, in opposite directions (behind after a lapse, ahead after a repeat). 97 controller, 49 persistence, 89 review screen/service and 39 mock-repository tests pass. |
@@ -58,8 +59,10 @@ Recheck the live main implementation before starting any item: other contributor
 may have changed it since the audit. These are not claims that every item below
 is still a live defect on a later commit.
 
-- **Next core behavior work:** different-arrival transposition acceptance
-  (INV-065). It needs its own failing regression first.
+- **Next core behavior work:** none with a source-level understanding
+  remaining. The two open items are the INV-028 design decision (above) and
+  INV-051's SQL-level read and delete bounds, which needs a measurement
+  harness before it can be a repair.
 - **Mixed UTC/local exposure throttling (INV-028) — analysed, not repaired.**
   The defect is real and confirmed by reading the code: the store reloads
   `lastExposedAt` and `lastReviewedAt` as UTC instants
