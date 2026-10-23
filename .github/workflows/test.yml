@@ -156,18 +156,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      # Trusted copy of the classifier that decides whether this PR runs the
-      # suite. Without it, a PR that edits .github/scripts/ci-docs-only.sh would
-      # judge itself. The bootstrap PR that introduces the script has no base
-      # copy and falls back to the PR tree with a warning -- the same trade
-      # gates.yml makes for the gate scripts, under the owner review G07 forces
-      # on .github/**.
-      - uses: actions/checkout@v7.0.1
-        if: github.event_name != 'push'
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-          path: trusted
-
       - name: Classify the diff (docs-only fast lane)
         id: scope
         if: github.event_name != 'push'
@@ -175,11 +163,6 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           set -uo pipefail
-          classifier=trusted/.github/scripts/ci-docs-only.sh
-          if [ ! -f "$classifier" ]; then
-            classifier=.github/scripts/ci-docs-only.sh
-            echo "::warning::no trusted classifier on the base (bootstrap PR); judging with the PR tree under owner review"
-          fi
           # Every failure below resolves to the full suite: minutes wasted is an
           # acceptable mistake, a wrongly skipped suite is not.
           if [ -z "${BASE_SHA:-}" ] || ! git fetch --no-tags --depth=1 origin "$BASE_SHA"; then
@@ -187,15 +170,34 @@ jobs:
             echo "::warning::no usable base commit (${BASE_SHA:-none}); running the full suite"
             exit 0
           fi
+          # The classifier is taken from the base commit with `git show`, never a
+          # second checkout: a checkout inside the workspace would be scanned by
+          # `flutter analyze` below (learned the hard way -- the first version of
+          # this PR did exactly that and failed on the copy's ungenerated files).
+          # Taking it from the base means a PR cannot edit the judge that decides
+          # whether its own tests run. The PR that introduces the script has no
+          # base copy and falls back to its own tree under owner review.
+          scripts=/tmp/ci-scripts
+          mkdir -p "$scripts"
+          for f in ci-docs-only.sh ci-docs-only-test.sh; do
+            if git show "$BASE_SHA:.github/scripts/$f" > "$scripts/$f" 2>/dev/null; then
+              echo "using the base copy of $f"
+            else
+              cp ".github/scripts/$f" "$scripts/$f"
+              echo "::warning::no trusted $f on the base (bootstrap PR); judging with the PR tree under owner review"
+            fi
+          done
           git diff --no-renames --name-only "$BASE_SHA" HEAD | tee /tmp/changed-paths.txt
-          decision=$(bash "$classifier" < /tmp/changed-paths.txt)
+          decision=$(bash "$scripts/ci-docs-only.sh" < /tmp/changed-paths.txt)
           echo "$decision"
           echo "$decision" >> "$GITHUB_OUTPUT"
 
       - name: Test the docs-only classifier
         run: |
-          scripts=.github/scripts
-          if [ -f "trusted/$scripts/ci-docs-only.sh" ]; then scripts="trusted/$scripts"; fi
+          scripts=/tmp/ci-scripts
+          if [ ! -f "$scripts/ci-docs-only-test.sh" ]; then
+            scripts=.github/scripts
+          fi
           bash "$scripts/ci-docs-only-test.sh" "$scripts/ci-docs-only.sh"
 
       - name: 🐦 Install flutter
