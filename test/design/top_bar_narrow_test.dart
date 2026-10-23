@@ -47,6 +47,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.byType(SrsTopBar), findsOneWidget);
   }
 
   Finder square(Side side) {

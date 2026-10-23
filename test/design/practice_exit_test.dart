@@ -96,6 +96,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byType(SrsTopBar), findsOneWidget);
 
       // `SrsTopBar` is a `Row`; a child taller than the row is the overflow this could cause.
       expect(tester.takeException(), isNull);
