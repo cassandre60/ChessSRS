@@ -14,6 +14,21 @@
 #   docs skips CI, preserving the cheap docs lane documented in AGENTS.md.
 # - G07 approval path: the owner adds the `gate-approved` label to a
 #   gate-change/spec-change PR after review; only then do referee edits pass.
+# - Merge-queue entries (2026-10-23): the queue re-runs the gates against the
+#   batch that is about to land, so this workflow must trigger on `merge_group`
+#   and must report "T1 fast gates" there -- a filtered-out required check would
+#   leave the queue waiting forever (G-CIREPORT again). G07 alone stays PR-time:
+#   it is a per-PR reviewer decision read from that PR's labels, and a group is
+#   several PRs with no single label set. It is not skipped in effect -- a PR
+#   cannot be enqueued until its own required checks are green, so the
+#   protected-path decision was already made and approved on the PR's head, and
+#   the batch adds no protected edit of its own. G03/G05/G08/G10 run against
+#   the batch, which is exactly what the queue is for. Comparison against the
+#   group's own base (not a newer origin/main) keeps the judgment on the batch.
+# - The prose-docs bullet above was true until 2026-10-14 and is not any more:
+#   `**.md` and `docs/**` were added to the filters below so that a docs-only PR
+#   still reports both required checks. Those PRs are now cheap for the suite
+#   lane rather than for this one (see test.yml's docs-only fast lane).
 # - Nightly recall judges each red-team patch delta only
 #   (BASE_REF = the checkout SHA), so the gate commit itself is not re-judged.
 
@@ -69,6 +84,10 @@ on:
       - 'docs/**'
     branches:
       - main
+  # Merge-queue entries (gh-readonly-queue/main/*): no `paths` filter is
+  # supported on this event, and the queue needs these checks to report against
+  # the batched tree before it can merge it.
+  merge_group:
   schedule:
     - cron: '0 3 * * *' # nightly red-team recall
   workflow_dispatch:
@@ -82,7 +101,9 @@ concurrency:
 jobs:
   fast:
     name: T1 fast gates
-    if: github.event_name == 'pull_request'
+    # merge_group entries run the same gates against the batch that will land;
+    # the nightly build keeps its own job below.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -93,9 +114,25 @@ jobs:
 
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           path: trusted
           fetch-depth: 0
+
+      - name: Resolve the comparison base
+        id: base
+        run: |
+          # merge_group has no pull_request payload and github.base_ref is empty
+          # there, so read the ref from the event itself.
+          ref="${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || 'main' }}"
+          ref="${ref#refs/heads/}"
+          echo "branch=$ref" >> "$GITHUB_OUTPUT"
+          # A group is built on a specific main commit; comparing against that
+          # one (not a possibly newer origin/main) keeps the gates judging the
+          # batch rather than main's later commits.
+          base="${{ github.event.merge_group.base_sha }}"
+          if [ -z "$base" ]; then base="origin/$ref"; fi
+          echo "BASE_REF=$base" >> "$GITHUB_ENV"
+          echo "judging against $base"
 
       - name: Locate gate scripts (trusted base copy; PR tree on bootstrap)
         working-directory: pr
@@ -113,6 +150,11 @@ jobs:
         run: python3 "$TRUSTED/scripts/gates/banned_apis_check.py" --config "$TRUSTED/.gates/banned-apis.json" --root .
 
       - name: G07 protected paths (referee edits need approval)
+        # PR-time only: a per-PR reviewer decision, read from that PR's labels.
+        # A merge group is several PRs at once with no single label set, and a
+        # PR cannot be enqueued before its own checks passed, so each member's
+        # protected edit was already reviewed and approved on its own head.
+        if: github.event_name == 'pull_request'
         working-directory: pr
         run: |
           APPROVAL=""
@@ -120,11 +162,11 @@ jobs:
             APPROVAL="--approved"
           fi
           python3 "$TRUSTED/scripts/gates/protected_paths_check.py" \
-            --base origin/${{ github.base_ref }} --patterns "$TRUSTED/.gates/protected-paths.txt" $APPROVAL
+            --base "$BASE_REF" --patterns "$TRUSTED/.gates/protected-paths.txt" $APPROVAL
 
       - name: G08 test-weakening tripwire
         working-directory: pr
-        run: python3 "$TRUSTED/scripts/gates/test_weakening_check.py" --base origin/${{ github.base_ref }}
+        run: python3 "$TRUSTED/scripts/gates/test_weakening_check.py" --base "$BASE_REF"
 
       - name: G05 spec traceability
         working-directory: pr
