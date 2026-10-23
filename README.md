@@ -17,20 +17,23 @@ Linux and Android, a live interactive demo, and FAQ.
 
 ## Status
 
-Foundation phase — the app is the Lichess Mobile foundation with product
-specifics under active development. See `IMPLEMENTATION_PLAN.md`.
+The local-first review loop has shipped to the owner for beta use; work is in
+Phase 6 refinement. Lichess study import, opening hubs, practice and three
+selectable schedulers are implemented. `IMPLEMENTATION_PLAN.md` is the delivery
+and evidence ledger; this summary is not a fresh runtime-verification claim.
 
 ## Development
 
 ```bash
 fvm flutter pub get
-dart run build_runner build     # after model/codegen changes
-fvm flutter analyze
-fvm flutter test
+fvm dart run build_runner build # required in a fresh worktree before compiling
+fvm flutter analyze <touched paths>
+fvm flutter test <affected test file> --concurrency=1
 fvm flutter run -d linux
 ```
 
-`./verify` runs the quality gate (analyze + tests).
+Full suites and release builds run in CI, not locally. See `TEST_STRATEGY.md`
+for the bounded local loop and `AGENTS.md` for worktree isolation.
 
 ## Support
 
@@ -51,9 +54,6 @@ reference only) and [chessrs](https://github.com/ZackMurry/chessrs)
 
 ## Documentation
 
-- `PRODUCT.md` — product definition
-- `MVP.md` — current scope
-- `ARCHITECTURE.md` — foundation + domain boundary
-- `QUALITY.md` — invariants
-- `CUT_PROPOSALS.md` — Lichess foundation trim map
-- `docs/INTEGRATION_MAP.md` — Listudy/chessrs extraction plan
+Start with [the authority map](docs/documentation-map.md): one home per rule,
+with links to product scope, architecture, SPEC invariants, verification,
+delivery status and agent instructions.
