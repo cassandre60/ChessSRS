@@ -801,6 +801,51 @@ void main() {
       );
     });
 
+    test('a new day counts the same position again (INV-031)', () async {
+      // SPEC INV-031 counts positions *today*. The controller keeps the ids it
+      // has counted, and that set is replaced on every load: after midnight, a
+      // position answered yesterday must not be treated as already counted, or
+      // the day's first answer is dropped and the displayed count stays behind
+      // the store's.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      // Day one: a lapse writes the position's event and counts it.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse?.isCorrect, isFalse);
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.dailyReviewedCount, 1);
+
+      // Midnight passes and the scope is reloaded, as a returning app would.
+      // Two days clears the one-day lapse retry rather than racing its edge.
+      clock.advance(const Duration(days: 2));
+      await controller.reload();
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.dailyReviewedCount,
+        0,
+        reason: "the displayed count is the new day's, which has none yet",
+      );
+
+      // The same position is due again. Its first answer today has to count.
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      final persisted = await repo.getTodayReviewedPositionsCount(clock.now());
+      expect(persisted, 1, reason: 'the store counted the position today');
+      expect(
+        state.dailyReviewedCount,
+        persisted,
+        reason: "yesterday's ids must not suppress today's count",
+      );
+    });
+
     test('mid-advance scope change discards the stale advancement', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);

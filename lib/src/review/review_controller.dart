@@ -381,9 +381,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   /// The canonical ids already counted toward today's displayed review count.
   ///
   /// SPEC INV-031 counts distinct positions, so the controller has to know
-  /// *which* positions it has counted, not only how many. Seeded from the
-  /// store at load time, so a position reviewed in an earlier session today is
-  /// already in it, and grown as this session counts new ones.
+  /// *which* positions it has counted, not only how many. Replaced from the
+  /// store at every load, so a position reviewed in an earlier session today is
+  /// already in it, and grown as this session counts new ones. Replaced rather
+  /// than merged: a load can land on a new day, and yesterday's ids must not
+  /// suppress today's first count.
   final Set<String> _countedToday = {};
 
   /// Bumped by every request that establishes a review session.
@@ -570,7 +572,12 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // The identities, not just the number: a position already counted today —
     // in this session or an earlier one — must not be counted again (INV-031).
     final countedToday = await _repository.getTodayReviewedPositionIds(now);
-    _countedToday.addAll(countedToday);
+    // Replace, never merge. A load can land on a new day, and a set that still
+    // held yesterday's ids would refuse to count a position's first answer
+    // today (INV-031 counts the day, not the controller's lifetime).
+    _countedToday
+      ..clear()
+      ..addAll(countedToday);
     final dailyReviewedCount = countedToday.length;
 
     final remainingQuota = _remainingQuotaFor(mode, dailyReviewedCount);
