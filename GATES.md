@@ -80,19 +80,28 @@ escape loop, after the regression test, SPEC invariant, and red-team case.
    gates**, not the workflow name Gates; `strict` and `enforce_admins` are on and
    no reviews are required. Confirm live settings before changing contexts;
    no direct/force pushes.
-2. Merge queue (enabled 2026-10-23): main requires a merge queue, so PRs are
-   enqueued (`gh pr merge --auto`, or "Merge when ready") instead of merged
-   directly. The queue updates the branch itself and re-runs both required
-   checks against the batched tree, which is why both workflows trigger on
-   `merge_group` and why `gates.yml` resolves its comparison base from the
-   group. A queued merge cannot carry a custom `--subject`/`--body-file`, so it
-   takes the repository's squash settings instead (currently commit-or-PR title
-   and the branch's commit messages) — which is why attribution belongs in the
-   **commit trailers**, as the global agent rule requires, and not only in the
-   PR body: fleet PR bodies are often opened without a footer, while the commit
-   messages carry `Agent:`/`Model:`. Keep `allow_update_branch` on so a behind
-   branch can be updated from the UI instead of by hand. Rolling the queue back
-   is unchecking "Require merge queue"; no workflow change is needed for that.
+2. Merge queue: `main` should require a merge queue, and the switch is
+   **UI-only** — Settings → Branches → main → Require merge queue. Verified
+   2026-10-23 that no API path sets it: the rulesets API rejects the
+   `merge_queue` rule type for this repository, classic protection has no REST
+   field for it, and GraphQL's branch-protection type has no queue field (only
+   `enqueuePullRequest`/`dequeuePullRequest`, for a queue that already exists).
+   After enabling, confirm `mergeQueue(branch:"main")` is non-null in GraphQL.
+   Everything the queue needs is already in place: both workflows trigger on
+   `merge_group` (#407) and `gates.yml` resolves its comparison base from the
+   group, so no workflow change is required to turn it on.
+   Once on, PRs are enqueued (`gh pr merge --auto`, or "Merge when ready")
+   instead of merged directly: the queue updates the branch itself and re-runs
+   both required checks against the batched tree, so a behind branch needs no
+   hand sync and nothing lands until the batch is green. A queued merge cannot
+   carry a custom `--subject`/`--body-file`, so it takes the repository's squash
+   settings instead (commit-or-PR title, branch commit messages) — which is why
+   attribution belongs in the **commit trailers**, as the global agent rule
+   requires, and not only in the PR body: fleet PR bodies are often opened
+   without a footer, while the commit messages carry `Agent:`/`Model:`. Keep
+   `allow_update_branch` on so a behind branch can be updated from the UI
+   instead of by hand. Rolling the queue back is unchecking "Require merge
+   queue"; no workflow change is needed for that either.
 3. Protected edits need a dedicated spec-change/gate-change PR, no product code,
    and explicit owner consent for that diff before applying gate-approved.
    The executable protected set is `.gates/protected-paths.txt`.

@@ -105,13 +105,15 @@ follow CLAUDE's dependency/codegen setup; skip it for docs-only work.
   checkout rather than writing into it.
 - Before acting on a shared remote branch/PR, fetch/re-read its live tip,
   state and head SHA; integrate moved tips, never force them away.
-- Main requires a merge queue: enqueue with `gh pr merge <n> --auto --squash`
-  instead of merging directly. The queue updates the branch itself and re-runs
-  the required checks against the batched tree, so there is nothing to hand-sync
-  to get past "behind" and nothing merges until the batch is green. A queued
-  merge takes its message from the repository's squash settings, not from
-  `--subject`/`--body-file`, so keep the `Agent:`/`Model:` trailers in the commit
-  message: they are the part that survives, not the PR body.
+- When a merge queue is required on main (enabled in the branch-protection UI;
+  no API sets it — verified 2026-10-23), enqueue with
+  `gh pr merge <n> --auto --squash` instead of merging directly. The queue
+  updates the branch itself and re-runs the required checks against the batched
+  tree, so there is nothing to hand-sync to get past "behind" and nothing merges
+  until the batch is green. A queued merge takes its message from the
+  repository's squash settings, not from `--subject`/`--body-file`, so keep the
+  `Agent:`/`Model:` trailers in the commit message: they are the part that
+  survives, not the PR body.
 - Disclose overlapping subsystem work before starting. Worktrees expose
   conflicts; they do not resolve design disagreements.
 - Push only when explicitly authorized by the user/session instructions.
