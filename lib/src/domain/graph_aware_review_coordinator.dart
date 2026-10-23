@@ -3,6 +3,7 @@
 
 import 'dart:math' as math;
 
+import 'package:chess_srs/src/domain/clock.dart';
 import 'package:chess_srs/src/domain/review_result.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
@@ -104,8 +105,18 @@ class GraphAwareReviewCoordinator {
     required this.scheduler,
     required this.repo,
     this.params = const GraphAwareParams(),
+    int Function(DateTime instant)? localDayKey,
     Map<String, DateTime>? initialExposureThrottle,
-  }) : _lastExposedAt = {...?initialExposureThrottle};
+  }) : _localDayKey = localDayKey ?? utcDayKey,
+       _lastExposedAt = {...?initialExposureThrottle};
+
+  /// The calendar day of an instant, in the frame the session reads days in.
+  ///
+  /// The store reloads timestamps as UTC instants while the clock reports the
+  /// reader's local time, so a day-scoped comparison has to place both on the
+  /// same day (INV-028). The session passes the clock's own key; the default
+  /// is the UTC day, the frame the store speaks.
+  final int Function(DateTime instant) _localDayKey;
 
   final Scheduler scheduler;
   final ReviewStateRepository repo;
@@ -285,6 +296,5 @@ class GraphAwareReviewCoordinator {
     }
   }
 
-  bool _isSameCalendarDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSameCalendarDay(DateTime a, DateTime b) => _localDayKey(a) == _localDayKey(b);
 }
