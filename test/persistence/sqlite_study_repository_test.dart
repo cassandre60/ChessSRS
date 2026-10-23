@@ -1671,6 +1671,65 @@ void main() {
       }
     });
 
+    test('getTodayReviewedPositionIds returns the positions the count counts', () async {
+      // SPEC INV-031. The identities, not just the number: a caller showing the
+      // count has to know which positions it already counted, so that a
+      // position answered again today is not counted twice.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+
+      try {
+        final now = DateTime.utc(2026, 9, 18, 14, 30);
+
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'dec-1',
+            when: now.subtract(const Duration(hours: 2)),
+            result: ReviewResult.incorrect,
+            oldState: const ReviewState(decisionId: 'dec-1'),
+            newState: const ReviewState(decisionId: 'dec-1', lapseCount: 1),
+          ),
+        );
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'dec-1', // the same position again: still one position
+            when: now.subtract(const Duration(hours: 1)),
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'dec-1', lapseCount: 1),
+            newState: const ReviewState(decisionId: 'dec-1', repetitionCount: 1),
+          ),
+        );
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'dec-2',
+            when: now,
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'dec-2'),
+            newState: const ReviewState(decisionId: 'dec-2', repetitionCount: 1),
+          ),
+        );
+        await repo.saveReviewEvent(
+          ReviewEvent(
+            decisionId: 'dec-3', // yesterday
+            when: now.subtract(const Duration(days: 1)),
+            result: ReviewResult.correct,
+            oldState: const ReviewState(decisionId: 'dec-3'),
+            newState: const ReviewState(decisionId: 'dec-3', repetitionCount: 1),
+          ),
+        );
+
+        final ids = await repo.getTodayReviewedPositionIds(now);
+        expect(ids, {'dec-1', 'dec-2'});
+        expect(
+          ids.length,
+          await repo.getTodayReviewedPositionsCount(now),
+          reason: 'the identities and the number must not disagree',
+        );
+      } finally {
+        await db.close();
+      }
+    });
+
     test('getTodayReviewedPositionsCount includes a review at local midnight', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = SqliteStudyRepository(db);

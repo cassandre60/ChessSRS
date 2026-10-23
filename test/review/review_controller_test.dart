@@ -709,6 +709,143 @@ void main() {
       expect(state.totalDueCount, 0);
     });
 
+    test('a position reviewed repeatedly today counts once (INV-031)', () async {
+      // SPEC INV-031. The lapse, the reguess and the re-test are three
+      // answers to ONE position, so the day counts one position — not three.
+      // The number on screen is the one the day's allowance is enforced
+      // against, so it has to be the distinct-position count.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.dailyReviewedCount, 0);
+
+      // Lapse: the event it writes counts the position for the day.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse?.isCorrect, isFalse);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.dailyReviewedCount,
+        1,
+        reason: 'the lapse reviews the position, so the day counts it once',
+      );
+
+      // Reguess: a corrected false start writes no event, so it adds nothing.
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.dailyReviewedCount,
+        1,
+        reason: 'the reguess is the same position again and must add nothing further',
+      );
+
+      // Re-test: still the same position, still one.
+      final retest = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retest?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(state.dailyReviewedCount, 1);
+
+      // The number on screen is the number the store holds.
+      final persisted = await repo.getTodayReviewedPositionsCount(clock.now());
+      expect(
+        state.dailyReviewedCount,
+        persisted,
+        reason: 'the displayed count must be the persisted distinct-position count',
+      );
+    });
+
+    test('a position already counted today is not counted again (INV-031)', () async {
+      // The same position answered in an earlier session today: the store
+      // already holds its event, so the count must not move again.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      final decision = (await repo.getAllDecisions()).first;
+
+      // An event from earlier today, as an earlier session would have left it.
+      await repo.saveReviewEvent(
+        ReviewEvent(
+          decisionId: decision.canonicalId,
+          when: clock.now(),
+          result: ReviewResult.correct,
+          oldState: ReviewState.initial(decisionId: decision.canonicalId),
+          newState: ReviewState.initial(decisionId: decision.canonicalId),
+        ),
+      );
+
+      await controller.reload();
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.dailyReviewedCount, 1, reason: 'the earlier session already counted it');
+
+      // Answering it now must not count it a second time.
+      final step = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(step?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.dailyReviewedCount,
+        1,
+        reason: 'a position already counted today must not be counted again',
+      );
+    });
+
+    test('a new day counts the same position again (INV-031)', () async {
+      // SPEC INV-031 counts positions *today*. The controller keeps the ids it
+      // has counted, and that set is replaced on every load: after midnight, a
+      // position answered yesterday must not be treated as already counted, or
+      // the day's first answer is dropped and the displayed count stays behind
+      // the store's.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+
+      // Day one: a lapse writes the position's event and counts it.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse?.isCorrect, isFalse);
+      var state = container.read(reviewControllerProvider).requireValue;
+      expect(state.dailyReviewedCount, 1);
+
+      // Midnight passes and the scope is reloaded, as a returning app would.
+      // Two days clears the one-day lapse retry rather than racing its edge.
+      clock.advance(const Duration(days: 2));
+      await controller.reload();
+      state = container.read(reviewControllerProvider).requireValue;
+      expect(
+        state.dailyReviewedCount,
+        0,
+        reason: "the displayed count is the new day's, which has none yet",
+      );
+
+      // The same position is due again. Its first answer today has to count.
+      final retry = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(retry?.isCorrect, isTrue);
+      state = container.read(reviewControllerProvider).requireValue;
+      final persisted = await repo.getTodayReviewedPositionsCount(clock.now());
+      expect(persisted, 1, reason: 'the store counted the position today');
+      expect(
+        state.dailyReviewedCount,
+        persisted,
+        reason: "yesterday's ids must not suppress today's count",
+      );
+    });
+
     test('mid-advance scope change discards the stale advancement', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);
