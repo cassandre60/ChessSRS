@@ -208,8 +208,8 @@ optional rather than merely preferable.
 
 Decision: The `Tests` job classifies the committed diff and skips the Flutter
 toolchain for a change that only touches Markdown under `docs/**`. Merges to
-`main` are meant to go through a merge queue that re-runs both required checks
-against the batched tree.
+`main` stay direct under `strict`; both workflows were made `merge_group`-ready
+so a queue could be adopted later without a CI change.
 
 Reason: under strict branch protection, every merge invalidates every other green
 branch, so a 16-PR wave cost about two hours of wall clock, and each docs PR paid
@@ -229,10 +229,11 @@ Consequences:
   failure resolves to it.
 - `gates.yml` keeps G07 PR-time only: a queue group is several PRs with no single
   label set to read, and a PR cannot be enqueued before its own checks passed.
-- A queued merge cannot carry `--subject`/`--body-file`, so attribution lives in
-  the commit trailers rather than only in the PR body.
-- The merge-queue switch itself is UI-only (no API sets it, verified 2026-10-23),
-  so the workflows were made queue-ready first and the queue is an owner action.
+- No merge queue is available for this repository (verified 2026-10-23: the
+  classic rule offers no such option, the rulesets API rejects the rule type, and
+  GraphQL reports none), so minus the trigger readiness, nothing here changes how
+  a merge is made: a behind branch is still synced by hand, with
+  `allow_update_branch` making that a UI click.
 
 Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
 something other than its batch.
