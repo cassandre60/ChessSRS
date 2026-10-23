@@ -1,6 +1,8 @@
 # Lichess Mobile Cut Proposals
 
-Status: **ACTIVE — Phase 1 F5+ staged cuts in progress.**
+Status: foundation cuts completed; remaining grey decisions stay deferred.
+The owner-decision/completed-cut tables are the cut ledger. Detailed execution
+plans below are historical recipes, not today's task queue.
 
 This document is the authoritative record of what is removed, what is kept,
 and why. Update it before executing any cut. Future agents: read this entire
@@ -102,9 +104,8 @@ survives at 50 lines holding only `CustomTheme`, which two explorer views read t
 
 ## Safe execution order
 
-Each step is ONE logical change, ONE commit. Gate: `fvm flutter analyze` (0
-issues) + `fvm flutter test` (all pass) + `fvm flutter run -d linux` (app
-launches, manual spot-check) before proceeding to the next step.
+Each cut is one logical change/commit. Verification and real-app acceptance
+follow TEST_STRATEGY (full suite remotely, never locally).
 
 **NEVER batch multiple steps into one commit.**
 
@@ -135,6 +136,12 @@ GREY decisions and are not started until explicit approval.
 ---
 
 ## C1/C2 decided 2026-09-29 — keep, and what "keep" actually means here
+
+**Superseded 2026-09-30:** Firebase/FCM/local notifications were removed by
+Option B (owner-decision table C1/C2 and completed cut 22). This dated account
+is preserved as decision history only, not a keep/restore instruction. SRS
+reminders are not currently implemented and do not inherently require Firebase
+or a backend; future design needs its own scope decision.
 
 Owner decision: keep Firebase, because notifications need it. Recorded here because
 the decision and its consequences are easy to conflate, and only one of the two is
@@ -372,7 +379,8 @@ or HTTP consumers outside auth and study-import paths.
 - `view/analysis/`, `model/analysis/` (C15 grey — shared with study)
 - `view/board_editor/`, `model/board_editor/` (C16 kept)
 - `model/explorer/`, `view/explorer/` (C14 kept)
-- `view/clock/`, `model/clock/` (clock tool kept)
+- Standalone clock tool was removed (Step 5); shared model/clock primitives
+  survive only where other kept consumers need them.
 - `network/http.dart` base infra (needed for auth + study import)
 - GPL-3.0 LICENSE, COPYING.md, copyright notices — preserved forever
 

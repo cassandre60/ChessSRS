@@ -1,5 +1,42 @@
 # Implementation Plan & Phase Status
 
+Authority: delivery/evidence ledger, not a second requirements manual.
+See docs/documentation-map.md for the normative home of each rule.
+
+## Current status and entry points
+
+The vertical slice shipped to the owner on 2026-09-16; work is in **Phase 6
+refinement**. Phases 0–5 below are historical delivery records. Their test counts,
+UI names, schema versions and measurements describe recorded snapshots, not
+today's inventory or a fresh runtime pass.
+
+- Current included/deferred scope: MVP.md.
+- Ready briefs and claims: docs/tasks/README.md; autonomous campaigns:
+  docs/AUTONOMOUS_WORK_LEDGER.md.
+- Owner decisions: docs/open-questions.md; device evidence: docs/manual-test-log.md.
+- Performance findings: docs/performance-handoff.md and its measurement brief;
+  older noisy medians below are not optimization proof.
+
+### Reconciled dispositions (2026-10-21)
+
+- Firebase/FCM were removed; C1/C2 are no longer grey/kept. CUT_PROPOSALS owns cuts.
+- R3 shipped ChessFSRS; "FSRS remains later" in the old Phase 5 summary is obsolete.
+- R2's single-move identity was superseded by the complete-answer-set, trained-side
+  key and rekeys (ARCHITECTURE §5; INV-016/017/030/069).
+- A11Y-FIX-27, POLISH-FIX-11 and startup/performance work formerly listed in flight
+  have landed; use docs/tasks/README.md rather than that historical queue.
+- Q5 shared-account approval limitation was accepted; Q6 docs CI triggers were
+  fixed. The old gate findings below are historical, not open work.
+- getDueReviewStates was removed on owner authorization (Q4); the old queue's
+  "excluded pending signature" instruction no longer applies.
+- P-SYNC remains deferred, but not because Firebase is currently pointed at
+  Lichess: Firebase was removed. Backend/auth/format choices remain undecided.
+- Local full-suite/verify recipes below are historical: TEST_STRATEGY §2 now
+  governs verification with no local wide-suite exception.
+- Documentation reconciliation: docs/documentation-reconciliation.md;
+  no product code or INV clauses changed; owner approved publication and this
+  documentation-only diff on 2026-10-21; remote CI pending. Q7–Q10 remain open.
+
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
 > `legacy/pre-reset` and is closed.
@@ -527,6 +564,7 @@ investigated — likely transient, unconfirmed).
 
 ## Recording rule
 
-Every completed task records: what shipped, verification evidence (verify +
-runtime), and date. Boundary changes update ARCHITECTURE.md/QUALITY.md in the
-same commit.
+Every completed task records what shipped, dated verification evidence and any
+unverified runtime checks. Follow TEST_STRATEGY; protect normative changes with
+GATES's dedicated spec-change/gate-change lane rather than bundling referee
+edits into product commits.

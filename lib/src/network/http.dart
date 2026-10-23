@@ -11,6 +11,7 @@ import 'package:chess_srs/src/model/log/http_log_storage.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/aggregator.dart';
 import 'package:chess_srs/src/network/server_status.dart';
+import 'package:chess_srs/src/utils/log_redaction.dart';
 import 'package:chess_srs/src/utils/riverpod.dart';
 import 'package:cronet_http/cronet_http.dart';
 import 'package:cupertino_http/cupertino_http.dart';
@@ -33,6 +34,13 @@ import 'package:http/retry.dart';
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+export 'package:chess_srs/src/utils/log_redaction.dart'
+    show
+        kRedactedLogValue,
+        kSecretBearingPathPrefixes,
+        kSensitiveQueryParameters,
+        redactUriForLogging;
+
 final _logger = Logger('HttpClient');
 
 const _maxCacheSize = 2 * 1024 * 1024;
@@ -54,96 +62,6 @@ Uri lichessUri(String unencodedPath, [Map<String, dynamic>? queryParameters]) =>
     guessIsUnsecureSchemeFromHost(kLichessHost)
     ? Uri.http(kLichessHost, unencodedPath, queryParameters)
     : Uri.https(kLichessHost, unencodedPath, queryParameters);
-
-/// Stands in for a value that must not appear in a log.
-const kRedactedLogValue = '***';
-
-/// Query parameters whose value is a credential or a personal identifier.
-///
-/// This is a denylist rather than an allowlist on purpose. Its opposite — allowlisting the
-/// parameters known to be safe — fails quietly and in the direction nobody notices: a
-/// parameter added later is blanked, the log gets less informative exactly when a new feature
-/// is being debugged, and no test fails. A denylist keeps the log useful. What stops a new
-/// secret-bearing parameter slipping past this list is review discipline, not automation: there
-/// is no app-wide scan (an earlier classification-guard attempt produced only false positives
-/// and was dropped). So when a credential is put in a query string, its name must be added
-/// here in the same change — and the sweep is part of every network review (see Round 4).
-///
-/// Add a name when a credential is put in a query string, not when an ordinary parameter is.
-const Set<String> kSensitiveQueryParameters = {
-  'code', // one-time login code
-  'email', // personal identifier
-  'otp',
-  'password',
-  'secret',
-  'sessionid',
-  'token',
-  'username', // personal identifier
-};
-
-/// Path prefixes whose following segment is a credential, with the reason.
-///
-/// Matched by prefix rather than by guessing "long opaque segment", which would mangle ordinary
-/// paths and make the log useless for the case it exists to serve.
-const Map<String, String> kSecretBearingPathPrefixes = {
-  '/mobile/register/firebase': 'the FCM registration token, a long-lived device credential',
-};
-
-/// Returns [uri] with anything that must not be logged replaced by [kRedactedLogValue].
-///
-/// Applied on the way *into* storage and logging, never to the request that is sent: the client
-/// has to deliver the real one-time code and the real token, so redacting at the source would
-/// break sign-in. What is stored is what has to be safe.
-///
-/// Only the secret parts are replaced. The path, the remaining parameters and the host are left
-/// alone, because "which request was made, and what came back" is the whole diagnostic value of
-/// the log.
-Uri redactUriForLogging(Uri uri) {
-  var segments = uri.pathSegments;
-
-  for (final entry in kSecretBearingPathPrefixes.entries) {
-    final prefixSegments = entry.key.split('/').where((s) => s.isNotEmpty).toList();
-    if (segments.length > prefixSegments.length && _startsWith(segments, prefixSegments)) {
-      segments = [
-        ...segments.take(prefixSegments.length),
-        kRedactedLogValue,
-        ...segments.skip(prefixSegments.length + 1),
-      ];
-      break;
-    }
-  }
-
-  var changed = !_sameSegments(segments, uri.pathSegments);
-
-  final parameters = <String, dynamic>{...uri.queryParameters};
-  parameters.forEach((name, value) {
-    if (kSensitiveQueryParameters.contains(name.toLowerCase()) && value != kRedactedLogValue) {
-      parameters[name] = kRedactedLogValue;
-      changed = true;
-    }
-  });
-
-  if (!changed) return uri;
-  return uri.replace(
-    pathSegments: segments,
-    queryParameters: parameters.isEmpty ? null : parameters,
-  );
-}
-
-bool _startsWith(List<String> segments, List<String> prefix) {
-  for (var i = 0; i < prefix.length; i++) {
-    if (segments[i] != prefix[i]) return false;
-  }
-  return true;
-}
-
-bool _sameSegments(List<String> a, List<String> b) {
-  if (a.length != b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
 
 /// The host of the lichess main server, without the port part.
 /// Other lichess services, such as the opening explorer, the tablebase or the

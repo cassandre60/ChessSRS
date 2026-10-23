@@ -1142,9 +1142,15 @@ class ReviewSession {
     if (direct != null) return (expected: direct, start: null);
     if (transposeScope == TransposeScope.off) return null;
     final target = _findTransposedNode(prompt, movePlayed);
-    final incoming = target?.incomingMove;
-    if (incoming == null || !incoming.matches(movePlayed)) return null;
-    return (expected: incoming, start: target);
+    if (target == null) return null;
+    final incoming = target.incomingMove;
+    if (incoming != null && incoming.matches(movePlayed)) {
+      return (expected: incoming, start: target);
+    }
+    // The repertoire reached this position by another move. The move that
+    // happened is the one the user played, and it is the one the verdict has
+    // to name (INV-065).
+    return (expected: movePlayed, start: target);
   }
 
   /// Transposition acceptance (P-TRANSPOSE, INV-065): returns the in-scope
@@ -1180,9 +1186,8 @@ class ReviewSession {
     final parts = next.fen.split(' ');
     if (parts.length < 4) return null;
     final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
+    RepertoireNode? fallback;
     for (final node in _nodesByFenKey[key] ?? const <RepertoireNode>[]) {
-      final incoming = node.incomingMove;
-      if (incoming == null || !incoming.matches(movePlayed)) continue;
       final chapter = _chapters[_chapterOfNode[node.id]];
       if (chapter == null ||
           !scope.matches(
@@ -1194,9 +1199,19 @@ class ReviewSession {
           (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
         continue;
       }
-      return node;
+      final incoming = node.incomingMove;
+      if (incoming != null && incoming.matches(movePlayed)) {
+        // The line the user is actually following: the repertoire used the
+        // same move to get here.
+        return node;
+      }
+      // The position is in scope, but the repertoire arrived here another way.
+      // The position is what INV-065 is about — interchangeable pieces reach
+      // the same square set by different moves — so this node is a valid
+      // target. Kept as the fallback in case no node matches the arrival.
+      fallback ??= node;
     }
-    return null;
+    return fallback;
   }
 
   /// Parses the active side to move from [fen] using dartchess [Setup.parseFen].
