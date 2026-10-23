@@ -1195,6 +1195,59 @@ void main() {
       expect(state.studies.any((s) => s.id == res2.study.id), isFalse);
     });
 
+    test('a practice rehearsal writes nothing to the store (INV-023)', () async {
+      // SPEC INV-023. Practice mode rehearses rather than schedules: it grades
+      // and traverses exactly as SRS mode does but performs zero writes to
+      // review states and logs zero events.
+      //
+      // The engine test that grades practice moves can only see the session's
+      // own state and event, and the service's no-write guard is below both.
+      // This one drives a real practice answer through the controller, the
+      // service and the store, and looks at what the store holds afterwards.
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(
+        pgnText: '1. d4 d5 2. c4 e6 *',
+        title: 'Queen Pawn',
+        repertoireSide: Side.white,
+      );
+      await controller.startPracticeMode();
+
+      // A wrong move: a lapse is the write most likely to leak, because it
+      // carries a state change and a contagion side effect.
+      final lapse = await controller.onUserMove(const NormalMove(from: Square.e2, to: Square.e4));
+      expect(lapse?.isCorrect, isFalse);
+
+      // And a right one.
+      final correct = await controller.onUserMove(const NormalMove(from: Square.d2, to: Square.d4));
+      expect(correct?.isCorrect, isTrue);
+
+      // Nothing reached the store.
+      expect(
+        await repo.getAllKnowledgeStates(),
+        isEmpty,
+        reason: 'practice mode must not write canonical knowledge states',
+      );
+      expect(
+        await repo.getAllReviewStates(),
+        isEmpty,
+        reason: 'practice mode must not write review states',
+      );
+      for (final decision in await repo.getAllDecisions()) {
+        expect(
+          await repo.getReviewEvents(decision.id),
+          isEmpty,
+          reason: 'practice mode must not log review events',
+        );
+      }
+      expect(
+        await repo.getTodayReviewedPositionsCount(clock.now()),
+        0,
+        reason: "practice mode must not move the day's reviewed count",
+      );
+    });
+
     test('practice rehearsals do not inflate the daily reviewed count', () async {
       // INV-031 counts persisted SRS positions; practice writes nothing, so the number on
       // screen must not move either — it is displayed against the repository total.

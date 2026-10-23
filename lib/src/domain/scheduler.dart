@@ -98,13 +98,15 @@ class SimpleScheduler implements Scheduler {
         );
 
       case ReviewResult.incorrect:
+        // SPEC INV-026. The retry interval is subject to the same cap as a successful recall.
+        final retryInterval = _clamp(firstInterval);
         return previous.copyWith(
           firstReviewedAt: firstSeen,
           lastReviewedAt: now,
-          nextDueAt: now.add(firstInterval),
+          nextDueAt: now.add(retryInterval),
           repetitionCount: 0,
           lapseCount: previous.lapseCount + 1,
-          stability: firstInterval.inMilliseconds.toDouble(),
+          stability: retryInterval.inMilliseconds.toDouble(),
         );
     }
   }
@@ -196,13 +198,14 @@ class EaseScalingScheduler implements Scheduler {
         );
 
       case ReviewResult.incorrect:
+        final retryInterval = _clamp(firstInterval);
         return previous.copyWith(
           firstReviewedAt: firstSeen,
           lastReviewedAt: now,
-          nextDueAt: now.add(firstInterval),
+          nextDueAt: now.add(retryInterval),
           repetitionCount: 0,
           lapseCount: previous.lapseCount + 1,
-          stability: firstInterval.inMilliseconds.toDouble(),
+          stability: retryInterval.inMilliseconds.toDouble(),
         );
     }
   }

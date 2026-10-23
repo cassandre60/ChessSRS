@@ -568,6 +568,71 @@ void main() {
       expect(nextDay.stability, greaterThan(first.stability));
     });
 
+    test("INV-028 the throttle reads days in the reader's frame, not the store's", () {
+      // The store reloads the exposure timestamp as a UTC instant; the clock
+      // reports the reader's local time. A reader in UTC+02 who is exposed at
+      // 00:30 local has that instant stored as the *previous* UTC day, so
+      // comparing the two raw calendar days grants a second credit on the same
+      // local day.
+      //
+      // The frame is pinned here rather than taken from the machine: the
+      // contributor's clock is not UTC and CI's is, so a test that depended on
+      // the ambient zone would pass in one and fail in the other.
+      int utcPlusTwoDayKey(DateTime instant) {
+        final shifted = instant.toUtc().add(const Duration(hours: 2));
+        return shifted.year * 10000 + shifted.month * 100 + shifted.day;
+      }
+
+      const node = GraphNode(
+        decisionId: 'learned_dec',
+        fen4: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+        expectedMoveUci: 'g1f3',
+      );
+      const initialStability = 5.0 * 86400000;
+
+      // 00:30 local on the 19th: the instant the store holds is 22:30 UTC on
+      // the 18th.
+      final exposedAt = DateTime.utc(2026, 9, 18, 22, 30);
+      // 03:30 local on the same day.
+      final laterSameLocalDay = DateTime.utc(2026, 9, 19, 1, 30);
+      // 03:30 local on the next day.
+      final nextLocalDay = DateTime.utc(2026, 9, 20, 1, 30);
+
+      final localRepo = InMemoryReviewStateRepository();
+      localRepo.put(
+        'learned_dec',
+        ReviewState(
+          decisionId: 'learned_dec',
+          stability: initialStability,
+          difficulty: 4.5,
+          repetitionCount: 2,
+          lastReviewedAt: DateTime.utc(2026, 9, 16, 12),
+          nextDueAt: DateTime.utc(2026, 9, 23, 12),
+        ),
+      );
+
+      // A restart: the throttle comes back from the store as a UTC instant.
+      final local = GraphAwareReviewCoordinator(
+        scheduler: scheduler,
+        repo: localRepo,
+        localDayKey: utcPlusTwoDayKey,
+        initialExposureThrottle: {'learned_dec': exposedAt},
+      );
+
+      // Same local day: no second grant.
+      final sameDay = local.recordAutoTraversalExposure(node: node, now: laterSameLocalDay)!;
+      expect(
+        sameDay.stability,
+        equals(initialStability),
+        reason: 'the second credit fell on the same local day and must be refused',
+      );
+      expect(sameDay.nextDueAt, DateTime.utc(2026, 9, 23, 12));
+
+      // The next local day grants again: the cap is daily, not a permanent lock.
+      final nextDay = local.recordAutoTraversalExposure(node: node, now: nextLocalDay)!;
+      expect(nextDay.stability, greaterThan(initialStability));
+    });
+
     test('recordAutoTraversalExposure refuses exposure credit to already-due decisions', () {
       const node = GraphNode(
         decisionId: 'due_dec',

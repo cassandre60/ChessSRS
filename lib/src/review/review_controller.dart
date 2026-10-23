@@ -1578,6 +1578,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
     if (move is! NormalMove) return null;
 
+    // Persistence can finish after a scope/mode reload. Keep the answer durable,
+    // but only its original generation may publish a verdict or start animation.
+    final generation = _generation;
     final from = move.from.name;
     final to = move.to.name;
     final promotion = move.promotion?.letter;
@@ -1604,6 +1607,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       if (isRetrying) {
         // Reguess attempt after previous lapse
         final result = await _service.retryMove(from: from, to: to, promotion: promotion);
+        if (!ref.mounted || generation != _generation) return result;
         if (result.isCorrect) {
           await _handleCorrectAdvancement(
             currentState: currentState,
@@ -1636,6 +1640,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
       // Initial move attempt on this prompt
       final result = await _service.submitMove(from: from, to: to, promotion: promotion);
+      if (!ref.mounted || generation != _generation) return result;
 
       if (result.isCorrect) {
         await _handleCorrectAdvancement(
@@ -1669,8 +1674,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
       return result;
     } catch (e) {
-      // If persistence fails, restore board position and state to pre-move checkpoint
-      state = AsyncData(currentState);
+      // The service restores the answered session on failure. Restore its board
+      // only if it still owns the screen; a newer load must remain untouched.
+      if (ref.mounted && generation == _generation) state = AsyncData(currentState);
       rethrow;
     } finally {
       _isProcessingMove = false;

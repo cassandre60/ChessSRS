@@ -27,6 +27,22 @@ void main() {
   Widget srsThemed(Widget child) =>
       SrsTheme(colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent), child: child);
 
+  /// The app's [MaterialApp], with the app's theme and a [Material] ancestor.
+  ///
+  /// The shared scope supplies both when it builds the app; a test that passes
+  /// its own [MaterialApp] as the scope's child gets neither. Without a
+  /// [Material] ancestor a bare [Text] inherits Material's 48 px monospace
+  /// error style - the framework's debugging aid for "you forgot a Material" -
+  /// and a nine-character string then measures 432 px wide. That is how this
+  /// file's fixtures overflowed their board chrome by up to 240 px, in a test
+  /// file, with the production layout untouched.
+  Widget appLike(Widget home) => MaterialApp(
+    theme: srsThemeData(SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent)),
+    builder: (context, child) =>
+        Material(type: MaterialType.transparency, child: child ?? const SizedBox.shrink()),
+    home: home,
+  );
+
   testWidgets('board background size should match board size on all surfaces', (
     WidgetTester tester,
   ) async {
@@ -34,8 +50,8 @@ void main() {
       final app = await makeTestProviderScope(
         key: ValueKey(surface),
         tester,
-        child: const MaterialApp(
-          home: GameLayout(
+        child: appLike(
+          const GameLayout(
             orientation: Side.white,
             boardParams: GameBoardParams.readonly(
               variant: Variant.standard,
@@ -84,8 +100,8 @@ void main() {
         key: ValueKey(boardPosition),
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -134,8 +150,8 @@ void main() {
         key: ValueKey(surface),
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -279,8 +295,8 @@ void main() {
 
     final app = await makeTestProviderScope(
       tester,
-      child: MaterialApp(
-        home: ValueListenableBuilder<GameBoardParams>(
+      child: appLike(
+        ValueListenableBuilder<GameBoardParams>(
           valueListenable: paramsNotifier,
           builder: (context, params, _) => GameLayout(orientation: Side.white, boardParams: params),
         ),
@@ -314,8 +330,8 @@ void main() {
     final playedMoves = <Move>[];
     final app = await makeTestProviderScope(
       tester,
-      child: MaterialApp(
-        home: GameLayout(
+      child: appLike(
+        GameLayout(
           orientation: Side.white,
           boardParams: GameBoardParams.interactive(
             variant: Variant.crazyhouse,
@@ -353,8 +369,8 @@ void main() {
 
     final app = await makeTestProviderScope(
       tester,
-      child: MaterialApp(
-        home: ValueListenableBuilder<({Position position, Move? lastMove})>(
+      child: appLike(
+        ValueListenableBuilder<({Position position, Move? lastMove})>(
           valueListenable: boardNotifier,
           builder: (context, value, _) => GameLayout(
             orientation: Side.white,
@@ -396,8 +412,8 @@ void main() {
 
     final app = await makeTestProviderScope(
       tester,
-      child: MaterialApp(
-        home: ValueListenableBuilder<PlayerSide>(
+      child: appLike(
+        ValueListenableBuilder<PlayerSide>(
           valueListenable: sideNotifier,
           builder: (context, playerSide, _) => GameLayout(
             orientation: Side.white,
@@ -445,8 +461,8 @@ void main() {
 
     final app = await makeTestProviderScope(
       tester,
-      child: MaterialApp(
-        home: ValueListenableBuilder<bool>(
+      child: appLike(
+        ValueListenableBuilder<bool>(
           valueListenable: showBoard,
           builder: (context, show, _) => show
               ? GameLayout(
@@ -508,8 +524,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -545,7 +561,7 @@ void main() {
       // layout is not in zen mode, so the moves it is given are listed.
       final app = await makeTestProviderScope(
         tester,
-        child: srsThemed(const MaterialApp(home: GameLayout.empty(moves: ['e4', 'e5']))),
+        child: srsThemed(appLike(const GameLayout.empty(moves: ['e4', 'e5']))),
       );
       await tester.pumpWidget(app);
 
@@ -572,8 +588,8 @@ void main() {
 
       final app = await makeTestProviderScope(
         tester,
-        child: MaterialApp(
-          home: ValueListenableBuilder<GameBoardParams>(
+        child: appLike(
+          ValueListenableBuilder<GameBoardParams>(
             valueListenable: paramsNotifier,
             builder: (context, params, _) => GameLayout(
               orientation: Side.white,
@@ -621,8 +637,8 @@ void main() {
 
       final app = await makeTestProviderScope(
         tester,
-        child: MaterialApp(
-          home: ValueListenableBuilder<GameBoardParams>(
+        child: appLike(
+          ValueListenableBuilder<GameBoardParams>(
             valueListenable: paramsNotifier,
             builder: (context, params, _) => GameLayout(
               orientation: Side.white,
@@ -669,8 +685,8 @@ void main() {
 
       final app = await makeTestProviderScope(
         tester,
-        child: MaterialApp(
-          home: ValueListenableBuilder<GameBoardParams>(
+        child: appLike(
+          ValueListenableBuilder<GameBoardParams>(
             valueListenable: paramsNotifier,
             builder: (context, params, _) =>
                 GameLayout(orientation: Side.white, boardParams: params, isReplaying: true),
@@ -720,8 +736,8 @@ void main() {
 
       final app = await makeTestProviderScope(
         tester,
-        child: MaterialApp(
-          home: ValueListenableBuilder<ChessboardController>(
+        child: appLike(
+          ValueListenableBuilder<ChessboardController>(
             valueListenable: controllerNotifier,
             builder: (context, controller, _) => GameLayout(
               orientation: Side.white,
@@ -762,8 +778,8 @@ void main() {
         key: const ValueKey('not_in_check'),
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -781,8 +797,8 @@ void main() {
         key: const ValueKey('in_check'),
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(variant: Variant.standard, position: inCheck),
             ),
@@ -800,8 +816,8 @@ void main() {
         key: const ValueKey('in_check_without_highlights'),
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(variant: Variant.standard, position: inCheck),
             ),
@@ -829,8 +845,8 @@ void main() {
       var app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.interactive(
                 variant: Variant.crazyhouse,
@@ -861,8 +877,8 @@ void main() {
       app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               controllerParams: ControllerBoardParams(
                 controller: controller,
@@ -883,8 +899,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -920,8 +936,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -960,8 +976,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -1003,8 +1019,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -1030,8 +1046,8 @@ void main() {
       var app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -1049,8 +1065,8 @@ void main() {
       app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.crazyhouse,
@@ -1077,8 +1093,8 @@ void main() {
       var app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.crazyhouse,
@@ -1100,8 +1116,8 @@ void main() {
       app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -1126,8 +1142,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: Center(
+          appLike(
+            const Center(
               child: GameLayout(
                 orientation: Side.white,
                 boardParams: GameBoardParams.readonly(
@@ -1165,8 +1181,8 @@ void main() {
         key: const ValueKey('tablet'),
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.crazyhouse,
@@ -1189,8 +1205,8 @@ void main() {
         key: const ValueKey('phone'),
         tester,
         child: srsThemed(
-          MaterialApp(
-            home: GameLayout(
+          appLike(
+            GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.crazyhouse,
@@ -1215,8 +1231,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
@@ -1255,8 +1271,8 @@ void main() {
       final app = await makeTestProviderScope(
         tester,
         child: srsThemed(
-          const MaterialApp(
-            home: GameLayout(
+          appLike(
+            const GameLayout(
               orientation: Side.white,
               boardParams: GameBoardParams.readonly(
                 variant: Variant.standard,
