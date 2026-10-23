@@ -231,6 +231,22 @@ at 400 px. Repeat at a narrow window to see the actions wrap rather than overflo
 
 ---
 
+### 7. Pending review answer cannot repaint a replacement scope (INV-032)
+
+**Shipped 2026-10-22 (PR #385); the runtime check is still owed.** The
+controller ignores an old answer's UI updates/error restoration after a new
+scope supersedes it; successful old answers still persist. Six targeted tests
+cover delayed correct/incorrect answers, commentary, retry exposure writes, and
+write failures through the real SQLite repository.
+
+**Runtime attempt:** a 90-second bounded `fvm flutter run -d linux --no-pub`
+timed out during Linux SDK download, before the app launched. No walkthrough is
+claimed. On a machine where the app launches, answer in one study and
+immediately switch studies/colours; the new prompt, board and counters must
+remain coherent and accept its next move. Reopen the original study to confirm
+its acknowledged answer survived. Ordinary manual timing cannot force a pending
+transaction; the deterministic storage gate in the regression is the race proof.
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)
