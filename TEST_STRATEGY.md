@@ -77,9 +77,22 @@ The `T1 fast gates` job in `.github/workflows/gates.yml` uses trusted-base
 scripts/config for referee checks, traceability and ratchets; the local wrapper
 uses checkout copies, so its result is not independent review.
 
-Markdown-only PRs **do trigger both workflows** under their current filters;
-the full remote suite is the accepted cost of reporting required checks. Read
+Markdown-only PRs **do trigger both workflows** under their current filters,
+because a required check that never reports blocks the merge permanently. Read
 the live workflow paths rather than assuming every push triggers both lanes.
+Since 2026-10-23 a diff that is *only* Markdown under `docs/**` takes the
+`Tests` job's docs-only fast lane (classifier `.github/scripts/ci-docs-only.sh`,
+unit-tested on every PR): the job still runs and still reports `Tests`, it
+simply skips the Flutter steps, because no step reads those files. Root
+Markdown is deliberately excluded — `test/reachability/enforcement_matrix_test.dart`
+parses `TEST_STRATEGY.md`, so an edit to it (or to SPEC/GATES/QUALITY/AGENTS), a
+`docs/screenshots` golden, or any code path still runs the full suite. The
+`T1 fast gates` lane is unchanged and cheap. Merges are direct: `strict`
+requires the branch to contain the latest `main` and both required checks to be
+green on that exact head, and a behind branch is synced by hand
+(`allow_update_branch` makes it a UI click). No merge queue is offered for this
+repository (verified 2026-10-23), though both workflows already trigger on
+`merge_group` if one ever is.
 Required check names and evidence/approval policy are in `GATES.md`.
 Run the fast gates on the committed branch as required there; do not interpret
 an empty committed diff as proof of an uncommitted change.

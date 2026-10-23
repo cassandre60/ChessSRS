@@ -37,6 +37,35 @@ today's inventory or a fresh runtime pass.
   no product code or INV clauses changed; owner approved publication and this
   documentation-only diff on 2026-10-21; remote CI pending. Q7–Q10 remain open.
 
+### Delivered 2026-10-23 — the audit-repair wave, and CI throughput
+
+- **The audit queue is merged:** the 16 reviewed PRs (#380–#404) plus the gate
+  change that unblocked the last one (#405: `.gates/ratchet-baseline.json`
+  `domain_loc` 3713 → 3900 for the measured INV-068 growth, owner-approved).
+  Repairs made during review, each recorded in its PR: #389's `_countedToday`
+  reset with its failing INV-031 test, #385/#386 dropped their invented status
+  documents, #381 restored the denylist rationale, #384 shrank to the shared
+  harness (private harness and control test removed, `findsOneWidget` guards
+  kept), #404 recorded the Q10 row.
+- **CI throughput** (#407, #410, #411, #412; rationale as D018 in
+  docs/decisions.md). The `Tests` job classifies the committed diff and skips the
+  Flutter toolchain for `docs/**` Markdown only: measured **449s → 9s and 11s** on
+  real PRs, while root Markdown still runs the full suite (**398s** on #410, whose
+  diff includes the `TEST_STRATEGY.md` a Flutter test parses). `build_runner`'s
+  asset graph is cached (79s cold → 3.4s warm → 27.5s after a source edit, with
+  regeneration verified). `allow_update_branch` is on, so a behind branch is
+  synced from the UI rather than by hand. Merge queue: **unavailable for this
+  repository** (the classic rule offers no option, the rulesets API rejects the
+  rule type, GraphQL reports none), so merges stay direct under `strict`; both
+  required workflows are `merge_group`-ready regardless.
+- **Unverified runtime checks from this batch:** docs/manual-test-log.md item 8 —
+  six review-behaviour changes, #386's question order first.
+- **Release outstanding:** `v1.8.6` (2026-10-22 08:38) predates the wave (13 files
+  changed under `lib/`, +427/−120), so it owes a decision under AGENTS §11 — a
+  patch on merged fixes — pending owner authorization.
+- **Owner decisions open:** Q7, Q8, Q12, Q13, Q14. Q10 was answered *fix then
+  fail* and landed in #380; Q9 and Q11 were answered 2026-10-22.
+
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
 > `legacy/pre-reset` and is closed.
