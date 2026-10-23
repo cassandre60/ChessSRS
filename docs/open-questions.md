@@ -17,11 +17,12 @@ Each one states what is known, what is not, and what I would need from you.
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
 | Q9 | The fail-to-pass gate script detaches the caller's worktree | — | **answered 2026-10-22: fix it — both legs now run in throwaway worktrees** |
-| Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
+| Q10 | Should the shared test scope FAIL on a layout overflow? | — | **answered 2026-10-22: fix the scaffolding first, then fail — done in this PR** |
 | Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | **answered 2026-10-22: guard it — the tool now refuses to say "nothing to do" when it is not configured** |
 | Q12 | 16 ms budget: validation only or durable answer, typical or every frame? | Contract scope | open 2026-10-21 |
 | Q13 | FSRS lapse repetition count versus INV-025 | Contract choice | open 2026-10-21 |
 | Q14 | Stored null-date state: due or fresh? | Legacy-edge contract | open 2026-10-21 |
+
 
 ---
 ## Q1 — Does the ~37 ms review-open pause matter?
@@ -333,9 +334,7 @@ immediately, or the threshold set to 0 now with those 8 known-red tests
 excluded by name until the fixture is fixed. The first is cleaner; the second
 is one PR instead of two.
 
-**Needed.** One word: *fail now* (the scope throws on any overflow; the 8
-scaffold tests are red and get fixed in the same PR) or *fix then fail* (the
-scaffold is repaired first, then the scope throws at 0 px with a clean suite).
+**Needed.** ~~One word~~ — **answered 2026-10-22: *fix then fail*.** The scaffolding was repaired first and the scope now fails: the one test file whose own fixture overflowed (76 occurrences) was given the app's theme and a `Material` ancestor instead of being exempted, and the shared scope now forwards a `RenderFlex` overflow to the test framework instead of swallowing it, while still printing the greppable marker. A layout overflow in a widget test is now a red test.
 
 **Found.** 2026-10-22, by the harness-measurement work (#355/#357) and the
 triage of the overflow blind spot (issues #334, #336).
