@@ -1,0 +1,69 @@
+# Weekly check that the vendored autonomous-improvement tools still match
+# their upstream tree. t1 (G13) verifies the working tree offline; only this
+# job can see upstream move, so it reports instead of auto-merging — syncing
+# scripts/autonomous/ is a gate-change PR under .gates/protected-paths.txt.
+name: Skill Sync
+
+on:
+  schedule:
+    - cron: '23 5 * * 1' # Mondays, after the upstream-sync run
+  workflow_dispatch:
+
+concurrency:
+  group: skill-sync
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compare the vendored skill with upstream
+        id: drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          python3 scripts/gates/vendor_drift_check.py --remote > drift.txt 2>&1
+          code=$?
+          cat drift.txt
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Open or update the update issue
+        if: steps.drift.outputs.code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create skill-sync --color "1D76DB" --description "Vendored skill update available" --force 2>/dev/null || true
+          {
+            echo 'The vendored `scripts/autonomous/` no longer matches its pinned upstream tree.'
+            echo
+            echo '```'
+            cat drift.txt
+            echo '```'
+            echo
+            echo 'Sync from `cassandre60/skills` (`skills/autonomous-improvement/scripts/autonomous`), then run:'
+            echo
+            echo '```sh'
+            echo 'python3 scripts/gates/vendor_drift_check.py --write --tree-sha <upstream tree>'
+            echo './scripts/gates.sh t1'
+            echo '```'
+            echo
+            echo 'The sync is a gate-change PR: `scripts/autonomous/*`, `.gates/*` and `.github/*` are protected.'
+          } > issue.md
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label skill-sync --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Skill update available: autonomous-improvement" --label skill-sync --body-file issue.md
+          fi

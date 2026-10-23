@@ -25,6 +25,7 @@ t2 can be expensive and requires narrow scoping/remote execution under that budg
 | G10 | ratchets (deps, suppressions, skips, tests, domain size) | T1 | s | silent drift | metrics gamed in isolation (kept small on purpose) | `./scripts/gates.sh t1` (collect + compare) | gates PR |
 | G11 | dependency + secret posture | T1 | — | unjustified deps | no scanner wired yet; pubspec.yaml is a protected path so every dep change needs approval | reviewer + G07 | owner |
 | G12 | red-team corpus recall | T3/nightly + gate-change PRs | min | weak fast gates | unknown unknowns | `python3 scripts/gates/redteam_runner.py --gate-cmd "./scripts/gates.sh t1"` | gates PR |
+| G13 | vendored skill drift | T1 (offline) + weekly upstream check | s | `scripts/autonomous/` diverging from its pinned upstream tree; undeclared local files there | compares content hashes, not behavior; upstream moves are reported by `skill-sync.yml` (an issue), not by t1 | `python3 scripts/gates/vendor_drift_check.py` (`--remote` compares with `cassandre60/skills`) | gates PR |
 
 ## Class → evidence (enforced by reviewer + PR template; CI-wired where noted)
 
