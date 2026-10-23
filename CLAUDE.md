@@ -1,15 +1,17 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Authority: Dart/Riverpod/code-generation and test-helper conventions for all
+agents contributing to ChessSRS. AGENTS owns safe execution/isolation;
+TEST_STRATEGY owns verification budgets; ARCHITECTURE owns module arrangement;
+design/docs owns visual rules. See docs/documentation-map.md.
 
 ## Project Overview
 
-Lichess Mobile is a Flutter-based mobile application (iOS/Android) for lichess.org. The app uses:
-- **Flutter**: Cross-platform UI framework (Flutter 3.38.0+, Dart 3.10.0+)
+ChessSRS is a local-first trainer forked from Lichess Mobile. The app uses:
+- **Flutter**: Cross-platform UI framework; toolchain pins in .fvmrc/pubspec.yaml
 - **Riverpod**: State management with providers
 - **Freezed**: Immutable data classes
 - **Code generation**: For data classes, JSON serialization, and localization
-- **Firebase**: Crashlytics and messaging
 - **Stockfish**: Chess engine integration via `multistockfish` package
 
 ## Development Setup
@@ -17,23 +19,19 @@ Lichess Mobile is a Flutter-based mobile application (iOS/Android) for lichess.o
 ### Initial Setup
 ```bash
 # Install dependencies
-flutter pub get
+fvm flutter pub get
 
 # Generate code (required before first run)
-dart run build_runner build
-
-# For continuous development
-dart run build_runner watch &
-flutter analyze --watch &
+fvm dart run build_runner build
 ```
 
 ### Running the App
 ```bash
-# Run on all devices (uses lichess.dev server by default)
-flutter run -d all
+# Launch one bounded runtime-validation target (production host is lichess.org)
+fvm flutter run -d linux
 
 # Run with custom server
-flutter run \
+fvm flutter run \
   --dart-define=LICHESS_HOST=localhost:8080 \
   --dart-define=LICHESS_WS_HOST=localhost:8080
 ```
@@ -46,21 +44,18 @@ flutter run \
 adb reverse tcp:8080 tcp:8080
 
 # Run app
-flutter run --dart-define=LICHESS_HOST=localhost:8080 --dart-define=LICHESS_WS_HOST=localhost:8080
+fvm flutter run --dart-define=LICHESS_HOST=localhost:8080 --dart-define=LICHESS_WS_HOST=localhost:8080
 ```
 
 ## Testing & Quality
 
 ### Run Tests
 ```bash
-# All tests
-flutter test
-
 # Single test file
-flutter test test/model/engine/engine_test.dart
+fvm flutter test <affected test file> --concurrency=1
 
 # Specific test
-flutter test test/model/engine/engine_test.dart --name "test name"
+fvm flutter test <affected test file> --plain-name 'test name' --concurrency=1
 ```
 
 ### Testing Strategy: Prefer HTTP Mocking Over Provider Overrides
@@ -73,18 +68,18 @@ flutter test test/model/engine/engine_test.dart --name "test name"
 
 **Pattern to use:**
 ```dart
-overrides: {
-  httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
+overrides: [
+  httpClientFactoryProvider.overrideWith((ref) {
     return FakeHttpClientFactory(
       () => MockClient((request) async {
-        if (request.url.path == '/api/puzzle/daily') {
-          return http.Response(mockDailyPuzzleResponse, 200);
+        if (request.url.path == '/api/study/abcdefgh.pgn') {
+          return http.Response(studyPgn, 200);
         }
         return http.Response('', 404);
       }),
     );
   }),
-},
+],
 ```
 
 Direct provider overrides are acceptable for **non-network providers** (repositories backed by mocks, services with no HTTP, etc.) where the provider has no `keepAlive` dependency and the override doesn't skip meaningful logic.
@@ -114,7 +109,8 @@ tester.widget<ChessboardEditor>(find.byType(ChessboardEditor)).pieces
 
 ### Analysis Rules (CRITICAL)
 
-**Always run `flutter analyze` on every file you edit, including test files, before finishing.**
+Analysis timing/scope is owned by TEST_STRATEGY §2 (once, after the last edit,
+all touched Dart files including tests).
 
 Two rules the analyzer enforces that are easy to miss:
 
@@ -123,23 +119,18 @@ Two rules the analyzer enforces that are easy to miss:
 
 ### Code Quality Checks
 ```bash
-# Static analysis
-flutter analyze
-
-# Format check (files to format)
-dart format --output=none --set-exit-if-changed $(find lib/src -name "*.dart" -not \( -name "*.*freezed.dart" -o -name "*.*g.dart" -o -name "*lichess_icons.dart" \) )
-dart format --output=none --set-exit-if-changed $(find test -name "*.dart" -not \( -name "*.*freezed.dart" -o -name "*.*g.dart" \) )
-
-# Format all code
-dart format lib/src test
+# Format/check only the touched hand-written Dart files (full checks run in CI)
+fvm dart format <touched Dart files>
+fvm flutter analyze <touched Dart paths>
 ```
 
 ### Formatting Rules (CRITICAL)
 
-**Always run `dart format` on every file you edit before finishing.** CI will fail if formatting is wrong.
+Format touched hand-written Dart per TEST_STRATEGY. Generated output follows
+the policy below, especially l10n (never manually formatted).
 
 ```bash
-dart format path/to/file.dart
+fvm dart format path/to/file.dart
 ```
 
 The formatter is configured via `analysis_options.yaml` (`formatter: page_width: 100`) and `dart format` picks this up automatically. Key rules enforced by the formatter:
@@ -165,33 +156,31 @@ and look inconsistent with the code around it. Fill each line before wrapping to
 ./scripts/gen-translations.sh
 ```
 
-This runs `gen-arb.mjs`, `flutter gen-l10n`, and `gen-widget-strings.mjs` in order.
+Inspect scripts/gen-translations.sh for the current pipeline; native home-screen
+widgets were removed, so the inherited WidgetKit-string stage is not current.
 
 Mobile-specific translations get a `mobile` prefix (e.g., "foo" becomes `mobileFoo` in Dart).
 
 ## Architecture
 
 ### Directory Structure
+
+The module map is owned by ARCHITECTURE §3. The abbreviated surviving foundation:
 ```
 lib/src/
 ├── model/          # Business logic, state management (Riverpod providers)
 │   ├── account/
 │   ├── analysis/
 │   ├── auth/
-│   ├── challenge/
 │   ├── common/     # Shared models and utilities
 │   ├── engine/     # Stockfish integration
 │   ├── game/
-│   ├── puzzle/
 │   ├── settings/
 │   └── ...
 ├── view/           # UI screens and pages
 │   ├── account/
 │   ├── analysis/
 │   ├── game/
-│   ├── home/
-│   ├── play/
-│   ├── puzzle/
 │   ├── settings/
 │   └── ...
 ├── widgets/        # Reusable UI components
@@ -220,7 +209,6 @@ This project uses `flutter_riverpod 3.x` / `riverpod 3.x`. Several APIs changed 
 
 **Binding Layer**: `LichessBinding` (in `binding.dart`) provides a testable abstraction for plugins and external APIs:
 - SharedPreferences
-- Firebase (messaging, crashlytics)
 - Stockfish factory
 
 Use `AppLichessBinding.ensureInitialized()` in production, `TestLichessBinding` in tests.
@@ -230,9 +218,8 @@ Use `AppLichessBinding.ensureInitialized()` in production, `TestLichessBinding` 
 - WebSocket: `lib/src/network/socket.dart` - Handles ping/pong, message acks, auto-reconnection, event versioning
 - Helper: `lichessUri(path, queryParams)` for HTTP, `lichessWSUri(path, queryParams)` for WebSocket
 
-**Services**: Long-running background services initialized in `app.dart`:
-- `AccountService`, `NotificationService`, `MessageService`, `ChallengeService`, `CorrespondenceService`
-- Start in `_AppState.initState()`
+**Services**: inspect app.dart for actual startup providers. Notification,
+message, challenge and correspondence services were removed with the product cuts.
 
 **Navigation**: Uses Flutter's Navigator with custom route resolution via `app_links.dart` for deep linking.
 
@@ -409,12 +396,17 @@ for (el in items) widgets.add(Text(el.name));
 
 ## Code Generation
 
-This project heavily uses code generation. Always run `dart run build_runner build` (or `watch`) after:
+Run `fvm dart run build_runner build` after:
 - Modifying Freezed classes
 - Adding JSON serialization
 - Changing models with code generation annotations
 
-Generated files are NOT committed to git.
+Freezed/JSON `*.freezed.dart` and `*.g.dart` are gitignored and per-worktree.
+Generated **l10n Dart and ARB are committed**. With l10n.yaml `format: false`,
+commit raw pinned-generator output when regeneration is intended; do not run
+dart format over lib/l10n or resurrect the obsolete formatting workaround.
+Run pub get before formatting so analyzer includes/page-width configuration
+resolve correctly. Inspect unexpected generator changes before staging them.
 
 ## Common Gotchas
 
@@ -424,39 +416,17 @@ Generated files are NOT committed to git.
 - **Brand names**: Don't translate names like "Puzzle Storm" or "Puzzle Streak"
 - **FVM users**: Remember to prefix commands with `fvm` (e.g., `fvm flutter test`)
 
-## iOS Home Screen Widgets (WidgetKit Extension)
+## Removed native integrations
 
-The app includes a native iOS WidgetKit extension (`ios/LichessWidgets/`) providing home screen widgets. See `ios/EXTENSIONS.md` for contributor setup instructions (requires Apple Developer account configuration).
-
-### Architecture
-
-- **`LichessWidgetsBundle.swift`** — `@main` entry point registering all 4 widgets.
-- **`LichessAppGroup.swift`** — Reads shared `UserDefaults` from App Group `group.org.chesssrs.app.LichessWidgets`:
-  - `lichessHost`, `boardTheme`, `pieceSet`, `isKidMode`
-- **`Deeplinks.swift`** — Custom URI scheme encoding for opening URLs in the in-app browser.
-- **Dependencies**: WidgetKit, ChessgroundAssets (Swift Package, shared with Dart), FeedKit, XMLKit.
-
-### Flutter Integration
-
-The Flutter app (via `home_widget` package) writes to the shared App Group from `app.dart`:
-- `lichessHost` — server URL
-- `boardTheme` / `pieceSet` — board appearance (triggers `DailyPuzzleWidget` reload)
-- `isKidMode` — hides blog widgets when active (triggers blog widget reload)
-
-When modifying widget-related settings or board theme/piece set preferences in Dart, ensure the corresponding `HomeWidget.saveWidgetData` call and `HomeWidget.updateWidget` are kept in sync in `lib/src/app.dart`.
-
-Widget UI strings are translated via `ios/LichessWidgets/Localizable.xcstrings` (a String Catalog). To add a new translatable string, register it under `WIDGET_KEYS` in `scripts/gen-widget-strings.mjs` and run `./scripts/gen-translations.sh`.
-
-### Code Signing
-
-The extension has its own bundle ID (`org.lichess.mobileV2.LichessWidgets`) and App Group entitlement. fastlane `sync_code_signing` handles provisioning for both targets (see `ios/fastlane/Matchfile`).
+Firebase/FCM and Android/iOS home-screen widgets were removed. CUT_PROPOSALS
+owns the cut record; do not restore them from inherited contributor guidance.
 
 ## Debugging
 
 ```bash
 # Start DevTools for logging
-dart devtools
+fvm dart devtools
 
 # Then run app and follow printed link
-flutter run
+fvm flutter run -d linux
 ```

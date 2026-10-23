@@ -1,92 +1,57 @@
-# GATES_PLAN: making acceptance expensive to fake
+# Gate Roadmap
 
-Protected path. Status: **proposed** (this PR is Phase 1).
+Protected path. Authority: planned enforcement, promotion criteria and accepted
+omissions. GATES owns the current registry, SPEC the exact invariants,
+TEST_STRATEGY the verification workflow. See `docs/documentation-map.md`.
 
-## 1. Context
+## 1. Baseline versus current state
 
-Local-first chess repertoire + SRS trainer on the Lichess Mobile fork (GPL-3.0).
-Beta-phase product; owner is the beta tester. One wrong SRS write or one lossy
-import silently destroys months of the owner's memorization work, so persistence
-and import are R0, scheduling/review logic is R1, UI glue is R2.
+The original 2026-10-01 proposal is preserved in git history. Its "missing
+CODEOWNERS/traceability/ratchets/corpus" baseline is no longer current:
+CODEOWNERS, protected paths, PR template, banned-API boundary enforcement,
+SPEC traceability, tripwire, ratchets and nightly red-team recall are installed.
+Definitions are in GATES and executable config, not repeated here.
+Ratchet values live in `.gates/ratchet-baseline.json`, not this roadmap.
 
-- Stack: Flutter 3.47.3 (FVM), dartchess (sole chess engine), sqflite, Riverpod 3.x.
-- Current maturity: **L3** (specs exist as prose in QUALITY.md, strict analyzer,
-  ~1500 tests, CI required on code paths, deterministic Clock/Random seams).
-- Missing (verified this session): no CODEOWNERS, no PR template, no protected
-  paths, no banned-API/boundary enforcement, no spec↔test traceability
-  (zero `INV-` citations anywhere), no ratchets, no mutation/fail-to-pass
-  wiring, no red-team corpus. `assess_repo.py` agrees: L3, no mutation/fuzz/
-  benchmarks/codeowners/gates_dir.
-- Baseline metrics (measured 2026-10-01, recorded in
-  `.gates/ratchet-baseline.json`): 65 direct deps, 18 analyzer suppressions
-  (excl. generated l10n), 11 `skip:` (all env-gated screenshot captures),
-  ~1507 test declarations.
+## 2. Risk prioritization
 
-## 2. Risk tiers
-
-| Tier | Modules | Gate expectation |
+| Risk | Modules | Priority |
 |---|---|---|
-| R0 | `lib/src/persistence/`, `lib/src/db/`, `lib/src/import/` | SPEC T0 invariants, boundary + trace + tripwire on every PR, migration tests, hand-picked mutants (local T2) |
-| R1 | `lib/src/domain/` (schedulers, coordinator, review session) | SPEC T1 invariants, purity/clock gates, hand-picked mutants (local T2) |
-| R2 | `lib/src/view/review/`, `lib/src/design/`, auth/network glue | strict types, behavior + a11y tests, tripwire |
-| R3 | generated (`*.freezed.dart`, `*.g.dart`, `lib/l10n/`) | excluded from metrics and scans |
+| R0 loss/corruption/security | persistence, migrations, import, auth secrets | durability, quarantine, migrations, redaction |
+| R1 wrong behavior | schedulers, graph coordinator, review/session orchestration | deterministic and model/property/differential proofs |
+| R2 degraded UX/performance | presentation, design, noncritical glue | widget/a11y evidence and measured performance |
+| R3 generated | Freezed/JSON/l10n output | verify inputs/toolchain; raw output policy in CLAUDE |
 
-## 3. Irreversible decisions (frozen by SPEC v1, not changed by this PR)
+Risk labels R0–R3 differ from SPEC's T0–T2 severity and GATES's T0–T3
+execution-cost tiers. They are not interchangeable rankings.
 
-SQLite schema + migrations, 4-field-FEN position identity, `canonicalKey`
-SHA-1 scheme, UUID entity IDs, PGN export format. SPEC.md records them as
-invariants; changing any of them is a spec-change PR with human approval.
+## 3. Remaining work (not running acceptance gates)
 
-## 4. Gap table (cost S/M/L, leverage S/M/L, order)
+| Work | Current limit | Promotion requirement |
+|---|---|---|
+| Blocking diff-scoped mutation CI | Hand-picked catalogue/audit campaigns; t2 wrapper only names scheduler tests | Prove matching test selection; two green runs without false positives before blocking |
+| Crash-consistency at write boundaries | Rollback/reopen/upgrade tests exist; no process-kill-at-every-boundary campaign wired | Bounded fixtures; prove detection; nightly first |
+| PGN fuzz campaigns | Example/property/round-trip tests, not a long-running fuzz lane | Deterministic seeds/minimized failures; nightly first |
+| Pinned-runner performance budgets | Small-path latency oracle; no device/tail guarantee | Reliable instrument/dataset/spread before ratcheting; settle Q8 |
+| Gate-health review | Table in GATES; no measured quarterly summary yet | Review rejection/false-positive/escape evidence; retain useful gates |
 
-| # | Gate | Catches | Cost | Leverage | Order |
-|---|---|---|---|---|---|
-| 1 | CODEOWNERS + protected-paths + PR template (Class line) | referee edits without approval | S | L | this PR |
-| 2 | Banned-API boundary gate (domain purity, Clock rule) + Dart boundary test | layer rot, hidden clocks | S | L | this PR |
-| 3 | SPEC.md (numbered INVs) + trace check | invariants with no test | M | L | this PR |
-| 4 | Test-weakening tripwire (Dart-tuned) | gutted tests, new skips/suppressions | S | M | this PR |
-| 5 | Ratchets (deps, suppressions, skips, test count) at today's values | silent drift | S | M | this PR |
-| 6 | Red-team seed corpus, 7 cases, recall 100% on T1 | weak fast gates | S | M | this PR |
-| 7 | `scripts/gates.sh` single entry point + gates.yml (PR fast lane, nightly recall) | CI/local divergence | S | M | this PR |
-| 8 | `.gates/mutants.json` + fail-to-pass script (local T2, reviewer-enforced) | tests that cannot fail | S | M | this PR (wiring only) |
-| 9 | Diff-scoped mutation as blocking CI | surviving mutants on changed lines | M | L | later (needs runner proving) |
-| 10 | Crash-consistency (kill at write boundaries) + fuzz PGN import | data loss, parser crashes | M | M | later (nightly) |
-| 11 | Perf budgets on pinned runner (import throughput, queue build) | regressions below 16ms budget | M | S | later |
+Autonomous mutation work/dispositions are indexed by
+`docs/AUTONOMOUS_WORK_LEDGER.md`; do not infer campaign coverage from a mutant's
+presence in `.gates/mutants.json`.
 
-## 5. Phases
+## 4. Deliberate omissions and constraints
 
-- **Phase 1 (this PR):** rows 1–8. Exit: `gates.sh t1` green on clean tree,
-  red-team recall 7/7, `flutter analyze` clean on touched files, one new
-  boundary test passing, CI's PR lane + nightly recall wired.
-- **Phase 2 (later):** row 9 — promote mutation to blocking after it runs
-  green twice without false positives. Row 10–11 go to nightly first.
-- **Phase 3 (quarterly):** gate-health review in GATES.md; delete gates that
-  stop paying; every escape becomes a corpus case + invariant.
+- No unproved blocking mutation job: false positives can stall every PR.
+- No blanket Random ban: session randomness is injectable/seeded in tests;
+  production fallback is allowed, not a scheduler randomness license.
+- No feature-punishing LOC diet: source-size tolerances live in ratchets.
+- No duplicate analyzer job in gates.yml: Tests owns the product suite.
+- No ownership-by-GitHub-identity claim: owner/agents share one account;
+  consent is operational, not identity enforcement (open-questions Q5).
+- Protected changes stay separate from product code. Schema/identity/format
+  changes need accepted contracts and migration evidence, not speculative
+  invariants without live oracles.
 
-## 6. What I chose NOT to do, and why
-
-- **No blocking mutation CI.** No mature Dart mutation tool is wired here;
-  an unverified blocking job risks red CI on every PR. Mutants ship as
-  local-opt-in (`gates.sh t2`) with a documented promotion rule instead.
-- **No `Random()` ban.** The single `Random()` in `review_session.dart` is an
-  injectable-default fallback, seeded in tests; banning it would force a
-  lib edit inside a gate PR. Determinism is enforced by injection + tests.
-- **No LOC diet ratchet.** LOC punishes features; dependency/suppression/skip
-  counts are the drift that matters. LOC is recorded with a wide bloat
-  tolerance instead.
-- **No engine-isolation or shape-spoiler invariants in SPEC v1.** No covering
-  tests exist yet; SPEC admits only invariants with live oracles. Both are
-  listed as SPEC candidates for the next feature PR in that area.
-- **No `flutter analyze --fatal-warnings` in gates.yml.** Warning policy is
-  already owned by `test.yml` + repo convention; duplicating it risks
-  conflicting definitions of "passing".
-- **No changes to `lib/`, product behavior, schemas, or public formats.**
-  Zero product code in a gate-change PR, per the evidence contract.
-
-## 7. Risks
-
-- Tripwire false positives on Dart idioms (tuned: `skip:` named-arg only,
-  not `.skip()` collection calls) — watch the first PRs, retune openly.
-- `test.yml` and `gates.yml` are two CI definitions; `gates.sh` + GATES.md
-  keep them from diverging silently. Long term they should merge.
-- Gate maintenance is real work: quarterly review is calendared in GATES.md.
+Shape spoilers are no longer a future SPEC candidate: INV-063 exists.
+Advisory engine isolation remains a QUALITY constraint; stronger mechanical
+enforcement is future work, not permission to block imports.
