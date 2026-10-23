@@ -1,0 +1,26 @@
+{
+  "files": {
+    "README.md": "0994f2356edd878f6a359d667832347d285434a9",
+    "common.py": "b2744cbffaa4243af42c16f8f66eb987c32261ff",
+    "fleet.py": "4b680cce4221d875214264533099afa6906d0745",
+    "ledger.py": "541a14f201b46d51d028dc56f8456847bea4027f",
+    "ledger_validate.py": "183095abce4e4c3e6771e958d8c4ec804047c918",
+    "mutants.py": "f070ff6de877a620a48e21635a562685c152ed78",
+    "mutation_engine.py": "b6c457649c0c3e401b4851bcf68c91fe607130df",
+    "mutation_rules/dart.json": "97e8a000a06ef2bf6ed629dfd65a40ce882692ea",
+    "mutation_rules/go.json": "986dedcd0e67f30f9a741d73c17bbade7d411d48",
+    "mutation_rules/javascript.json": "c22bc582b167b65414902fb846e39c06632e26a8",
+    "mutation_rules/python.json": "b390f6d609b21ced4cca0a8045be21a545edd16a",
+    "mutation_rules/typescript.json": "a49ffa61061661a415738ce5ecd3c6004c3db798",
+    "orchestrator.py": "29460a308513d685fe8663256efe2544e3e60fba",
+    "test_weakening_check.py": "6b017f525bf63f042946313c2953996d16bc2369"
+  },
+  "local_files": [
+    "config.example.json",
+    "config.json"
+  ],
+  "local_path": "scripts/autonomous",
+  "source": "cassandre60/skills",
+  "tree_sha": "1562f05e79228db74302a02efccc120dd6b19b79",
+  "upstream_path": "skills/autonomous-improvement/scripts/autonomous"
+}

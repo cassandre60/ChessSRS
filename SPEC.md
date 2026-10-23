@@ -13,9 +13,15 @@ How to use
 - Tier legend: T0 = loss/corruption/security, T1 = wrong behavior,
   T2 = degraded UX/perf.
 
-The T0/T1 invariants below transcribe `QUALITY.md` (already
-owner-authoritative) and mined regressions (see GATES_PLAN.md §1 and the
-`History` notes). Merging this file is the owner's confirmation.
+Authority: exact numbered behavioral contracts and their oracle/test links.
+Originally transcribed from QUALITY.md and mined regressions, these contracts
+now have their normative home here; QUALITY links here rather than redefining
+them. See `docs/documentation-map.md` for the other document responsibilities.
+
+Documentation reconciliation leaves every INV sentence and ID unchanged.
+Known unresolved conflicts (INV-025, INV-050, INV-060 and the null-date edge of
+INV-068) are tracked in `docs/open-questions.md` Q7, Q12–Q14. Their existence is not
+permission to weaken a test or silently interpret current code as approval.
 
 ---
 

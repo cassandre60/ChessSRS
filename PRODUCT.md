@@ -1,5 +1,9 @@
 # Product Definition
 
+Authority: product intent, user journeys and non-goals. MVP owns current scope,
+SPEC owns exact acceptance contracts, design/docs owns visual/copy details.
+Delivery/evidence lives in IMPLEMENTATION_PLAN. See docs/documentation-map.md.
+
 ## 1. Vision & Core Value
 
 **Chess Repertoire SRS** is a focused, local-first chess learning application for **memorizing and retaining opening and middlegame repertoires through active spaced repetition**.
@@ -23,7 +27,7 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
 
 ### Journey 1: Daily Repertoire Review (Default)
 1. User opens the application.
-2. The app immediately presents the chessboard on the first due position across all active imported studies.
+2. The app presents the chessboard for the active review pool, prioritizing due work and then capped fresh introductions (SPEC INV-068).
 3. User recalls and makes their prepared move on the board. (Crucial: move comments and annotations are strictly hidden during recall to prevent move spoilers).
 4. If correct: subtle positive feedback, automatic traversal through already-learned opponent/user continuations, and stopping at the next due decision. Any explanatory move comment is revealed post-move. (With `Line continuity` set to Full line instead: every line is played whole from its first move to its last, even when steps are not yet due, and a lapse acknowledged without retry continues down the same line.)
 5. If incorrect: non-blocking feedback indicating the expected repertoire continuation with an on-board arrow, recording a lapse, and keeping the board interactive so the user can immediately reguess and play the correct move.
@@ -40,7 +44,7 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
 1. User is preparing for a specific opening (e.g. against 1.e4) and wants to focus on their Sicilian repertoire.
 2. User opens the lightweight study/opening filter drawer.
 3. User selects a target study or an Opening Hub (e.g. "Sicilian Defense" which aggregates lines across multiple studies automatically classified by standard opening name/ECO/FEN).
-4. The Review scene updates its active pool to only test due positions matching that filter.
+4. The Review scene constrains due work and fresh introductions to that filter; the chosen continuity mode controls line presentation (SPEC INV-030/068).
 
 ### Journey 4: Pre-Match Rehearsal / Cram Mode (Custom Review)
 1. User has an upcoming tournament or match in 20 minutes and wants to rehearse lines in a specific repertoire.
@@ -73,8 +77,8 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
    - Mistakes allow immediate reguess on the board without modal locking.
 
 3. **Spaced Repetition System (SRS) & Review Modes**:
-   - Every repertoire decision maintains its own SRS state (repetition count, lapse count, stability/interval, next due timestamp).
-   - Non-due (already learned) positions are automatically traversed during review so the user is only tested on what is currently due.
+   - Repertoire occurrences reference shared memory for the same question and trained side; different accepted-answer sets remain independent (SPEC INV-016/017/030).
+   - Due-only review traverses learned non-due positions; Full line instead tests the line throughout. Fresh material has its own introduction cap (SPEC INV-022/068; P-CONTINUITY in the delivery ledger).
    - Previously learned moves return as active testable questions once their interval elapses.
    - Scheduler algorithm is replaceable behind an abstract contract.
    - Dual review modes: Standard SRS mode (updates intervals and logs recall events) and Pre-Match Rehearsal mode (trains positions on the board without altering SRS intervals or history).
@@ -84,9 +88,9 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
    - Openings are automatically classified from standard PGN headers (Event, ECO, Opening) or position FEN.
    - Openings form lightweight virtual review scopes aggregating lines across multiple studies without data duplication.
 
-4. **Offline & Performance**:
+5. **Offline & Performance**:
    - The entire review and move-validation loop is 100% local and requires zero network access.
-   - Perceived interaction latency must be effectively zero (<16ms on mobile and desktop).
+   - Interaction should feel immediate. The measurable move budget is owned by QUALITY §4.1 and SPEC INV-050; proof limits are in TEST_STRATEGY §3, not a universal device-performance claim here.
 
 ---
 
@@ -120,8 +124,8 @@ dartchess, the Riverpod/domain architecture). See `CUT_PROPOSALS.md` for what te
 
 ## 7. Future Horizons (Post-MVP)
 
-- **Lichess Integration**: Authenticate and directly import/sync user's Lichess studies.
+- **Remote synchronization**: import/authentication already exist; automatic remote study synchronization does not. Current imports are local snapshots (MVP §2).
 - **Full Local Backup & Restore**: Export all studies (PGN) plus all SRS data, and re-import it (see P-EXPORT-ALL). Local file/share only; no cloud dependency.
 - **Cross-Device Async Sync**: Background synchronization of study content and SRS review history across mobile, web, and desktop.
 - **Advisory Import Health Check**: Optional asynchronous one-time engine pass warning users of severe evaluation collapses in their own lines (advisory only, never blocking).
-- **Cross-Study Opening Categorization**: Aggregate repertoire positions by opening family across separate study files.
+- Opening hubs already aggregate studies by opening family; they are current scope in MVP, not a future feature.
