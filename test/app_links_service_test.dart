@@ -22,6 +22,7 @@ import 'package:chess_srs/src/view/user/user_screen.dart';
 import 'package:chess_srs/src/widgets/rich_link_text.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,6 +111,141 @@ Future<void> triggerLinkifyOpen(WidgetTester tester, String url) async {
   );
   await tester.pumpWidget(app);
   await tester.tap(find.text('test linkify'));
+}
+
+/// A single-shot stream that delivers its event inside `listen()` itself, the
+/// way the platform delivers the cold-start link before the first frame has
+/// been built. (A `StreamController(sync: true)` cannot do this: an `add()`
+/// from `onListen` lands on a microtask, after the first frame.)
+class _ImmediateStream extends Stream<Uri> {
+  _ImmediateStream(this.uri);
+
+  final Uri uri;
+
+  @override
+  StreamSubscription<Uri> listen(
+    void Function(Uri)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    if (onData != null) onData(uri);
+    return const _DoneSubscription();
+  }
+}
+
+class _DoneSubscription implements StreamSubscription<Uri> {
+  const _DoneSubscription();
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  void onData(void Function(Uri)? handleData) {}
+
+  @override
+  void onError(Function? handleError) {}
+
+  @override
+  void onDone(void Function()? handleDone) {}
+
+  @override
+  bool get isPaused => false;
+
+  @override
+  void pause([Future<void>? resumeSignal]) {}
+
+  @override
+  void resume() {}
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => Future.value(futureValue);
+}
+
+/// Records pushed and replaced routes so a test can assert on their
+/// [Route.transitionDuration], which is how the service's `animated` flag is
+/// observable.
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  final List<Route<dynamic>> pushed = [];
+  final List<Route<dynamic>> replaced = [];
+
+  /// The route's transition duration — how the service's `animated` flag is
+  /// observable on the route it pushes.
+  static Duration transitionOf(Route<dynamic> route) =>
+      (route as TransitionRoute<dynamic>).transitionDuration;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) replaced.add(newRoute);
+  }
+}
+
+/// Mocks the url_launcher platform channel, recording every url the app asks
+/// the platform to launch. `launch` answers true so [launchUrl] returns
+/// normally instead of throwing a missing-plugin error.
+List<String> mockUrlLauncher(WidgetTester tester) {
+  final launched = <String>[];
+  const channel = MethodChannel('plugins.flutter.io/url_launcher');
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+    final args = call.arguments;
+    if (call.method == 'launch' && args is Map<Object?, Object?>) {
+      final url = args['url'];
+      if (url is String) launched.add(url);
+    }
+    return true;
+  });
+  addTearDown(() {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+  });
+  return launched;
+}
+
+/// Pumps an app whose deep-link stream is a live controller, so a test can
+/// emit links on demand and observe navigation through [observer]. The first
+/// emitted link is the stream's first event, i.e. the cold-start link; links
+/// emitted afterwards arrive while the app is "running".
+Future<(StreamController<Uri>, _RecordingNavigatorObserver)> pumpDeepLinkApp(
+  WidgetTester tester, {
+  Map<ProviderOrFamily, Override>? overrides,
+}) async {
+  final links = StreamController<Uri>.broadcast();
+  final observer = _RecordingNavigatorObserver();
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final mockAppLinks = MockAppLinks();
+  when(() => mockAppLinks.uriLinkStream).thenAnswer((_) => links.stream);
+  when(() => mockAppLinks.getInitialLink()).thenAnswer((_) async => null);
+
+  final app = await makeTestProviderScope(
+    tester,
+    overrides: {
+      currentNavigatorKeyProvider: currentNavigatorKeyProvider.overrideWithValue(navigatorKey),
+      appLinksServiceProvider: appLinksServiceProvider.overrideWith((ref) {
+        final service = AppLinksService(ref, appLinks: mockAppLinks);
+        ref.onDispose(service.dispose);
+        return service;
+      }),
+      ...?overrides,
+    },
+    // SrsTheme and the l10n delegates because this harness builds its own tree
+    // instead of makeTestProviderScopeApp: the deep-linked screens (BoardEditor
+    // in particular) resolve their colours and strings through them.
+    child: SrsTheme(
+      colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent),
+      child: MaterialApp(
+        navigatorKey: navigatorKey,
+        navigatorObservers: [observer],
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: const _ColdStartLauncher(),
+      ),
+    ),
+  );
+  await tester.pumpWidget(app);
+  return (links, observer);
 }
 
 void main() {
@@ -491,6 +627,45 @@ void main() {
       expect(find.byType(BoardEditorScreen), findsNothing);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      'a first-party url with no in-app route falls back to the browser from linkified text',
+      (tester) async {
+        // Linkified text is user content, not an app link, so unlike the app-link
+        // stream the fallback IS allowed: a first-party url the app cannot resolve
+        // in-app (the cut TV route) opens in the browser. INV-008: the url is
+        // first-party, so the app handles its navigation.
+        final launched = mockUrlLauncher(tester);
+        await triggerLinkifyOpen(tester, 'https://$kLichessHost/tv/blitz');
+        await tester.pumpAndSettle();
+
+        expect(launched, ['https://$kLichessHost/tv/blitz']);
+      },
+    );
+
+    testWidgets('navigation from linkified text uses the normal animated transition', (
+      tester,
+    ) async {
+      final observer = _RecordingNavigatorObserver();
+      final app = await makeTestProviderScope(
+        tester,
+        child: SrsTheme(
+          colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent),
+          child: MaterialApp(
+            navigatorObservers: [observer],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: const Scaffold(body: _LinkifyTestWidget(url: 'https://lichess.org/editor')),
+          ),
+        ),
+      );
+      await tester.pumpWidget(app);
+      await tester.tap(find.text('test linkify'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
+      expect(_RecordingNavigatorObserver.transitionOf(observer.pushed.last), isNot(Duration.zero));
+    });
   });
 
   group('start (deep link subscription)', () {
@@ -547,6 +722,162 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 2500));
       expect(find.textContaining('Invalid FEN'), findsNothing);
+    });
+
+    testWidgets(
+      'a cold-start link arriving before the first frame is deferred until the navigator exists',
+      (tester) async {
+        // The cold-start link can arrive before the first frame (the code comment's
+        // exact scenario). A synchronous controller is not enough for that — a
+        // sync controller's onListen-add lands on a microtask, after the first
+        // frame — so this stream delivers inside listen() itself, while the
+        // navigator key still has no context. Handling the link immediately
+        // would read that null context and silently drop the link; the deferral
+        // must hold it until the post-frame callback, when the navigator exists.
+        final mockAppLinks = MockAppLinks();
+        when(
+          () => mockAppLinks.uriLinkStream,
+        ).thenAnswer((_) => _ImmediateStream(Uri.parse('https://lichess.org/editor')));
+        final navigatorKey = GlobalKey<NavigatorState>();
+
+        final app = await makeTestProviderScope(
+          tester,
+          overrides: {
+            currentNavigatorKeyProvider: currentNavigatorKeyProvider.overrideWithValue(
+              navigatorKey,
+            ),
+            appLinksServiceProvider: appLinksServiceProvider.overrideWith((ref) {
+              final service = AppLinksService(ref, appLinks: mockAppLinks);
+              ref.onDispose(service.dispose);
+              return service;
+            }),
+          },
+          child: SrsTheme(
+            colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent),
+            child: MaterialApp(
+              navigatorKey: navigatorKey,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: const _ColdStartLauncher(),
+            ),
+          ),
+        );
+        // One pump builds the first frame (the link already arrived during
+        // initState); the second builds the route the post-frame callback pushed.
+        await tester.pumpWidget(app);
+        await tester.pump();
+
+        expect(find.byType(BoardEditorScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('a cold-start link pushes without a transition, a link while running is animated', (
+      tester,
+    ) async {
+      final (links, observer) = await pumpDeepLinkApp(tester);
+
+      // First stream event: the cold-start link. Pushed without a transition —
+      // the user launched the app via this link so the screen should just be there.
+      links.add(Uri.parse('https://lichess.org/editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
+      expect(_RecordingNavigatorObserver.transitionOf(observer.pushed.last), Duration.zero);
+
+      // Second event: the app is running now, so the link gets a normal
+      // transition. Same screen type, so the push replaces the existing route.
+      links.add(Uri.parse('https://lichess.org/editor?color=black'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(observer.replaced, isNotEmpty);
+      expect(
+        _RecordingNavigatorObserver.transitionOf(observer.replaced.last),
+        isNot(Duration.zero),
+      );
+    });
+
+    testWidgets('an open-web link opens the encoded web url and refuses a non-web url', (
+      tester,
+    ) async {
+      // org.chesssrs.app://open-web?url=... comes from the platform widget and must
+      // open exactly the encoded url in the in-app browser. Only web urls: launchUrl
+      // hands any scheme to the platform, so a `tel:` url must be refused here.
+      final launched = mockUrlLauncher(tester);
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(
+        Uri.parse(
+          'org.chesssrs.app://open-web?url=${Uri.encodeComponent('https://lichess.org/faq')}',
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launched, ['https://lichess.org/faq']);
+
+      links.add(
+        Uri.parse('org.chesssrs.app://open-web?url=${Uri.encodeComponent('tel:+15550123')}'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launched, ['https://lichess.org/faq'], reason: 'a non-web url must not be launched');
+    });
+
+    testWidgets('a custom-scheme link whose host is not open-web or shared-pgn still navigates', (
+      tester,
+    ) async {
+      // The custom-scheme guards must match the host exactly: a custom-scheme link
+      // with any other host (here a platform widget naming a fake host) falls
+      // through to normal route resolution.
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(Uri.parse('org.chesssrs.app://widget/editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
+    });
+
+    testWidgets('a shared-pgn custom-scheme link is skipped before any resolution', (tester) async {
+      // Shared PGN links are handled natively by SharePlugin; the service must not
+      // resolve their path at all. The path names a real route so that any
+      // fall-through would be observable as navigation.
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(Uri.parse('org.chesssrs.app://shared-pgn/editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+    });
+
+    testWidgets('a file link is skipped rather than resolved as a route', (tester) async {
+      // File links belong to the sharing-intent logic. The path names a real route
+      // so a removed guard would navigate instead of being silently inert.
+      final launched = mockUrlLauncher(tester);
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(Uri.parse('file:///editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(launched, isEmpty);
+    });
+
+    testWidgets('an app link that resolves to nothing never falls back to the browser', (
+      tester,
+    ) async {
+      // App links must not fall back to the browser: re-launching the browser with
+      // the link can loop between browser and app. An unresolvable link (the cut TV
+      // route) must do nothing at all.
+      final launched = mockUrlLauncher(tester);
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(Uri.parse('https://lichess.org/tv/blitz'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(launched, isEmpty);
     });
   });
 }
