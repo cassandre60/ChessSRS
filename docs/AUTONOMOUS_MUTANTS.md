@@ -13,6 +13,12 @@
 
 | Date | Mutant ID | Source Hash | Disposition | PR / Issue | Reason |
 |---|---|---|---|---|---|
+| 2026-10-23 | `lib/src/db/openings_database.dart:43:370fe8648634` | `9f745f2c3` | EQUIVALENT | — | flush only affects durability under crash/power-loss; any subsequent read sees identical bytes, so no test can distinguish - full mapped file green under the mutant |
+| 2026-10-23 | `lib/src/db/openings_database.dart:46:fe4942b21d79` | `9f745f2c3` | KILLED-BY | #409 | readOnly:false lets a CREATE TABLE through on the static dataset; the first-run test asserts writes are refused |
+| 2026-10-23 | `lib/src/db/openings_database.dart:28:8bcc2db417ad` | `9f745f2c3` | KILLED-BY | #409 | recursive:false on a fresh install leaves ancestors missing; the swallowed create makes directory.list() throw and the provider fails - killed by the first-run test's fresh .dart_tool wipe |
+| 2026-10-23 | `lib/src/db/openings_database.dart:28:8bcc2db417ad` | `9f745f2c3` | OPEN | — | Invert boolean literal true -> false |
+| 2026-10-23 | `lib/src/db/openings_database.dart:43:370fe8648634` | `9f745f2c3` | OPEN | — | Invert boolean literal true -> false |
+| 2026-10-23 | `lib/src/db/openings_database.dart:46:fe4942b21d79` | `9f745f2c3` | OPEN | — | Invert boolean literal true -> false |
 | 2026-10-23 | `lib/src/app_links_service.dart:299:d3595af1c9ac` | `4d0c5a090` | EQUIVALENT | — | return true for non-http/unparseable in _isFirstPartyUrl converges with the else branch: onLinkifyOpen launches the same url via the browser fallback either way; full mapped file green under the mutant |
 | 2026-10-23 | `lib/src/app_links_service.dart:239:2bbc79d99f0d` | `4d0c5a090` | EQUIVALENT | — | rootNavigator flag: currentNavigatorKeyProvider is the app's only navigator (tab_navigation.dart), so both flag values resolve the same navigator at this call site; full mapped file green under the mutant |
 | 2026-10-23 | `lib/src/app_links_service.dart:233:fb71f2b4e15e` | `4d0c5a090` | KILLED-BY | #406 | handleAppLink allowBrowserFallback default true->false: first-party unresolvable url never reaches browser; test asserts launch |
