@@ -1,4 +1,5 @@
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/utils/log_redaction.dart';
 import 'package:collection/collection.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,6 +77,11 @@ class AppLogStorage {
   Future<void> save(AppLogEntry entry) async {
     await _db.insert(kAppLogStorageTable, {
       ...entry.toJson(),
+      // SPEC INV-006. Exceptions can carry a raw request URL even when the log message is safe.
+      // Protect every textual payload at the write boundary, including directly constructed entries.
+      'message': redactLogText(entry.message),
+      'error': entry.error == null ? null : redactLogText(entry.error!),
+      'stackTrace': entry.stackTrace == null ? null : redactLogText(entry.stackTrace!),
       'lastModified': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }

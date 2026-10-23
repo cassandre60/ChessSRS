@@ -1,4 +1,5 @@
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/utils/log_redaction.dart';
 import 'package:collection/collection.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,6 +56,9 @@ class HttpLogStorage {
   Future<void> save(HttpLogEntry httpLog) async {
     await _db.insert(kHttpLogStorageTable, {
       ...httpLog.toJson(),
+      // SPEC INV-006. Every caller, including error updates, crosses this storage boundary.
+      'requestUrl': redactUriForLogging(httpLog.requestUrl).toString(),
+      'errorMessage': httpLog.errorMessage == null ? null : redactLogText(httpLog.errorMessage!),
       'lastModified': DateTime.now().toIso8601String(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -83,7 +87,7 @@ class HttpLogStorage {
       {
         'responseCode': 0,
         'lastModified': DateTime.now().toIso8601String(),
-        'errorMessage': errorMessage,
+        'errorMessage': errorMessage == null ? null : redactLogText(errorMessage),
       },
       where: 'httpLogId = ?',
       whereArgs: [httpLogId],

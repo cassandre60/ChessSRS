@@ -68,24 +68,25 @@ const String _layoutOverflowMarker = '[SRS-LAYOUT-OVERFLOW]';
 /// report a single overflow once per install.
 void Function(FlutterErrorDetails details)? _previousErrorHandler;
 
-/// Reports a layout overflow instead of swallowing it.
+/// Fails a layout overflow instead of swallowing it.
 ///
 /// A `RenderFlex` overflow is a real defect, not a test artefact. Swallowing it
 /// silently hides the whole bug class from every test that uses the shared
-/// scope: the suite cannot fail on a layout overflow, so a broken layout is
-/// invisible to it.
+/// scope: the suite could not fail on a layout overflow, so a broken layout
+/// was invisible to it.
 ///
-/// The suite cannot fail on these yet either: 118 tests across 16 files
-/// overflow today, so turning them into failures is a migration, not a
-/// one-liner. They are printed with a greppable marker instead, so the blind
-/// spot becomes visible in CI output and can be ratcheted down site by site.
+/// It can fail now. The harness was fixed first, so the measurements are
+/// honest: the scope measures text with the app's own theme and fonts (see
+/// [_materialApp] and `test/utils/app_fonts.dart`), and the one test file
+/// whose own fixture overflowed was repaired rather than exempted. A layout
+/// overflow in a widget test is now a red test, with a greppable marker on
+/// the message so the site is still easy to find in CI output.
 ///
 /// Every other error is forwarded to [_previousErrorHandler], so the test
-/// framework still fails the test.
+/// framework fails the test.
 void _reportLayoutOverflow(FlutterErrorDetails details) {
   if (_isRenderFlexOverflow(details)) {
     _printLayoutOverflow(details);
-    return;
   }
   final previous = _previousErrorHandler;
   if (previous == null) {
