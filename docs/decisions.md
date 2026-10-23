@@ -203,3 +203,36 @@ Consequences:
 Revisit when: a daily review reminder is actually built. That feature needs a
 backend we own, and at that point owning the Firebase project stops being
 optional rather than merely preferable.
+
+## D018 — CI runs what a change can break, not a fixed suite
+
+Decision: The `Tests` job classifies the committed diff and skips the Flutter
+toolchain for a change that only touches Markdown under `docs/**`. Merges to
+`main` are meant to go through a merge queue that re-runs both required checks
+against the batched tree.
+
+Reason: under strict branch protection, every merge invalidates every other green
+branch, so a 16-PR wave cost about two hours of wall clock, and each docs PR paid
+a ~7.5-minute Flutter suite for prose that no step reads (of one 449s run: 301s
+unit tests, 63s code generation, 36s analyze, 20s Flutter install).
+
+Consequences:
+
+- The `Tests` check always reports; the fast lane lives *inside* that job, so no
+  stand-in can wear the check's name (the collision closed in #95/#107).
+- The classifier (`.github/scripts/ci-docs-only.sh`) is taken from the base commit
+  and is unit-tested on every PR. The rule is narrow because two test files read
+  files a naive "any Markdown" rule would skip:
+  `test/reachability/enforcement_matrix_test.dart` parses `TEST_STRATEGY.md`, and
+  `test/view/screenshot_capture_test.dart` compares `docs/screenshots/*.png`. Root
+  Markdown and goldens therefore still run the full suite, and any classification
+  failure resolves to it.
+- `gates.yml` keeps G07 PR-time only: a queue group is several PRs with no single
+  label set to read, and a PR cannot be enqueued before its own checks passed.
+- A queued merge cannot carry `--subject`/`--body-file`, so attribution lives in
+  the commit trailers rather than only in the PR body.
+- The merge-queue switch itself is UI-only (no API sets it, verified 2026-10-23),
+  so the workflows were made queue-ready first and the queue is an owner action.
+
+Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
+something other than its batch.
