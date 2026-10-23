@@ -1,7 +1,21 @@
 /// Placeholder for credentials removed from diagnostic output.
 const kRedactedLogValue = '***';
 
-/// Query parameters carrying credentials or authentication identifiers.
+/// Query parameters whose value is a credential or a personal identifier.
+///
+/// This is a denylist rather than an allowlist on purpose. Its opposite —
+/// allowlisting the parameters known to be safe — fails quietly and in the
+/// direction nobody notices: a parameter added later is blanked, the log gets
+/// less informative exactly when a new feature is being debugged, and no test
+/// fails. A denylist keeps the log useful. What stops a new secret-bearing
+/// parameter slipping past this list is review discipline, not automation:
+/// there is no app-wide scan (an earlier classification-guard attempt produced
+/// only false positives and was dropped). So when a credential is put in a
+/// query string, its name must be added here in the same change — and the
+/// sweep is part of every network review.
+///
+/// Add a name when a credential is put in a query string, not when an ordinary
+/// parameter is.
 const Set<String> kSensitiveQueryParameters = {
   'code',
   'email',
@@ -13,12 +27,26 @@ const Set<String> kSensitiveQueryParameters = {
   'username',
 };
 
-/// Routes whose following path segment contains a credential.
+/// Path prefixes whose following segment is a credential, with the reason.
+///
+/// Matched by prefix rather than by guessing "long opaque segment", which would
+/// mangle ordinary paths and make the log useless for the case it exists to
+/// serve.
 const Map<String, String> kSecretBearingPathPrefixes = {
   '/mobile/register/firebase': 'the FCM registration token, a long-lived device credential',
 };
 
-/// Redacts credentials without changing the request that is actually sent.
+/// Returns [uri] with anything that must not be logged replaced by
+/// [kRedactedLogValue].
+///
+/// Applied on the way *into* storage and logging, never to the request that is
+/// sent: the client has to deliver the real one-time code and the real token,
+/// so redacting at the source would break sign-in. What is stored is what has
+/// to be safe.
+///
+/// Only the secret parts are replaced. The path, the remaining parameters and
+/// the host are left alone, because "which request was made, and what came
+/// back" is the whole diagnostic value of the log.
 Uri redactUriForLogging(Uri uri) {
   var segments = uri.pathSegments;
 
