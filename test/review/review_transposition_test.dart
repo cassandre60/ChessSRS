@@ -4,6 +4,8 @@
 import 'dart:math';
 
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/import/pgn_importer.dart';
+import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Review-time transposition support (P-TRANSPOSE): a legal move that matches
@@ -330,6 +332,76 @@ void main() {
       expect(session.reviewStates['dec-a-2']?.repetitionCount, 1);
       expect(result.nextPrompt?.nodeId, 'node-b-nf6');
       expect(result.nextPrompt?.chapterId, 'chapter-b');
+    });
+
+    // A position reached by a different move than the repertoire used to get
+    // there. Chapter A drills 1.Nc3 Nf6 2.e4; chapter B holds the Nimzo-ish
+    // 1.Nf3 Nf6 2.Nc3. After 1.Nc3 Nf6 the two lines sit on *different*
+    // positions (the knight is on c3 in one and f3 in the other), but the
+    // position after 1.Nc3 Nf6 2.Nf3 is the same as the one after
+    // 1.Nf3 Nf6 2.Nc3: the knights are interchangeable.
+    //
+    // So at chapter A's second White move, playing 2.Nf3 reaches chapter B's
+    // position - reached there by 2.Nc3. The position is in scope, so SPEC
+    // INV-065 says the move is graded correct and review continues from that
+    // line. The arrival move differs, which is the whole point of the case.
+    //
+    // The fixture is imported rather than hand-written, so the positions are
+    // the ones the app really stores.
+    ImportResult buildDifferentArrivalRepertoire() {
+      const pgn = '''
+[Event "Nc3 line"]
+
+1. Nc3 Nf6 2. e4 *
+
+[Event "Nf3 line"]
+
+1. Nf3 Nf6 2. Nc3 Nc6 3. g3 *
+''';
+      final imported = importPgn(pgn, studyTitle: 'Different arrival', repertoireSide: Side.white);
+      expect(imported.errors, isEmpty);
+      expect(imported.chapters, hasLength(2));
+      return imported;
+    }
+
+    test('a position reached by a different arrival move is still accepted (INV-065)', () {
+      // SPEC INV-065: a legal move that matches no expected continuation is
+      // graded correct when the position it reaches exists in the active
+      // scope's repertoire tree. The position here is in scope, and the move
+      // that reached it in the repertoire (Nc3) is not the move the user
+      // played (Nf3). The position is what the rule is about.
+      final imported = buildDifferentArrivalRepertoire();
+      final engine = ReviewEngine(clock: clock);
+      final session = engine.createSession(
+        studies: [imported.study],
+        chapters: imported.chapters,
+        decisions: imported.decisions,
+        reviewStates: const {},
+        scope: const ReviewScope.all(),
+        transposeScope: TransposeScope.inScope,
+        random: Random(0),
+      );
+
+      // The first question is chapter A's 1.Nc3.
+      expect(session.currentPrompt?.expectedMoves.first.san, 'Nc3');
+      final first = session.submitMove(from: 'b1', to: 'c3');
+      expect(first.isCorrect, isTrue);
+      // The opponent replies 1...Nf6 and the drill asks for 2.e4.
+      expect(session.currentPrompt?.expectedMoves.first.san, 'e4');
+
+      // The user plays 2.Nf3, which reaches chapter B's position after 2.Nc3.
+      final result = session.submitMove(from: 'g1', to: 'f3');
+
+      expect(
+        result.isCorrect,
+        isTrue,
+        reason: 'the position the move reaches is in scope, so the move is graded correct',
+      );
+      // Review continues from the transposed line: the opponent's Nc6 reply,
+      // then chapter B's own question (2...Nc6 asks for 3.g3).
+      expect(result.autoPlayedMoves.map((m) => m.move.san), ['Nc6']);
+      expect(result.nextPrompt?.expectedMoves.first.san, 'g3');
+      expect(result.nextPrompt?.chapterId, imported.chapters[1].id);
     });
 
     test('a transposition outside the scope stays incorrect', () {
