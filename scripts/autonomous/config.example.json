@@ -1,34 +1,46 @@
 {
+  "_comment": [
+    "THIS REPO'S FLEET CONFIG - the project-local copy (scripts/autonomous/config.json) is",
+    "gitignored on purpose, so this file is what a fresh clone starts from.",
+    "Copy it, then check the two repo-specific things: the candidate globs, and the",
+    "source-to-test mapping. The mapping decides the companion half of the dedup hash,",
+    "so a rule that resolves to nothing makes every audit look stale.",
+    "Verify it once:  python3 scripts/autonomous/ledger.py next --stream 1 --limit 3",
+    "It prints the mapped test for each candidate; a mapped path that does not exist",
+    "means the rule is wrong for this repo."
+  ],
   "base_ref": "origin/main",
   "ledger_path": "docs/AUTONOMOUS_WORK_LEDGER.md",
   "mutant_ledger_path": "docs/AUTONOMOUS_MUTANTS.md",
   "origin_url": null,
-  "setup_cmds": [],
-  "format_check_cmd": ["ruff", "format", "--check", "."],
-  "analyze_cmd": ["ruff", "check"],
-  "analyze_extensions": [".py"],
-  "gate_cmd": null,
-  "test_cmd": ["python3", "-m", "pytest", "-x", "-q"],
+  "setup_cmds": [
+    ["fvm", "flutter", "pub", "get"],
+    ["fvm", "dart", "run", "build_runner", "build", "--delete-conflicting-outputs"]
+  ],
+  "format_check_cmd": [
+    "fvm", "dart", "format", "--output=none", "--set-exit-if-changed", "lib", "test"
+  ],
+  "analyze_cmd": ["fvm", "flutter", "analyze"],
+  "analyze_extensions": [".dart"],
+  "gate_cmd": ["./scripts/gates.sh", "t1"],
+  "test_cmd": ["fvm", "flutter", "test"],
   "test_for_source": [
     {
-      "src": "^src/(?:.*/)?([^/]+)\\.py$",
-      "test": "tests/test_\\1.py"
-    },
-    {
-      "src": "^(?:lib|pkg)/(?:.*/)?([^/]+)\\.py$",
-      "test": "tests/test_\\1.py"
+      "src": "^lib/src/(.*)\\.dart$",
+      "test": "test/\\1_test.dart"
     }
   ],
   "candidates": {
     "A": {
-      "include": ["src/**/*.py", "lib/**/*.py"],
-      "exclude": ["**/__init__.py", "**/conftest.py", "**/migrations/**"],
+      "include": ["lib/src/**/*.dart"],
+      "exclude": ["lib/src/**/*.g.dart", "lib/src/**/*.freezed.dart"],
       "require_test": true,
       "priority_paths": []
     },
     "B": {
-      "include": ["tests/**/*.py", "test/**/*.py"],
-      "exclude": ["**/conftest.py"],
+      "include": ["test/**/*_test.dart"],
+      "exclude": [],
+      "require_test": false,
       "priority_paths": []
     }
   },

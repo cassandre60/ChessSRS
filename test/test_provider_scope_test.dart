@@ -43,7 +43,7 @@ class _Printer {
 }
 
 void main() {
-  testWidgets('the shared scope reports a layout overflow instead of forwarding it', (
+  testWidgets('the shared scope FAILS a layout overflow, and says where it happened', (
     tester,
   ) async {
     final printer = _Printer();
@@ -51,11 +51,17 @@ void main() {
       final app = await makeTestProviderScope(tester, child: _overflowingRow());
       await tester.pumpWidget(app);
 
+      // The overflow reaches the test framework, so the test fails on it: a
+      // layout defect in a widget test is a red test, not a printed line.
+      final error = tester.takeException();
+      expect(error, isNotNull, reason: 'an overflow must fail the test');
       expect(
-        tester.takeException(),
-        isNull,
-        reason: 'an overflow must not reach the test framework, or the suite goes red',
+        error.toString(),
+        contains('A RenderFlex overflowed'),
+        reason: 'the failure must name the class of defect, not something else',
       );
+
+      // ... and the marker still names the site, so it is greppable in CI.
       expect(printer.overflowLines, hasLength(1));
       expect(printer.overflowLines.single, contains('100 pixels on the right'));
       expect(printer.overflowLines.single, contains('test_provider_scope_test.dart:'));
@@ -88,6 +94,8 @@ void main() {
       await tester.pumpWidget(app);
 
       expect(printer.overflowLines, hasLength(1));
+      // The failure reaches the framework once, not once per install.
+      expect(tester.takeException(), isNotNull);
     } finally {
       printer.restore();
     }
