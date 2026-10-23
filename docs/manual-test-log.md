@@ -192,6 +192,43 @@ the field and the button beside the board preview. Then open Settings → Appear
 → Accent, narrow the window to about 240px wide, and check that the four dots are
 all there and that the rightmost one is not cut off.
 
+### 7. The dialog card is wider now, and its actions sit on its edge
+
+**What changed.** Issue #354 measured `SrsDialog` and found its actions
+right-aligned against the dialog's *content column* rather than against the *card*,
+so they stopped short of the card's own padding edge — 84.87 px short on a 390 px
+phone, where the design calls for 24 px. Two shapes of fix were possible; the
+wider-card one was taken (`lib/src/design/srs_dialog.dart`):
+
+- the card's width is now the demo's `.dlg` rule, `min(400px, 100% - 32px)`, and
+  Material's `Dialog` default `minWidth: 280` was dropped to reach it;
+- the actions row is now an `Align` at the end of the card's *content box* rather
+  than a `Wrap` hugging the content column.
+
+**This is a visible change on every dialog in the app**, not a subtle one. On a
+390 px phone the card goes from **280 px to 358 px wide**, and the actions move
+from 85 px short of the card's edge to sitting on the card's 24 px padding. The
+same applies to the rename, delete, FEN, Chess960, picker and log-details dialogs,
+which all use `SrsDialog`. The dialog's *geometry* is asserted by tests; its
+*appearance* is not, because the machine that made the change had no display.
+
+**What the tests prove.** The card takes the full width the rule allows and the
+actions are measured against the card's right padding edge, not the content
+column's - a test that fails on the base code. What they do not prove is how the
+wider card looks, or that a wide body no longer leaves the actions stranded at
+the left of the content.
+
+**What only you can check.** That the wider card reads as one card with its
+actions on the right edge, at each of the three widths: phone, tablet and
+desktop, in light and dark. And that on a dialog with a **wide body** the
+actions still sit at the right, not at the left of the body.
+
+**How to test it.** On Linux desktop, `fvm flutter run -d linux`. Open the study
+board's rename dialog (or any dialog with a body and two actions) and check that
+the actions sit on the card's right padding edge, and that the card is wider than
+it used to be. Then widen the window past 432 px and check the card stops growing
+at 400 px. Repeat at a narrow window to see the actions wrap rather than overflow.
+
 ---
 
 ### 7. Pending review answer cannot repaint a replacement scope (INV-032)
