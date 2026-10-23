@@ -80,19 +80,20 @@ escape loop, after the regression test, SPEC invariant, and red-team case.
    gates**, not the workflow name Gates; `strict` and `enforce_admins` are on and
    no reviews are required. Confirm live settings before changing contexts;
    no direct/force pushes.
-2. Merge queue (enabled 2026-10-23): main requires a merge queue, so PRs are
-   enqueued (`gh pr merge --auto`, or "Merge when ready") instead of merged
-   directly. The queue updates the branch itself and re-runs both required
-   checks against the batched tree, which is why both workflows trigger on
-   `merge_group` and why `gates.yml` resolves its comparison base from the
-   group. A queued merge cannot carry a custom `--subject`/`--body-file`, so it
-   takes the repository's squash settings instead (currently commit-or-PR title
-   and the branch's commit messages) — which is why attribution belongs in the
-   **commit trailers**, as the global agent rule requires, and not only in the
-   PR body: fleet PR bodies are often opened without a footer, while the commit
-   messages carry `Agent:`/`Model:`. Keep `allow_update_branch` on so a behind
-   branch can be updated from the UI instead of by hand. Rolling the queue back
-   is unchecking "Require merge queue"; no workflow change is needed for that.
+2. Merge queue: **not available for this repository** (verified 2026-10-23, and
+   not merely hidden in the UI). Evidence: the classic protection rule for
+   `main` offers no "Require merge queue" option, the rulesets API rejects the
+   rule type with `Invalid rule 'merge_queue'` while accepting other rule types,
+   and GraphQL's `mergeQueue(branch:"main")` is null. So merges stay direct under
+   `strict`: a branch must contain the latest `main` and show both required
+   checks green on that exact head, and a behind branch is synced by hand —
+   `allow_update_branch` is on so that is a UI click rather than a local merge,
+   push and rebuild. Both workflows already trigger on `merge_group` (#407), so
+   if the queue ever becomes available it needs no CI change to turn on. Were it
+   on, a queued merge could not carry a custom `--subject`/`--body-file` and
+   would take the repository's squash settings (commit-or-PR title, branch commit
+   messages), which is where the global rule already puts attribution: in the
+   commit trailers, not only the PR body.
 3. Protected edits need a dedicated spec-change/gate-change PR, no product code,
    and explicit owner consent for that diff before applying gate-approved.
    The executable protected set is `.gates/protected-paths.txt`.
