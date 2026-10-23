@@ -1,10 +1,15 @@
 # Releases
 
+Authority: publishing mechanics, artifact support, version stamping and proof
+workflows. AGENTS §11 owns the decision to release; TEST_STRATEGY owns the
+local-machine budget. See docs/documentation-map.md.
+
 Cutting a release is pushing a tag. Everything else is automatic
 (`.github/workflows/release.yml`).
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 A tag on `main` builds every artifact and publishes a (pre-)release with
@@ -20,7 +25,7 @@ not re-test. `AGENTS.md` §11 is the policy for *whether* to cut one.
 | Linux AppImage | `chesssrs-<tag>-x86_64.AppImage` | Yes. Single-click portable executable for all distributions. |
 | Linux .deb | `chesssrs_<tag>_amd64.deb` | Yes. Native graphical package for Debian/Ubuntu/Mint. |
 | Linux Tarball | `chesssrs-<tag>-linux-x64.tar.gz` | Yes. Portable unpack-and-run archive. |
-| Android | `chesssrs-<tag>-android.apk` / `.aab` | Yes. Signed with permanent developer release keystore from GitHub Secrets. |
+| Android | `chesssrs-<tag>-android.apk` / `.aab` | Shippable only when the permanent release key is configured. release.yml falls back to a throwaway key if its secret is absent; verify signing evidence before calling an artifact shippable. |
 | Checksums | `SHA256SUMS.txt` | Yes. Cryptographic verification for all assets. |
 
 ## Not shipped (and why)
@@ -39,7 +44,7 @@ workflow by hand from the Actions tab (**Actions → Release → Run workflow**)
 or:
 
 ```bash
-gh workflow run Release
+gh workflow run release.yml -R cassandre60/ChessSRS
 ```
 
 This builds the Linux and Android jobs exactly as a real release would. The
@@ -47,6 +52,19 @@ publish job is gated on the run being a tag push (`refs/tags/v…`), so a manual
 run stops after building — you download the artifacts from that run. The
 artifacts are stamped with the version in `pubspec.yaml`, since there is no tag
 to take one from.
+
+## Throwaway Android release proof
+
+`Release proof` (`.github/workflows/release-proof.yml`) is a **separate existing
+workflow**. It always generates a temporary signing key and produces AAB/APK
+for testing only, never a publishable/update-compatible release. It runs on
+manual dispatch or a PR editing that workflow, not on general product PRs.
+Do not confuse it with Release's manual dry-run, which builds all release
+platforms and uses the permanent key when configured.
+
+```bash
+gh workflow run release-proof.yml -R cassandre60/ChessSRS
+```
 
 ## The tag is the only version ledger
 
@@ -99,6 +117,6 @@ under AGENTS.md §11.
 
 ## Local release builds
 
-Never run on a dev machine (`flutter build appbundle/apk --release` OOMs,
-and Gradle cannot run on new JDKs — see AGENTS.md §4). Release proof lives
-in CI only.
+Follow TEST_STRATEGY §2: all release builds/proof run on GitHub runners, not
+the developer's machine. The historical local OOM/JDK incident is archived in
+docs/agent-history.md, not a second budget definition here.

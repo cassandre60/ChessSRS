@@ -47,6 +47,9 @@ python3 "$gates/collect_metrics.py" --out "$metrics_dir/metrics.json"
 python3 "$gates/ratchet_check.py" --baseline .gates/ratchet-baseline.json --current "$metrics_dir/metrics.json" || fail "G10 ratchet"
 rm -rf "$metrics_dir"
 
+step "G13 vendored skill drift"
+python3 "$gates/vendor_drift_check.py" || fail "G13 vendored skill drift (scripts/autonomous/ diverged from its pinned upstream)"
+
 [[ "$TIER" == "t1" ]] && { echo "t1 ok"; exit 0; }
 
 # ---- t2 ---------------------------------------------------------------------------------
