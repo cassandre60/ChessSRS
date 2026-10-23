@@ -77,8 +77,10 @@ Reference-project behavior does not override the accepted local contract.
 **TEST_STRATEGY §2 is the single local-machine budget:** narrow single-worker
 tests, one final affected-file run, one analysis after the last edit; full
 suites and release builds belong to CI. No local wide-suite/watch/offline
-exception. Markdown-only work needs no Flutter setup/codegen.
-GATES specifies the post-commit fast check and required evidence.
+exception. Markdown-only work needs no Flutter setup/codegen, and CI takes the
+docs-only fast lane for a diff that is *only* Markdown under `docs/**`; root
+Markdown (including `TEST_STRATEGY.md`, which a test parses) still runs the full
+suite. GATES specifies the post-commit fast check and required evidence.
 
 ### Isolation: one worktree per task
 
@@ -103,6 +105,13 @@ follow CLAUDE's dependency/codegen setup; skip it for docs-only work.
   checkout rather than writing into it.
 - Before acting on a shared remote branch/PR, fetch/re-read its live tip,
   state and head SHA; integrate moved tips, never force them away.
+- Main requires a merge queue: enqueue with `gh pr merge <n> --auto --squash`
+  instead of merging directly. The queue updates the branch itself and re-runs
+  the required checks against the batched tree, so there is nothing to hand-sync
+  to get past "behind" and nothing merges until the batch is green. A queued
+  merge takes its message from the repository's squash settings, not from
+  `--subject`/`--body-file`, so keep the `Agent:`/`Model:` trailers in the commit
+  message: they are the part that survives, not the PR body.
 - Disclose overlapping subsystem work before starting. Worktrees expose
   conflicts; they do not resolve design disagreements.
 - Push only when explicitly authorized by the user/session instructions.
