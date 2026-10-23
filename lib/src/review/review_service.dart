@@ -612,8 +612,12 @@ class ReviewService {
       )).where((d) => chapterIds.contains(d.chapterId)).toList();
     } else if (scope.openingFamily != null) {
       final chapterOpenings = preloadedChapterOpenings ?? await repository.getChapterOpenings();
+      // The scope's own key, not an exact comparison: the summary counts an
+      // opening by its normalized name, and the session has to queue the same
+      // chapters the summary counted (INV-030).
+      final wantedOpening = ReviewScope.openingKey(scope.openingFamily!);
       final matchingChapterIds = chapterOpenings.entries
-          .where((e) => e.value?.trim() == scope.openingFamily!.trim())
+          .where((e) => ReviewScope.openingKey(e.value ?? '') == wantedOpening)
           .map((e) => e.key)
           .toSet();
 
@@ -979,9 +983,13 @@ class ReviewService {
     List<RepertoireDecision>? preloadedDecisions,
   ]) async {
     final activeStudyIds = studies.where((s) => s.isActive).map((s) => s.id).toSet();
-    final wanted = openingFamily.trim();
+    final wanted = ReviewScope.openingKey(openingFamily);
     final matchingChapterIds = allChapters
-        .where((c) => (c.opening?.trim() ?? '') == wanted && activeStudyIds.contains(c.studyId))
+        .where(
+          (c) =>
+              ReviewScope.openingKey(c.opening ?? '') == wanted &&
+              activeStudyIds.contains(c.studyId),
+        )
         .map((c) => c.id)
         .toList();
     if (matchingChapterIds.isEmpty) return const [];

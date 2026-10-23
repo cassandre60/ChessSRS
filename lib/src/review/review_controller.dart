@@ -378,6 +378,16 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   @visibleForTesting
   bool? get prewarmedIsCheck => _prewarmedIsCheck;
 
+  /// The canonical ids already counted toward today's displayed review count.
+  ///
+  /// SPEC INV-031 counts distinct positions, so the controller has to know
+  /// *which* positions it has counted, not only how many. Replaced from the
+  /// store at every load, so a position reviewed in an earlier session today is
+  /// already in it, and grown as this session counts new ones. Replaced rather
+  /// than merged: a load can land on a new day, and yesterday's ids must not
+  /// suppress today's first count.
+  final Set<String> _countedToday = {};
+
   /// Bumped by every request that establishes a review session.
   ///
   /// Loading a scope reads the studies, chapters, decisions and review states it needs, so it
@@ -459,6 +469,36 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     return (maxDailyReviews - reviewedCount).clamp(0, maxDailyReviews);
   }
 
+  /// The daily count after [result] completed [canonicalId] (SPEC INV-031).
+  ///
+  /// Distinct positions reviewed today count once each, and the screen shows
+  /// the same number the day's allowance is enforced against. The rule follows
+  /// the persisted one exactly, because the persisted one *is* the enforced
+  /// one: a position counts when the session wrote an event for it, and never
+  /// twice.
+  ///
+  /// So a lapse counts the position (its event is the first one for it today),
+  /// the reguess that follows writes no event and adds nothing further, and a
+  /// position already counted — earlier today, in this session or an earlier
+  /// one — is not counted again. A first-try success writes an event and
+  /// counts the position once, the same as a lapse does.
+  ///
+  /// Practice rehearsals are not counted: they write no event, and the
+  /// repository total they are displayed against only ever contains persisted
+  /// SRS answers.
+  int _dailyCountAfter(
+    ReviewScreenState currentState,
+    ReviewStepResult? result,
+    String? canonicalId,
+  ) {
+    if (currentState.isPracticeMode) return currentState.dailyReviewedCount;
+    if (result?.event == null) return currentState.dailyReviewedCount;
+    if (canonicalId == null || !_countedToday.add(canonicalId)) {
+      return currentState.dailyReviewedCount;
+    }
+    return currentState.dailyReviewedCount + 1;
+  }
+
   /// How many never-presented positions the session may still introduce today
   /// (INV-068). Null disables the cap, which is the practice-mode and
   /// unlimited-settings case.
@@ -529,7 +569,16 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
   }) async {
     final maxDailyReviews = ref.read(studyPreferencesProvider).maxDailyReviews;
     final now = ref.read(clockProvider).now();
-    final dailyReviewedCount = await _repository.getTodayReviewedPositionsCount(now);
+    // The identities, not just the number: a position already counted today —
+    // in this session or an earlier one — must not be counted again (INV-031).
+    final countedToday = await _repository.getTodayReviewedPositionIds(now);
+    // Replace, never merge. A load can land on a new day, and a set that still
+    // held yesterday's ids would refuse to count a position's first answer
+    // today (INV-031 counts the day, not the controller's lifetime).
+    _countedToday
+      ..clear()
+      ..addAll(countedToday);
+    final dailyReviewedCount = countedToday.length;
 
     final remainingQuota = _remainingQuotaFor(mode, dailyReviewedCount);
 
@@ -1403,13 +1452,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // Counted on completion, not on a first-try success. A position answered right only after a
     // lapse is still one position reviewed today, and the session's own quota count includes it —
     // counting it here too is what keeps the number on screen equal to the one being enforced.
-    // This cannot double-count: a prompt answered correctly has already advanced, so it cannot
-    // complete a second time. Practice rehearsals are not counted: the repository total they are
-    // displayed against only ever contains persisted SRS answers (INV-031), so counting them
-    // here would drift the screen away from it until the next reload.
-    final updatedDailyCount = currentState.isPracticeMode
-        ? currentState.dailyReviewedCount
-        : currentState.dailyReviewedCount + 1;
+    final updatedDailyCount = _dailyCountAfter(
+      currentState,
+      result,
+      currentState.currentPrompt?.decision.canonicalId,
+    );
 
     // In Practice Mode under dynamic repertoire mode: check if this was an unreviewed, un-unlocked line
     ({String decisionId, String chapterId, String moveSan})? pendingUnlock;
@@ -1531,6 +1578,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
     if (move is! NormalMove) return null;
 
+    // Persistence can finish after a scope/mode reload. Keep the answer durable,
+    // but only its original generation may publish a verdict or start animation.
+    final generation = _generation;
     final from = move.from.name;
     final to = move.to.name;
     final promotion = move.promotion?.letter;
@@ -1557,6 +1607,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       if (isRetrying) {
         // Reguess attempt after previous lapse
         final result = await _service.retryMove(from: from, to: to, promotion: promotion);
+        if (!ref.mounted || generation != _generation) return result;
         if (result.isCorrect) {
           await _handleCorrectAdvancement(
             currentState: currentState,
@@ -1570,6 +1621,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
               feedback: ReviewFeedback.incorrect,
               expectedMove: result.expectedMoves.firstOrNull,
               isLapseAcknowledged: false,
+              // The lapse writes the event that counts the position today, so
+              // the day's count moves with it (INV-031).
+              dailyReviewedCount: _dailyCountAfter(
+                currentState,
+                result,
+                currentState.currentPrompt?.decision.canonicalId,
+              ),
               revealedComment: _resolveComment(
                 currentState.currentPrompt,
                 result.expectedMoves.firstOrNull,
@@ -1582,6 +1640,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
       // Initial move attempt on this prompt
       final result = await _service.submitMove(from: from, to: to, promotion: promotion);
+      if (!ref.mounted || generation != _generation) return result;
 
       if (result.isCorrect) {
         await _handleCorrectAdvancement(
@@ -1597,6 +1656,13 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
             feedback: ReviewFeedback.incorrect,
             expectedMove: result.expectedMoves.firstOrNull,
             isLapseAcknowledged: false,
+            // The lapse writes the event that counts the position today, so
+            // the day's count moves with it (INV-031).
+            dailyReviewedCount: _dailyCountAfter(
+              currentState,
+              result,
+              currentState.currentPrompt?.decision.canonicalId,
+            ),
             revealedComment: _resolveComment(
               currentState.currentPrompt,
               result.expectedMoves.firstOrNull,
@@ -1608,8 +1674,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
       return result;
     } catch (e) {
-      // If persistence fails, restore board position and state to pre-move checkpoint
-      state = AsyncData(currentState);
+      // The service restores the answered session on failure. Restore its board
+      // only if it still owns the screen; a newer load must remain untouched.
+      if (ref.mounted && generation == _generation) state = AsyncData(currentState);
       rethrow;
     } finally {
       _isProcessingMove = false;
