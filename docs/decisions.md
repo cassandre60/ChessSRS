@@ -2,6 +2,10 @@
 
 This file records decisions that should not be silently reversed during implementation.
 
+Decision history/rationale, not a competing rulebook: current normative homes
+are in docs/documentation-map.md. Supersession is explicit; dated context is
+not a current feature/status assertion.
+
 ## D001 — Review is the primary application
 
 Decision: The app is Review-first. There is no conventional dashboard/product hierarchy.
@@ -151,6 +155,11 @@ presentation-layer change only; it does not affect scheduling, persistence,
 import, or any domain logic.
 
 ## D017 — Keep Firebase, pointed at Lichess, until reminders are actually built
+
+**Superseded 2026-09-30:** Option B removed Firebase, Crashlytics, FCM and local
+notifications (CUT_PROPOSALS C1/C2 and cut 22). This entry is historical only;
+it does not authorize restoration. No SRS reminders currently ship. A future
+local reminder design does not inherently require a cloud backend/Firebase.
 
 Decision: keep Firebase and notifications (C1, C2 in `CUT_PROPOSALS.md`). Do not
 strip them, and do not create a new Firebase project yet. `lib/firebase_options.dart`
