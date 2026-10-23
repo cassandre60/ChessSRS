@@ -1,75 +1,115 @@
 # Verification & Testing Strategy
 
-This document defines **how the invariants and properties in `QUALITY.md`
-are mechanically proven** through automated tests, static analysis, quality
-gates — and mandatory runtime validation.
+Authority: verification workflow and methods. `SPEC.md` owns the per-invariant
+oracle/covering-file list; `GATES.md` owns gate definitions and change-class
+evidence. See `docs/documentation-map.md`.
 
-> Adapted to the Lichess Mobile foundation (Phase 1+). Test file paths will be
-> re-established as the new suite is built; the *enforcement matrix* below is
-> the durable contract. Legacy tests (`legacy/pre-reset`) are contract
-> references — mine them for intended behavior, translate valuable cases,
-> never copy tests that only encode the old architecture.
+## 1. What each kind of evidence proves
 
----
+- Deterministic domain tests: fixed Clock and seeded Random exercise schedule,
+  queue, branch and graph behavior without a widget tree.
+- Import/export tests: tree structure, legal adapters, quarantine and round trips.
+- Persistence tests: real sqflite-FFI database, close/reopen durability, upgrade
+  fixtures, write-scope/argument-count assertions, failure rollback.
+- Provider/service tests: actual orchestration over repository/HTTP boundaries.
+  Follow the HTTP-mocking and board-helper patterns in `CLAUDE.md`.
+- Widget tests: rendered controls, board interaction, semantics and viewports;
+  they cannot prove a physical speaker, haptic motor or production OAuth flow.
+- Property/differential tests: laws and equivalence, not just happy examples.
+  Mutation and fail-to-pass evidence assess whether tests detect wrong code.
+- G05: invariant IDs are cited, **not** that the cited test proves the claim.
+- Reachability tests walk the import/export graph from lib/main.dart and reject
+  new unreachable source against their baseline. They run as part of G04;
+  their source/baseline, not this document, defines the executable ratchet.
 
-## 1. Quality Invariant Enforcement Matrix
+Legacy tests (`legacy/pre-reset`) are behavioral references only. Translate
+useful contracts into the current architecture; do not restore legacy code.
 
-| Invariant / Property in `QUALITY.md` | Enforcement Mechanism | Test Target |
+### Enforcement navigation index (not a second contract)
+
+The existing `test/reachability/enforcement_matrix_test.dart` reads this table,
+checks named paths exist and rejects an emptied index. Retain it for navigation:
+the authoritative requirements and exact oracle/covering lists remain in SPEC
+or QUALITY; representative targets below do not promise exhaustive proof.
+
+| Invariant / property | Authoritative contract | Representative enforcement target |
 |---|---|---|
-| **Layer Independence & Clean Architecture** | Static analysis (`fvm flutter analyze`, zero warnings) + import-boundary gate G03 (`.gates/banned-apis.json`) + in-suite boundary test | whole project; the domain layer is `lib/src/domain/`; boundary test is `test/gates/domain_boundary_test.dart` |
-| **Single Chess Representation (dartchess only)** | Dependency review + analyzer import linting | `pubspec.yaml`, domain & application code |
-| **Legal Move Validation & SAN/UCI** | dartchess itself (already upstream-tested); our adapter unit tests | `test/import/pgn_importer_test.dart` |
-| **PGN Multi-game & Variation Preservation** | Unit tests of import pipeline (dartchess `PgnParser` → Study/Chapter/tree) | `test/import/pgn_importer_test.dart` |
-| **Study Tree Normalization & Error Reporting** | Integration tests incl. malformed-PGN quarantine | `test/import/pgn_importer_test.dart`, `test/import/chapter_orientation_test.dart` |
-| **SRS Interval Growth & Lapse Recovery** | Deterministic unit tests with injected `Clock` + clock rule in G03 (no `DateTime.now` in scheduling/review paths) | `test/domain/scheduler_test.dart`, `test/domain/chess_fsrs_scheduler_test.dart`, `test/gates/domain_boundary_test.dart` |
-| **Repertoire Answer Validation & Persistence** | Service tests over repository (in-memory + sqflite) | `test/review/review_service_test.dart` |
-| **Auto-Traversal & No Permanent Exclusion** | Deterministic engine tests (fixed clock) | `test/review/review_engine_test.dart` |
-| **Review Scene Rendering & Interaction** | Widget tests using Lichess `test_helpers.dart` board helpers | `test/view/review/review_screen_test.dart` |
-| **Incremental Persistence** | Repository tests asserting write scope | `test/persistence/sqlite_study_repository_test.dart` |
-| **Move Validation Latency (< 16 ms, §4.1)** | Wall-clock assertion on the median of a graded-move batch, sample list printed on failure | `test/review/move_latency_test.dart` |
-| **Spec-to-Test Traceability (SPEC.md)** | Every `INV-xxx` cited by at least one test; tests cite only real IDs (gate G05) | `SPEC.md` ↔ `test/` suites via SPEC coverage comments |
-| **No Unreachable Source** | Import/export graph walk from `lib/main.dart`; new unreachable files fail, ratcheted against a baseline | `test/reachability/reachability_test.dart` |
-| **Complete Mandatory Quality Gate** | Executable script | `verify` |
+| Domain purity and I/O | SPEC INV-040/042 | `test/gates/domain_boundary_test.dart` |
+| Single chess representation | QUALITY §1.2 | `test/import/pgn_importer_test.dart` (adapters); dependency review |
+| Local-first review | QUALITY §1.3 | `test/review/review_service_test.dart` (local service path); architecture review |
+| Variation preservation | SPEC INV-010 | `test/import/pgn_importer_test.dart` |
+| Malformed input and starting positions | SPEC INV-011/012 | `test/import/pgn_importer_test.dart` |
+| Chapter orientation | SPEC INV-013 | `test/import/chapter_orientation_test.dart` |
+| Position identity and memory sharing | SPEC INV-015/016/017 | `test/domain/position_knowledge_state_test.dart` |
+| Scheduling and time injection | SPEC INV-024/025/026/041 | `test/domain/scheduler_test.dart`, `test/domain/chess_fsrs_scheduler_test.dart` |
+| Repertoire grading and lapse recovery | SPEC INV-020/021/033/065 | `test/review/review_engine_test.dart`, `test/review/review_transposition_test.dart` |
+| Traversal and practice | SPEC INV-022/023 | `test/review/review_engine_test.dart` |
+| Durability, incremental writes and upgrades | SPEC INV-001/002/005/069 | `test/persistence/sqlite_study_repository_test.dart`, `test/persistence/migration_fixtures_test.dart` |
+| Move latency | QUALITY §4.1, SPEC INV-050; limits in §3 below | `test/review/move_latency_test.dart` |
+| Review interaction, semantics and annotations | SPEC INV-060/062/063 | `test/view/review/review_screen_test.dart` |
+| Invariant citation coverage | GATES G05 | `scripts/gates/spec_trace_check.py` |
+| Source reachability | GATES G04; executable source/baseline | `test/reachability/reachability_test.dart` |
 
-## 2. Test Suite Organization (target)
+## 2. Local versus remote verification
 
-```text
-test/
-├── domain/          # pure Dart: entities, scheduler, review engine (no Flutter)
-├── import/          # PGN → study normalization, variation preservation, errors
-├── persistence/     # sqflite store (sqflite_common_ffi in CI), durability
-├── review/          # review session engine + provider-level tests
-└── view/            # review scene widget tests (board helpers, feedback states)
-```
+### Local development (bounded)
 
-New tests are written **with the contract** (test-first or test-with) per the
-development loop in `AGENTS.md`.
+- Iterate with one explicitly named test in the affected file:
+  `fvm flutter test <file> --plain-name '<test name>' --concurrency=1`.
+- Run the affected full file once at the end, with `--concurrency=1`.
+  A base-code fail-check counts as the second file run; then stop. Prefer an
+  isolated scratch copy over altering another checkout's work.
+- Format touched hand-written Dart files and run one targeted
+  `fvm flutter analyze <touched paths>` after the last edit.
+- Do not run adjacent files, whole directories, a full suite, `./verify`,
+  multi-worker tests or watch-mode tests locally. No offline/pre-push exception:
+  report full verification pending when CI is unavailable.
+- Run heavy commands serially. Skip Flutter dependency/codegen/build work for
+  Markdown-only changes; validate diff, paths, contracts and fast gates instead.
+- Release builds run on GitHub runners only, never on the developer's machine.
 
-## 3. Verification Levels
+### CI and fast gates
 
-### Level 1: Targeted Brick Check
-During development of a specific function or contract, run only the targeted
-test file:
-```bash
-fvm flutter test test/domain/scheduler_test.dart
-```
+The `Tests` job in `.github/workflows/test.yml` runs code generation, format,
+analyze, full Flutter tests and release/nightly script checks. `verify` is a
+full-suite convenience wrapper, not literally the command CI calls.
+The `T1 fast gates` job in `.github/workflows/gates.yml` uses trusted-base
+scripts/config for referee checks, traceability and ratchets; the local wrapper
+uses checkout copies, so its result is not independent review.
 
-### Level 2: Full Local Quality Gate (`./verify`)
-Before committing or marking a task complete:
-```bash
-./verify
-```
-executing `fvm flutter analyze` (zero warnings) + `fvm flutter test`.
+Markdown-only PRs **do trigger both workflows** under their current filters;
+the full remote suite is the accepted cost of reporting required checks. Read
+the live workflow paths rather than assuming every push triggers both lanes.
+Required check names and evidence/approval policy are in `GATES.md`.
+Run the fast gates on the committed branch as required there; do not interpret
+an empty committed diff as proof of an uncommitted change.
 
-### Level 3: Runtime Validation (MANDATORY for user-visible work)
-Automated green is **not** evidence of a working app (this project has been
-burned by exactly that before). For every user-visible milestone:
-1. `./verify` passes.
-2. `fvm flutter run -d linux` (or attached device) and manually exercise the
-   affected feature.
-3. Visually inspect the UI (screenshots for UI work).
-4. Only then record the milestone complete in `IMPLEMENTATION_PLAN.md`.
+## 3. Performance evidence and limits
 
-### Level 4: Continuous Integration
-GitHub Actions runs `./verify` on every PR and push to `main` in a clean
-environment.
+`test/review/move_latency_test.dart` times awaited service submissions including
+incremental persistence on a small seeded path. It asserts median **<16 ms** and
+prints p90/max. It is neither a pinned-device frame measurement nor a tail
+latency guarantee. QUALITY §4.1 and INV-050 retain their requirements; their
+scope mismatch is recorded as Q12 in `docs/open-questions.md`.
+
+For performance changes, report dataset, mode, warmups, sample spread and
+harness; prove equivalence. Read `docs/performance-handoff.md` and the linked
+measurement brief before relying on earlier timings. Do not optimize from a
+single noisy median or treat session-start timing as move-response timing.
+Planned pinned-runner budgets live in GATES_PLAN, not as already-running gates.
+
+## 4. Runtime acceptance (user-visible work)
+
+1. Confirm CI evidence for the change's current SHA, not the latest unrelated run.
+2. Launch the real app (`fvm flutter run -d linux` or attached device), exercise
+   the affected flow, and quit. A widget capture is not this walkthrough.
+3. For visual changes capture the affected screens at phone, tablet and desktop
+   widths in light/dark themes; compare against `design/reference/index.html` at
+   matching sizes/themes.
+4. Record date, commit, actions and result with the delivery entry in
+   IMPLEMENTATION_PLAN. Record uncovered physical/device checks in
+   `docs/manual-test-log.md` in the shipping PR. Mark unperformed checks
+   unverified, not completed. Product decisions belong in `docs/open-questions.md`.
+
+Wait for remote runs with
+`gh run watch <id> -R cassandre60/ChessSRS --exit-status`, not polling loops.

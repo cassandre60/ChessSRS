@@ -1,81 +1,52 @@
-# Quality & Engineering Invariants
+# Quality & Engineering Constraints
 
-This document defines the **non-negotiable properties, constraints, and
-invariants** that must be maintained across all implementations, refactorings,
-and feature additions in Chess Repertoire SRS.
+Authority: engineering constraints not already specified by a numbered invariant.
+`SPEC.md` owns exact behavioral invariants and their test links;
+`ARCHITECTURE.md` owns module arrangement. See `docs/documentation-map.md`.
 
-> Layer names refer to the Lichess-Mobile-foundation architecture described in
-> `ARCHITECTURE.md` (presentation / application / our domain / infrastructure).
-> The invariants themselves are implementation-agnostic and carried over
-> verbatim from the product reset.
-
----
+The section numbers below are retained for older references. A pointer here is
+not a second definition: follow its normative home.
 
 ## 1. Architectural Invariants
 
-1. **Layer Independence**:
-   - The Presentation layer (Lichess `view/` + our review scene) must never
-     directly interact with database tables, raw storage blobs, or chess
-     library internals; it talks to application providers only.
-   - Our Domain layer must remain pure Dart with **zero imports** of Flutter
-     widget libraries (`package:flutter/...`), chessground, or sqflite.
-2. **Single Chess Representation**:
-   - `dartchess` is the only chess rules engine. Never introduce a competing
-     chess library or a second internal representation of moves, positions, or
-     games. chessground is a presentation consumer of dartchess state.
-3. **Local-First Zero-Latency Review**:
-   - The critical review loop (`user move submission -> move validation ->
-     SRS update -> board update`) must execute entirely in memory and locally.
-   - Network calls are strictly forbidden on the critical path of move
-     submission and board rendering.
-4. **Advisory Engine Isolation**:
-   - If an engine analysis pass is introduced (e.g. at import), it must run
-     asynchronously outside the review loop and remain purely advisory. An
-     engine evaluation must never veto or block the user's repertoire import.
-
----
+1. **Layer independence**: presentation may consume domain value types but
+   orchestrates use cases through application providers. It must not directly
+   access database tables, persistence repositories or raw storage blobs.
+   Domain purity and I/O restrictions: SPEC INV-040/042.
+2. **Single chess representation**: dartchess is the sole rules engine and
+   move/position representation; chessground renders it. Do not introduce a
+   competing chess library or reimplement move generation.
+3. **Local-first review**: no network call is permitted on move submission,
+   grading, SRS update or board rendering. Pure computation is in memory;
+   local incremental persistence is asynchronous and must meet the durability
+   contract (SPEC INV-001/002). "Local" does not mean "no SQLite writes".
+4. **Advisory engine isolation**: engine work is asynchronous and outside the
+   review loop. An optional import-time assessment may warn but never veto or
+   block an import. Repertoire grading: SPEC INV-020/065.
 
 ## 2. Domain & Chess Invariants
 
-1. **Repertoire Correctness over Engine Truth**:
-   - Correctness during Review is strictly defined by the user's repertoire
-     material, not engine evaluation.
-   - Opponent inaccuracies and mistakes are valid repertoire content (intended
-     to teach prepared punishments).
-2. **Variation Preservation**:
-   - PGN import must preserve recursive annotation variations (RAVs) as
-     first-class sibling branches under their respective parent nodes.
-   - Variations must never be flattened or silently deleted during parsing or
-     conversion.
-3. **Position Identity Integrity**:
-   - A position's identity must account for piece placement, active side to
-     move, castling availability, and en-passant target square (normalized
-     4-field FEN; the "clean FEN").
-4. **Long-Term Retrieval (No Permanent Exclusion)**:
-   - A learned move that is auto-traversed during non-due intervals is **never
-     permanently excluded** from review. It must become an active question
-     again once its scheduled due date arrives.
-
----
+1. Repertoire correctness: SPEC INV-020, including the configurable
+   transposition exception INV-065.
+2. Variation preservation: SPEC INV-010.
+3. Position identity and shared memory: SPEC INV-015/016/017/030;
+   storage/key composition is described in ARCHITECTURE §5.
+4. Long-term retrieval (no permanent exclusion): SPEC INV-022.
 
 ## 3. Reliability & Error Invariants
 
-1. **Graceful Degradation over Silent Corruption**:
-   - Malformed PGN moves or invalid headers must be quarantined with
-     structured error messages (containing chapter title and move index)
-     rather than crashing the importer or silently creating broken position
-     graphs.
-2. **Deterministic Time Testing**:
-   - All time-dependent domain logic (SRS scheduling, due item queries) must
-     accept an abstract `Clock` instance so test suites can run
-     deterministically without depending on system wall-clock time.
-
----
+1. Malformed-input quarantine: SPEC INV-011/012.
+2. Scheduling/review time comes through Clock: SPEC INV-024/041. This does
+   not claim that entity-construction timestamps throughout the entire domain
+   are already injected; review/scheduling paths are the guarded boundary.
 
 ## 4. Performance Invariants
 
-1. **Move Response Time**: Local move legality validation and repertoire
-   lookup must complete in **< 16 milliseconds** (within a single display
-   frame).
-2. **Incremental State Writes**: Review state updates must be persisted
-   incrementally without rewriting the entire study tree on every move.
+1. **Move response time**: local legality validation and repertoire lookup must
+   complete in **<16 ms**. SPEC INV-050 additionally describes a graded answer
+   including persistence on its reference path. The current oracle measures
+   a batch median, not every frame on every device (TEST_STRATEGY §3).
+   This is not a session-start/import budget. The conflicting scope of these
+   claims awaits a decision in `docs/open-questions.md` Q12; neither bound is
+   relaxed by this documentation change.
+2. Incremental state writes: SPEC INV-002.
