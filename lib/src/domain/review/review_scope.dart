@@ -41,6 +41,15 @@ class ReviewScope {
   /// `all()`, and nothing the user reached by tapping.
   final Side? side;
 
+  /// The key two opening names are compared by.
+  ///
+  /// This is the scope's own definition of "the same opening family", and it
+  /// is the one the summary counts with. The service's prefilters have to use
+  /// the same key: a scope that counts a position in its summary but queues
+  /// nothing for it reports work it will never ask (INV-030).
+  static String openingKey(String name) =>
+      name.toLowerCase().replaceAll('defence', 'defense').trim();
+
   bool matches({
     required String studyId,
     required String chapterId,
@@ -50,8 +59,7 @@ class ReviewScope {
     if (this.studyId != null && this.studyId != studyId) return false;
     if (this.chapterId != null && this.chapterId != chapterId) return false;
     if (this.openingFamily != null &&
-        (openingFamily?.toLowerCase().replaceAll('defence', 'defense').trim() ?? '') !=
-            this.openingFamily!.toLowerCase().replaceAll('defence', 'defense').trim()) {
+        openingKey(openingFamily ?? '') != openingKey(this.openingFamily!)) {
       return false;
     }
     // A null `side` means the caller's chapter was unresolvable, which is not the

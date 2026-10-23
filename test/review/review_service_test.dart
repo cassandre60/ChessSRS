@@ -327,6 +327,68 @@ void main() {
       },
     );
 
+    test('an opening scope queues the same material its summary counts (INV-030)', () async {
+      // SPEC INV-030: `opening()` aggregates across studies with name
+      // normalization. The summary and the session have to agree on what
+      // "the same opening" means: a scope that reports a due count and then
+      // queues nothing leaves the user on an empty board with a number on it.
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+      final service = ReviewService(repository: repo, clock: clock);
+
+      try {
+        const study = Study(id: 's_case', title: 'Case Variant');
+        await repo.saveStudy(study);
+
+        final chapter = Chapter.create(
+          studyId: study.id,
+          sourceOrder: 0,
+          opening: 'Sicilian Defense',
+        );
+        await repo.saveChapter(chapter);
+
+        final decision = RepertoireDecision.create(
+          studyId: study.id,
+          chapterId: chapter.id,
+          nodeId: 'n1',
+          expectedMoves: const [RepertoireMove(from: 'c7', to: 'c5', san: 'c5')],
+        );
+        await repo.saveDecision(decision);
+
+        // Due, so the summary counts it and the session should queue it.
+        await repo.saveReviewState(
+          ReviewState(
+            decisionId: decision.canonicalId,
+            repetitionCount: 1,
+            nextDueAt: clock.now().subtract(const Duration(hours: 1)),
+          ),
+        );
+
+        // The scope's name differs from the stored one only in case, which
+        // the scope's own matching treats as the same family.
+        const scope = ReviewScope.opening('sicilian defense');
+
+        final studies = await repo.getAllStudies();
+        final summary = await service.getDueSummary(studies: studies, scope: scope);
+        expect(
+          summary.totalDueCount,
+          1,
+          reason: "the summary counts the position through the scope's normalization",
+        );
+
+        final session = await service.startSession(scope: scope);
+        expect(
+          session.remainingDueCount,
+          1,
+          reason:
+              'the session must queue what the summary counts, or the board is empty '
+              'while the top bar shows a due position',
+        );
+      } finally {
+        await db.close();
+      }
+    });
+
     test(
       'dynamic repertoire mode: learned lines mastered + unreviewed dormant lines report 0 due',
       () async {

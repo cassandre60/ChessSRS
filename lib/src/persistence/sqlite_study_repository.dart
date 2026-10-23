@@ -1199,6 +1199,23 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<Set<String>> getTodayReviewedPositionIds(DateTime now) async {
+    // The same boundary and the same DISTINCT as the count above, so the two
+    // cannot disagree: a caller that shows the count needs the identities to
+    // decide what it has already counted (INV-031).
+    final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+    final rows = await _db.rawQuery(
+      '''
+      SELECT DISTINCT decisionId
+      FROM $kTableSrsReviewEvent
+      WHERE whenTimestamp >= ?
+      ''',
+      [startOfDay],
+    );
+    return {for (final row in rows) row['decisionId']! as String};
+  }
+
+  @override
   Future<int> getTodayIntroducedPositionsCount(DateTime now) async {
     // `firstReviewedAt` rather than `lastReviewedAt` (INV-068): a position is
     // introduced once, so a position reviewed three times today spends one unit
