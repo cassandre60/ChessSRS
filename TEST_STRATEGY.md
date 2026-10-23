@@ -87,9 +87,12 @@ simply skips the Flutter steps, because no step reads those files. Root
 Markdown is deliberately excluded — `test/reachability/enforcement_matrix_test.dart`
 parses `TEST_STRATEGY.md`, so an edit to it (or to SPEC/GATES/QUALITY/AGENTS), a
 `docs/screenshots` golden, or any code path still runs the full suite. The
-`T1 fast gates` lane is unchanged and cheap. Merges go through main's merge
-queue, which re-runs both required checks against the batched tree
-(`merge_group`), so "green" still means "green exactly as it lands".
+`T1 fast gates` lane is unchanged and cheap. Merges are direct: `strict`
+requires the branch to contain the latest `main` and both required checks to be
+green on that exact head, and a behind branch is synced by hand
+(`allow_update_branch` makes it a UI click). No merge queue is offered for this
+repository (verified 2026-10-23), though both workflows already trigger on
+`merge_group` if one ever is.
 Required check names and evidence/approval policy are in `GATES.md`.
 Run the fast gates on the committed branch as required there; do not interpret
 an empty committed diff as proof of an uncommitted change.
