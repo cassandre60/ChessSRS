@@ -573,24 +573,25 @@ void main() {
     });
 
     test('a transposition of the same position converges on one id', () {
-      // Both lines reach the position after 1.e4 e5 2.Nf3 Nc6, where Black must answer, by a
-      // different move order. That is one question asked twice, so it gets one memory item.
+      // SPEC INV-016. After four plies both lines ask White for Bb5 from the same position.
+      // Selecting Black's earlier Nc6 from these White repertoires compared two empty sets and
+      // passed even when every imported position had a different memory id.
       const viaE4 = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 *';
       const viaNf3 = '1. Nf3 Nc6 2. e4 e5 3. Bb5 a6 *';
 
-      // The shared decision is the one offering the ...Nc6 answer.
-      Iterable<String> idsOffering(String uci) sync* {
-        final result = importPgn(uci);
+      Iterable<String> idsOffering(String pgn) sync* {
+        final result = importPgn(pgn, repertoireSide: Side.white);
+        expect(result.errors, isEmpty);
         for (final d in result.decisions) {
-          if (d.expectedMoves.any((m) => m.uci == 'b8c6')) yield d.canonicalId;
+          if (d.expectedMoves.any((m) => m.uci == 'f1b5')) yield d.canonicalId;
         }
       }
 
-      expect(
-        idsOffering(viaE4).toSet(),
-        equals(idsOffering(viaNf3).toSet()),
-        reason: 'the same position must not fork by move order',
-      );
+      final first = idsOffering(viaE4).toSet();
+      final second = idsOffering(viaNf3).toSet();
+      expect(first, hasLength(1), reason: 'the first line must actually ask the shared question');
+      expect(second, hasLength(1), reason: 'the second line must actually ask the shared question');
+      expect(first, equals(second), reason: 'the same position must not fork by move order');
     });
 
     test('distinct positions never share a canonical id', () {

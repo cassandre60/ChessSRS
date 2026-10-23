@@ -17,11 +17,14 @@ Each one states what is known, what is not, and what I would need from you.
 | Q7 | Lapse-announcement wording ("repertoire" vs "study") | — | open 2026-10-16 |
 | Q8 | A corrupt timestamp in a row: roll over silently, or refuse? | — | open 2026-10-21 |
 | Q9 | The fail-to-pass gate script detaches the caller's worktree | — | **answered 2026-10-22: fix it — both legs now run in throwaway worktrees** |
-| Q10 | Should the shared test scope FAIL on a layout overflow? | — | open 2026-10-22 |
+| Q10 | Should the shared test scope FAIL on a layout overflow? | — | **answered 2026-10-22: fix the scaffolding first, then fail — done in this PR** |
 | Q11 | The queue tool reported an empty queue, and the dedup law could not see the ledger | — | **answered 2026-10-22: guard it — the tool now refuses to say "nothing to do" when it is not configured** |
+| Q12 | 16 ms budget: validation only or durable answer, typical or every frame? | Contract scope | open 2026-10-21 |
+| Q13 | FSRS lapse repetition count versus INV-025 | Contract choice | open 2026-10-21 |
+| Q14 | Stored null-date state: due or fresh? | Legacy-edge contract | open 2026-10-21 |
+
 
 ---
-
 ## Q1 — Does the ~37 ms review-open pause matter?
 
 **Known.** Against your real library (519 decisions, 480 due), a whole-library
@@ -331,9 +334,7 @@ immediately, or the threshold set to 0 now with those 8 known-red tests
 excluded by name until the fixture is fixed. The first is cleaner; the second
 is one PR instead of two.
 
-**Needed.** One word: *fail now* (the scope throws on any overflow; the 8
-scaffold tests are red and get fixed in the same PR) or *fix then fail* (the
-scaffold is repaired first, then the scope throws at 0 px with a clean suite).
+**Needed.** ~~One word~~ — **answered 2026-10-22: *fix then fail*.** The scaffolding was repaired first and the scope now fails: the one test file whose own fixture overflowed (76 occurrences) was given the app's theme and a `Material` ancestor instead of being exempted, and the shared scope now forwards a `RenderFlex` overflow to the test framework instead of swallowing it, while still printing the greppable marker. A layout overflow in a widget test is now a red test.
 
 **Found.** 2026-10-22, by the harness-measurement work (#355/#357) and the
 triage of the overflow blind spot (issues #334, #336).
@@ -357,3 +358,52 @@ triage of the overflow blind spot (issues #334, #336).
 **Needed.** ~~One word~~ — **answered 2026-10-22: *guard*.** The tooling now refuses to report an empty queue without a config: it exits with a message naming the key and the file to create, and a candidate list that matches no file is reported separately from an exhausted queue. The committed example config also describes THIS repo (Dart globs, the `lib/src/<rest>.dart` ↔ `test/<rest>_test.dart` mapping, the real commands) instead of a generic Python template, so a fresh clone starts from something that works.
 
 **Found.** 2026-10-22, by the fleet's own consistency check after a ledger correction: measuring the ledger's visibility with the tool's parser surfaced the queue tool reporting an empty queue.
+
+---
+
+## Q12 — What exactly must fit inside 16 ms?
+
+**Known.** QUALITY §4.1 bounds legality/lookup at <16 ms. INV-050 includes
+grading and persistence in a single frame. The actual oracle
+`test/review/move_latency_test.dart` times awaited `ReviewService.submitMove`
+on a small fixture and asserts the **median** <16 ms, printing p90/max. It does
+not measure every rendered frame or performance on pinned mobile/desktop
+devices. Session startup is off this path.
+
+**Decision needed.** Keep the stronger durable-answer target and define its
+reference device/dataset and percentile, or keep the validation/lookup target
+and specify durability responsiveness separately. The former needs reliable
+device/runner measurement; the latter narrows the current SPEC promise and
+requires explicit approval. Either way, a passing batch median alone is not
+evidence about every frame. No threshold or assertion changed in reconciliation.
+
+---
+
+## Q13 — Should a ChessFSRS lapse erase the repetition count?
+
+**Known.** INV-025 says lapses reset the streak. Simple/EaseScaling reset
+repetitionCount to zero. ChessFSRS deliberately preserves it, increments lapses
+and recalculates stability; its tests assert preservation. The code/report
+describes a retained review counter, while SPEC describes a streak.
+This was already recorded in the conformance audit F6, not newly invented.
+
+**Decision needed.** Document the scheduler-specific meanings (matching existing
+behavior), or require a reset for every scheduler (behavioral change with
+scheduling/diagnostic implications). Matching code is not automatic authority
+to amend INV-025. No counter behavior or invariant was changed here.
+
+---
+
+## Q14 — Does a stored state with no due date count as due?
+
+**Known.** INV-068 says a scheduled date must have arrived and distinguishes
+fresh items without a review state. `domain/review/due_status.dart` classifies
+a **missing state** as fresh but an **existing state with null nextDueAt** as
+due; `test/domain/due_status_test.dart` intentionally covers that legacy edge.
+The specification does not explicitly include it. A cold helper's isDueAt in
+isolation is not the whole application's fresh/due classifier.
+
+**Decision needed.** Explicitly allow stored null-date states as due (matching
+the compatibility behavior), or classify/repair them as fresh/scheduled with
+a data-handling decision. The latter changes counts/introduction and may need
+migration evidence. Reconciliation changes neither code nor INV-068.
