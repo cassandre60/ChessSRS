@@ -10,6 +10,12 @@ Product-suite authority is the Tests job in test.yml (format/analyze/full tests
 and script checks). `verify` is a convenience wrapper, not CI's literal command.
 Local budgets/runtime acceptance live in TEST_STRATEGY. T1 runs no Flutter tests;
 t2 can be expensive and requires narrow scoping/remote execution under that budget.
+Since 2026-10-23 that job reports in seconds for a diff that is only Markdown
+under `docs/**` (docs-only fast lane; the classifier is unit-tested in the same
+lane), while root Markdown still runs the full suite because
+`enforcement_matrix_test.dart` parses `TEST_STRATEGY.md`. Merges to main go
+through a merge queue, so both required checks are re-run against the batched
+tree on `merge_group`.
 
 | ID | Gate | Tier | Runtime | Catches | Known blind spots | Local command | Owner |
 |----|------|------|---------|---------|-------------------|---------------|-------|
@@ -37,7 +43,7 @@ t2 can be expensive and requires narrow scoping/remote execution under that budg
 | feature | new contracts approved in a dedicated spec-change PR first; reuse existing INVs when sufficient; property tests for new invariants (G05 checks citations, not strength) |
 | test-only | names the mutant, invariant, or ratchet it improves |
 | dependency | written reason + pubspec.yaml approval (G07); size/startup note |
-| docs | no product code; Markdown currently triggers both CI workflows, including the full remote suite |
+| docs | no product code; Markdown triggers both workflows (a filtered-out required check blocks the merge forever), but a diff that is only prose under `docs/**` takes the Tests job's docs-only fast lane; root Markdown (SPEC/GATES/QUALITY/TEST_STRATEGY/AGENTS) and `docs/screenshots` goldens still run the full suite |
 | gate-change / spec-change | separate PR, no product code, human approval (G07), red-team recall not reduced |
 
 ## Blind spots (known, accepted)
@@ -70,13 +76,28 @@ escape loop, after the regression test, SPEC invariant, and red-team case.
 
 ## Operator checklist (owner actions, not automatable here)
 
-1. Preserve main protection: required contexts are Tests and **T1 fast gates**,
-   not the workflow name Gates. Confirm live settings before changing contexts;
+1. Preserve main protection: required contexts are `Tests` and **T1 fast
+   gates**, not the workflow name Gates; `strict` and `enforce_admins` are on and
+   no reviews are required. Confirm live settings before changing contexts;
    no direct/force pushes.
-2. Protected edits need a dedicated spec-change/gate-change PR, no product code,
+2. Merge queue: **not available for this repository** (verified 2026-10-23, and
+   not merely hidden in the UI). Evidence: the classic protection rule for
+   `main` offers no "Require merge queue" option, the rulesets API rejects the
+   rule type with `Invalid rule 'merge_queue'` while accepting other rule types,
+   and GraphQL's `mergeQueue(branch:"main")` is null. So merges stay direct under
+   `strict`: a branch must contain the latest `main` and show both required
+   checks green on that exact head, and a behind branch is synced by hand —
+   `allow_update_branch` is on so that is a UI click rather than a local merge,
+   push and rebuild. Both workflows already trigger on `merge_group` (#407), so
+   if the queue ever becomes available it needs no CI change to turn on. Were it
+   on, a queued merge could not carry a custom `--subject`/`--body-file` and
+   would take the repository's squash settings (commit-or-PR title, branch commit
+   messages), which is where the global rule already puts attribution: in the
+   commit trailers, not only the PR body.
+3. Protected edits need a dedicated spec-change/gate-change PR, no product code,
    and explicit owner consent for that diff before applying gate-approved.
    The executable protected set is `.gates/protected-paths.txt`.
-3. Quarterly: review this file's health tables, tighten ratchets, delete dead gates.
+4. Quarterly: review this file's health tables, tighten ratchets, delete dead gates.
 
 ## Committed-branch fast check
 

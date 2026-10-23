@@ -203,3 +203,37 @@ Consequences:
 Revisit when: a daily review reminder is actually built. That feature needs a
 backend we own, and at that point owning the Firebase project stops being
 optional rather than merely preferable.
+
+## D018 — CI runs what a change can break, not a fixed suite
+
+Decision: The `Tests` job classifies the committed diff and skips the Flutter
+toolchain for a change that only touches Markdown under `docs/**`. Merges to
+`main` stay direct under `strict`; both workflows were made `merge_group`-ready
+so a queue could be adopted later without a CI change.
+
+Reason: under strict branch protection, every merge invalidates every other green
+branch, so a 16-PR wave cost about two hours of wall clock, and each docs PR paid
+a ~7.5-minute Flutter suite for prose that no step reads (of one 449s run: 301s
+unit tests, 63s code generation, 36s analyze, 20s Flutter install).
+
+Consequences:
+
+- The `Tests` check always reports; the fast lane lives *inside* that job, so no
+  stand-in can wear the check's name (the collision closed in #95/#107).
+- The classifier (`.github/scripts/ci-docs-only.sh`) is taken from the base commit
+  and is unit-tested on every PR. The rule is narrow because two test files read
+  files a naive "any Markdown" rule would skip:
+  `test/reachability/enforcement_matrix_test.dart` parses `TEST_STRATEGY.md`, and
+  `test/view/screenshot_capture_test.dart` compares `docs/screenshots/*.png`. Root
+  Markdown and goldens therefore still run the full suite, and any classification
+  failure resolves to it.
+- `gates.yml` keeps G07 PR-time only: a queue group is several PRs with no single
+  label set to read, and a PR cannot be enqueued before its own checks passed.
+- No merge queue is available for this repository (verified 2026-10-23: the
+  classic rule offers no such option, the rulesets API rejects the rule type, and
+  GraphQL reports none), so minus the trigger readiness, nothing here changes how
+  a merge is made: a behind branch is still synced by hand, with
+  `allow_update_branch` making that a UI click.
+
+Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
+something other than its batch.

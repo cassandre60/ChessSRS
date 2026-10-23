@@ -77,8 +77,10 @@ Reference-project behavior does not override the accepted local contract.
 **TEST_STRATEGY §2 is the single local-machine budget:** narrow single-worker
 tests, one final affected-file run, one analysis after the last edit; full
 suites and release builds belong to CI. No local wide-suite/watch/offline
-exception. Markdown-only work needs no Flutter setup/codegen.
-GATES specifies the post-commit fast check and required evidence.
+exception. Markdown-only work needs no Flutter setup/codegen, and CI takes the
+docs-only fast lane for a diff that is *only* Markdown under `docs/**`; root
+Markdown (including `TEST_STRATEGY.md`, which a test parses) still runs the full
+suite. GATES specifies the post-commit fast check and required evidence.
 
 ### Isolation: one worktree per task
 
@@ -103,6 +105,16 @@ follow CLAUDE's dependency/codegen setup; skip it for docs-only work.
   checkout rather than writing into it.
 - Before acting on a shared remote branch/PR, fetch/re-read its live tip,
   state and head SHA; integrate moved tips, never force them away.
+- Merges to this repository are direct: no merge queue is offered for it
+  (verified 2026-10-23 — no option in the classic protection rule, the rulesets
+  API rejects the rule type, GraphQL reports none), so a behind branch must be
+  synced before merging and `allow_update_branch` makes that a UI click rather
+  than a local merge and push. If a repository *does* require a merge queue,
+  enqueue with `gh pr merge <n> --auto --squash` instead of merging directly:
+  the queue updates the branch itself and re-runs the required checks against
+  the batched tree. A queued merge takes its message from the repository's
+  squash settings, not from `--subject`/`--body-file`, so there the
+  `Agent:`/`Model:` trailers must be in the commit message.
 - Disclose overlapping subsystem work before starting. Worktrees expose
   conflicts; they do not resolve design disagreements.
 - Push only when explicitly authorized by the user/session instructions.
