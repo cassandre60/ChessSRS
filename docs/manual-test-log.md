@@ -247,6 +247,34 @@ remain coherent and accept its next move. Reopen the original study to confirm
 its acknowledged answer survived. Ordinary manual timing cannot force a pending
 transaction; the deterministic storage gate in the regression is the race proof.
 
+### 8. Today's review fixes: what only a real session can confirm (#383, #386, #389, #391, #394, #397 — 2026-10-23)
+
+**What changed.** Six merged fixes alter what the review loop *asks* and
+*counts*. Widget tests fake the store and the clock, so none of them can say the
+loop reads correctly on a real library.
+
+| Fix | What to try | What a correct app does |
+|---|---|---|
+| #386 INV-068 | Spend the new-position allowance, then answer a due position whose line runs into a fresh descendant | The walk stops at that fresh position and continues with the due work instead of introducing it |
+| #391 INV-030 | Open the scope drawer and start a session | The number the scope summary shows is the number of positions that actually get queued |
+| #389 INV-031 | Review a few positions, then read the daily figure | It counts distinct positions, not one per answer |
+| #394 INV-065 | Reach a transposed position from a second line | Graded as the same position, not as a new one |
+| #383 lapse caps | Answer wrong repeatedly until a card lapses, and watch its next interval | The retry interval respects the configured cap instead of doubling past it |
+| #397 INV-028 | Review either side of local midnight | The day boundary is the reader's, not UTC's |
+
+**What the tests prove.** Each fix carries a regression that fails on the
+pre-fix code, and the session, scheduler, controller and repository suites are
+green. INV-032's answer-publication race is the item above, not repeated here.
+
+**What only you can check.** The order of questions after a correct answer is the
+part #386 deliberately changed: with the allowance spent, the loop must not jump
+into a new position while due work is waiting. That is a minute of reviewing on
+your own library, and it is the change most worth that minute.
+
+**Runtime attempt.** None on the machine that recorded this: no app was launched
+for these six, and a green `Tests` lane plus `./scripts/gates.sh t1` is not a
+runtime pass (TEST_STRATEGY §4).
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)
