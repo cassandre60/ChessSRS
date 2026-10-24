@@ -89,6 +89,19 @@ Q15. No product code changed; the ceiling harness and performance-handoff §11
 record the evidence. §11 references §9/§10, which ride the open PRs
 #421/#422.
 
+### Decided 2026-10-24 — Q15 answered: fen key on decision rows
+
+The owner picked option A the same day (plain-language consent recorded at
+open-questions Q15): store each decision's position identity on the decision
+row, backfilled once from chapter trees, so session construction stops
+decoding the whole library. One enabling fact from the design pass: nothing
+in `lib/` mutates a chapter tree after import, so the stored fen key has no
+ongoing sync burden — import computes it, the v21 migration backfills it,
+and rows that cannot be backfilled stay null and fall back to the tree path.
+Implementation is briefed top-to-bottom as
+`docs/tasks/PERF-FIX-49-session-start-fen-key.md` and lands as its own
+product PR (separate from the measurement PR carrying this section).
+
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
 > `legacy/pre-reset` and is closed.

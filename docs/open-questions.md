@@ -22,7 +22,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q12 | 16 ms budget: validation only or durable answer, typical or every frame? | Contract scope | open 2026-10-21 |
 | Q13 | FSRS lapse repetition count versus INV-025 | Contract choice | open 2026-10-21 |
 | Q14 | Stored null-date state: due or fresh? | Legacy-edge contract | open 2026-10-21 |
-| Q15 | Whole-library review opens in ~0.8 s: pick a redesign path, or keep it | Product + schema choice | open 2026-10-24 |
+| Q15 | Whole-library review opens in ~0.8 s: pick a redesign path, or keep it | Product + schema choice | **answered 2026-10-24: Option A — store the fen key on decision rows.** Implementation brief: `docs/tasks/PERF-FIX-49-session-start-fen-key.md` |
 
 
 ---
@@ -412,6 +412,12 @@ migration evidence. Reconciliation changes neither code nor INV-068.
 ---
 
 ## Q15 — Whole-library review opens in ~0.8 s: pick a redesign path, or keep it?
+
+**Answered 2026-10-24: Option A — store the fen key on decision rows.** The
+owner picked A in plain-language terms (schema upgrade accepted; largest
+change, largest re-verification surface). Implementation is briefed as
+`docs/tasks/PERF-FIX-49-session-start-fen-key.md`, top-to-bottom. Recorded
+here so the consent is durable, per the Q5 shared-account limitation.
 
 **Known.** Opening whole-library review takes **795–889 ms** on your real
 library (31k decisions), measured 2026-10-24. About 75% is app-side session

@@ -390,3 +390,17 @@ a semantic decision (mixed libraries still need it), not a laziness win; it
 went to open-questions Q15 together with the two paths that do address the
 remaining ~800 ms: storing the fen key on decision rows (removes the tree
 decode) and two-phase indexing (moves it off the first frame).
+
+---
+
+## 12. Q15 answered: fen key on decision rows (2026-10-24)
+
+The owner chose option A the same day, with the migration cost accepted in
+plain language (recorded at open-questions Q15). Direction 2's ordering idea
+returns as an implementation detail, not a semantic: node maps become lazy
+per chapter, every reader that needs them completes the index synchronously
+(`_findTransposedNode` and `_findSiblingGraphNodes` already do), and a
+background pass progressively decodes the rest so the work overlaps
+think-time. The implementation brief is
+`docs/tasks/PERF-FIX-49-session-start-fen-key.md`; equivalence evidence and
+before/after numbers land with its PR.
