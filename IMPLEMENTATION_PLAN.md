@@ -60,9 +60,15 @@ today's inventory or a fresh runtime pass.
   required workflows are `merge_group`-ready regardless.
 - **Unverified runtime checks from this batch:** docs/manual-test-log.md item 8 —
   six review-behaviour changes, #386's question order first.
-- **Release outstanding:** `v1.8.6` (2026-10-22 08:38) predates the wave (13 files
-  changed under `lib/`, +427/−120), so it owes a decision under AGENTS §11 — a
-  patch on merged fixes — pending owner authorization.
+- **Release decided (2026-10-24):** `v1.8.7` tagged on the post-wave main tip
+  (`0704e4824`) — a patch on the merged fix batch per AGENTS §11 (fix-class
+  changes only: seven user-visible review/scheduler fixes among the 37 commits
+  since `v1.8.6`; no docs/tests/gates-only tag was cut). Consent chain: the
+  owner delegated the decision on 2026-10-24 ("release is trivial either way,
+  you choose") and the agent exercised it on that delegation — recorded here
+  because Q5's shared account cannot distinguish them. The manual-test-log
+  item 8 runtime checks stay open; they verify on device independently of the
+  tag.
 - **Owner decisions open:** Q7, Q8, Q12, Q13, Q14. Q10 was answered *fix then
   fail* and landed in #380; Q9 and Q11 were answered 2026-10-22.
 
