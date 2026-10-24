@@ -598,6 +598,51 @@ void main() {
       expect(await service.resolveAppLinkUri(context, uri), isNull);
       expect(find.text('test link'), findsOneWidget, reason: 'cut TV route must not navigate');
     });
+
+    testWidgets('a deep-link route pushed from a nested navigator lands on the root navigator', (
+      tester,
+    ) async {
+      // handleAppLink must push its resolved routes onto the ROOT navigator: the
+      // link context can live inside a nested navigator, and a push there would
+      // place the screen where only that nested stack shows it instead of over
+      // the whole app. The screen is visible in both cases, so the observable is
+      // which navigator owns the pushed screen's context.
+      final uri = Uri.parse('https://lichess.org/editor');
+      final rootKey = GlobalKey<NavigatorState>();
+      final nestedKey = GlobalKey<NavigatorState>();
+
+      final app = await makeTestProviderScope(
+        tester,
+        overrides: {
+          currentNavigatorKeyProvider: currentNavigatorKeyProvider.overrideWithValue(rootKey),
+        },
+        child: SrsTheme(
+          colors: SrsColors.forBrightness(Brightness.light, kSrsDefaultAccent),
+          child: MaterialApp(
+            navigatorKey: rootKey,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: Navigator(
+                key: nestedKey,
+                onGenerateInitialRoutes: (navigator, initialRoute) => [
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(body: _TestWidget(uri: uri)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(app);
+
+      await tester.tap(find.text('test link'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
+      final editorContext = tester.element(find.byType(BoardEditorScreen));
+      expect(Navigator.of(editorContext).widget.key, same(rootKey));
+    });
   });
 
   group('onLinkifyOpen', () {
@@ -626,6 +671,21 @@ void main() {
 
       expect(find.byType(BoardEditorScreen), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not treat a non-web scheme as first-party even on the first-party host', (
+      tester,
+    ) async {
+      // The first-party guard only accepts http(s). A foreign scheme must not
+      // drive in-app resolution just because its host is the configured one and
+      // its path names a real route: without that guard, ftp://<kLichessHost>/editor
+      // would open the in-app editor instead of handing the url to the platform.
+      final launched = mockUrlLauncher(tester);
+      await triggerLinkifyOpen(tester, 'ftp://$kLichessHost/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(launched, ['ftp://$kLichessHost/editor']);
     });
 
     testWidgets(
