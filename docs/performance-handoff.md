@@ -37,7 +37,10 @@ otherwise.
 
 Do not optimise what has not been measured on this database. The owner library
 is the only realistic workload: **11 studies, 25 chapters, 528 decisions, 480
-due, 7 MiB.** Synthetic fixtures are worse than useless here — see section 4.
+due, 7 MiB** (2026-10-14). It does not stay that size — by 2026-10-24 it is
+**61 studies, 309 chapters, 31,156 decisions, 330 due, 34 MiB** (§9). Re-read
+the shape from the harness output each time; do not trust a remembered number.
+Synthetic fixtures are worse than useless here — see section 4.
 
 Copy the database and benchmark the copy. **Copy the `-wal` sidecar too.** It has
 a 4 MiB write-ahead log, and copying only the `.db` gives a snapshot missing
@@ -230,6 +233,67 @@ The owner's standing answer on speed is the mandate at the top of this brief:
 **instant, everything, as fast as possible.** That is the target. Where it
 conflicts with keeping the app correct, correctness wins and the conflict is
 recorded — not silently resolved either way.
+---
+
+## 9. Measured 2026-10-24 — the library grew 60x; where the time is now
+
+The landed harnesses (`test/perf/real_library_session_cost_test.dart`,
+`test/perf/due_summary_attribution_test.dart`), run against a copy of the
+owner's database (`CHESS_SRS_PERF_DB`), median of 15 after 3 warmups, single
+worker, on the 2026-10-24 tree (`0704e4824`). This is the run the playbook
+asked for: benchmark first, run it, rank suspects from the numbers.
+
+**Shape:** 61 active studies, 309 chapters, 31,156 decisions, 330 due,
+34 MiB — versus 11/25/528/480/7 MiB on 2026-10-14.
+
+| Measurement | 2026-10-14 (519 decisions) | 2026-10-24 (31,156 decisions) |
+|---|---|---|
+| whole-library `startSession()` | 37–39 ms | **795 ms** |
+| `loadSessionAndSummary()` | — | **880 ms** |
+| `getDueSummary()` (due queries only) | 26–30 ms | **~170–175 ms** |
+| largest single study `startSession()` | 15–16 ms | 49 ms |
+
+No order-of-magnitude regression: the harness's 2000 ms ceiling passes, and
+~20x session-start growth against 60x decision growth is roughly linear
+(~25 µs/decision end to end, versus the synthetic constructor's ~4 µs/decision
+estimate — the real cost is the queries, as §3 predicted).
+
+**Due-summary attribution (the interleaved harness, medians with spread):**
+
+| Call | Median | Share |
+|---|---|---|
+| `getAllDecisions` | 172.6 ms (151.7–206.8) | **61%** |
+| `getTallyDecisions` | 84.3 ms (75.9–111.7) | **30%** |
+| `getAllReviewStates` | 15.0 ms (14.2–32.3) | 5% |
+| `getKnowledgeStates` | 9.6 ms (7.7–25.0) | 2–3% |
+| chapter openings/orientations/ids | ~2 ms each | ~1% each |
+| sum of parts / `getDueSummary()` total | 284.6 / 225.6 ms | |
+
+Date-parse control on 1743 stamps: `DateTime.parse` 2.6 ms vs `parseUtcIso`
+0.5 ms — parsing is not the cost.
+
+**Ranked suspects for any future optimisation (owner decides whether to spend
+the change; the mandate is "instant" and QUALITY §4.1's 16 ms governs the move
+path, not session start):**
+
+1. `getAllDecisions` — a full-table load of 31k rows to build the summary
+   (61%). A due-aware targeted query is the lever PERF-FIX-21 used at 519
+   decisions; the summary path has outgrown it.
+2. `getTallyDecisions` — the second full-table load (30%).
+3. `startSession()`'s non-summary remainder (~620 ms over 31k decisions) —
+   not yet attributed; the attribution harness covers the summary path only.
+   Do not touch it before giving it its own attribution pass.
+4. Everything else measured ≤15 ms — noise at this shape.
+
+**Harness fix shipped with this record:** the default 30 s per-test timeout
+killed `real_library_session_cost_test.dart` mid-run at this shape (3 warmups
++ 15 calls at ~0.9 s each exceed it) — the run died before printing
+`startSession()`. The test now carries `timeout: Timeout(Duration(minutes:
+10))`. `due_summary_attribution_test.dart` still fits at this shape but has
+the same exposure; give it the same parameter if a future shape outgrows it.
+
+Runtime checks owed: none new — this pass measured, changed no product code.
+
 ---
 
 ## 10. Session-start attribution, 2026-10-24 (answers §9's suspect 3)
