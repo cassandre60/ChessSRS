@@ -49,3 +49,38 @@ Baseline (fresh worktree, 2026-10-24): 32 tests, ~26 s wall (startup-dominated).
    (owner approval per AGENTS §10; the row is not in this PR).
 
 Class: test-only. `lib/` must end byte-identical to origin/main.
+
+## Results (2026-10-24)
+
+| State | Count |
+|---|---|
+| Killed | 22 |
+| Survived | 3 (all EQUIVALENT, no pin) |
+| Uncompilable (excluded) | 8 |
+| Timed out | 0 |
+
+33 candidates; kill rate 88.0% of the 25 killable. The 8 uncompilable are the
+familiar null-promotion noise (`&&` ↔ `||` swaps that make patterns unparseable).
+No production defect found; no new tests written — each survivor's killing test
+would demand a contract change and fail on clean source.
+
+Survivor triage (recorded in `docs/AUTOMOUS_MUTANTS.md` at hash `e91aa7578`):
+
+- **Lines 63 and 163** (`_clamp`, `>` → `>=`), both scheduler classes: the clamp
+  compares at millisecond granularity and every call site reaches it through
+  `Duration(milliseconds: …)` or whole-day constants (`firstInterval`,
+  `baseInterval`), while `stability` round-trips through `.inMilliseconds` — so
+  a sub-millisecond duration cannot arrive. At boundary equality both branches
+  return value-identical `Duration`s. Unobservable for every input the function
+  can receive.
+- **Line 228** (`dueItems`, `growable: false` → `true`): `dueItems` has no
+  production caller (the two oracle test files are its only callers); no INV or
+  call site observes the returned list's growability.
+
+Observation for the ratchet owners (not actioned here): `dueItems` is currently
+a test-only convenience helper; it is in G08's protected territory for
+test-called symbols and must not be deleted blind.
+
+Re-audit trigger satisfied and resolved: the file is re-audited at its
+post-#383 hash. Next trigger: any modification to `scheduler.dart` or the two
+oracle test files.

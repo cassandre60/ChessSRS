@@ -13,6 +13,12 @@
 
 | Date | Mutant ID | Source Hash | Disposition | PR / Issue | Reason |
 |---|---|---|---|---|---|
+| 2026-10-24 | `lib/src/domain/scheduler.dart:228:409de8b11d1d` | `e91aa7578` | EQUIVALENT | 417 | dueItems has no production caller (test-only convenience helper); no INV or call site observes the returned list growability; flipping it cannot change behavior any contract names |
+| 2026-10-24 | `lib/src/domain/scheduler.dart:163:e75d7151670d` | `e91aa7578` | EQUIVALENT | 417 | Same clamp expression as line 63 in EaseScalingScheduler; identical reasoning - all call sites are ms-precision, boundary equality returns the identical Duration value |
+| 2026-10-24 | `lib/src/domain/scheduler.dart:63:e75d7151670d` | `e91aa7578` | EQUIVALENT | 417 | Clamp compares at ms granularity; every caller constructs d via Duration(milliseconds:) or whole-day constants and stability round-trips through .inMilliseconds, so a sub-ms duration never reaches the clamp; when inMilliseconds are equal the two branches return value-identical Durations |
+| 2026-10-24 | `lib/src/domain/scheduler.dart:63:e75d7151670d` | `e91aa7578` | OPEN | — | Loosen strict inequality: '>' -> '>=' |
+| 2026-10-24 | `lib/src/domain/scheduler.dart:163:e75d7151670d` | `e91aa7578` | OPEN | — | Loosen strict inequality: '>' -> '>=' |
+| 2026-10-24 | `lib/src/domain/scheduler.dart:228:409de8b11d1d` | `e91aa7578` | OPEN | — | Invert boolean literal false -> true |
 | 2026-10-23 | `lib/src/db/openings_database.dart:43:370fe8648634` | `9f745f2c3` | EQUIVALENT | — | flush only affects durability under crash/power-loss; any subsequent read sees identical bytes, so no test can distinguish - full mapped file green under the mutant |
 | 2026-10-23 | `lib/src/db/openings_database.dart:46:fe4942b21d79` | `9f745f2c3` | KILLED-BY | #409 | readOnly:false lets a CREATE TABLE through on the static dataset; the first-run test asserts writes are refused |
 | 2026-10-23 | `lib/src/db/openings_database.dart:28:8bcc2db417ad` | `9f745f2c3` | KILLED-BY | #409 | recursive:false on a fresh install leaves ancestors missing; the swallowed create makes directory.list() throw and the provider fails - killed by the first-run test's fresh .dart_tool wipe |
