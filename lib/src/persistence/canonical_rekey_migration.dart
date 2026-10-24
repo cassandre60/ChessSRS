@@ -31,7 +31,7 @@ final _logger = Logger('CanonicalRekeyMigration');
 /// Safe to run more than once: a decision already on the new format recomputes to itself and is
 /// left alone.
 Future<CanonicalRekeyResult> rekeyCanonicalReviewState(DatabaseExecutor db) async {
-  final fenKeysByChapter = await _loadFenKeysByChapter(db);
+  final fenKeysByChapter = await loadFenKeysByChapter(db);
 
   final decisions = await db.query(
     kTableSrsDecision,
@@ -216,7 +216,10 @@ class CanonicalRekeyResult {
 }
 
 /// chapterId -> nodeId -> position identity.
-Future<Map<String, Map<String, String>>> _loadFenKeysByChapter(DatabaseExecutor db) async {
+///
+/// Public for [backfillDecisionFenKeys] (fen_key_backfill_migration.dart),
+/// which needs the same tree walk the rekey uses to recover positions.
+Future<Map<String, Map<String, String>>> loadFenKeysByChapter(DatabaseExecutor db) async {
   final chapters = await db.query(kTableSrsChapter, columns: ['id', 'treeJson']);
   final result = <String, Map<String, String>>{};
 

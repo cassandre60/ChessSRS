@@ -4,6 +4,7 @@
 /// Review session lifecycle and card queue state.
 library;
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:chess_srs/src/domain/chapter.dart';
@@ -214,15 +215,18 @@ class ReviewSession {
       }
     }
 
-    // Index chapters holding decisions in queue (both SRS and practice mode)
+    // Index chapters holding decisions in queue (both SRS and practice mode).
+    // The decision maps are tree-free since v21 — the row carries its node's
+    // fen key — so nothing here decodes a chapter tree. The node maps the
+    // prompts need are indexed for the prompted chapter on demand
+    // (_ensureChapterNodesIndexed) and for everything else by the background
+    // pass kicked below, with every reader still able to finish the job
+    // synchronously.
     final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
     for (final chapter in chapters) {
       if (neededChapterIds.contains(chapter.id)) {
-        _indexChapter(chapter);
+        _indexChapterDecisions(chapter);
       }
-    }
-    if (neededChapterIds.length >= chapters.length) {
-      _allChaptersIndexed = true;
     }
 
     // Presentation order (INV-066) applies within each bucket, so a chosen
@@ -288,6 +292,7 @@ class ReviewSession {
         : _unbufferedQueue.where((d) => !isFresh(d)).length;
     _refillPrefetchBuffer();
     _advanceToNextDue();
+    unawaited(_indexRemainingNodesInBackground());
     _logger.info(
       'ReviewSession created: mode=$mode, scope=$scope, order=$order, continuity=$continuity, '
       'initialDueCount=$_initialQueueCount, '
@@ -346,7 +351,21 @@ class ReviewSession {
   final Map<String, Chapter> _chapters;
   final List<Chapter> _chaptersList;
   final Map<String, List<RepertoireDecision>> _decisionsByChapter = {};
-  final Set<String> _indexedChapterIds = {};
+
+  /// Chapters whose decision maps (`_decisionsByFenKey`, `_canonicalByFenMove`)
+  /// are built. Tree-free since v21 — the decision row carries its node's fen
+  /// key — so this is done at construction for every queued chapter.
+  final Set<String> _decisionIndexedChapterIds = {};
+
+  /// Chapters whose node maps (`_nodesById`, `_parentOfNode`, `_nodesByFenKey`,
+  /// `_chapterOfNode`) are built. Requires the chapter's decoded tree, so this
+  /// happens on demand for the prompted chapter and in the background for the
+  /// rest; every reader can also finish it synchronously.
+  final Set<String> _nodeIndexedChapterIds = {};
+
+  /// True once every chapter's node maps exist. Only set after the last
+  /// chapter is indexed — a reader observing it false simply completes the
+  /// work itself, so it must never promise more than is built.
   bool _allChaptersIndexed = false;
   final Map<String, ReviewState> _reviewStates;
   final Map<String, RepertoireDecision> _decisionsById;
@@ -357,34 +376,90 @@ class ReviewSession {
   final Map<String, List<RepertoireNode>> _nodesByFenKey = {};
   final Map<String, String> _chapterOfNode = {};
   final Map<String, RepertoireNode> _parentOfNode = {};
+
+  /// Each node-indexed chapter's position in [_chaptersList], and each indexed
+  /// node's depth-first pre-order rank within its chapter. The transposition
+  /// lookup sorts candidates by (chapter position, rank), which is exactly the
+  /// order eager indexing always produced, whatever schedule built the maps.
+  final Map<String, int> _chapterListIndex = {};
+  final Map<String, int> _nodeDfsRank = {};
+  int _nodeDfsRankCounter = 0;
   final Map<String, String> _canonicalByFenMove = {};
   final Map<String, int> _nodeCountCache = {};
 
-  void _indexChapter(Chapter chapter) {
-    if (!_indexedChapterIds.add(chapter.id)) return;
-    if (chapter.root != null) {
-      _indexNodes(chapter.root!, chapter.id);
-      final decisions = _decisionsByChapter[chapter.id];
-      if (decisions != null) {
-        for (final d in decisions) {
-          final node = _nodesById[d.nodeId];
-          if (node != null) {
-            _decisionsByFenKey.putIfAbsent(node.fenKey, () => []).add(d);
-            for (final m in d.expectedMoves) {
-              _canonicalByFenMove['${node.fenKey}|${m.uci}'] = d.canonicalId;
-            }
-          }
-        }
+  /// Builds the decision maps for [chapter] from its rows. The position a
+  /// decision sits on comes from the row's own fen key; a row the v21 backfill
+  /// could not fill falls back to the decoded node — so a chapter holding any
+  /// unfilled row decodes its tree first, exactly as every row did before the
+  /// column existed. A decision with neither (its node is gone from its tree)
+  /// indexes nothing — also as before v21.
+  void _indexChapterDecisions(Chapter chapter) {
+    if (!_decisionIndexedChapterIds.add(chapter.id)) return;
+    final decisions = _decisionsByChapter[chapter.id];
+    if (decisions == null) return;
+    if (decisions.any((d) => d.fenKey == null)) {
+      _ensureChapterNodesIndexed(chapter.id);
+    }
+    for (final d in decisions) {
+      final fenKey = d.fenKey ?? _nodesById[d.nodeId]?.fenKey;
+      if (fenKey == null) continue;
+      _decisionsByFenKey.putIfAbsent(fenKey, () => []).add(d);
+      for (final m in d.expectedMoves) {
+        _canonicalByFenMove['$fenKey|${m.uci}'] = d.canonicalId;
       }
     }
   }
 
+  /// Builds the node maps for [chapter] by decoding its tree. This is the
+  /// expensive half of the old `_indexChapter` — the part v21 exists to defer.
+  void _indexChapterNodes(Chapter chapter) {
+    if (!_nodeIndexedChapterIds.add(chapter.id)) return;
+    final root = chapter.root;
+    if (root != null) {
+      _chapterListIndex[chapter.id] = _chaptersList.indexOf(chapter);
+      _nodeDfsRankCounter = 0;
+      _indexNodes(root, chapter.id);
+    }
+  }
+
+  /// Indexes the node maps for one chapter if they are missing. Call before
+  /// any read that needs a specific chapter's nodes.
+  void _ensureChapterNodesIndexed(String chapterId) {
+    if (_allChaptersIndexed || _nodeIndexedChapterIds.contains(chapterId)) return;
+    final chapter = _chapters[chapterId];
+    if (chapter != null) _indexChapterNodes(chapter);
+  }
+
   void _ensureAllChaptersIndexed() {
     if (_allChaptersIndexed) return;
-    _allChaptersIndexed = true;
     for (final c in _chaptersList) {
-      _indexChapter(c);
+      // Decision maps are tree-free, but cross-chapter readers (sibling
+      // coupling, canonical resolution) need every chapter in them, exactly
+      // as eager indexing provided.
+      _indexChapterDecisions(c);
+      if (!_nodeIndexedChapterIds.contains(c.id)) {
+        _indexChapterNodes(c);
+      }
     }
+    _allChaptersIndexed = true;
+  }
+
+  /// Decodes the remaining chapter trees between event-loop turns so the cost
+  /// overlaps the user's think-time instead of the first frame. Purely an
+  /// optimization: every reader completes missing node maps synchronously, so
+  /// correctness never depends on how far this has got. The loop keeps
+  /// `_chaptersList` order, which preserves the candidate order the
+  /// transposition lookup documents.
+  Future<void> _indexRemainingNodesInBackground() async {
+    // Let the first frame paint before any decoding runs.
+    await Future<void>.delayed(Duration.zero);
+    for (final c in _chaptersList) {
+      if (_allChaptersIndexed) return;
+      if (_nodeIndexedChapterIds.contains(c.id)) continue;
+      _indexChapterNodes(c);
+      await Future<void>.delayed(Duration.zero);
+    }
+    _allChaptersIndexed = true;
   }
 
   final List<RepertoireDecision> _dueQueue = [];
@@ -1058,6 +1133,10 @@ class ReviewSession {
       return;
     }
     final nextDecision = _dueQueue.removeAt(0);
+    // The prompt build reads the decision's node and its ancestry; make sure
+    // this chapter's node maps exist (usually already done by the background
+    // pass, which this call also finishes synchronously when not).
+    _ensureChapterNodesIndexed(nextDecision.chapterId);
     if (continuity == ReviewContinuity.fullLine) {
       // Whole lines: open at the line start and walk it. A target whose walk
       // missed it gets a dedicated walk down its own ancestry — never a
@@ -1182,6 +1261,11 @@ class ReviewSession {
   void _indexNodes(RepertoireNode node, String chapterId, [RepertoireNode? parent]) {
     _nodesById[node.id] = node;
     _chapterOfNode[node.id] = chapterId;
+    // Depth-first pre-order rank within the chapter. Together with the
+    // chapter's position in _chaptersList this reproduces the candidate order
+    // the transposition lookup always had when indexing was eager (see
+    // _findTransposedNode), no matter which schedule indexed the chapters.
+    _nodeDfsRank[node.id] = _nodeDfsRankCounter++;
     _nodesByFenKey.putIfAbsent(node.fenKey, () => []).add(node);
     if (parent != null) {
       _parentOfNode[node.id] = parent;
@@ -1245,8 +1329,20 @@ class ReviewSession {
     final parts = next.fen.split(' ');
     if (parts.length < 4) return null;
     final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
+    // Candidates in the order eager indexing always produced: chapters in
+    // _chaptersList order, depth-first within a chapter. Chapters may now be
+    // indexed in any schedule (prompt-time, background), so the sort — not
+    // insertion order — is what keeps the choice among equally valid targets
+    // identical to the pre-v21 behavior.
+    final candidates = [...(_nodesByFenKey[key] ?? const <RepertoireNode>[])]
+      ..sort((a, b) {
+        final chapterA = _chapterListIndex[_chapterOfNode[a.id]] ?? _chaptersList.length;
+        final chapterB = _chapterListIndex[_chapterOfNode[b.id]] ?? _chaptersList.length;
+        if (chapterA != chapterB) return chapterA.compareTo(chapterB);
+        return (_nodeDfsRank[a.id] ?? 0).compareTo(_nodeDfsRank[b.id] ?? 0);
+      });
     RepertoireNode? fallback;
-    for (final node in _nodesByFenKey[key] ?? const <RepertoireNode>[]) {
+    for (final node in candidates) {
       final chapter = _chapters[_chapterOfNode[node.id]];
       if (chapter == null ||
           !scope.matches(
@@ -1430,6 +1526,9 @@ class ReviewSession {
   List<String> _childDecisionIdsOf(String decisionId) {
     final decision = _decisionsByCanonicalId[decisionId] ?? _decisionsById[decisionId];
     if (decision == null) return const [];
+    // Lapse contagion walks the graded decision's chapter subtree; make sure
+    // its node maps exist (the prompt path usually indexed them already).
+    _ensureChapterNodesIndexed(decision.chapterId);
     final node = _nodesById[decision.nodeId];
     if (node == null) return const [];
 

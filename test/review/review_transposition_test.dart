@@ -518,5 +518,57 @@ void main() {
       expect(result.nextPrompt?.nodeId, 'node-c-nf6');
       expect(result.nextPrompt?.chapterId, 'chapter-c');
     });
+
+    test('grades the transposition identically when the rows carry their fen key', () {
+      // The v21 decision row carries its node's fen key so the session can
+      // build its transposition index without decoding trees. Fill every
+      // decision the way the importer and the v21 backfill leave it — the
+      // keys read straight off the trees, the truth the column copies — and
+      // require the same acceptance and continuation the fallback path
+      // (unfilled rows) gives above. INV-065 must not care which way the
+      // identity arrived.
+      final (study, chapterA, chapterB, decisions) = buildTransposedRepertoire();
+      String? fenKeyOf(String nodeId) {
+        String? walk(RepertoireNode node) {
+          if (node.id == nodeId) return node.fenKey;
+          for (final child in node.children) {
+            final hit = walk(child);
+            if (hit != null) return hit;
+          }
+          return null;
+        }
+
+        return walk(chapterA.root!) ?? walk(chapterB.root!);
+      }
+
+      final filled = [
+        for (final d in decisions)
+          RepertoireDecision(
+            id: d.id,
+            studyId: d.studyId,
+            chapterId: d.chapterId,
+            nodeId: d.nodeId,
+            expectedMoves: d.expectedMoves,
+            canonicalStateId: d.canonicalStateId,
+            fenKey: fenKeyOf(d.nodeId),
+          ),
+      ];
+      expect(
+        filled.every((d) => d.fenKey != null),
+        isTrue,
+        reason: 'the fixture must actually exercise the row-keyed path',
+      );
+
+      final session = startSession(study, chapterA, chapterB, filled);
+
+      expect(session.currentPrompt?.nodeId, 'node-a-root');
+      session.submitMove(from: 'e2', to: 'e4');
+      final result = session.submitMove(from: 'f1', to: 'c4');
+
+      expect(result.isCorrect, isTrue);
+      expect(result.movePlayed.san, 'Bc4');
+      expect(result.event?.result, ReviewResult.correct);
+      expect(result.nextPrompt?.nodeId, 'node-b-nf6');
+    });
   });
 }

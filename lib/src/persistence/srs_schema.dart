@@ -71,6 +71,7 @@ void createSrsTables(Batch batch) {
       nodeId TEXT NOT NULL,
       expectedMoves TEXT NOT NULL,
       canonicalStateId TEXT,
+      fenKey TEXT,
       FOREIGN KEY (studyId) REFERENCES $kTableSrsStudy(id) ON DELETE CASCADE,
       FOREIGN KEY (chapterId) REFERENCES $kTableSrsChapter(id) ON DELETE CASCADE
     );

@@ -25,6 +25,7 @@ class RepertoireDecision {
     required this.nodeId,
     required this.expectedMoves,
     this.canonicalStateId,
+    this.fenKey,
   });
 
   /// Creates a new [RepertoireDecision] with a freshly-generated UUID.
@@ -34,6 +35,7 @@ class RepertoireDecision {
     required String nodeId,
     required List<RepertoireMove> expectedMoves,
     String? canonicalStateId,
+    String? fenKey,
   }) {
     return RepertoireDecision(
       id: newId(),
@@ -42,6 +44,7 @@ class RepertoireDecision {
       nodeId: nodeId,
       expectedMoves: List.unmodifiable(expectedMoves),
       canonicalStateId: canonicalStateId,
+      fenKey: fenKey,
     );
   }
 
@@ -58,6 +61,17 @@ class RepertoireDecision {
   /// Pointer to the shared [PositionKnowledgeState.canonicalId].
   /// Nullable for backwards compatibility with pre-v10 databases.
   final String? canonicalStateId;
+
+  /// The [RepertoireNode.fenKey] of [nodeId], copied onto the row so session
+  /// construction can build its transposition and canonical indexes without
+  /// decoding the chapter's tree (v21; performance-handoff §10-§12).
+  ///
+  /// Nullable for rows the v21 backfill could not fill (chapter tree
+  /// unreadable, node gone) — those fall back to the decoded node at session
+  /// time, exactly as every row did before v21. Deliberately excluded from
+  /// [==]/[hashCode]: it is derived state of [nodeId], like [expectedMoves],
+  /// and identity must not depend on whether the copy has been filled yet.
+  final String? fenKey;
 
   /// Effective canonical knowledge identifier: [canonicalStateId] if set, else [id].
   String get canonicalId => canonicalStateId ?? id;

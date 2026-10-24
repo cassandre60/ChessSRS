@@ -310,6 +310,9 @@ Future<void> _writeFixture(
 /// Runs in reverse order of introduction. Indexes are dropped before the
 /// columns they reference, because SQLite refuses to drop an indexed column.
 Future<void> _stripToVersion(Database db, int version) async {
+  if (version < 21) {
+    await db.execute('ALTER TABLE $kTableSrsDecision DROP COLUMN fenKey');
+  }
   if (version < 19) {
     await db.execute('DROP TABLE IF EXISTS $kTableSrsUnlockedDecision');
   }
@@ -489,7 +492,7 @@ Future<void> _seedSharedSideInstall(Database db) async {
 Future<void> _expectCurrentSchema(Database db) async {
   expect(
     (await db.rawQuery('PRAGMA user_version')).single['user_version'],
-    20,
+    21,
     reason: 'the upgrade must persist the new schema version',
   );
 
@@ -505,7 +508,7 @@ Future<void> _expectCurrentSchema(Database db) async {
 
   expect(await columnsOf(kTableSrsStudy), containsAll(<String>['isActive', 'pgnHash']));
   expect(await columnsOf(kTableSrsChapter), containsAll(<String>['opening', 'orientation']));
-  expect(await columnsOf(kTableSrsDecision), containsAll(<String>['canonicalStateId']));
+  expect(await columnsOf(kTableSrsDecision), containsAll(<String>['canonicalStateId', 'fenKey']));
   expect(await columnsOf(kTableSrsReviewState), containsAll(<String>['difficulty']));
   expect(await columnsOf(kTablePositionKnowledgeState), containsAll(<String>['lastExposedAt']));
   expect(
