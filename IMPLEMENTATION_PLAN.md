@@ -72,6 +72,23 @@ today's inventory or a fresh runtime pass.
 - **Owner decisions open:** Q7, Q8, Q12, Q13, Q14. Q10 was answered *fix then
   fail* and landed in #380; Q9 and Q11 were answered 2026-10-22.
 
+### Measured 2026-10-24 — the lazy-expectedMoves path is closed (PERF-FIX-48)
+
+The option-3 handoff's direction 3 (lazy `RepertoireDecision.expectedMoves`,
+hoped to recover the 162 ms `getAllDecisions` mapping) is refuted on the real
+library: the session constructor reads every queued decision's move list
+through `_indexChapter`'s canonical loop, so laziness relocates the parse
+instead of removing it, and the move-content work it could skip measures
+~30 ms of a ~550 ms preloaded build (median of 15, interleaved rounds
+agreeing; `test/perf/session_start_move_list_ceiling_test.dart`). The move
+decode inside `getAllDecisions` is ~52 ms of the 145 ms mapping. 98.6% of rows
+carry `canonicalStateId`, so the canonical map that loop builds is read only
+for pre-v10 legacy nodes — removing it is a semantic decision, filed with the
+two redesign paths that do address the remaining ~800 ms as open-questions
+Q15. No product code changed; the ceiling harness and performance-handoff §11
+record the evidence. §11 references §9/§10, which ride the open PRs
+#421/#422.
+
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
 > `legacy/pre-reset` and is closed.

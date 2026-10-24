@@ -22,6 +22,7 @@ Each one states what is known, what is not, and what I would need from you.
 | Q12 | 16 ms budget: validation only or durable answer, typical or every frame? | Contract scope | open 2026-10-21 |
 | Q13 | FSRS lapse repetition count versus INV-025 | Contract choice | open 2026-10-21 |
 | Q14 | Stored null-date state: due or fresh? | Legacy-edge contract | open 2026-10-21 |
+| Q15 | Whole-library review opens in ~0.8 s: pick a redesign path, or keep it | Product + schema choice | open 2026-10-24 |
 
 
 ---
@@ -407,3 +408,45 @@ isolation is not the whole application's fresh/due classifier.
 the compatibility behavior), or classify/repair them as fresh/scheduled with
 a data-handling decision. The latter changes counts/introduction and may need
 migration evidence. Reconciliation changes neither code nor INV-068.
+
+---
+
+## Q15 — Whole-library review opens in ~0.8 s: pick a redesign path, or keep it?
+
+**Known.** Opening whole-library review takes **795–889 ms** on your real
+library (31k decisions), measured 2026-10-24. About 75% is app-side session
+construction, and roughly half of that is decoding your chapters' opening
+trees to build a cross-chapter transposition index before your first answer.
+The cheap fix (lazy move lists) was measured and closed: its whole ceiling is
+~30 ms (performance-handoff §11). What remains needs one of two redesigns —
+or a decision to keep the current behavior.
+
+**Decision needed — pick one (or "keep"):**
+
+- **Option A — store each decision's board position (a "fen key") in the
+  decisions table.** Cost of yes: a database upgrade with a one-time backfill
+  of your library, and every chapter edit must keep the new column in sync —
+  the biggest change here, with the most to re-verify. What it buys:
+  transposition lookups stop needing the chapter trees decoded, so opening
+  decodes ~1 chapter instead of ~300 — roughly 350 ms of the 800 gone, and
+  the design still holds near ~80k decisions, where the current one crosses
+  the 2 s regression ceiling. Cost of no: the ~0.8 s stays until option B or
+  nothing.
+- **Option B — index lazily, but always finish the full index before any
+  answer can be graded.** Cost of yes: a new ordering guarantee in the session
+  code ("the full index exists before the first answer is graded") that future
+  changes must not silently break — provable with tests, but it is a new
+  semantic. What it buys: the first frame no longer waits for the ~350 ms
+  decode; total work is unchanged, so the deferred build still grows with the
+  library. Cost of no: as above.
+- **Keep as-is:** the ~0.8 s stays; at today's 31k size you are inside the
+  2 s ceiling the harness pins.
+
+**Recommendation: A**, if you accept the migration — it is the only path that
+removes work rather than hiding it, and it is what keeps "instant" honest at a
+larger library. B is the lower-risk fallback if you want no schema change
+during beta. A third option, decoding trees off the main thread, only removes
+stutter, not the wait — it does not need this decision.
+
+Also useful whenever you answer: what number would count as "instant" to you?
+The harness only pins a loose 2 s regression ceiling; today you are at ~0.8 s.
