@@ -151,5 +151,9 @@ void main() {
     } finally {
       await db.close();
     }
-  });
+    // The whole-library median is 15 calls plus 3 warmups; at the 2026-10-24
+    // library shape (31k decisions, ~0.9 s per startSession) that alone exceeds
+    // the 30 s default per-test timeout, killing the run before it prints.
+    // Ten minutes keeps the harness valid as the library keeps growing.
+  }, timeout: const Timeout(Duration(minutes: 10)));
 }
