@@ -35,6 +35,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'due_summary_attribution_test.dart' show interleavedRoundsOf, medianOf, percentileOf;
 
+/// Keeps the compiler from folding the forced decode away.
+void _touch(Object? _) {}
+
 void main() {
   final dbPath = Platform.environment['CHESS_SRS_PERF_DB'];
 
@@ -107,6 +110,17 @@ void main() {
         'getAllDecisions': await medianOf(() => repo.getAllDecisions()),
         'review data load (SQL + maps)': await medianOf(reviewDataLoad),
         'getUnlockedDecisionIds': await medianOf(() => repo.getUnlockedDecisionIds()),
+        // Control for the lazy-tree hypothesis: `Chapter.root` jsonDecodes the
+        // chapter's whole tree on first access (`_root ??= rootResolver?.call()`),
+        // and the session constructor's chapter-index loop reads `chapter.root`.
+        // This target times exactly that forced decode over the same chapters,
+        // with no session in the loop.
+        'force-decode all chapter trees': await medianOf(() async {
+          final chapters = await repo.getChaptersByStudyIds(activeIds);
+          for (final c in chapters) {
+            _touch(c.root);
+          }
+        }),
         'session build (no DB)': await medianOf(buildOnly),
       };
       final whole = await medianOf(wholeSession);

@@ -230,3 +230,54 @@ The owner's standing answer on speed is the mandate at the top of this brief:
 **instant, everything, as fast as possible.** That is the target. Where it
 conflicts with keeping the app correct, correctness wins and the conflict is
 recorded — not silently resolved either way.
+---
+
+## 10. Session-start attribution, 2026-10-24 (answers §9's suspect 3)
+
+`test/perf/session_start_attribution_test.dart` (same conventions: real-DB copy,
+median of 15 after 3 warmups, interleaved rotated rounds, no synthetic fallback).
+The all-studies path on the 34 MiB library:
+
+| Part | Median |
+|---|---|
+| `getAllStudies` | 2 ms |
+| `getChaptersByStudyIds` | 34–52 ms |
+| `getAllDecisions` | 160–162 ms |
+| review-data load (SQL + the maps `_loadReviewData` builds) | 30 ms |
+| `getUnlockedDecisionIds` | 0 ms (mode off by default) |
+| **force-decode all chapter trees (control probe)** | **358 ms** |
+| **session build, fully preloaded (no DB)** | **606–677 ms** |
+| whole `startSession()` | 795–889 ms |
+
+The parts account for the whole (remainder −4% to −42% run to run; the build
+figure is noisy across runs — read the interleaved spread in the harness output,
+not a single number). **The database is not the bottleneck: ~75% of session
+start is Dart-side session construction**, and roughly half of that is the
+constructor's chapter-index loop force-decoding lazy trees:
+
+- `Chapter.root` jsonDecodes the chapter's whole tree on first access
+  (`_root ??= rootResolver?.call()`), and the constructor's
+  "index chapters holding decisions in queue" loop reads `chapter.root` for
+  every chapter with a queued item — with 330 due items spread over 309
+  chapters, that decodes nearly the whole library at open. PERF-FIX-46 made
+  chapter trees lazy; the session constructor's eager indexing defeats it.
+
+**Why this is recorded, not fixed:** the index the constructor builds
+(`_decisionsByFenKey`, `_canonicalByFenMove`, `_nodesById`) is read by
+cross-chapter transposition lookups (the acceptance path behind INV-065 and the
+coordinator's canonical resolution). Those lookups are correct *because* every
+queued chapter is indexed before the first answer; indexing lazily per chapter
+would hide transposition candidates from not-yet-prompted chapters — a behavior
+change, and the handoff's rule is that behaviour is the contract.
+
+**Optimisation paths, in risk order (owner decides):**
+
+1. *None of them are small.* The candidates are: decoding trees off the UI
+   thread (isolate) — wall clock unchanged, jank removed; restructuring grading
+   to not need a prebuilt global fen-key index — a domain redesign in
+   invariant-dense territory; or making `RepertoireDecision.expectedMoves` lazy
+   (the 162 ms `getAllDecisions` is row mapping — mostly move-list parsing the
+   queue build never touches). Each needs its own brief, its own equivalence
+   story, and the full suite. Nothing here justifies a quick edit.
+2. The 2-second ceiling still passes; the owner's "instant" mandate at 31k
+   decisions is a design conversation, not a patch.
