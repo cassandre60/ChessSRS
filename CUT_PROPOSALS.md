@@ -44,10 +44,10 @@ These are the authoritative decisions from the owner. Do not override them.
 | C10 Blog/recap/announce | `[x]` DONE | Removed 2026-09-15 — models, services, home carousel, test |
 | C11 Over-the-board game | `[x]` DONE | Removed 2026-09-14 |
 | C11 Chess clock tool | `[x]` DONE | Removed by owner request 2026-09-14 |
-| C12 Offline computer play | `[G]` GREY | Owner undecided; leave untouched until explicit approval |
-| C13 Engine (Stockfish) | `[G]` GREY | May be useful as optional import advisor — undecided |
+| C12 Offline computer play | `[K]` KEEP | Owner decision (2026-10-24, in chat: "keep all 3") — offline computer play stays |
+| C13 Engine (Stockfish) | `[K]` KEEP | Owner decision (2026-10-24, in chat: "keep all 3"); the engine is load-bearing — it powers offline computer play and the evaluation features in study/review, not just a possible import advisor |
 | C14 Opening explorer | `[K]` KEEP | Owner decision |
-| C15 Analysis screen | `[G]` GREY | Undecided — shares widgets with study; leave untouched |
+| C15 Analysis screen | `[K]` KEEP | Owner decision (2026-10-24, in chat: "keep all 3") — analysis stays, shared widgets and all |
 | C16 Board editor | `[K]` KEEP | Owner decision |
 | C17 WebSocket | `[K]` KEEP | Owner decision (2026-09-16) — kept for study sync, cloud Stockfish evaluation, and future sync |
 | C18 HTTP repos | `[K]` KEEP | Owner decision (2026-09-16) — base HTTP, auth, study import, opening explorer, and tablebase kept; dead online repos trimmed |
@@ -130,8 +130,9 @@ Step 17 [x]  UI/Widgets — Dead orphaned widgets, views & assets (UserContextMe
 Step 18 [x]  C5/C6 — Dead Android system gestures exclusion utility & method channel handler DONE
 ```
 
-Steps beyond 12 (C12 offline computer, C13 engine) are blocked on owner
-GREY decisions and are not started until explicit approval.
+The GREY items were decided 2026-10-24: C12, C13 and C15 are all KEEP ("keep
+all 3"). No cut steps remain open in this plan — every item is DONE, KEEP, or
+already removed by a completed step.
 
 ---
 
@@ -376,7 +377,7 @@ or HTTP consumers outside auth and study-import paths.
 - l10n pipeline
 - `model/auth/` (C3 kept — optional login for study import)
 - `view/study/`, `model/study/` (D1 — closest to our review scene)
-- `view/analysis/`, `model/analysis/` (C15 grey — shared with study)
+- `view/analysis/`, `model/analysis/` (C15 kept 2026-10-24 — shared with study)
 - `view/board_editor/`, `model/board_editor/` (C16 kept)
 - `model/explorer/`, `view/explorer/` (C14 kept)
 - Standalone clock tool was removed (Step 5); shared model/clock primitives
