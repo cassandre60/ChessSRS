@@ -345,3 +345,62 @@ change, and the handoff's rule is that behaviour is the contract.
    story, and the full suite. Nothing here justifies a quick edit.
 2. The 2-second ceiling still passes; the owner's "instant" mandate at 31k
    decisions is a design conversation, not a patch.
+
+---
+
+## 11. The lazy-expectedMoves path is closed (2026-10-24)
+
+Direction 3 of the option-3 handoff — make `RepertoireDecision.expectedMoves`
+lazy so session start stops paying for move-list parsing — is refuted for
+whole-library session start. Measured, nothing to do here.
+
+Two access-site facts, both verified against the tree:
+
+- The constructor reads every queued decision's move list. `_indexChapter`
+  (`review_session.dart:363`) iterates `d.expectedMoves` for every decision in
+  every indexed chapter to build `_canonicalByFenMove` (line 373), and
+  `neededChapterIds` (line 218) is derived from the final trimmed queue. At
+  the 2026-10-24 shape the constructor's decode matches §10's force-decode
+  control probe, so nearly every chapter indexes and nearly every decision's
+  moves are read before the first prompt. Laziness would relocate the parse
+  from `getAllDecisions` into the constructor, not remove it. It would also
+  de-const `RepertoireDecision`, whose const constructor ~150 test fixtures
+  rely on.
+- The 162 ms attributed to `getAllDecisions` double-counted. A raw row scan
+  over the same table (query + row maps, no move decode) runs in ~93 ms of the
+  145 ms mapping median; only ~52 ms is move parsing.
+
+The ceiling probe (`test/perf/session_start_move_list_ceiling_test.dart`, real
+DB copy, median of 15 after 3 warmups, interleaved rotated rounds agreeing):
+
+| Measurement | Median |
+|---|---|
+| `getAllDecisions` (full mapping) | 145 ms |
+| decision rows, no move decode | 93 ms |
+| session build, real move lists | 552 ms |
+| session build, empty move lists | 521 ms |
+| **constructor cost that depends on move-list content** | **~30 ms** |
+
+The whole direction is therefore bounded by ~30 ms of constructor work plus
+≤52 ms of parsing the constructor consumes anyway. Separately recorded: 98.6%
+of decision rows (30,731 of 31,182) already carry `canonicalStateId`, so
+`_canonicalByFenMove` — the map that per-move loop exists to build — is read
+only for pre-v10 legacy nodes. Not building it on fully migrated libraries is
+a semantic decision (mixed libraries still need it), not a laziness win; it
+went to open-questions Q15 together with the two paths that do address the
+remaining ~800 ms: storing the fen key on decision rows (removes the tree
+decode) and two-phase indexing (moves it off the first frame).
+
+---
+
+## 12. Q15 answered: fen key on decision rows (2026-10-24)
+
+The owner chose option A the same day, with the migration cost accepted in
+plain language (recorded at open-questions Q15). Direction 2's ordering idea
+returns as an implementation detail, not a semantic: node maps become lazy
+per chapter, every reader that needs them completes the index synchronously
+(`_findTransposedNode` and `_findSiblingGraphNodes` already do), and a
+background pass progressively decodes the rest so the work overlaps
+think-time. The implementation brief is
+`docs/tasks/PERF-FIX-49-session-start-fen-key.md`; equivalence evidence and
+before/after numbers land with its PR.

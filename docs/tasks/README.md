@@ -15,6 +15,8 @@ agent can pick up and execute top-to-bottom.
 |---|---|
 | `REFACTOR-FIX-23-enum-values-not-dead.md` | Investigation complete — **0 dead enum values; all are actively persisted/used** |
 | `PERF-FIX-24-real-library-measurement.md` | Measured on 31k-decision real library — durable findings recorded |
+| `PERF-FIX-48-session-start-move-list-ceiling.md` | Closed 2026-10-24 — lazy expectedMoves refuted (~30 ms ceiling); path decision open as Q15 |
+| `PERF-FIX-49-session-start-fen-key.md` | **Ready — pick up and execute top-to-bottom.** Q15 answered: option A; whole-library session start goes tree-free |
 
 ### Recently Landed Briefs (Swept)
 
