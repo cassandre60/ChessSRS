@@ -2140,6 +2140,9 @@ void main() {
             createSrsTables(batch);
             await batch.commit();
             await db.execute('ALTER TABLE $kTableSrsReviewState DROP COLUMN difficulty');
+            // Also strip the v21 column: the fixture stands in for a v12
+            // database, and the upgrade ladder adds the column itself.
+            await db.execute('ALTER TABLE $kTableSrsDecision DROP COLUMN fenKey');
           },
         ),
       );
@@ -2182,6 +2185,9 @@ void main() {
             final batch = db.batch();
             createSrsTables(batch);
             await batch.commit();
+            // Strip the v21 column: the fixture stands in for a v13 database,
+            // and the upgrade ladder adds the column itself.
+            await db.execute('ALTER TABLE $kTableSrsDecision DROP COLUMN fenKey');
 
             const fenKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
             await db.insert(kTableSrsStudy, {

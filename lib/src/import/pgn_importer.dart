@@ -719,6 +719,7 @@ void _deriveDecisions(
           nodeId: node.id,
           expectedMoves: node.childMoves,
           canonicalStateId: cKey,
+          fenKey: node.fenKey,
         ),
       );
     }

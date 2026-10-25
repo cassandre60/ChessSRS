@@ -124,6 +124,7 @@ RepertoireDecision _decision({
   required String nodeId,
   required List<RepertoireMove> expectedMoves,
   String? canonicalStateId,
+  String? fenKey,
   String chapterId = _chapterId,
   String studyId = _studyId,
 }) => RepertoireDecision(
@@ -133,6 +134,7 @@ RepertoireDecision _decision({
   nodeId: nodeId,
   expectedMoves: expectedMoves,
   canonicalStateId: canonicalStateId,
+  fenKey: fenKey,
 );
 
 RepertoireDecision _dec1({String? canonicalStateId, List<RepertoireMove> moves = const [_mE4]}) =>
@@ -1767,6 +1769,60 @@ void main() {
       expect(records.any((r) => r.message.contains('Lapse contagion/coupling updated')), isTrue);
     });
 
+    test('couples siblings identically when the decision rows carry their fen key', () {
+      // The v21 row carries its node's fen key, so the sibling-coupling index
+      // is built from rows instead of decoded trees. Same fixture as the test
+      // above, with every decision filled the way the v21 backfill leaves it —
+      // coupling must not care which way the identity arrived.
+      const bRoot = RepertoireNode(id: 'node-b-root', fen: _fenStart, fenKey: _fenKeyStart);
+      const cRoot = RepertoireNode(id: 'node-c-root', fen: _fenStart, fenKey: _fenKeyStart);
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(_lRoot),
+          _chapterOf(bRoot, chapterId: 'ch-2'),
+          _chapterOf(cRoot, chapterId: 'ch-3'),
+        ],
+        decisions: [
+          _decision(
+            id: 'dec-ka',
+            nodeId: 'node-root',
+            expectedMoves: const [_mE4],
+            canonicalStateId: 'can-ka',
+            fenKey: _fenKeyStart,
+          ),
+          _decision(
+            id: 'dec-kb',
+            nodeId: 'node-b-root',
+            expectedMoves: const [_mD4],
+            canonicalStateId: 'can-kb',
+            chapterId: 'ch-2',
+            fenKey: _fenKeyStart,
+          ),
+          _decision(
+            id: 'dec-kc',
+            nodeId: 'node-c-root',
+            expectedMoves: const [_mD4],
+            canonicalStateId: 'can-kc',
+            chapterId: 'ch-3',
+            fenKey: _fenKeyStart,
+          ),
+        ],
+        reviewStates: {
+          'can-ka': _dueState('can-ka', overdue: const Duration(hours: 3)),
+          'can-kb': _dueState('can-kb', difficulty: 4.0, overdue: const Duration(hours: 2)),
+          'can-kc': _dueState('can-kc', difficulty: 4.0, overdue: const Duration(hours: 1)),
+        },
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-ka');
+
+      final result = session.submitMove(from: 'd2', to: 'd4');
+      expect(result.isCorrect, isFalse);
+
+      expect(session.reviewStates['can-kb']!.difficulty, closeTo(4.35, 1e-9));
+      expect(session.reviewStates['can-kc']!.difficulty, closeTo(4.35, 1e-9));
+    });
+
     test('a lapse is graded against the question own canonical state', () {
       // mutant L633: decision.canonicalStateId != null -> == null
       const twinRoot = RepertoireNode(id: 'node-b-root', fen: _fenStart, fenKey: _fenKeyStart);
@@ -2149,6 +2205,62 @@ void main() {
           .toList();
       expect(directMoves, hasLength(1));
       expect(directMoves.single, isNot(contains('(transposed line)')));
+    });
+
+    test('a small chapter backlog indexes synchronously, with no scheduled work', () {
+      // Budget path: at most kSynchronousIndexingChapterBudget chapters decode
+      // inside the constructor, so the session is fully indexed the moment it
+      // exists and no background timer was ever scheduled — a widget-test
+      // FakeAsync zone must never see one pending.
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(_lRoot),
+          _chapterOf(_lRoot, chapterId: 'ch-2'),
+          _chapterOf(_lRoot, chapterId: 'ch-3'),
+        ],
+        decisions: [_dec1(canonicalStateId: 'can-1')],
+        reviewStates: {'can-1': _dueState('can-1', overdue: const Duration(hours: 1))},
+      );
+      expect(
+        session.isNodeIndexComplete,
+        isTrue,
+        reason: 'a 3-chapter backlog is inside the synchronous budget',
+      );
+    });
+
+    test('a large chapter backlog defers to the background pass and completes', () async {
+      // Above the budget the constructor must NOT decode every tree (that is
+      // the whole point of v21); the background pass finishes the tail.
+      final chapters = [
+        for (var i = 0; i < 12; i++)
+          _chapterOf(
+            RepertoireNode(id: 'node-root-$i', fen: _fenStart, fenKey: _fenKeyStart),
+            chapterId: 'ch-${i + 1}',
+          ),
+      ];
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: chapters,
+        decisions: [_dec1(canonicalStateId: 'can-1')],
+        reviewStates: {'can-1': _dueState('can-1', overdue: const Duration(hours: 1))},
+      );
+      expect(
+        session.isNodeIndexComplete,
+        isFalse,
+        reason: 'a 12-chapter backlog exceeds the synchronous budget',
+      );
+
+      var turns = 0;
+      while (!session.isNodeIndexComplete && turns < 100) {
+        await Future<void>.delayed(Duration.zero);
+        turns++;
+      }
+      expect(
+        session.isNodeIndexComplete,
+        isTrue,
+        reason: 'the background pass must finish the deferred chapters',
+      );
     });
   });
 }

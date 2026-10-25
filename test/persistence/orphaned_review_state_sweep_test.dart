@@ -105,7 +105,10 @@ void main() {
       // neither a decision (by id or canonical id) nor a knowledge row names any more.
       await seedAllShapes();
 
-      // Rewind the version so the next open takes the upgrade path.
+      // Rewind the version so the next open takes the upgrade path. The v21
+      // column goes too: the upgrade ladder adds it back, and ALTER ADD
+      // cannot run twice on the same table.
+      await db.execute('ALTER TABLE $kTableSrsDecision DROP COLUMN fenKey');
       await db.execute('PRAGMA user_version = 19');
       await db.close();
 

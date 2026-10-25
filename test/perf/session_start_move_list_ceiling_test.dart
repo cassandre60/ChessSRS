@@ -82,6 +82,10 @@ void main() {
             nodeId: d.nodeId,
             expectedMoves: const [],
             canonicalStateId: d.canonicalStateId,
+            // Carry the row's copied position identity: dropping it would
+            // steer this variant down the null-fenKey fallback, which decodes
+            // chapter trees synchronously and measures something else.
+            fenKey: d.fenKey,
           ),
       ];
 

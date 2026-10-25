@@ -275,6 +275,30 @@ your own library, and it is the change most worth that minute.
 for these six, and a green `Tests` lane plus `./scripts/gates.sh t1` is not a
 runtime pass (TEST_STRATEGY §4).
 
+### 9. The v21 migration backfills fen keys on your library at first launch (2026-10-24)
+
+**What changed.** The database upgrades v20 → v21: a new nullable
+`srs_decision.fenKey` column is copied once from each chapter's stored tree
+(31,182 decisions on the 2026-10-24 copy; "0 skipped" in the startup log is
+the healthy outcome), and review-session construction then builds its
+transposition index from rows instead of decoding chapter trees.
+
+**What the tests prove.** Fixture upgrades land on v21 with rows and identities
+intact; the backfill is idempotent and fault-injected upgrades heal on reopen
+(crash-consistency tests); grading with a filled row equals grading with an
+unfilled row (INV-065 transposition, lapse coupling); the real-library
+harnesses measure session start before and after on a copy of your database.
+
+**What the suite cannot prove.** That the migration on YOUR database, on the
+device, completes cleanly on first launch after the update (the startup log
+line "Fen key backfill: N decisions filled, 0 skipped" is what to look for),
+and that whole-library review visibly opens faster with no new stutter while
+the background indexing overlaps your answers. The app cannot be pointed at a
+copy of the data directory (no override exists; TEST_STRATEGY §4), so the
+first real launch after this ships is the confirmation point. If opening
+review feels slower or wrong after updating, this change is the one to
+suspect.
+
 ## Closed
 
 ### #93 — review moves now make a sound (#93, `c00856c36`)

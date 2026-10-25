@@ -1314,6 +1314,7 @@ class SqliteStudyRepository implements StudyRepository {
       nodeId: row['nodeId']! as String,
       expectedMoves: decodeExpectedMoves(rawMoves),
       canonicalStateId: row['canonicalStateId'] as String?,
+      fenKey: row['fenKey'] as String?,
     );
   }
 
@@ -1329,6 +1330,7 @@ class SqliteStudyRepository implements StudyRepository {
     'nodeId': decision.nodeId,
     'expectedMoves': encodeExpectedMoves(decision.expectedMoves),
     'canonicalStateId': decision.canonicalStateId ?? decision.canonicalId,
+    'fenKey': decision.fenKey,
   };
 
   static ReviewState _reviewStateFromRow(Map<String, Object?> row) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
+import 'package:chess_srs/src/persistence/fen_key_backfill_migration.dart';
 import 'package:chess_srs/src/persistence/opening_name_repair_migration.dart';
 import 'package:chess_srs/src/persistence/orphaned_review_state_sweep.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
@@ -91,7 +92,7 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 20,
+      version: 21,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -316,6 +317,23 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
               'CREATE INDEX IF NOT EXISTS idx_srs_unlocked_decision_decisionId ON $kTableSrsUnlockedDecision(decisionId)',
             );
           }
+
+          if (oldVersion < 21) {
+            // The decision's position identity on its own row, so session
+            // construction can build the transposition and canonical indexes
+            // without decoding chapter trees (PERF-FIX-49). Nullable: the v21
+            // data migration backfills it from the trees, and a row it cannot
+            // fill stays null and falls back to the tree path at session time.
+            // Guarded on the table existing, as v18 was: hand-built fixtures
+            // (and only fixtures) can carry a version without the SRS tables.
+            final decisionTables = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+              [kTableSrsDecision],
+            );
+            if (decisionTables.isNotEmpty) {
+              batch.execute('ALTER TABLE $kTableSrsDecision ADD COLUMN fenKey TEXT');
+            }
+          }
         }
 
         // Not a schema change: v14 redefines the canonical review id and backfills history that
@@ -384,6 +402,18 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
         if (oldVersion < 20) {
           final swept = await sweepOrphanedReviewStates(db);
           _logger.info('Orphaned review-state sweep: $swept rows removed');
+        }
+
+        // Also not a schema change: v21 copies each decision's position
+        // identity (its node's fen key) onto its row, reading the stored
+        // chapter trees once. Runs after the batch commit for the same reason
+        // as the v14/v16 blocks above — it reads the upgraded table.
+        if (oldVersion < 21) {
+          final fenKeys = await backfillDecisionFenKeys(db);
+          _logger.info(
+            'Fen key backfill: ${fenKeys.decisionsFilled} decisions filled, '
+            '${fenKeys.skipped} skipped',
+          );
         }
 
         _logger.info('Database schema upgraded successfully to v$newVersion');

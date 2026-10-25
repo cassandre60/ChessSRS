@@ -101,6 +101,22 @@ and rows that cannot be backfilled stay null and fall back to the tree path.
 Implementation is briefed top-to-bottom as
 `docs/tasks/PERF-FIX-49-session-start-fen-key.md` and lands as its own
 product PR (separate from the measurement PR carrying this section).
+### Delivered 2026-10-25 — PERF-FIX-49, the fen key moves onto the decision row
+
+Q15's option A is implemented on PR #425 (the decision itself, the
+performance-handoff §11/§12 record and the brief land via #424; this PR
+branched before them). Schema v21 stores each decision's position identity on
+its row, backfilled once from the stored trees; session construction builds
+its transposition index tree-free and defers the node maps to on-demand +
+background indexing. Equivalence: 563 tests green across the affected trees;
+INV-065 and lapse-coupling tests pin filled-row == unfilled-row grading; the
+v21 backfill is fault-injected all-or-nothing with heal-on-retry; G08's flag
+on the fixtures' column assertion was a strengthening (Ack-G08 trailer).
+Measured on the real library copy (median of 15; interleaved bands in the PR):
+whole-library `startSession()` 868 → 672 ms, session construction 604 → 190 ms
+— the ~410 ms tree decode left the visible path and trickles in the
+background. What only a real launch can check (the migration on the owner's
+database, no stutter from background indexing) is in manual-test-log §9.
 
 > Reset plan (post Lichess-Mobile foundation decision). The previous task
 > graph (T1–T17, standalone implementation) is archived at git tag
