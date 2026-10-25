@@ -324,7 +324,15 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
             // without decoding chapter trees (PERF-FIX-49). Nullable: the v21
             // data migration backfills it from the trees, and a row it cannot
             // fill stays null and falls back to the tree path at session time.
-            batch.execute('ALTER TABLE $kTableSrsDecision ADD COLUMN fenKey TEXT');
+            // Guarded on the table existing, as v18 was: hand-built fixtures
+            // (and only fixtures) can carry a version without the SRS tables.
+            final decisionTables = await db.rawQuery(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+              [kTableSrsDecision],
+            );
+            if (decisionTables.isNotEmpty) {
+              batch.execute('ALTER TABLE $kTableSrsDecision ADD COLUMN fenKey TEXT');
+            }
           }
         }
 

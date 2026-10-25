@@ -2206,5 +2206,61 @@ void main() {
       expect(directMoves, hasLength(1));
       expect(directMoves.single, isNot(contains('(transposed line)')));
     });
+
+    test('a small chapter backlog indexes synchronously, with no scheduled work', () {
+      // Budget path: at most kSynchronousIndexingChapterBudget chapters decode
+      // inside the constructor, so the session is fully indexed the moment it
+      // exists and no background timer was ever scheduled — a widget-test
+      // FakeAsync zone must never see one pending.
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(_lRoot),
+          _chapterOf(_lRoot, chapterId: 'ch-2'),
+          _chapterOf(_lRoot, chapterId: 'ch-3'),
+        ],
+        decisions: [_dec1(canonicalStateId: 'can-1')],
+        reviewStates: {'can-1': _dueState('can-1', overdue: const Duration(hours: 1))},
+      );
+      expect(
+        session.isNodeIndexComplete,
+        isTrue,
+        reason: 'a 3-chapter backlog is inside the synchronous budget',
+      );
+    });
+
+    test('a large chapter backlog defers to the background pass and completes', () async {
+      // Above the budget the constructor must NOT decode every tree (that is
+      // the whole point of v21); the background pass finishes the tail.
+      final chapters = [
+        for (var i = 0; i < 12; i++)
+          _chapterOf(
+            RepertoireNode(id: 'node-root-$i', fen: _fenStart, fenKey: _fenKeyStart),
+            chapterId: 'ch-${i + 1}',
+          ),
+      ];
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: chapters,
+        decisions: [_dec1(canonicalStateId: 'can-1')],
+        reviewStates: {'can-1': _dueState('can-1', overdue: const Duration(hours: 1))},
+      );
+      expect(
+        session.isNodeIndexComplete,
+        isFalse,
+        reason: 'a 12-chapter backlog exceeds the synchronous budget',
+      );
+
+      var turns = 0;
+      while (!session.isNodeIndexComplete && turns < 100) {
+        await Future<void>.delayed(Duration.zero);
+        turns++;
+      }
+      expect(
+        session.isNodeIndexComplete,
+        isTrue,
+        reason: 'the background pass must finish the deferred chapters',
+      );
+    });
   });
 }

@@ -32,6 +32,16 @@ class FenKeyBackfillResult {
 ///
 /// Safe to run more than once: a row already carrying a fen key is left alone.
 Future<FenKeyBackfillResult> backfillDecisionFenKeys(DatabaseExecutor db) async {
+  // Fixture databases can carry a version without either SRS table; skip
+  // whole rather than throwing, as the v20 sweep does.
+  final present = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
+    [kTableSrsDecision, kTableSrsChapter],
+  );
+  if (present.length < 2) {
+    return const FenKeyBackfillResult(decisionsFilled: 0, skipped: 0);
+  }
+
   final fenKeysByChapter = await loadFenKeysByChapter(db);
 
   final decisions = await db.query(

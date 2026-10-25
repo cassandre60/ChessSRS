@@ -42,6 +42,15 @@ const int kDefaultPrefetchBatchSize = 25;
 /// live on this side of the boundary.
 const int kDefaultPrefetchRefillThreshold = 3;
 
+/// How many not-yet-node-indexed chapters a session decodes synchronously at
+/// construction before handing the remainder to the background pass.
+///
+/// A small backlog costs single-digit milliseconds and completes inside the
+/// constructor — no scheduled work, no timer a test environment has to drain.
+/// A large one (whole-library review, hundreds of chapters) is what v21
+/// exists to defer.
+const int kSynchronousIndexingChapterBudget = 8;
+
 /// Active review session state machine.
 ///
 /// Encapsulates queue management, move validation against repertoire (Invariant §2.1),
@@ -292,7 +301,20 @@ class ReviewSession {
         : _unbufferedQueue.where((d) => !isFresh(d)).length;
     _refillPrefetchBuffer();
     _advanceToNextDue();
-    unawaited(_indexRemainingNodesInBackground());
+    // Small backlogs finish synchronously and completely (no scheduled work);
+    // a large one hands its tail to the background pass.
+    final unindexed = _chaptersList.where((c) => !_nodeIndexedChapterIds.contains(c.id)).toList();
+    if (unindexed.length <= kSynchronousIndexingChapterBudget) {
+      for (final c in _chaptersList) {
+        _indexChapterDecisions(c);
+      }
+      for (final c in unindexed) {
+        _indexChapterNodes(c);
+      }
+      _allChaptersIndexed = true;
+    } else {
+      unawaited(_indexRemainingNodesInBackground());
+    }
     _logger.info(
       'ReviewSession created: mode=$mode, scope=$scope, order=$order, continuity=$continuity, '
       'initialDueCount=$_initialQueueCount, '
@@ -553,6 +575,13 @@ class ReviewSession {
   /// Of [initialQueueCount], how many are genuinely due (INV-068). Practice
   /// mode reports the whole queue, having no fresh/due distinction to make.
   int get initialDueCount => _initialDueCount;
+
+  /// Whether every chapter's node maps exist. True immediately after
+  /// construction when the backlog fit [kSynchronousIndexingChapterBudget];
+  /// otherwise it becomes true as the background pass (or any synchronous
+  /// ensure) finishes the chapters. Diagnostic and test seam for the indexing
+  /// schedule; nothing behavioral reads it.
+  bool get isNodeIndexComplete => _allChaptersIndexed;
 
   /// Due positions the scope held when this session was built, before the
   /// daily quota trimmed the queue.

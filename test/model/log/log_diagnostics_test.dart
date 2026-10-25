@@ -207,7 +207,8 @@ void main() {
           chapterId TEXT NOT NULL,
           nodeId TEXT NOT NULL,
           expectedMoves TEXT NOT NULL,
-          canonicalStateId TEXT
+          canonicalStateId TEXT,
+          fenKey TEXT
         )
       ''');
       await db.execute('''
