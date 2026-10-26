@@ -35,6 +35,24 @@ void main() {
         expect(theme.trackColor!.resolve({WidgetState.selected}), colors.ink);
         expect(theme.thumbColor!.resolve({WidgetState.selected}), colors.ground);
       });
+
+      test('input decoration is filled ($mode)', () {
+        final theme = srsThemeData(colors);
+        expect(
+          theme.inputDecorationTheme.filled,
+          isTrue,
+          reason: 'un-migrated input fields must keep the filled surface treatment',
+        );
+      });
+
+      test('slider uses the post-2023 style ($mode)', () {
+        final theme = srsThemeData(colors);
+        expect(
+          theme.sliderTheme.year2023,
+          isFalse,
+          reason: 'the slider opts out of the deprecated 2023 appearance',
+        );
+      });
     }
   });
 }
