@@ -6,7 +6,6 @@ import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
