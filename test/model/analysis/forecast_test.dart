@@ -102,7 +102,12 @@ void main() {
       final e4Move = Move.parse('e2e4')!;
       expect(
         forecast.playMove(e4Move),
-        Forecast(onMyTurn: true, lines: [UciPath.fromUciMoves(['e7e5'])].lock),
+        Forecast(
+          onMyTurn: true,
+          lines: [
+            UciPath.fromUciMoves(['e7e5']),
+          ].lock,
+        ),
       );
     });
   });
