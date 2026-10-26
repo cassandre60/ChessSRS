@@ -1,5 +1,6 @@
 import 'package:chess_srs/src/model/analysis/forecast.dart';
 import 'package:chess_srs/src/model/common/uci.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -91,6 +92,18 @@ void main() {
       test('double-ply lines are candidates', () {
         expect(forecastNotMyTurn.isCandidate(queensPawnGame), true);
       });
+    });
+  });
+  group('playMove', () {
+    test('keeps only lines starting with the played move and trims them', () {
+      final e4Line = UciPath.fromUciMoves(['e2e4', 'e7e5']);
+      final d4Line = UciPath.fromUciMoves(['d2d4', 'd7d5']);
+      final forecast = Forecast(onMyTurn: false, lines: [e4Line, d4Line].lock);
+      final e4Move = Move.parse('e2e4')!;
+      expect(
+        forecast.playMove(e4Move),
+        Forecast(onMyTurn: true, lines: [UciPath.fromUciMoves(['e7e5'])].lock),
+      );
     });
   });
 }
