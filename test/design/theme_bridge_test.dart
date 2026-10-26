@@ -48,6 +48,7 @@ void main() {
       test('slider uses the post-2023 style ($mode)', () {
         final theme = srsThemeData(colors);
         expect(
+          // ignore: deprecated_member_use
           theme.sliderTheme.year2023,
           isFalse,
           reason: 'the slider opts out of the deprecated 2023 appearance',
