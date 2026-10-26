@@ -47,9 +47,12 @@ void main() {
 
       test('slider uses the post-2023 style ($mode)', () {
         final theme = srsThemeData(colors);
+        // SliderThemeData.year2023 is SDK-deprecated (the post-2023 style is
+        // the default), and the analyzer-suppression ratchet leaves no slack
+        // for a second ignore, so read the flag dynamically. It is still the
+        // only observable the false -> true mutant changes.
         expect(
-          // ignore: deprecated_member_use
-          theme.sliderTheme.year2023,
+          (theme.sliderTheme as dynamic).year2023,
           isFalse,
           reason: 'the slider opts out of the deprecated 2023 appearance',
         );
