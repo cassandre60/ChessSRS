@@ -931,7 +931,7 @@ void main() {
     // there would pass silently.
     test('a mixed-case white keyword still resolves to white', () {
       const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
-      final pgn =
+      const pgn =
           '[FEN "$fen"]\n[SetUp "1"]\n[Event "French Defense for White"]\n\n1. Nf6 2. Nc3 Nxe4 3. Qe2 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.white));
@@ -941,14 +941,14 @@ void main() {
     // is '*' is about the black side. The OR in the placeholder test must not
     // collapse into AND, or '*' stops counting as a sentinel.
     test('a "*" white tag resolves orientation to black', () {
-      final pgn = '[White "*"]\n[Black "Karpov"]\n\n1. e4 e5 *';
+      const pgn = '[White "*"]\n[Black "Karpov"]\n\n1. e4 e5 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.black));
     });
 
     test('a "*" black tag resolves orientation to white', () {
       const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
-      final pgn = '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "*"]\n\n1. Nf6 2. Nc3 *';
+      const pgn = '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "*"]\n\n1. Nf6 2. Nc3 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.white));
     });
@@ -956,14 +956,14 @@ void main() {
     // SPEC INV-012. The empty check on a player name must stay an emptiness
     // test: a real (non-empty) name must not be treated as a placeholder.
     test('two real player names do not make white a placeholder', () {
-      final pgn = '[White "Karpov"]\n[Black "Lasker"]\n\n1. e4 e5 *';
+      const pgn = '[White "Karpov"]\n[Black "Lasker"]\n\n1. e4 e5 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.white));
     });
 
     test('two real player names with a black-to-move start stay black', () {
       const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
-      final pgn =
+      const pgn =
           '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "Lasker"]\n\n1. Nf6 2. Nc3 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.black));
