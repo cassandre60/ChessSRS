@@ -144,6 +144,34 @@ void main() {
       });
     }, timeout: const Timeout(Duration(seconds: 30)));
 
+    test('the game socket route names the default side instead of the enum', () async {
+      final routes = <Uri>[];
+      final container = await makeContainer(
+        overrides: {
+          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async => http.Response('{}', 200)),
+            ),
+          ),
+          webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWithValue(
+            FakeWebSocketChannelFactory((uri) {
+              routes.add(uri);
+              return FakeWebSocketChannel(uri);
+            }),
+          ),
+        },
+      );
+      addTearDown(container.dispose);
+      final service = container.read(serverAnalysisServiceProvider);
+
+      // The caller may omit the side; the default must reach the wire as its name, not as the
+      // enum's toString.
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA));
+      await pumpEventQueue();
+
+      expect(routes.single.path, '/watch/gameAAAA/white/v6');
+    });
+
     test('a repeated request for the same source reuses the live socket', () async {
       final channels = <FakeWebSocketChannel>[];
       var requests = 0;
