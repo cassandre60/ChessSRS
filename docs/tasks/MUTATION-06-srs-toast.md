@@ -94,3 +94,13 @@ the toast is app-level chrome — both lookups in the pair are load-bearing, and
 now both are enforced. 8 tests in the oracle (was 6). No production defect
 found. `lib/` byte-identical to origin/main. Re-audit trigger: any modification
 to `srs_toast.dart` or `test/design/srs_toast_test.dart`.
+
+Verification note (2026-10-26): the referee's `gates.sh t1` passes locally
+(ratchet `test_declarations` 2722 → 2741; G13 clean) and the analyzer is clean.
+The fleet config's `format_check_cmd` (`dart format --output=none --set-exit-if-changed
+lib test`) exits 1 on a **pristine origin/main checkout too** (540 files, all
+committed generated code — `lib/l10n/l10n_*.dart`, `.g.dart` — is not
+dart-format-canonical), so that step cannot distinguish this diff; the touched
+file is format-clean under the same command. The config's format scope is
+fleet tooling drift, not a defect of this round; flagging it for the config
+owners rather than editing a gate to get green.
