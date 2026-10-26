@@ -12,6 +12,16 @@ void main() {
       expect(pgnOffloadThresholdBytes, 8192);
     });
 
+    test('offloadsAt holds the at-or-above boundary exactly (POLISH-FIX-10)', () {
+      // The pure decision, unguarded by the web/test sniff: 8192 itself
+      // crosses ("at or above"), 8191 does not. Regression for mutation
+      // round MUTATION-07 — `>=` tightened to `>` survived the mapped suite
+      // because the public helper is env-guarded under flutter_test.
+      expect(offloadsAt(8191), isFalse);
+      expect(offloadsAt(8192), isTrue);
+      expect(offloadsAt(8193), isTrue);
+    });
+
     test('is always false in the test environment regardless of length', () {
       // FLUTTER_TEST is set under flutter_test, so the env guard dominates: even a
       // multi-megabyte input stays on this isolate. That proves the web/test sniff is
