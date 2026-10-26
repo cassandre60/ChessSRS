@@ -94,7 +94,9 @@ void main() {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
             return FakeHttpClientFactory(() => mockClient);
           }),
-          preloadedDataProvider: preloadedDataProvider.overrideWith((ref) => _preloaded(authUser: _signedIn())),
+          preloadedDataProvider: preloadedDataProvider.overrideWith(
+            (ref) => _preloaded(authUser: _signedIn()),
+          ),
         },
       );
       addTearDown(container.dispose);
@@ -114,7 +116,9 @@ void main() {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
             return FakeHttpClientFactory(() => mockClient);
           }),
-          preloadedDataProvider: preloadedDataProvider.overrideWith((ref) => _preloaded(authUser: null)),
+          preloadedDataProvider: preloadedDataProvider.overrideWith(
+            (ref) => _preloaded(authUser: null),
+          ),
         },
       );
       addTearDown(container.dispose);
@@ -135,7 +139,9 @@ void main() {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith((ref) {
             return FakeHttpClientFactory(() => mockClient);
           }),
-          preloadedDataProvider: preloadedDataProvider.overrideWith((ref) => _preloaded(authUser: null)),
+          preloadedDataProvider: preloadedDataProvider.overrideWith(
+            (ref) => _preloaded(authUser: null),
+          ),
         },
       );
       addTearDown(container.dispose);
@@ -149,31 +155,30 @@ void main() {
   });
 }
 
-
 AuthUser _signedIn() => const AuthUser(
-      token: 't',
-      user: LightUser(id: UserId('alice'), name: 'alice'),
-    );
+  token: 't',
+  user: LightUser(id: UserId('alice'), name: 'alice'),
+);
 
 PreloadedData _preloaded({AuthUser? authUser}) => (
-      sri: 'test-sri',
-      packageInfo: PackageInfo(
-        appName: 'chess_srs_test',
-        version: '0.0.0',
-        buildNumber: '0',
-        packageName: 'chess_srs_test',
-      ),
-      deviceInfo: BaseDeviceInfo({
-        'name': 'test',
-        'model': 'test',
-        'manufacturer': 'test',
-        'systemName': 'test',
-        'systemVersion': 'test',
-        'identifierForVendor': 'test',
-        'isPhysicalDevice': true,
-      }),
-      authUser: authUser,
-      engineMaxMemoryInMb: 256,
-      appDocumentsDirectory: null,
-      appSupportDirectory: null,
-    );
+  sri: 'test-sri',
+  packageInfo: PackageInfo(
+    appName: 'chess_srs_test',
+    version: '0.0.0',
+    buildNumber: '0',
+    packageName: 'chess_srs_test',
+  ),
+  deviceInfo: BaseDeviceInfo({
+    'name': 'test',
+    'model': 'test',
+    'manufacturer': 'test',
+    'systemName': 'test',
+    'systemVersion': 'test',
+    'identifierForVendor': 'test',
+    'isPhysicalDevice': true,
+  }),
+  authUser: authUser,
+  engineMaxMemoryInMb: 256,
+  appDocumentsDirectory: null,
+  appSupportDirectory: null,
+);
