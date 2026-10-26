@@ -204,4 +204,111 @@ void main() {
 
     expect(find.text('From a navigator context'), findsOneWidget);
   });
+
+  testWidgets('renders in the root overlay even from inside a nested navigator', (tester) async {
+    // The toast is app chrome: §12 puts it at z-index 40, above the scrim (10) and the
+    // sheet (20), neither of which lives inside a nested subtree. A host app may embed its
+    // own Navigator (a tab shell does), so the lookup must ask for the rootmost overlay --
+    // settling for the nearest one would file the toast inside that subtree, under the
+    // shell's own chrome, and two shells could each keep a "single" toast.
+    const shellMarker = ValueKey('shell-subtree');
+
+    await tester.pumpWidget(
+      SrsTheme(
+        colors: SrsColors.light(SrsAccent.ultramarine),
+        child: MaterialApp(
+          home: KeyedSubtree(
+            key: shellMarker,
+            child: Navigator(
+              onGenerateRoute: (settings) => PageRouteBuilder<void>(
+                pageBuilder: (_, _, _) => Builder(
+                  builder: (context) => Scaffold(
+                    body: Center(
+                      child: SrsTextButton(
+                        label: 'Act',
+                        onPressed: () => showSrsToast(context, 'Above the shell'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The premise: the button's context is under the nested navigator's own overlay, so a
+    // nearest-overlay lookup would succeed locally.
+    final overlays = tester.widgetList<Overlay>(find.byType(Overlay)).toList();
+    expect(overlays.length, 2, reason: 'the shell embeds its own navigator');
+    expect(find.ancestor(of: find.text('Act'), matching: find.byKey(shellMarker)), findsOneWidget);
+
+    await tester.tap(find.text('Act'));
+    await settleToast(tester);
+
+    expect(find.text('Above the shell'), findsOneWidget);
+    // Not a descendant of the shell subtree: the root overlay hosts it, above the shell.
+    expect(
+      find.ancestor(of: find.text('Above the shell'), matching: find.byKey(shellMarker)),
+      findsNothing,
+      reason: 'the toast must render in the root overlay, not the nearest one',
+    );
+  });
+
+  testWidgets('a navigator-key context past a LookupBoundary still resolves to the root', (
+    tester,
+  ) async {
+    // The second lookup exists for contexts that cannot see any overlay. One way that
+    // happens without a missing ancestor: the framework clips inherited lookups at a
+    // LookupBoundary, so a nested navigator's own key context below one finds no overlay at
+    // all even though overlays sit above it. The fallback must then climb to the rootmost
+    // navigator -- taking the nearest one would file the toast inside the clipped subtree.
+    final nestedKey = GlobalKey<NavigatorState>();
+    const shellMarker = ValueKey('shell-subtree');
+
+    await tester.pumpWidget(
+      SrsTheme(
+        colors: SrsColors.light(SrsAccent.ultramarine),
+        child: MaterialApp(
+          home: KeyedSubtree(
+            key: shellMarker,
+            child: LookupBoundary(
+              child: Navigator(
+                key: nestedKey,
+                onGenerateRoute: (settings) => PageRouteBuilder<void>(
+                  pageBuilder: (_, _, _) => Scaffold(
+                    body: Center(
+                      child: SrsTextButton(
+                        label: 'Act',
+                        onPressed: () =>
+                            showSrsToast(nestedKey.currentContext!, 'Past the boundary'),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The premise: the key context cannot see an overlay (the boundary clips the walk), yet
+    // overlays exist above it.
+    expect(nestedKey.currentContext, isNotNull);
+    expect(find.ancestor(of: find.text('Act'), matching: find.byKey(shellMarker)), findsOneWidget);
+
+    await tester.tap(find.text('Act'));
+    await settleToast(tester);
+
+    expect(find.text('Past the boundary'), findsOneWidget);
+    expect(
+      find.ancestor(of: find.text('Past the boundary'), matching: find.byKey(shellMarker)),
+      findsNothing,
+      reason: 'the fallback must climb to the rootmost navigator, not the context-owned one',
+    );
+  });
 }

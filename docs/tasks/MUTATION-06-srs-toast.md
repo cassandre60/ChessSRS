@@ -33,7 +33,8 @@ observable contract.
 fvm flutter test test/design/srs_toast_test.dart --concurrency=1
 ```
 
-Baseline (fresh worktree at `ae6380dbd`, 2026-10-26): see Results.
+Baseline (fresh worktree at `ae6380dbd`, 2026-10-26): 6 tests green, ~25 s
+test time (startup-dominated; `--timeout 300` ≈ 12×).
 
 ## Plan
 
@@ -50,4 +51,46 @@ Class: test-only. `lib/` must end byte-identical to origin/main.
 
 ## Results (2026-10-26)
 
-(filled at the end of the round)
+| State | Count |
+|---|---|
+| Killed (engine, original suite) | 0 |
+| Survived → killed by the new tests | 2 |
+| Survived → EQUIVALENT (no pin) | 0 |
+| Uncompilable (excluded) | 1 |
+| Timed out | 0 |
+
+3 candidates — the dart rule pack finds only three boolean/null operators in the
+file; 0/2 killable before the round, 2/2 after. The uncompilable is the
+`== null` inversion on the early return (type-promotion noise, same class as
+prior rounds').
+
+Survivor triage (dispositions in `docs/AUTOMOUS_MUTANTS.md` at source hash
+`dfbdd83a8`):
+
+- **Line 42** (`Overlay.maybeOf(context, rootOverlay: true)` → `false`): real
+  gap, pinned. The toast is app chrome — §12 puts it at z-index 40, above the
+  scrim and the sheet, neither of which lives inside a nested subtree — so a
+  context below a *nested* navigator's overlay must resolve to the rootmost
+  overlay. Clean source does; the mutant filed the toast into the nested
+  subtree. New test `renders in the root overlay even from inside a nested
+  navigator` builds a shell with its own `Navigator`, asserts the toast renders
+  outside the shell subtree; red under the mutant, green on clean source.
+- **Line 43** (`Navigator.maybeOf(context, rootNavigator: true)` → `false`):
+  first called EQUIVALENT ("the fallback only runs where no overlay exists
+  above, i.e. at the rootmost navigator, where both flags agree") — the round's
+  refutation pass **refuted that**, empirically, against the framework source:
+  an app-placed `LookupBoundary` clips `Overlay.maybeOf`'s marker walk
+  (`lookup_boundary.dart`, `boundary.depth > candidate.depth`), so a nested
+  navigator's own key context can reach the fallback with overlays above it,
+  and `Navigator.maybeOf`'s `??` asymmetry (`rootNavigator: false` takes the
+  context-owned navigator, `true` takes the rootmost ancestor) then picks
+  different navigators. Killed by `a navigator-key context past a LookupBoundary
+  still resolves to the root` — red under the mutant, green on clean source.
+  The refuted EQUIVALENT row stays in `docs/AUTONOMOUS_MUTANTS.md` history,
+  superseded by the topmost KILLED-BY row.
+
+Both kills pin the same documented contract from the file's own header comment:
+the toast is app-level chrome — both lookups in the pair are load-bearing, and
+now both are enforced. 8 tests in the oracle (was 6). No production defect
+found. `lib/` byte-identical to origin/main. Re-audit trigger: any modification
+to `srs_toast.dart` or `test/design/srs_toast_test.dart`.
