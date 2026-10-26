@@ -948,8 +948,7 @@ void main() {
 
     test('a "*" black tag resolves orientation to white', () {
       const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
-      final pgn =
-          '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "*"]\n\n1. Nf6 2. Nc3 *';
+      final pgn = '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "*"]\n\n1. Nf6 2. Nc3 *';
       final result = importPgn(pgn);
       expect(result.chapters.first.orientation, equals(Side.white));
     });
