@@ -504,8 +504,8 @@ void main() {
         sanMove: SanMove('e4', e4Move),
         position: root.position.playUnchecked(e4Move),
         lichessAnalysisComments: [
-          PgnComment(eval: PgnEvaluation.pawns(pawns: 0.1), text: 'old evaluation'),
-          PgnComment(text: 'a note'),
+          const PgnComment(eval: PgnEvaluation.pawns(pawns: 0.1), text: 'old evaluation'),
+          const PgnComment(text: 'a note'),
         ],
       );
       root.addChild(e4);
