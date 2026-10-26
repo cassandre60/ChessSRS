@@ -187,8 +187,9 @@ void main() {
       final container = await makeContainer(
         overrides: {
           httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
-            (ref) =>
-                FakeHttpClientFactory(() => MockClient((request) async => http.Response('{}', 200))),
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async => http.Response('{}', 200)),
+            ),
           ),
           webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWithValue(
             FakeWebSocketChannelFactory((uri) {
@@ -538,11 +539,7 @@ void main() {
 
       ServerAnalysisService.mergeOngoingAnalysis(root, {
         'children': [
-          {
-            'uci': 'd2d4',
-            'san': 'd4',
-            'children': <Map<String, dynamic>>[],
-          },
+          {'uci': 'd2d4', 'san': 'd4', 'children': <Map<String, dynamic>>[]},
         ],
       });
 
