@@ -35,6 +35,28 @@ void main() {
         expect(theme.trackColor!.resolve({WidgetState.selected}), colors.ink);
         expect(theme.thumbColor!.resolve({WidgetState.selected}), colors.ground);
       });
+
+      test('input decoration is filled ($mode)', () {
+        final theme = srsThemeData(colors);
+        expect(
+          theme.inputDecorationTheme.filled,
+          isTrue,
+          reason: 'un-migrated input fields must keep the filled surface treatment',
+        );
+      });
+
+      test('slider uses the post-2023 style ($mode)', () {
+        final theme = srsThemeData(colors);
+        // SliderThemeData.year2023 is SDK-deprecated (the post-2023 style is
+        // the default), and the analyzer-suppression ratchet leaves no slack
+        // for a second ignore, so read the flag dynamically. It is still the
+        // only observable the false -> true mutant changes.
+        expect(
+          (theme.sliderTheme as dynamic).year2023,
+          isFalse,
+          reason: 'the slider opts out of the deprecated 2023 appearance',
+        );
+      });
     }
   });
 }
