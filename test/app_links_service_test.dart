@@ -261,7 +261,7 @@ void main() {
       final context = tester.element(find.text('test link'));
       final service = ProviderScope.containerOf(context).read(appLinksServiceProvider);
       expect(await service.resolveAppLinkUri(context, uri), isNull);
-      expect(find.text('test link'), findsOneWidget, reason: 'Still on the same screen');
+      expect(find.text('test link'), findsOneWidget); // Still on the same screen
     });
 
     testWidgets('a /study link with no id resolves to nothing rather than throwing', (
