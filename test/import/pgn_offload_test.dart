@@ -15,7 +15,7 @@ void main() {
     test('offloadsAt holds the at-or-above boundary exactly (POLISH-FIX-10)', () {
       // The pure decision, unguarded by the web/test sniff: 8192 itself
       // crosses ("at or above"), 8191 does not. Regression for mutation
-      // round MUTATION-07 — `>=` tightened to `>` survived the mapped suite
+      // round MUTATION-10 — `>=` tightened to `>` survived the mapped suite
       // because the public helper is env-guarded under flutter_test.
       expect(offloadsAt(8191), isFalse);
       expect(offloadsAt(8192), isTrue);

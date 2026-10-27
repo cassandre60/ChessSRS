@@ -17,7 +17,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 ///
 /// Split from [shouldOffloadPgnWork] so the documented boundary itself stays
 /// testable — the public helper's web/test guard would otherwise make the
-/// `8192` edge unobservable under `flutter_test` (mutation round MUTATION-07).
+/// `8192` edge unobservable under `flutter_test` (mutation round MUTATION-10).
 ///
 /// Deliberate decision (POLISH-FIX-10): 8192, the lower of the two historical thresholds.
 /// Tree building dominates hash cost, so isolating at 8 KB keeps typical 10–30 KB
