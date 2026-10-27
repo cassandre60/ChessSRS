@@ -119,14 +119,23 @@ class LinuxSoundPlayer {
 }
 
 /// Loads all sounds of the given [SoundTheme].
-Future<void> _loadAllSounds(SoundTheme soundTheme, {Set<Sound> excluded = _emtpySet}) async {
+Future<void> _loadAllSounds(
+  SoundTheme soundTheme, {
+  Set<Sound> excluded = _emtpySet,
+  LinuxSoundPlayer? linuxPlayer,
+}) async {
   await Future.wait(
-    Sound.values.where((s) => !excluded.contains(s)).map((sound) => _loadSound(soundTheme, sound)),
+    Sound.values
+        .where((s) => !excluded.contains(s))
+        .map((sound) => _loadSound(soundTheme, sound, linuxPlayer: linuxPlayer)),
   );
 }
 
 /// Loads a single sound from the given [SoundTheme].
-Future<void> _loadSound(SoundTheme theme, Sound sound) async {
+///
+/// [linuxPlayer] defaults to the process-wide backend. Tests pass the injected
+/// stand-in so the load path is observable through the same seam as playback.
+Future<void> _loadSound(SoundTheme theme, Sound sound, {LinuxSoundPlayer? linuxPlayer}) async {
   final themePath = 'assets/sounds/${theme.name}';
   const standardPath = 'assets/sounds/standard';
   final soundId = sound.name;
@@ -139,7 +148,7 @@ Future<void> _loadSound(SoundTheme theme, Sound sound) async {
     fullPath = '$standardPath/$file';
   }
   if (defaultTargetPlatform == TargetPlatform.linux) {
-    await _linuxSoundPlayer.load(theme, soundId, fullPath);
+    await (linuxPlayer ?? _linuxSoundPlayer).load(theme, soundId, fullPath);
   } else {
     try {
       await _soundEffectPlugin.load(soundId, fullPath);
@@ -229,11 +238,11 @@ class SoundService {
       } on PlatformException catch (_) {
       } on MissingPluginException catch (_) {}
     }
-    await _loadSound(theme, Sound.move);
+    await _loadSound(theme, Sound.move, linuxPlayer: _linuxPlayer);
     if (playSound) {
       play(Sound.move);
     }
-    await _loadAllSounds(theme, excluded: {Sound.move});
+    await _loadAllSounds(theme, excluded: {Sound.move}, linuxPlayer: _linuxPlayer);
   }
 
   Future<void> release() async {
