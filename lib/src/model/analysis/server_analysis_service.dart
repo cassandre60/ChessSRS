@@ -90,7 +90,8 @@ class ServerAnalysisService {
 
     final uri = Uri(
       path: switch (source) {
-        _GameServerAnalysisSource(:final gameId) => '/watch/$gameId/${side?.name ?? Side.white}/v6',
+        _GameServerAnalysisSource(:final gameId) =>
+          '/watch/$gameId/${side?.name ?? Side.white.name}/v6',
         _StudyChapterServerAnalysisSource(:final studyId) => '/study/$studyId/socket/v6',
       },
     );
