@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:chess_srs/src/model/analysis/server_analysis_service.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
@@ -142,6 +143,156 @@ void main() {
         // Reaching here without an unhandled asynchronous error is the assertion that matters.
       });
     }, timeout: const Timeout(Duration(seconds: 30)));
+
+    test('a repeated request for the same source reuses the live socket', () async {
+      final channels = <FakeWebSocketChannel>[];
+      var requests = 0;
+      final container = await makeContainer(
+        overrides: {
+          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async {
+                if (request.url.path.endsWith('/request-analysis')) requests++;
+                return http.Response('{}', 200);
+              }),
+            ),
+          ),
+          webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWithValue(
+            FakeWebSocketChannelFactory((uri) {
+              final channel = FakeWebSocketChannel(uri);
+              channels.add(channel);
+              return channel;
+            }),
+          ),
+        },
+      );
+      addTearDown(container.dispose);
+      final service = container.read(serverAnalysisServiceProvider);
+
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA));
+      await pumpEventQueue();
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA));
+      await pumpEventQueue();
+
+      expect(requests, 1, reason: 'the server is asked to analyze the game once');
+      expect(
+        channels,
+        hasLength(1),
+        reason: 'the live socket is kept instead of being torn down and reopened',
+      );
+    });
+
+    test('replacing the analysis disposes the previous socket', () async {
+      final channels = <FakeWebSocketChannel>[];
+      final container = await makeContainer(
+        overrides: {
+          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async => http.Response('{}', 200)),
+            ),
+          ),
+          webSocketChannelFactoryProvider: webSocketChannelFactoryProvider.overrideWithValue(
+            FakeWebSocketChannelFactory((uri) {
+              final channel = FakeWebSocketChannel(uri);
+              channels.add(channel);
+              return channel;
+            }),
+          ),
+        },
+      );
+      addTearDown(container.dispose);
+      final service = container.read(serverAnalysisServiceProvider);
+
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA));
+      await pumpEventQueue();
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameB));
+      await pumpEventQueue();
+
+      expect(channels, hasLength(2));
+      expect(
+        channels.first.closeCode,
+        isNotNull,
+        reason: 'the socket of the replaced analysis is closed, not leaked',
+      );
+    });
+
+    test('an incomplete progress event keeps the analysis waiting', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+      final service = container.read(serverAnalysisServiceProvider);
+      const route = '/watch/gameAAAA/white/v6';
+
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA), Side.white);
+      await pumpEventQueue();
+
+      sendServerSocketMessages(Uri(path: route), [
+        jsonEncode({
+          't': 'analysisProgress',
+          'd': {
+            'tree': {
+              'ply': 0,
+              'children': [
+                {
+                  'ply': 1,
+                  'san': 'e4',
+                  'children': [
+                    {'ply': 2, 'san': 'e5'},
+                  ],
+                },
+              ],
+            },
+          },
+        }),
+      ]);
+      await pumpEventQueue();
+
+      final event = service.lastAnalysisEvent.value;
+      expect(event, isNotNull, reason: 'the progress event reached the service');
+      expect(event!.$2.isAnalysisComplete, isFalse);
+      expect(
+        service.currentAnalysis.value,
+        const ServerAnalysisSource.game(gameId: gameA),
+        reason: 'a partial analysis must not end the wait',
+      );
+
+      sendServerSocketMessages(Uri(path: route), [
+        jsonEncode({
+          't': 'analysisProgress',
+          'd': {
+            'tree': {'ply': 0, 'children': <Map<String, dynamic>>[]},
+          },
+        }),
+      ]);
+      await pumpEventQueue();
+
+      expect(
+        service.currentAnalysis.value,
+        isNull,
+        reason: 'the final event completes the wait and releases the analysis',
+      );
+    });
+
+    test('a 400 response keeps listening because the analysis already exists', () async {
+      final container = await makeContainer(
+        overrides: {
+          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async => http.Response('{}', 400)),
+            ),
+          ),
+        },
+      );
+      addTearDown(container.dispose);
+      final service = container.read(serverAnalysisServiceProvider);
+
+      await service.requestAnalysis(const ServerAnalysisSource.game(gameId: gameA));
+
+      expect(
+        service.currentAnalysis.value,
+        const ServerAnalysisSource.game(gameId: gameA),
+        reason: 'an already-requested analysis is still listening, not a failure',
+      );
+    });
   });
 
   group('ServerAnalysisService.mergeOngoingAnalysis', () {
@@ -239,6 +390,161 @@ void main() {
       expect(root.children.length, 1);
       expect(root.children.first.lichessAnalysisComments?.length, 1);
       expect(root.children.first.lichessAnalysisComments?.first.text, 'Best move!');
+    });
+
+    test('keeps a mate evaluation from the server', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      root.addChild(
+        Branch(sanMove: SanMove('e4', e4Move), position: root.position.playUnchecked(e4Move)),
+      );
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {
+            'uci': 'e2e4',
+            'san': 'e4',
+            'eval': {'mate': 3},
+            'comments': [
+              {'text': '#'},
+            ],
+            'children': <Map<String, dynamic>>[],
+          },
+        ],
+      });
+
+      final comments = root.children.first.lichessAnalysisComments;
+      expect(comments, isNotNull);
+      expect(comments!.single.eval?.mate, 3);
+      expect(comments.single.eval?.isPawns(), isFalse);
+    });
+
+    test('does not attach an eval comment when the server sent no evaluation', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      root.addChild(
+        Branch(sanMove: SanMove('e4', e4Move), position: root.position.playUnchecked(e4Move)),
+      );
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {
+            'uci': 'e2e4',
+            'san': 'e4',
+            'comments': [
+              {'text': 'just a note'},
+            ],
+            'children': <Map<String, dynamic>>[],
+          },
+        ],
+      });
+
+      expect(
+        root.children.first.lichessAnalysisComments,
+        isNull,
+        reason: 'a comment without an evaluation must not invent one',
+      );
+    });
+
+    test('takes the first glyph as the node annotation', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      root.addChild(
+        Branch(sanMove: SanMove('e4', e4Move), position: root.position.playUnchecked(e4Move)),
+      );
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {
+            'uci': 'e2e4',
+            'san': 'e4',
+            'glyphs': [
+              {'id': 1},
+              {'id': 2},
+            ],
+            'children': <Map<String, dynamic>>[],
+          },
+        ],
+      });
+
+      expect(root.children.first.nags, [1]);
+    });
+
+    test('takes the first comment of a server node', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      root.addChild(
+        Branch(sanMove: SanMove('e4', e4Move), position: root.position.playUnchecked(e4Move)),
+      );
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {
+            'uci': 'e2e4',
+            'san': 'e4',
+            'eval': {'cp': 20},
+            'comments': [
+              {'text': 'first'},
+              {'text': 'second'},
+            ],
+            'children': <Map<String, dynamic>>[],
+          },
+        ],
+      });
+
+      final comments = root.children.first.lichessAnalysisComments;
+      expect(comments, hasLength(1));
+      expect(comments!.single.text, 'first');
+    });
+
+    test('a new evaluation replaces the stale one and keeps a plain note', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      final e4 = Branch(
+        sanMove: SanMove('e4', e4Move),
+        position: root.position.playUnchecked(e4Move),
+        lichessAnalysisComments: [
+          const PgnComment(eval: PgnEvaluation.pawns(pawns: 0.1), text: 'old evaluation'),
+          const PgnComment(text: 'a note'),
+        ],
+      );
+      root.addChild(e4);
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {
+            'uci': 'e2e4',
+            'san': 'e4',
+            'eval': {'cp': 42},
+            'comments': [
+              {'text': 'new evaluation'},
+            ],
+            'children': <Map<String, dynamic>>[],
+          },
+        ],
+      });
+
+      final texts = e4.lichessAnalysisComments!.map((c) => c.text);
+      expect(texts, contains('new evaluation'));
+      expect(texts, contains('a note'));
+      expect(texts, isNot(contains('old evaluation')));
+    });
+
+    test('a single new server variation is not collapsed', () {
+      final root = Root(position: Chess.initial);
+      final e4Move = Move.parse('e2e4')!;
+      root.addChild(
+        Branch(sanMove: SanMove('e4', e4Move), position: root.position.playUnchecked(e4Move)),
+      );
+
+      ServerAnalysisService.mergeOngoingAnalysis(root, {
+        'children': [
+          {'uci': 'd2d4', 'san': 'd4', 'children': <Map<String, dynamic>>[]},
+        ],
+      });
+
+      final d4 = root.children.firstWhere((c) => c.sanMove.san == 'd4');
+      expect(d4.isCollapsed, isFalse, reason: 'one variation is not a crowded branch');
     });
   });
 }
