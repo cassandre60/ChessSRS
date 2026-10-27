@@ -1,9 +1,9 @@
 diff --git a/test/persistence/orphaned_review_state_sweep_test.dart b/test/persistence/orphaned_review_state_sweep_test.dart
 deleted file mode 100644
-index 6ea99a285..000000000
+index 7a1f05327..000000000
 --- a/test/persistence/orphaned_review_state_sweep_test.dart
 +++ /dev/null
-@@ -1,152 +0,0 @@
+@@ -1,155 +0,0 @@
 -// Copyright (C) 2024 ChessSRS contributors
 -// SPDX-License-Identifier: GPL-3.0-or-later
 -// SPEC coverage: INV-005, INV-069.
@@ -111,7 +111,10 @@ index 6ea99a285..000000000
 -      // neither a decision (by id or canonical id) nor a knowledge row names any more.
 -      await seedAllShapes();
 -
--      // Rewind the version so the next open takes the upgrade path.
+-      // Rewind the version so the next open takes the upgrade path. The v21
+-      // column goes too: the upgrade ladder adds it back, and ALTER ADD
+-      // cannot run twice on the same table.
+-      await db.execute('ALTER TABLE $kTableSrsDecision DROP COLUMN fenKey');
 -      await db.execute('PRAGMA user_version = 19');
 -      await db.close();
 -

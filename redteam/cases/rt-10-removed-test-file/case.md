@@ -28,6 +28,10 @@ path and was dropped, so the file's three tests and 7 assertions left no
 trace. Verified: the pre-fix tripwire exited 0 on exactly this patch.
 
 ## History
+Regenerated 2026-10-27: #425 (merged 2026-10-25) edited the target file, so the
+recorded deletion patch no longer applied and the nightly recall run exited 2
+with `STALE rt-10`. Same outright deletion, regenerated against the current
+file (3 tests, 155 lines); no semantic change to the case.
 Discovered 2026-10-19 while building this case for the F5 escape (#239):
 the tripwire's docstring promised "removed test files" while a deletion
 outright exited 0. Closed in the same PR — G08 now yields one
@@ -35,4 +39,4 @@ outright exited 0. Closed in the same PR — G08 now yields one
 the documented `Ack-G08:` path.
 
 Patch file: `patch.diff` (git diff format, applies to the commit recorded below)
-Recorded against: ee3a7f7dd905a690200e4aca222f88d65281a519
+Recorded against: 541d2df42d218767fb5503f8e99be5f6bf552c03
