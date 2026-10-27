@@ -29,31 +29,88 @@ EXIT_NEGATIVE = 1
 EXIT_USAGE = 2
 EXIT_ENV = 3
 
+def state_dir_candidates(home: Optional[Path] = None) -> List[Path]:
+    """Deployed fleet state dirs under ``~/.local/share`` (issue #93).
+
+    ``fleet-ops/references/05`` tells a cold start to look for ``<project>-oracle/``
+    while ``_resolve_state_dir`` looks at ``~/.local/share/orchestrator`` and
+    the repo fallback — so a host can hold two state dirs, one of them dead,
+    and the two readers disagree. This enumerates both shapes (the legacy
+    ``orchestrator`` name and the ``*-oracle`` pattern, which is an exact
+    suffix: an archived ``x-oracle.stale-2026-10-22`` no longer matches) and
+    de-duplicates by ``realpath``: two names for one directory are one
+    candidate, not an ambiguity.
+    """
+    base = (Path(home) if home is not None else Path.home()) / ".local" / "share"
+    found: Dict[str, Path] = {}
+    if base.is_dir():
+        for pattern in ("*-oracle", "orchestrator"):
+            for path in sorted(base.glob(pattern)):
+                if path.is_dir():
+                    found.setdefault(str(path.resolve()), path)
+    return sorted(found.values(), key=lambda p: str(p))
+
+
 DEFAULT_CONFIG = {
     "base_ref": "origin/main",
     "ledger_path": "docs/AUTONOMOUS_WORK_LEDGER.md",
     "mutant_ledger_path": "docs/AUTONOMOUS_MUTANTS.md",
     "origin_url": None,
     "setup_cmds": [],
+    # Where this skill runs. "laptop" (the default) keeps every keep-alive
+    # mechanism (beats, watchdog, wake timers) off unless the owner installed
+    # it deliberately — the doctor names a live timer on a laptop as a
+    # warning; "vm"/"ci" are the unattended profiles (fleet-ops/references/05).
+    "session": {"environment": "laptop"},
     "format_check_cmd": None,
     "analyze_cmd": None,
     "analyze_extensions": [],
     "gate_cmd": None,
     "test_cmd": None,
+    "mutation_backend": None,
+    "mutation_backends": {},
+    "coverage_report": None,
     "test_for_source": [],
     "candidates": {
         "A": {"include": [], "exclude": [], "require_test": True, "priority_paths": []},
-        "B": {"include": [], "exclude": [], "priority_paths": []},
+        "B": {"include": [], "exclude": [], "require_test": False, "priority_paths": []},
+        # The shipped streams carry their own default candidate scope: since
+        # an empty include list means "not configured" (not "nothing to do"),
+        # a stream without one would refuse to run at all.
+        "C": {"include": ["src/**/*.py", "lib/**/*.py", "tests/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "E": {"include": ["src/**/*.py", "lib/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "F": {"include": ["tests/**/*.py", "test/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "G": {"include": ["src/**/*.py", "lib/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "H": {"include": ["**/*"], "exclude": ["**/.git/**", "**/node_modules/**"], "require_test": False, "priority_paths": []},
+        "I": {"include": ["**/*.md", "src/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "J": {"include": ["src/**/*.py", "lib/**/*.py"], "exclude": [], "require_test": False, "priority_paths": []},
+        "K": {"include": ["**/*"], "exclude": ["**/.git/**"], "require_test": False, "priority_paths": []},
+        "L": {"include": ["**/*"], "exclude": ["**/.git/**"], "require_test": False, "priority_paths": []},
     },
-    "machine_budget": {"max_concurrent_tests": 1},
     "pr_required": {"COMPLETED": True, "SOUND": False},
+    "verify_gate": {"weakening": "fail", "evidence": "warn"},
     "fleet": {
         "max_open_prs": 5,
         "max_new_prs_per_day": 6,
-        "min_acceptance_rate_14d": 0.5,
         "kill_switch_file": ".autonomous/STOP",
+        "harness_cmd": None,
+        "model_ladder": [],
+        "doctor_min_free_gb": 2,
         "merge_policy": "never",
         "ledger_mode": "batched",
+        "doctor": {
+            "enforce": False,
+            "require_branch_protection": True,
+            "require_timer": False,
+            "forbidden_token_scopes": [
+                "admin:org",
+                "delete_repo",
+                "admin:public_key",
+                "admin:repo_hook",
+            ],
+            "min_free_gb": 5,
+            "max_clock_skew_seconds": 300,
+        },
     },
 }
 
@@ -183,9 +240,24 @@ def _deep_merge(defaults: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
 
 
 def config_path(root: Path, explicit: Optional[str] = None) -> Path:
+    """Where this repo's autonomous config lives.
+
+    Lookup order: the --config flag, then the AUTONOMOUS_CONFIG env var, then
+    the canonical ``<repo>/.autonomous/config.json`` when it exists, then the
+    legacy ``<repo>/scripts/autonomous/config.json`` copy layout (kept
+    working). ``root`` always comes from git in the current directory, never
+    from this script's location.
+    """
     if explicit:
         path = Path(explicit)
         return path if path.is_absolute() else (Path.cwd() / path).resolve()
+    env = os.environ.get("AUTONOMOUS_CONFIG")
+    if env:
+        path = Path(env)
+        return path if path.is_absolute() else (Path.cwd() / path).resolve()
+    modern = root / ".autonomous" / "config.json"
+    if modern.exists():
+        return modern
     return root / "scripts" / "autonomous" / "config.json"
 
 
@@ -194,6 +266,10 @@ def load_config(root: Path, explicit: Optional[str] = None) -> Dict[str, Any]:
     if not path.exists():
         if explicit:
             raise UsageError(f"config not found: {path}")
+        if os.environ.get("AUTONOMOUS_CONFIG"):
+            raise UsageError(
+                f"config not found: {path} (AUTONOMOUS_CONFIG points there)"
+            )
         return _deep_merge(DEFAULT_CONFIG, {})
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -380,7 +456,13 @@ def candidate_paths(root: Path, cfg: Dict[str, Any], stream: str) -> List[str]:
     exclude = section.get("exclude") or []
     if not include:
         path = config_path(root, None)
-        where = f" (no config file at {path})" if not path.exists() else ""
+        where = (
+            f" (no config file at {path}; looked for .autonomous/config.json "
+            "and scripts/autonomous/config.json, and AUTONOMOUS_CONFIG is "
+            "unset)"
+            if not path.exists()
+            else ""
+        )
         raise UsageError(
             f"no candidates configured for stream {stream}: set "
             f"candidates.{stream}.include in {path}{where}. "
@@ -449,16 +531,17 @@ def test_for_source(root: Path, cfg: Dict[str, Any], source: str) -> Optional[st
 STREAMS: Dict[str, Dict[str, Any]] = {
     "A": {"label": "A (Mutation)", "status": "available"},
     "B": {"label": "B (Test Audit)", "status": "available"},
-    "C": {"label": "C (Property / Fuzz)", "status": "planned"},
+    "C": {"label": "C (Property / Fuzz)", "status": "available"},
     "D": {"label": "D (Data / Migration)", "status": "planned"},
-    "E": {"label": "E (Defect Repair)", "status": "planned"},
-    "F": {"label": "F (Flake & Determinism)", "status": "planned"},
-    "G": {"label": "G (Performance)", "status": "planned"},
-    "H": {"label": "H (Security & Supply Chain)", "status": "planned"},
-    "I": {"label": "I (Docs & Spec Truthfulness)", "status": "planned"},
-    "J": {"label": "J (Simplification / Dead Code)", "status": "planned"},
-    "K": {"label": "K (Dependency Evolution)", "status": "planned"},
-    "L": {"label": "L (Meta: Fleet Self-Improvement)", "status": "planned"},
+    "E": {"label": "E (Defect Repair)", "status": "available"},
+    "F": {"label": "F (Flake & Determinism)", "status": "available"},
+    "G": {"label": "G (Performance)", "status": "available"},
+    "H": {"label": "H (Security & Supply Chain)", "status": "available"},
+    "I": {"label": "I (Docs & Spec Truthfulness)", "status": "available"},
+    "J": {"label": "J (Simplification / Dead Code)", "status": "available"},
+    "K": {"label": "K (Dependency Evolution)", "status": "available"},
+    "M": {"label": "M (Ratchet)", "status": "available"},
+    "L": {"label": "L (Meta: Fleet Self-Improvement)", "status": "gated"},
 }
 _STREAM_ALIASES: Dict[str, str] = {"1": "A", "2": "B"}
 for _sid, _info in STREAMS.items():
@@ -477,12 +560,37 @@ def normalize_stream(value: str) -> str:
             f"unknown stream {value!r}; known streams: {known} (1/2 alias A/B)"
         )
     info = STREAMS[stream]
-    if info["status"] != "available":
+    if info["status"] not in ("available", "gated"):
         raise UsageError(
             f"stream {info['label']} is planned, not implemented "
-            "(use A or B; see references/08-recursive-self-improvement.md)"
+            "(use A, B, F, or J; see references/08-recursive-self-improvement.md)"
         )
     return stream
+
+
+def stream_l_switch_problem(root: Path, cfg: Dict[str, Any]) -> Optional[str]:
+    """Stream L's own kill switch; independent of the fleet switch.
+
+    L runs only when ``fleet.stream_l_enabled`` is true AND no
+    ``.autonomous/STOP-STREAM-L`` file is present. Flowing through the
+    fleet master switch is deliberately impossible: a loop that can not
+    be turned off per-stream when it touches its own evaluator is the
+    documented objective-hacking incident.
+    """
+    fleet = cfg.get("fleet", {}) or {}
+    if not bool(fleet.get("stream_l_enabled")):
+        return (
+            "stream L is gated behind its kill switch (independent of the "
+            "fleet switch): set fleet.stream_l_enabled=true in "
+            "scripts/autonomous/config.json to request it"
+        )
+    for candidate in (root / ".autonomous" / "STOP-STREAM-L", Path.cwd() / ".autonomous" / "STOP-STREAM-L"):
+        if candidate.exists():
+            return (
+                "stream L kill switch present (.autonomous/STOP-STREAM-L); "
+                "L stays off while the file exists"
+            )
+    return None
 
 
 def stream_label(stream: str) -> str:
