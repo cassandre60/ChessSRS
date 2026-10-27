@@ -13,7 +13,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-/// Byte length at or above which PGN work moves to a worker isolate.
+/// The unguarded offload decision: at or above the threshold.
+///
+/// Split from [shouldOffloadPgnWork] so the documented boundary itself stays
+/// testable — the public helper's web/test guard would otherwise make the
+/// `8192` edge unobservable under `flutter_test` (mutation round MUTATION-10).
 ///
 /// Deliberate decision (POLISH-FIX-10): 8192, the lower of the two historical thresholds.
 /// Tree building dominates hash cost, so isolating at 8 KB keeps typical 10–30 KB
@@ -28,5 +32,9 @@ const int pgnOffloadThresholdBytes = 8192;
 /// synchronous tests).
 bool shouldOffloadPgnWork({required int textLength}) {
   if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) return false;
-  return textLength >= pgnOffloadThresholdBytes;
+  return offloadsAt(textLength);
 }
+
+/// Whether [textLength] crosses the offload threshold — the pure boundary
+/// decision behind [shouldOffloadPgnWork], "at or above" per POLISH-FIX-10.
+bool offloadsAt(int textLength) => textLength >= pgnOffloadThresholdBytes;
