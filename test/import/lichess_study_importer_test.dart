@@ -87,6 +87,15 @@ void main() {
       expect(extractStudyTitleFromPgn(pgn), 'French Defense');
     });
 
+    test('prefers a non-empty StudyName header over an Event without a colon', () {
+      const pgn = '''
+[StudyName "My Study"]
+[Event "Casual Game"]
+1. e4 e5 *
+''';
+      expect(extractStudyTitleFromPgn(pgn), 'My Study');
+    });
+
     test('returns null if Event has no colon or is missing', () {
       const pgnNoColon = '''
 [Event "Casual Game"]
