@@ -922,6 +922,55 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
+  // Orientation resolution: keyword case-insensitivity and placeholder sentinels
+  // ---------------------------------------------------------------------------
+  group('importPgn — orientation resolution', () {
+    // SPEC INV-012 (orientation). The keyword regexes are case-insensitive by
+    // design, so a mixed-case keyword must still resolve. The white-keyword path
+    // has no other test exercising case, so a regression to caseSensitive: true
+    // there would pass silently.
+    test('a mixed-case white keyword still resolves to white', () {
+      const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+      const pgn =
+          '[FEN "$fen"]\n[SetUp "1"]\n[Event "French Defense for White"]\n\n1. Nf6 2. Nc3 Nxe4 3. Qe2 *';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, equals(Side.white));
+    });
+
+    // SPEC INV-012. '*' is a PGN placeholder sentinel; a chapter whose White tag
+    // is '*' is about the black side. The OR in the placeholder test must not
+    // collapse into AND, or '*' stops counting as a sentinel.
+    test('a "*" white tag resolves orientation to black', () {
+      const pgn = '[White "*"]\n[Black "Karpov"]\n\n1. e4 e5 *';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, equals(Side.black));
+    });
+
+    test('a "*" black tag resolves orientation to white', () {
+      const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+      const pgn = '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "*"]\n\n1. Nf6 2. Nc3 *';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, equals(Side.white));
+    });
+
+    // SPEC INV-012. The empty check on a player name must stay an emptiness
+    // test: a real (non-empty) name must not be treated as a placeholder.
+    test('two real player names do not make white a placeholder', () {
+      const pgn = '[White "Karpov"]\n[Black "Lasker"]\n\n1. e4 e5 *';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, equals(Side.white));
+    });
+
+    test('two real player names with a black-to-move start stay black', () {
+      const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2';
+      const pgn =
+          '[FEN "$fen"]\n[SetUp "1"]\n[White "Karpov"]\n[Black "Lasker"]\n\n1. Nf6 2. Nc3 *';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, equals(Side.black));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // An import that produced no repertoire is a failure, not an empty success (M13)
   // ---------------------------------------------------------------------------
   group('importPgn — imports with nothing usable in them', () {
@@ -1073,6 +1122,14 @@ void main() {
       // exporter stays a sentinel even when only one of the pair is synthetic.
       final result = importPgn('[White "Repertoire"]\n[Black "Karpov"]\n\n1. e4 e5 *');
       expect(result.chapters.first.title, equals('Game 1'));
+    });
+
+    // SPEC INV-014. A dedicated Chapter (or ChapterName) tag wins outright over
+    // Event/Site and the player-matchup fallback, so an explicit chapter name
+    // survives a re-import instead of being collapsed onto 'Game N'.
+    test('a dedicated Chapter tag wins the chapter title', () {
+      final result = importPgn('[Chapter "My Chapter"]\n\n1. e4 e5 *');
+      expect(result.chapters.first.title, equals('My Chapter'));
     });
   });
 }
