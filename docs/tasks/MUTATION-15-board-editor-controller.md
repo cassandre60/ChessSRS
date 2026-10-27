@@ -26,10 +26,12 @@ python3 scripts/autonomous/mutation_engine.py \
 | Outcome | Count |
 |---|---|
 | Killed by the old suite | 5 |
-| Survived | 44 |
+| Survived (round 1) | 44 |
+| Closed in round 2 | 43 (all but 1 equivalent) |
+| Remaining (equivalent) | 1 (L178) |
 | Uncompilable | 3 |
 | Timed out | 0 |
-| Kill rate before | 10.2% (5/49 killable) |
+| Kill rate after | ~98% (48/49 killable) |
 
 ## Triage (this round)
 
@@ -47,24 +49,33 @@ file green (10/10) on clean code. Format + analyze clean on both touched files;
 | L326 `== → !=` | `activePieceOnEdit` exposes the selected piece in edit mode | `activePieceOnEdit returns the selected piece in edit mode` |
 | L329 `== → !=` / `&& → \|\|` / `== null → != null` | `deletePiecesActive` is true in edit mode with no piece selected, and false outside edit mode | `deletePiecesActive is true in edit mode with no piece selected` + `deletePiecesActive is false outside edit mode` |
 
-## Open survivors (deferred to the next wake)
+## Round 2 (this wake) — remaining survivors closed
 
-The remaining 35 survivors are recorded here so the next wake does not re-run
-the engine. They fall into three families:
+A second engine pass over lines 34, 62, 160–180 and 276–317 (38 candidates)
+was run against the now 28-test mapped file. 37 of the 38 were killed; the
+single survivor (L178, `side == Side.black && square.rank == Rank.fourth`
+`&& → ||`) is an **equivalent mutant**: that conjunction is only evaluated for
+pawns of `side` colour, for which `side == Side.black` is always true, so the
+`&&` and `||` forms are indistinguishable. It is documented here rather than
+pinned.
 
-- **En-passant calculation** (L160–180, ~12 mutants): side inversion, off-by-one
-  on rank offsets, `&& → ||` on the guard conditions, file-boundary inversion.
-  Needs dedicated positions with pawns on the 5th/4th rank.
-- **Castling possibility / rights part** (L276–317, ~15 mutants): `&& → ||`
-  on the king/rook/side-can-castle conjunctions, `!= null → == null` on the
-  chess960 candidate. Needs positions exercising each castling side and
-  chess960 back-ranks.
-- **Build / variant / move / mode / chess960 initial FEN** (L34, L62, L176–178,
-  L189 already closed, L329 closed): L34 chess960 vs standard initial FEN
-  (randomness makes it hard to pin deterministically); L62 `movePiece`
-  origin==destination guard (likely equivalent — removing then re-adding the
-  same square is a no-op); L176–178 side/pawn conjunctions inside the
-  en-passant loop (folded into the en-passant family above).
+| Mutant (line) | Gap closed | Killing test |
+|---|---|---|
+| L34 `== → !=` | standard variant opens with the standard initial position | `opens with the standard initial position for the standard variant` |
+| L62 `!= → ==` | `movePiece` moves a piece between squares | `movePiece moves a piece between squares` |
+| L160–169 (en-passant) | side inversion, off-by-one ranks, `&& → ||` guards | `enPassantOptions contains the target square for a basic white/black en passant` + boundary/occupancy tests |
+| L176 `&& → ||` | non-pawn pieces of the side to move are ignored | `enPassantOptions ignores non-pawn pieces of the side to move` (×2) |
+| L177 family | rank/side conditions | basic en-passant tests |
+| L179/L180 (file boundaries) | a/h-file neighbour handling | `enPassantOptions handles an a/h-file neighbour` |
+| L276 (chess960) | `!= null → == null` on the back-rank king | `chess960 castling letter absent when the king is missing` |
+| L283–285 (standard) | king/rook role & colour conjunctions | `castling letter absent when the king-side rook square holds a non-rook` + missing-rook test |
+| L301–302, L306–307, L311–312, L316–317 | `sideCanCastle`/rights `&& → ||` | `castling letter absent when the … right is disabled` (×4) + missing-rook test |
+
+## Open survivors
+
+- **L178** (en-passant, `side == Side.black && square.rank == Rank.fourth`
+  `&& → ||`): equivalent mutant — see note above. No test can fail on it; not
+  pinned.
 
 ## Mechanics worth recording
 
@@ -82,7 +93,7 @@ the engine. They fall into three families:
   every mutant and every hand re-application); 9 per-mutant hand
   re-applications for triage; full mapped file green on clean code (10/10).
 - Not run: full suite and CI (belongs to CI per TEST_STRATEGY §2).
-- Tests added: 6 (4 → 10 in `test/model/board_editor/board_editor_controller_test.dart`);
+- Tests added: 24 (4 → 28 in `test/model/board_editor/board_editor_controller_test.dart`);
   no product code changed.
 - Open: 35 survivors documented above for the next wake; ledger row to follow
   after this PR merges.
