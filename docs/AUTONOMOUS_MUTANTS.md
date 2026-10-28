@@ -13,6 +13,7 @@
 
 | Date | Mutant ID | Source Hash | Disposition | PR / Issue | Reason |
 |---|---|---|---|---|---|
+| 2026-10-28 | `lib/src/model/common/time_increment.dart:43:507bd8e558ea` | `143c23f95` | KILLED-BY | #445 | identical(this, other) \|\| -> && in operator ==: killed by "Equality holds for runtime-equal, distinct instances" in test/model/common/time_increment_test.dart (red under the mutant, green on clean source). Const instances with equal fields are canonicalized to one object so identical() short-circuits and no field comparison runs; the test builds both sides at runtime and asserts identical(a, b) is false. |
 | 2026-10-27 | `lib/src/import/pgn_offload.dart:31:257d14857bbd` | `0d39640c0` | KILLED-BY | #441 | the 2026-10-26 EQUIVALENT call below is superseded: #441 extracted the pure decision offloadsAt(int) (behaviour-preserving one-liner), making the at-or-above boundary observable under flutter_test, where 'offloadsAt holds the at-or-above boundary exactly (POLISH-FIX-10)' kills the tightened comparison (8191 false, 8192/8193 true) |
 | 2026-10-27 | `lib/src/import/pgn_offload.dart:31:257d14857bbd` | `0d39640c0` | OPEN | — | Tighten inequality: '>=' -> '>': '>=' -> '>' |
 | 2026-10-27 | `lib/src/model/auth/auth_controller.dart:26:3d8c58fff898` | `25a62b28c` | KILLED-BY | #437 | killed by 'isLoggedInProvider tracks the signed-in state': no test read the boolean's value |
