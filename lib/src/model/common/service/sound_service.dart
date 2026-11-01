@@ -57,6 +57,27 @@ class LinuxSoundPlayer {
   final Map<String, String> _soundPaths = {};
   String? _playerCmd;
 
+  // Seams for command discovery: default to the process-wide behaviour used
+  // before the audit, but allow tests to inject a deterministic file/command
+  // probe without staging real binaries in /usr/bin or /usr/local/bin.
+  final bool Function(String path) _fileExists;
+  final bool Function(String cmd) _commandExists;
+
+  LinuxSoundPlayer({
+    bool Function(String path)? fileExists,
+    bool Function(String cmd)? commandExists,
+  }) : _fileExists = fileExists ?? ((path) => File(path).existsSync()),
+       _commandExists =
+           commandExists ??
+           ((cmd) {
+             try {
+               final res = Process.runSync('which', [cmd]);
+               return res.exitCode == 0;
+             } catch (_) {
+               return false;
+             }
+           });
+
   void initialize() {
     if (_hasCmd('pw-play')) {
       _playerCmd = 'pw-play';
@@ -67,16 +88,17 @@ class LinuxSoundPlayer {
     }
   }
 
+  @visibleForTesting
+  String? get playerCommand => _playerCmd;
+
+  @visibleForTesting
+  bool hasCommand(String cmd) => _hasCmd(cmd);
+
   bool _hasCmd(String cmd) {
-    if (File('/usr/bin/$cmd').existsSync() || File('/usr/local/bin/$cmd').existsSync()) {
+    if (_fileExists('/usr/bin/$cmd') || _fileExists('/usr/local/bin/$cmd')) {
       return true;
     }
-    try {
-      final res = Process.runSync('which', [cmd]);
-      return res.exitCode == 0;
-    } catch (_) {
-      return false;
-    }
+    return _commandExists(cmd);
   }
 
   Future<void> load(SoundTheme theme, String soundId, String fullPath) async {

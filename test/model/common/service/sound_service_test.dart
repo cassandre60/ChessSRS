@@ -35,6 +35,12 @@ class _RecordingLinuxPlayer implements LinuxSoundPlayer {
 
   @override
   void release() => releases++;
+
+  @override
+  String? get playerCommand => null;
+
+  @override
+  bool hasCommand(String cmd) => false;
 }
 
 void main() {
@@ -220,6 +226,57 @@ void main() {
     await soundService.release();
 
     expect(player.releases, 1, reason: 'release must reach the Linux backend');
+  });
+
+  test('LinuxSoundPlayer discovers a command present in /usr/bin alone', () {
+    // Discovery uses an OR over the two hard-coded discovery paths. A probe that
+    // is available in exactly one of them must still be discovered.
+    final player = LinuxSoundPlayer(
+      fileExists: (path) => path == '/usr/bin/pw-play',
+      commandExists: (_) => false,
+    );
+    player.initialize();
+    expect(
+      player.playerCommand,
+      'pw-play',
+      reason: 'a player present in /usr/bin but not /usr/local/bin must still be selected',
+    );
+  });
+
+  test('LinuxSoundPlayer discovers a command present in /usr/local/bin alone', () {
+    final player = LinuxSoundPlayer(
+      fileExists: (path) => path == '/usr/local/bin/aplay',
+      commandExists: (_) => false,
+    );
+    player.initialize();
+    expect(
+      player.playerCommand,
+      'aplay',
+      reason: 'a player present in /usr/local/bin but not /usr/bin must still be selected',
+    );
+  });
+
+  test('LinuxSoundPlayer falls back to the "which" probe when no path has it', () {
+    final player = LinuxSoundPlayer(
+      fileExists: (_) => false,
+      commandExists: (cmd) => cmd == 'paplay',
+    );
+    player.initialize();
+    expect(
+      player.playerCommand,
+      'paplay',
+      reason: 'the which probe is consulted when both discovery paths miss',
+    );
+  });
+
+  test('LinuxSoundPlayer stays unresolved when no probe succeeds', () {
+    final player = LinuxSoundPlayer(fileExists: (_) => false, commandExists: (_) => false);
+    player.initialize();
+    expect(
+      player.playerCommand,
+      isNull,
+      reason: 'with no discovered backend there is no command to run',
+    );
   });
 }
 
