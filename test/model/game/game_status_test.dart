@@ -13,7 +13,6 @@ void main() {
     expect(gameStatus, GameStatus.mate);
   });
 
-
   test('can decode status by integer value', () {
     final gameStatus = Pick(30).asGameStatusOrThrow();
     expect(gameStatus, GameStatus.mate);
