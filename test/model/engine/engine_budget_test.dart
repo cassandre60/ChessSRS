@@ -69,6 +69,13 @@ void main() {
       expect(budget.analysisThreads(8), 3);
       expect(budget.analysisThreads(0), 1);
     });
+
+    test('asks for a third hint line only with six or more cores', () {
+      // The third line is another whole search tree, so it is only worth asking for on a
+      // device with cores to spare; six is the first core count that qualifies.
+      expect(const EngineBudget(maxMemoryInMb: 300, maxCores: 5).offlineEvalMultiPv, 2);
+      expect(const EngineBudget(maxMemoryInMb: 300, maxCores: 6).offlineEvalMultiPv, 3);
+    });
   });
 
   group('engineMaxMemoryFor', () {
