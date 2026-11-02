@@ -278,6 +278,19 @@ void main() {
       reason: 'with no discovered backend there is no command to run',
     );
   });
+
+  test('LinuxSoundPlayer reports an unavailable command via the default probe', () {
+    // The default filesystem/command probe (no injected seams) must report that
+    // a definitely absent command is unavailable; exercising it guards the
+    // exit-code comparison and the catch fallthrough in the default probe.
+    final player = LinuxSoundPlayer();
+    expect(
+      player.hasCommand('absolutely-not-a-real-command-xyz'),
+      isFalse,
+      reason:
+          'a command absent from /usr/bin, /usr/local/bin and `which` must be reported unavailable',
+    );
+  });
 }
 
 Future<SoundService> _soundServiceWith(_RecordingLinuxPlayer player) {
