@@ -362,4 +362,12 @@ void main() {
       }
     });
   });
+
+  group('shapeBookMoves', () {
+    test('keeps a move whose share exactly equals the cutoff', () {
+      final result = shapeBookMoves({'a': 1, 'b': 49}, cutoff: 0.02);
+      expect(result, hasLength(2));
+      expect(result.map((m) => m.uci).toList(), contains('a'));
+    });
+  });
 }
