@@ -1,3 +1,4 @@
+import 'package:chess_srs/src/model/engine/engine_spec.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,6 +75,24 @@ void main() {
     test('returns null for a name it cannot read', () {
       expect(engineShortLabel(null), isNull);
       expect(engineShortLabel('Lc0 v0.32.1'), isNull);
+    });
+  });
+
+  group('isLightStockfish', () {
+    test('recognises only the light Stockfish flavour', () {
+      expect(isLightStockfish(StockfishSpec.light()), isTrue);
+      expect(isLightStockfish(StockfishSpec.latest(nnuePath: 'x')), isFalse);
+      expect(isLightStockfish(null), isFalse);
+    });
+  });
+
+  group('threatModePosition', () {
+    test('advances both move counters for a black-to-move position', () {
+      final p = position('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 12');
+      final t = threatModePosition(p);
+      expect(t.turn, Side.white);
+      expect(t.halfmoves, p.halfmoves + 1);
+      expect(t.fullmoves, p.fullmoves + 1);
     });
   });
 }
