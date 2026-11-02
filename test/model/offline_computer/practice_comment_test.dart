@@ -115,5 +115,51 @@ void main() {
         MoveVerdict.blunder,
       );
     });
+
+    test('threshold boundaries are inclusive on the correct side', () {
+      // Boundary: shift == kGoodMoveThreshold is not "good" (strict '<').
+      expect(
+        MoveVerdict.fromShift(
+          0.05,
+          hasBetterMove: true,
+          winningChancesBefore: 0.0,
+          winningChancesAfter: -0.05,
+        ),
+        MoveVerdict.inaccuracy,
+      );
+
+      // Boundary: winning chances exactly at kWinningThreshold keep notBest.
+      expect(
+        MoveVerdict.fromShift(
+          0.1,
+          hasBetterMove: true,
+          winningChancesBefore: 0.5,
+          winningChancesAfter: 0.5,
+        ),
+        MoveVerdict.notBest,
+      );
+
+      // Boundary: winning chances after exactly at threshold keep notBest.
+      expect(
+        MoveVerdict.fromShift(
+          0.1,
+          hasBetterMove: true,
+          winningChancesBefore: 0.8,
+          winningChancesAfter: 0.5,
+        ),
+        MoveVerdict.notBest,
+      );
+
+      // Boundary: shift == kMistakeThreshold is blunder (strict '<' for mistake).
+      expect(
+        MoveVerdict.fromShift(
+          0.24,
+          hasBetterMove: true,
+          winningChancesBefore: 0.3,
+          winningChancesAfter: 0.06,
+        ),
+        MoveVerdict.blunder,
+      );
+    });
   });
 }
