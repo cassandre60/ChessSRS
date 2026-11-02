@@ -80,8 +80,8 @@ void main() {
 
   group('isLightStockfish', () {
     test('recognises only the light Stockfish flavour', () {
-      expect(isLightStockfish(StockfishSpec.light()), isTrue);
-      expect(isLightStockfish(StockfishSpec.latest(nnuePath: 'x')), isFalse);
+      expect(isLightStockfish(const StockfishSpec.light()), isTrue);
+      expect(isLightStockfish(const StockfishSpec.latest(nnuePath: 'x')), isFalse);
       expect(isLightStockfish(null), isFalse);
     });
   });
