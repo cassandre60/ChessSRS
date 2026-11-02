@@ -84,6 +84,15 @@ void main() {
         );
       });
 
+      // Even DTM must round up in half-move→full-move conversion.
+      // DTM=2 → ceil(2/2)=1; the off-by-one mutant (+2) would give 2.
+      test('white to move, DTM=2 half-moves → mate +1', () {
+        final entry = _makeEntry(category: TablebaseCategory.win, dtm: 2);
+        final eval = tablebaseEntryToCloudEval(entry, whiteToMove)!;
+        expect(eval.mate, 1); // (2+1)~/2 = 1
+        expect(eval.cp, isNull);
+      });
+
       test('DTM=null falls back to ±10', () {
         expect(
           tablebaseEntryToCloudEval(_makeEntry(category: TablebaseCategory.win), whiteToMove)!.mate,
