@@ -96,4 +96,29 @@ void main() {
       expect(storage.pageCalls(), 2, reason: 'the last page reported no further cursor');
     });
   });
+
+  group('HttpLogPaginator delete button visibility', () {
+    test('is hidden when the log list is empty', () async {
+      final storage = MockHttpLogStorage();
+      when(
+        () => storage.page(
+          cursor: any(named: 'cursor'),
+          searchQuery: any(named: 'searchQuery'),
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => _page([]));
+
+      final container = ProviderContainer(
+        overrides: [httpLogStorageProvider.overrideWith((ref) => Future.value(storage))],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(httpLogPaginatorProvider(null), (_, _) {});
+      addTearDown(subscription.close);
+
+      await container.read(httpLogPaginatorProvider(null).future);
+      final state = container.read(httpLogPaginatorProvider(null)).requireValue;
+      expect(state.logs, isEmpty);
+      expect(state.isDeleteButtonVisible, isFalse);
+    });
+  });
 }
