@@ -101,10 +101,7 @@ void main() {
 
       expect(find.text('Hello'), findsOneWidget);
       expect(find.byIcon(Icons.info), findsOneWidget);
-      expect(
-        find.byWidgetPredicate((w) => w is SizedBox && w.width == 16.0),
-        findsOneWidget,
-      );
+      expect(find.byWidgetPredicate((w) => w is SizedBox && w.width == 16.0), findsOneWidget);
     });
   });
 }
