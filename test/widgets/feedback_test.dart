@@ -92,7 +92,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: FeedbackTile(leading: Icon(Icons.info), title: Text('Hello')),
           ),
@@ -102,7 +102,7 @@ void main() {
       expect(find.text('Hello'), findsOneWidget);
       expect(find.byIcon(Icons.info), findsOneWidget);
       expect(
-        find.byWidgetPredicate((w) => w is SizedBox && (w as SizedBox).width == 16.0),
+        find.byWidgetPredicate((w) => w is SizedBox && w.width == 16.0),
         findsOneWidget,
       );
     });
