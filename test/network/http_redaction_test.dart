@@ -110,6 +110,14 @@ void main() {
 
       expect(redacted.toString(), isNot(contains('tok3n')));
     });
+
+    test('preserves trailing segments after a redacted FCM path token', () {
+      final redacted = redactUriForLogging(
+        Uri.parse('https://lichess.dev/mobile/register/firebase/secret-token/extra'),
+      );
+
+      expect(redacted.path, '/mobile/register/firebase/$kRedactedLogValue/extra');
+    });
   });
 
   group('every logged URL goes through the helper', () {
