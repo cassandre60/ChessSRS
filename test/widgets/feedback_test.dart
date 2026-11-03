@@ -79,7 +79,9 @@ void main() {
   group('FeedbackTile', () {
     testWidgets('renders the title when leading is null', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: FeedbackTile(title: Text('Hello')))),
+        const MaterialApp(
+          home: Scaffold(body: FeedbackTile(title: Text('Hello'))),
+        ),
       );
 
       expect(find.text('Hello'), findsOneWidget);
@@ -91,7 +93,9 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(body: FeedbackTile(leading: Icon(Icons.info), title: Text('Hello'))),
+          home: Scaffold(
+            body: FeedbackTile(leading: Icon(Icons.info), title: Text('Hello')),
+          ),
         ),
       );
 
@@ -103,5 +107,4 @@ void main() {
       );
     });
   });
-
 }
