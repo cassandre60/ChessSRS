@@ -465,4 +465,47 @@ void main() {
       expect(container.read(lichessConnectionStatusProvider), LichessConnectionStatus.networkDown);
     });
   });
+
+  test('a change arriving inside the throttle window is not dropped for good', () async {
+    var requests = 0;
+    final container = await makeContainer(
+      overrides: {
+        httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+          (ref) => FakeHttpClientFactory(
+            () => MockClient((request) async {
+              requests++;
+              if (requests <= 4) return http.Response('', 200);
+              throw const SocketException('offline');
+            }),
+          ),
+        ),
+      },
+    );
+
+    final subscription = container.listen(connectivityChangesProvider, (_, _) {});
+    await container.read(connectivityChangesProvider.future);
+    expect(container.read(isDeviceOnlineProvider), isTrue);
+
+    FakeConnectivity.controller.add([ConnectivityResult.wifi]);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    FakeConnectivity.controller.add([ConnectivityResult.wifi]);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    await Future<void>.delayed(kConnectivityThrottleDelay + const Duration(seconds: 3));
+
+    subscription.close();
+
+    expect(
+      requests,
+      greaterThan(4),
+      reason: 'the trailing change must have been probed (got $requests requests)',
+    );
+    expect(
+      container.read(isDeviceOnlineProvider),
+      isFalse,
+      reason:
+          'the connectivity change arriving during the throttle window must survive as a trailing run',
+    );
+  });
 }
