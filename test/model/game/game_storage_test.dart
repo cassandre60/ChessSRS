@@ -4,6 +4,7 @@ import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/common/speed.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
+import 'package:chess_srs/src/model/game/game_filter.dart';
 import 'package:chess_srs/src/model/game/game_status.dart';
 import 'package:chess_srs/src/model/game/game_storage.dart';
 import 'package:chess_srs/src/model/game/material_diff.dart';
@@ -44,6 +45,24 @@ void main() {
       final page2 = await storage.page(userId: userId, max: 10, until: page1.last.lastModified);
       expect(page2.length, 10);
       expect(page2.last.game.id, const GameId('game0080'));
+    });
+
+    test('page filters by side', () async {
+      final container = await makeContainer();
+
+      final storage = await container.read(gameStorageProvider.future);
+
+      await storage.save(game);
+      final blackGame = game.copyWith(id: const GameId('game0099'), youAre: Side.black);
+      await storage.save(blackGame);
+
+      final page = await storage.page(
+        userId: const UserId('whiteId'),
+        filter: const GameFilterState(side: Side.white),
+      );
+
+      expect(page.length, 1);
+      expect(page.first.game.youAre, Side.white);
     });
   });
 }
