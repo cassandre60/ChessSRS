@@ -149,6 +149,12 @@ void main() {
       expect(p.asUciCharPairOrNull(), isNull);
     });
 
+    test('a valid id returns its pair from asUciCharPairOrNull', () {
+      final p = pick(<String, dynamic>{'u': 'ab'}, 'u');
+
+      expect(p.asUciCharPairOrNull(), UciCharPair.fromStringId('ab'));
+    });
+
     test('reads a UciPath and keeps its value', () {
       final out = pick(<String, dynamic>{'p': 'e2e4d7d5'}, 'p').asUciPathOrThrow();
 
@@ -205,6 +211,12 @@ void main() {
       final p = pick(<String, dynamic>{}, 'at');
 
       expect(p.asDateTimeFromMillisecondsOrNull(), isNull);
+    });
+
+    test('a valid epoch returns its DateTime from asDateTimeFromMillisecondsOrNull', () {
+      final p = pick(<String, dynamic>{'at': 1700000000000}, 'at');
+
+      expect(p.asDateTimeFromMillisecondsOrNull()?.millisecondsSinceEpoch, 1700000000000);
     });
   });
 
@@ -281,6 +293,14 @@ void main() {
       expect(d.asDurationFromSecondsOrNull(), isNull);
       expect(d.asDurationFromCentiSecondsOrNull(), isNull);
       expect(d.asDurationFromMilliSecondsOrNull(), isNull);
+    });
+
+    test('valid centi/milli values pass through the OrNull variants', () {
+      final c = pick(<String, dynamic>{'d': 250}, 'd');
+      final m = pick(<String, dynamic>{'d': 1234}, 'd');
+
+      expect(c.asDurationFromCentiSecondsOrNull(), const Duration(milliseconds: 2500));
+      expect(m.asDurationFromMilliSecondsOrNull(), const Duration(milliseconds: 1234));
     });
   });
 }
