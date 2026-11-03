@@ -1,10 +1,12 @@
+import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/view/analysis/analysis_screen.dart';
 import 'package:chess_srs/src/widgets/move_times_chart.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/widgets.dart';
+import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 
@@ -129,6 +131,62 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('3.88 seconds'), findsOneWidget);
+    });
+
+    testWidgets('paints nothing without throwing for empty move times', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 150,
+              child: MoveTimesChart(
+                params: (
+                  moveTimes: const IList<Duration>.empty(),
+                  clocks: const IList<Duration>.empty(),
+                  division: null,
+                  rootPly: 0,
+                  currentNodePly: 1,
+                  isOnMainline: false,
+                  onJumpToNode: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('paints nothing without throwing when every move time is zero', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 150,
+              child: MoveTimesChart(
+                params: (
+                  moveTimes: IList<Duration>(const [Duration.zero, Duration.zero]),
+                  clocks: IList<Duration>(const [Duration.zero, Duration.zero]),
+                  division: null,
+                  rootPly: 0,
+                  currentNodePly: 1,
+                  isOnMainline: false,
+                  onJumpToNode: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     });
   });
 }
