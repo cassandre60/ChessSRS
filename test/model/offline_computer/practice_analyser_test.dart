@@ -190,6 +190,37 @@ void main() {
       });
     });
 
+    test('usableEval returns at once when the stored eval is exactly minDepth deep', () async {
+      final container = await makeContainer();
+
+      fakeAsync((async) {
+        final analyser = PracticeAnalyser(
+          evaluator: () => readEvaluator(container),
+          onEval: (_, _) {},
+        );
+        addTearDown(analyser.dispose);
+
+        analyser.analyse(makeWork());
+        async.elapse(_settleWindow);
+
+        engine.emitDepthRange(toDepth: kPracticeUsableDepth);
+        async.elapse(_settleWindow);
+
+        // The stored eval is exactly at the requested minDepth: that is "deep enough",
+        // so usableEval must hand it back without waiting for anything.
+        var completed = false;
+        ClientEval? served;
+        analyser.usableEval(Chess.initial, timeout: const Duration(seconds: 5)).then((eval) {
+          completed = true;
+          served = eval;
+        });
+        async.flushMicrotasks();
+
+        expect(completed, isTrue, reason: 'an eval already at minDepth needs no waiting');
+        expect(served?.depth, kPracticeUsableDepth);
+      });
+    });
+
     test('usableEval gives up with the best it has when the deadline passes', () async {
       final container = await makeContainer();
 
