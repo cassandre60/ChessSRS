@@ -208,7 +208,7 @@ void main() {
       ''';
 
       final mockClient = MockClient((request) {
-        if (request.url.path == '/player') {
+        if (request.url.path == '/player' && request.url.queryParameters['speeds'] == 'bullet') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
           return mockResponse(response, 200);
         }
