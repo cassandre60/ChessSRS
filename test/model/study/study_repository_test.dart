@@ -556,6 +556,9 @@ void main() {
       expect(study.chapter.setup.orientation, Side.black);
       expect(study.chapter.setup.fromFen, isFalse);
       expect(study.chapter.practise, isFalse);
+      expect(study.chapter.features, (computer: true, explorer: true));
+      expect(study.liked, isFalse);
+      expect(study.features, (cloneable: false, sticky: false));
       expect(summary, isNull);
       expect(pgn, contains('[Event "Main Line"]'));
 
