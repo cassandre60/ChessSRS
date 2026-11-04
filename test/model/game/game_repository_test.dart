@@ -155,8 +155,7 @@ void main() {
 
   group('GameRepository.getUserGames perf filter', () {
     test('perfType is sent for a non-empty perf filter', () async {
-      const response =
-          '''
+      const response = '''
 {"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
 ''';
 
