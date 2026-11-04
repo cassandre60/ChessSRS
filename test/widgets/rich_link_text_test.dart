@@ -41,6 +41,12 @@ void main() {
       expect(url.url.toUpperCase(), contains('EXAMPLE.COM'));
     });
 
+    test('normalizes an uppercase protocol prefix in the stored URL', () {
+      final result = linkify('visit HTTPS://EXAMPLE.COM now');
+      final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
+      expect(url.url, 'HTTPS://EXAMPLE.COM');
+    });
+
     test('humanizes URL display text', () {
       final result = linkify('visit https://example.com/path now');
       final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
