@@ -4,6 +4,7 @@
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
+import 'package:chess_srs/src/review/fresh_introduction_order.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
@@ -691,6 +692,10 @@ class ReviewService {
       transposeScope: transposeScope,
       dynamicRepertoireMode: dynamicRepertoireMode,
       unlockedDecisionIds: unlockedIds,
+      freshIntroductionOrder: freshIntroductionOrderFor(
+        decisions: decisions,
+        reviewStates: reviewStates,
+      ),
       initialExposureThrottle: exposureThrottle,
       prefetchBatchSize: prefetchBatchSize,
       prefetchRefillThreshold: prefetchRefillThreshold,

@@ -660,19 +660,22 @@ investigated — likely transient, unconfirmed).
 
 Owner-reported on the phone: *"the black and white drawers are confusing, i have
 no idea if im learning anything ... i got served the same line over and over
-everyday while all the others are lost."* Four changes, in `review_session.dart`,
-`review_service.dart`, `review_screen.dart`, `review_scope_drawer.dart`.
+everyday while all the others are lost."* Four changes, in
+`fresh_introduction_order.dart`, `review_session.dart`, `review_service.dart`,
+`review_screen.dart`, `review_scope_drawer.dart`.
 
 1. **Fresh introductions grow the whole library, not its head.** The fresh
    bucket was introduced by `sublist(0, allowance)` in import order, so a
    20-a-day allowance stayed inside the first-imported study for weeks while
-   every other repertoire stayed invisible. Introductions now visit the
-   least-presented study (then least-presented chapter) first, interleaved one
-   per round, so a capped day samples every part of the library. Due-date ties
-   carry a random tie-break so a bulk backlog is not cut by insertion order.
-   Opponent-branch fallback with nothing due below it is now an even draw
-   instead of subtree-size weighting (which had the mainline dominating every
-   walk).
+   every other repertoire stayed invisible. `review_session.dart` exposes a
+   `FreshIntroductionOrder` seam (a product policy, kept out of the pure domain
+   so the domain LOC ratchet still fits); `fresh_introduction_order.dart`
+   supplies the production policy, which visits the least-presented study (then
+   least-presented chapter) first and interleaves one position per round, so a
+   capped day samples every part of the library. Due-date ties carry a random
+   tie-break so a bulk backlog is not cut by insertion order. Opponent-branch
+   fallback with nothing due below it is now an even draw instead of
+   subtree-size weighting (which had the mainline dominating every walk).
 2. **The drawer names its repertoire.** A title row (colour swatch + `White
    repertoire` / `Black repertoire` + the colour's due count, then a
    `N openings · M studies` summary) sits above the search field. The sheet
@@ -689,10 +692,12 @@ everyday while all the others are lost."* Four changes, in `review_session.dart`
 
 **Evidence.** `test/review/review_fresh_spread_test.dart` and
 `test/view/review/review_progress_and_drawer_test.dart` (CI). A pure-Dart probe
-(`dart run`) over the domain, run against the pre-fix and post-fix tree by
-restoring the file: pre-fix `served=[a, a, a]` (one study three times) and 3/12
-studies touched over four days; post-fix `served=[a, b, c]` and 12/12.
-`dart analyze` clean on every touched file. Not runtime-validated on a device.
+(`dart run`) over the domain: without the ordered policy a three-study library
+serves `[a, a, a]` (one study three times — the bug); with it, `[a, b, c]`, and
+four simulated days reach 12/12 studies. The same probe shows a 20-chapter
+by-line session with allowance one is `isNodeIndexComplete=false` (pre-fix
+`true`). `dart analyze` clean on every touched file; `domain_loc` 4046 of the
+4050 ratchet cap. Not runtime-validated on a device.
 
 ## Recording rule
 

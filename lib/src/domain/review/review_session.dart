@@ -51,90 +51,9 @@ const int kDefaultPrefetchRefillThreshold = 3;
 /// exists to defer.
 const int kSynchronousIndexingChapterBudget = 8;
 
-/// Orders [fresh] so a capped introduction grows the whole library evenly
-/// instead of spending every day inside whichever study was imported first.
-///
-/// The fresh bucket is built in database/import order, and taking its head
-/// meant a 20-a-day allowance stayed inside the first study for weeks — the
-/// owner's "served the same line over and over everyday while all the others
-/// are lost". Two rules fix that:
-///
-/// 1. Groups are visited least-presented first (fewest positions from that
-///    study/chapter have ever been shown), so a session moves on to untouched
-///    material instead of digging the same hole deeper.
-/// 2. Groups are interleaved one position per round, so every study/chapter
-///    with material contributes before any contributes twice.
-///
-/// Order inside a chapter is preserved: it is the author's line order, and the
-/// caller re-sorts the admitted set when the user asked for line order.
-List<RepertoireDecision> _spreadFreshIntroductions(
-  List<RepertoireDecision> fresh, {
-  required Map<String, int> presentedByStudy,
-  required Map<String, int> presentedByChapter,
-}) {
-  if (fresh.length <= 2) return fresh;
-
-  final byStudy = <String, List<RepertoireDecision>>{};
-  for (final d in fresh) {
-    byStudy.putIfAbsent(d.studyId, () => <RepertoireDecision>[]).add(d);
-  }
-  final studies = _leastPresentedFirst(byStudy, presentedByStudy);
-  if (studies.length == 1) {
-    return _interleaveChapters(studies.first, presentedByChapter);
-  }
-  return _interleaveStreams([
-    for (final study in studies) _interleaveChapters(study, presentedByChapter),
-  ]);
-}
-
-/// Round-robins one study's fresh decisions across its chapters, least-presented
-/// chapter first, keeping each chapter's own order.
-List<RepertoireDecision> _interleaveChapters(
-  List<RepertoireDecision> decisions,
-  Map<String, int> presentedByChapter,
-) {
-  final byChapter = <String, List<RepertoireDecision>>{};
-  for (final d in decisions) {
-    byChapter.putIfAbsent(d.chapterId, () => <RepertoireDecision>[]).add(d);
-  }
-  final chapters = _leastPresentedFirst(byChapter, presentedByChapter);
-  if (chapters.length == 1) return chapters.first;
-  return _interleaveStreams(chapters);
-}
-
-/// Groups ordered by how few of their positions have ever been presented, ties
-/// kept in input order so an equal library stays stable across sessions.
-List<List<RepertoireDecision>> _leastPresentedFirst(
-  Map<String, List<RepertoireDecision>> groups,
-  Map<String, int> presented,
-) {
-  final ordered = groups.entries.toList(growable: false);
-  final rank = <String, int>{for (var i = 0; i < ordered.length; i++) ordered[i].key: i};
-  final sorted = [...ordered]..sort((a, b) {
-    final byCount = (presented[a.key] ?? 0).compareTo(presented[b.key] ?? 0);
-    return byCount != 0 ? byCount : rank[a.key]!.compareTo(rank[b.key]!);
-  });
-  return [for (final entry in sorted) entry.value];
-}
-
-/// Takes one item from each stream per round until every stream is exhausted.
-List<RepertoireDecision> _interleaveStreams(List<List<RepertoireDecision>> streams) {
-  if (streams.length == 1) return streams.first;
-  final spread = <RepertoireDecision>[];
-  var index = 0;
-  var added = true;
-  while (added) {
-    added = false;
-    for (final stream in streams) {
-      if (index < stream.length) {
-        spread.add(stream[index]);
-        added = true;
-      }
-    }
-    index++;
-  }
-  return spread;
-}
+/// Fresh-backlog ordering policy injected by the app; null keeps database order.
+typedef FreshIntroductionOrder =
+    List<RepertoireDecision> Function(List<RepertoireDecision> fresh);
 
 /// Active review session state machine.
 ///
@@ -161,6 +80,7 @@ class ReviewSession {
     this.remainingNewQuota,
     this.dynamicRepertoireMode = false,
     this.unlockedDecisionIds = const {},
+    this.freshIntroductionOrder,
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
     Random? random,
@@ -193,19 +113,6 @@ class ReviewSession {
     final queuedCanonicalIds = <String>{};
     final dueBucket = <RepertoireDecision>[];
     final freshBucket = <RepertoireDecision>[];
-
-    // How many positions of each study and chapter have ever been presented.
-    // Fresh introductions read it to grow the least-touched part of the library
-    // first, instead of re-introducing from the head of the list every day.
-    final presentedByStudy = <String, int>{};
-    final presentedByChapter = <String, int>{};
-    for (final d in decisions) {
-      final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
-      if (state != null) {
-        presentedByStudy[d.studyId] = (presentedByStudy[d.studyId] ?? 0) + 1;
-        presentedByChapter[d.chapterId] = (presentedByChapter[d.chapterId] ?? 0) + 1;
-      }
-    }
 
     for (final d in decisions) {
       final chapter = _chapters[d.chapterId];
@@ -275,42 +182,19 @@ class ReviewSession {
       // sort floats them to the front and buries the recall work the user is
       // actually answerable for.
       //
-      // Most-overdue first, with a random tie-break. Ties matter more than they
-      // look: the daily quota keeps the head of this list, so when a bulk
-      // import leaves many positions sharing a due instant, insertion order
-      // alone would decide which of them the user is ever allowed to see.
+      // Most-overdue first; random tie-break so the quota cut is not insertion order.
       final tieBreak = <String, int>{for (final d in dueBucket) d.id: _random.nextInt(1 << 31)};
       dueBucket.sort((a, b) {
-        final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
-        final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
-        final dueA = stateA?.nextDueAt;
-        final dueB = stateB?.nextDueAt;
-        if (dueA != null && dueB != null) {
-          final byDate = dueA.compareTo(dueB);
-          if (byDate != 0) return byDate;
-        } else if (dueA == null && dueB != null) {
-          return -1;
-        } else if (dueA != null && dueB == null) {
-          return 1;
-        }
+        final dueA = (_reviewStates[a.canonicalId] ?? _reviewStates[a.id])?.nextDueAt;
+        final dueB = (_reviewStates[b.canonicalId] ?? _reviewStates[b.id])?.nextDueAt;
+        if (dueA != null && dueB != null && dueA != dueB) return dueA.compareTo(dueB);
+        if (dueA == null && dueB != null) return -1;
+        if (dueA != null && dueB == null) return 1;
         return tieBreak[a.id]!.compareTo(tieBreak[b.id]!);
       });
 
-      // Introduce at most `remainingNewQuota` never-presented positions; the
-      // rest stay fresh for a later day instead of counting as work.
-      //
-      // The fresh bucket arrives in database insertion order: whichever study
-      // was imported first owns the front of it, so an allowance of 20 spent
-      // day after day inside that one study while every other imported
-      // repertoire stayed invisible. Spreading the introductions across studies
-      // and chapters is what makes a large library feel like one library
-      // instead of one line (owner report: "same line over and over, all the
-      // others are lost").
-      var introduced = _spreadFreshIntroductions(
-        freshBucket,
-        presentedByStudy: presentedByStudy,
-        presentedByChapter: presentedByChapter,
-      );
+      // Cap the introductions; the injected policy grows the whole library.
+      var introduced = freshIntroductionOrder?.call(freshBucket) ?? freshBucket;
       final newAllowance = remainingNewQuota;
       if (newAllowance != null && newAllowance >= 0 && introduced.length > newAllowance) {
         _logger.info(
@@ -377,14 +261,11 @@ class ReviewSession {
 
     // By-line order (INV-066): same set, walking study, chapter, tree order.
     if (order == ReviewOrder.byLine) {
-      // Only the chapters the queue actually holds need their trees decoded.
-      // `_ensureAllChaptersIndexed()` decoded the whole library here, which made
-      // the product's default line order the slow path on a large library: a
-      // whole-library session paid to decode all ~300 chapter trees before the
-      // first frame, defeating the lazy per-chapter indexing. The chapters not
-      // in the queue are still indexed by the background pass below (and on
-      // demand), and the comparator only ever compares node ranks within one
-      // chapter, so a partial index orders the queue identically.
+      // Decode only the chapters the queue holds. `_ensureAllChaptersIndexed()`
+      // decoded the whole library here, making the default line order the slow
+      // path; the rest are indexed by the background pass, and the comparator
+      // only compares node ranks within one chapter, so a partial index orders
+      // the queue identically.
       for (final chapterId in neededChapterIds) {
         final chapter = _chapters[chapterId];
         if (chapter != null) _indexChapterNodes(chapter);
@@ -479,6 +360,9 @@ class ReviewSession {
   final TransposeScope transposeScope;
   final bool dynamicRepertoireMode;
   final Set<String> unlockedDecisionIds;
+
+  /// Fresh-backlog ordering policy; null keeps the database order.
+  final FreshIntroductionOrder? freshIntroductionOrder;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;
@@ -1574,12 +1458,9 @@ class ReviewSession {
       return _selectWeighted(dueChildren, dueCounts);
     }
 
-    // Nothing below any branch is due, so this choice is about variety rather
-    // than urgency. Weighting by subtree size let the largest branch (usually
-    // the mainline) dominate every walk, which is the traversal half of the
-    // "same line every day" report: repetitions re-walked the same prefix while
-    // the sidelines were never played. An even draw gives every recorded
-    // continuation the same chance.
+    // Nothing below any branch is due, so this is about variety: an even draw
+    // instead of subtree-size weighting, which let the largest branch (usually
+    // the mainline) dominate every walk.
     return node.children[_random.nextInt(node.children.length)];
   }
 

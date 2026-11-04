@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-068 (fresh introduction under a daily allowance).
 import 'package:chess_srs/src/domain/domain.dart';
+import 'package:chess_srs/src/review/fresh_introduction_order.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A capped introduction must grow the whole library, not just its head.
@@ -55,6 +56,17 @@ void main() {
     return (studies: studies, chapters: chapters, decisions: decisions);
   }
 
+  /// The production fresh-ordering policy over a built library.
+  FreshIntroductionOrder orderFor(
+    ({
+      List<Study> studies,
+      List<Chapter> chapters,
+      List<RepertoireDecision> decisions,
+    })
+    library, {
+    Map<String, ReviewState> states = const {},
+  }) => freshIntroductionOrderFor(decisions: library.decisions, reviewStates: states);
+
   /// Answers every prompt (the expected move is always e2e4) and returns the
   /// decisions the session asked. `submitMove` consumes a card; `skip` only
   /// moves it to the back, so it cannot drain a session.
@@ -83,6 +95,7 @@ void main() {
         chapters: library.chapters,
         decisions: library.decisions,
         reviewStates: const {},
+        freshIntroductionOrder: orderFor(library),
         remainingNewQuota: 3,
       );
       final served = answerAll(session);
@@ -110,6 +123,7 @@ void main() {
         chapters: library.chapters,
         decisions: library.decisions,
         reviewStates: const {},
+        freshIntroductionOrder: orderFor(library),
         remainingNewQuota: 2,
       );
       final served = answerAll(session);
@@ -141,6 +155,7 @@ void main() {
           chapters: library.chapters,
           decisions: library.decisions,
           reviewStates: Map<String, ReviewState>.of(learned),
+          freshIntroductionOrder: orderFor(library, states: learned),
           remainingNewQuota: 3,
         );
         for (final decision in answerAll(session)) {
@@ -174,6 +189,7 @@ void main() {
         chapters: library.chapters,
         decisions: library.decisions,
         reviewStates: const {},
+        freshIntroductionOrder: orderFor(library),
         remainingNewQuota: 6,
       );
 
