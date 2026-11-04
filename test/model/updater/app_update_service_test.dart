@@ -143,6 +143,21 @@ void main() {
       expect(state.releaseInfo!.isNewer, isFalse);
     });
 
+    test('marks upToDate when remote returns an empty release list', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+
+      final state = container.read(appUpdateProvider);
+      expect(state.status, equals(UpdateStatus.upToDate));
+    });
+
     test('handles GitHub API error gracefully', () async {
       final mockClient = MockClient((request) async {
         return http.Response('Rate limit exceeded', 403);
