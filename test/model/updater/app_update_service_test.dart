@@ -292,6 +292,26 @@ void main() {
     });
   });
 
+  test('throttles repeated checks within 30 minutes', () async {
+    int requestCount = 0;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.contains('/releases')) {
+        requestCount++;
+        return http.Response(_mockReleasesJson, 200, headers: {'content-type': 'application/json'});
+      }
+      return http.Response('Not found', 404);
+    });
+
+    final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(appUpdateProvider.notifier);
+    await notifier.checkForUpdate(force: true);
+    await notifier.checkForUpdate();
+
+    expect(requestCount, equals(1));
+  });
+
   group('System APK installer channel methods', () {
     const channel = MethodChannel('mobile.lichess.org/system');
 
