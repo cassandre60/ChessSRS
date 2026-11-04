@@ -137,7 +137,8 @@ void main() {
       ''';
 
       final mockClient = MockClient((request) {
-        if (request.url.path == '/lichess') {
+        if (request.url.path == '/lichess' &&
+            request.url.queryParameters['ratings'] == '1000,1200') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
           return mockResponse(response, 200);
         }
