@@ -12,4 +12,13 @@ void main() {
     final gameStatus = Pick({'id': 30, 'name': 'mate'}).asGameStatusOrThrow();
     expect(gameStatus, GameStatus.mate);
   });
+
+  test('can decode status by integer value', () {
+    final gameStatus = Pick(30).asGameStatusOrThrow();
+    expect(gameStatus, GameStatus.mate);
+  });
+
+  test('unknown status keeps its -1 sentinel value', () {
+    expect(GameStatus.unknown.value, -1);
+  });
 }

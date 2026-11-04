@@ -95,6 +95,32 @@ void main() {
       expect(result.title, 'GM');
       expect(result.profile?.country, 'France');
     });
+
+    test('getUser does not add the challenge query by default', () async {
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/user/$testUserId' &&
+            !request.url.queryParameters.containsKey('challenge')) {
+          return mockResponse('''
+{
+  "id": "$testUserId",
+  "username": "$testUserId",
+  "createdAt": 1290415680000,
+  "seenAt": 1290415680000,
+  "perfs": {
+  }
+}
+''', 200);
+        }
+        return mockResponse('', 404);
+      });
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(userRepositoryProvider);
+
+      final result = await repo.getUser(testUserId);
+
+      expect(result, isA<User>());
+      expect(result.id, testUserId);
+    });
   });
 
   group('UserRepository.getPerfStats', () {

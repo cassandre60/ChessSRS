@@ -87,6 +87,21 @@ void main() {
       expect(container.read(serverStatusProvider), ServerStatus.down);
     });
 
+    test('HTTP 400 does not restore the server status after an outage', () async {
+      var statusCode = 503;
+      final container = await lichessClientContainer(
+        MockClient((request) async => http.Response('', statusCode)),
+      );
+      final client = container.read(lichessClientProvider);
+
+      await client.get(Uri(path: '/api/account'));
+      expect(container.read(serverStatusProvider), ServerStatus.maintenance);
+
+      statusCode = 400;
+      await client.get(Uri(path: '/api/account'));
+      expect(container.read(serverStatusProvider), ServerStatus.maintenance);
+    });
+
     test('a client error does not trigger an outage', () async {
       final container = await lichessClientContainer(
         MockClient((request) async => http.Response('', 404)),

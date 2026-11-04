@@ -75,4 +75,33 @@ void main() {
       expect(() => LagIndicator(lagRating: 5), throwsA(isA<AssertionError>()));
     });
   });
+
+  group('FeedbackTile', () {
+    testWidgets('renders the title when leading is null', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: FeedbackTile(title: Text('Hello'))),
+        ),
+      );
+
+      expect(find.text('Hello'), findsOneWidget);
+      expect(find.byType(SizedBox), findsNothing);
+    });
+
+    testWidgets('renders the leading and its spacer when leading is provided', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: FeedbackTile(leading: Icon(Icons.info), title: Text('Hello')),
+          ),
+        ),
+      );
+
+      expect(find.text('Hello'), findsOneWidget);
+      expect(find.byIcon(Icons.info), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is SizedBox && w.width == 16.0), findsOneWidget);
+    });
+  });
 }

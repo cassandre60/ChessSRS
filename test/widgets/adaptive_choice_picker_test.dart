@@ -396,4 +396,40 @@ void main() {
     await tester.scrollUntilVisible(find.text('three'), 80);
     expect(find.text('three'), findsOneWidget);
   });
+
+  testWidgets('showChoicePicker renders a non-null title', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      SrsTheme(
+        colors: SrsColors.light(SrsAccent.ultramarine),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return Center(
+                  child: ElevatedButton(
+                    child: const Text('Show picker'),
+                    onPressed: () {
+                      showChoicePicker<int>(
+                        context,
+                        title: const Text('Picker Title'),
+                        choices: const [1, 2],
+                        selectedItem: 1,
+                        labelBuilder: (choice) => Text(choice.toString()),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show picker'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Picker Title'), findsOneWidget);
+  });
 }

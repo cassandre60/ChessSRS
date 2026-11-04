@@ -14,6 +14,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../../test_container.dart';
@@ -553,6 +554,8 @@ void main() {
       expect(study.chapters[1].name, 'Advance Variation');
       expect(study.chapter.id.value, 'ch_1');
       expect(study.chapter.setup.orientation, Side.black);
+      expect(study.chapter.setup.fromFen, isFalse);
+      expect(study.chapter.practise, isFalse);
       expect(summary, isNull);
       expect(pgn, contains('[Event "Main Line"]'));
 
@@ -563,6 +566,56 @@ void main() {
       );
       expect(study2.chapter.id.value, 'ch_2');
       expect(pgn2, contains('[Event "Advance Variation"]'));
+    });
+
+    test('falls back to the first chapter when the requested chapter is unknown', () async {
+      final mockClient = MockClient((request) {
+        fail('Should not make network calls for local study: ${request.url}');
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final srsRepo = await container.read(srsStudyRepositoryProvider.future);
+
+      const localStudy = domain.Study(id: 'local_study_1', title: 'Caro-Kann Repertoire');
+      await srsRepo.saveStudy(localStudy);
+
+      final chapter1 = domain.Chapter(
+        id: 'ch_1',
+        studyId: localStudy.id,
+        sourceOrder: 0,
+        title: 'Main Line',
+        orientation: Side.black,
+      );
+      final chapter2 = domain.Chapter(
+        id: 'ch_2',
+        studyId: localStudy.id,
+        sourceOrder: 1,
+        title: 'Advance Variation',
+        orientation: Side.black,
+      );
+      await srsRepo.saveChapters([chapter1, chapter2]);
+
+      final repo = container.read(studyRepositoryProvider);
+      final (study, summary, pgn) = await repo.getStudy(
+        id: const StudyId('local_study_1'),
+        chapterId: const StudyChapterId('ch_missing'),
+      );
+
+      expect(study.chapter.id.value, 'ch_1');
+      expect(pgn, contains('[Event "Main Line"]'));
+    });
+  });
+
+  group('StudyRepository.getStudiesByUsername', () {
+    test('throws ServerException when the server responds 400', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('', 400);
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      expect(() => repo.getStudiesByUsername('someuser'), throwsA(isA<ServerException>()));
     });
   });
 }

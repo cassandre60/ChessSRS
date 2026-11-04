@@ -137,7 +137,8 @@ void main() {
       ''';
 
       final mockClient = MockClient((request) {
-        if (request.url.path == '/lichess') {
+        if (request.url.path == '/lichess' &&
+            request.url.queryParameters['ratings'] == '1000,1200') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
           return mockResponse(response, 200);
         }
@@ -207,7 +208,7 @@ void main() {
       ''';
 
       final mockClient = MockClient((request) {
-        if (request.url.path == '/player') {
+        if (request.url.path == '/player' && request.url.queryParameters['speeds'] == 'bullet') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
           return mockResponse(response, 200);
         }
@@ -233,6 +234,25 @@ void main() {
         expect(result.recentGames, isNotNull);
         expect(result.recentGames!.length, 1);
       }
+    });
+  });
+  group('OpeningExplorerRepository.getOpenDatabase', () {
+    test('parses chessdb response', () async {
+      const response =
+          '{"status":"ok","moves":[{"uci":"e2e4","san":"e4","winrate":"50.0","score":10}]}';
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn' && request.url.path == '/cdb.php') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      final result = await repo.getOpenDatabase('fen');
+      expect(result.moves.length, 1);
     });
   });
 }

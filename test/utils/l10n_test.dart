@@ -70,6 +70,11 @@ void main() {
       expect(formatPgnDate('1972.13.01'), '1972');
     });
 
+    test('month boundaries are inclusive', () {
+      expect(formatPgnDate('1972.01.??'), 'Jan 1972');
+      expect(formatPgnDate('1972.12.??'), 'Dec 1972');
+    });
+
     test('unknown date', () {
       expect(formatPgnDate('????.??.??'), '????');
       expect(formatPgnDate(''), '????');

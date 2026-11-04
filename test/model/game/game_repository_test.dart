@@ -1,7 +1,11 @@
+import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/common/id.dart';
+import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
+import 'package:chess_srs/src/model/game/game_filter.dart';
 import 'package:chess_srs/src/model/game/game_repository.dart';
+import 'package:chess_srs/src/model/user/user.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,6 +152,178 @@ void main() {
 
       expect(result, isA<ExportedGame>());
       expect(result.steps[0].position is ThreeCheck, true);
+    });
+  });
+
+  group('GameRepository.getUserGames perf filter', () {
+    test('perfType is sent for a non-empty perf filter', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/user/testUser' &&
+            request.url.queryParameters['perfType'] == 'blitz') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+
+      final result = await repo.getUserGames(
+        const UserId('testUser'),
+        filter: GameFilterState(perfs: ISet(const {Perf.blitz})),
+      );
+
+      expect(result.length, 1);
+      expect(result[0].game.id, const GameId('Huk88k3D'));
+    });
+  });
+
+  group('GameRepository.getBookmarkedGames', () {
+    test('forces isBookmarked true for exported bookmark games', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/export/bookmarks') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final result = await repo.getBookmarkedGames(
+        const AuthUser(
+          user: LightUser(id: UserId('testUser'), name: 'testUser'),
+          token: 'token',
+        ),
+      );
+
+      expect(result.length, 1);
+      expect(result[0].game.isBookmarked, isTrue);
+    });
+  });
+
+  group('GameRepository.getUserGames bookmark default', () {
+    test('does not request bookmarks when withBookmarked is omitted', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/user/testUser' &&
+            !request.url.queryParameters.containsKey('withBookmarked')) {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+
+      final result = await repo.getUserGames(const UserId('testUser'));
+
+      expect(result.length, 1);
+      expect(result[0].game.isBookmarked, isFalse);
+    });
+  });
+
+  group('GameRepository.getUserGames moves default', () {
+    test('sends moves=false when withMoves is omitted', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/user/testUser' &&
+            request.url.queryParameters['moves'] == 'false') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+
+      final result = await repo.getUserGames(const UserId('testUser'));
+
+      expect(result.length, 1);
+    });
+  });
+
+  group('GameRepository.getGame withBookmarked default', () {
+    test('does not send withBookmarked by default', () async {
+      const response = '''
+{"id":"aBcDeFgH","rated":false,"source":"import","import":{"date":"1972.08.31"},"variant":"standard","speed":"classical","perf":"classical","createdAt":1673443822389,"lastMoveAt":1673444036416,"status":"resign","players":{"white":{"name":"Fischer, Robert J."},"black":{"name":"Spassky, Boris V."}},"winner":"white","moves":"e4 e5 Nf3"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/game/export/aBcDeFgH' &&
+            !request.url.queryParameters.containsKey('withBookmarked')) {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final game = await repo.getGame(const GameId('aBcDeFgH'));
+
+      expect(game.data.id, const GameId('aBcDeFgH'));
+    });
+  });
+
+  group('GameRepository.getUserGames pov', () {
+    test('attributes games won', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"winner":"black","lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/user/mightynanook') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final result = await repo.getUserGames(const UserId('mightynanook'));
+
+      expect(result.length, 1);
+      expect(result[0].pov, Side.white);
+    });
+  });
+
+  group('GameRepository.getBookmarkedGames pov', () {
+    test('attributes games to black when the auth user is not the white player', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"winner":"black","lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/export/bookmarks') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final result = await repo.getBookmarkedGames(
+        const AuthUser(
+          user: LightUser(id: UserId('testUser'), name: 'testUser'),
+          token: 'token',
+        ),
+      );
+
+      expect(result.length, 1);
+      expect(result[0].pov, Side.black);
     });
   });
 }

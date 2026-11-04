@@ -143,6 +143,61 @@ void main() {
       expect(state.releaseInfo!.isNewer, isFalse);
     });
 
+    test('marks upToDate when remote returns an empty release list', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('[]', 200, headers: {'content-type': 'application/json'});
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+
+      final state = container.read(appUpdateProvider);
+      expect(state.status, equals(UpdateStatus.upToDate));
+    });
+
+    test('marks upToDate when remote returns a non-list JSON body', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          '{"message":"Not an array"}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+
+      final state = container.read(appUpdateProvider);
+      expect(state.status, equals(UpdateStatus.upToDate));
+    });
+
+    test('throttles a non-forced check within 30 minutes of a prior one', () async {
+      var calls = 0;
+      final mockClient = MockClient((request) async {
+        calls++;
+        return http.Response(_mockReleasesJson, 200, headers: {'content-type': 'application/json'});
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+      expect(calls, 1);
+
+      await notifier.checkForUpdate(force: false);
+
+      final state = container.read(appUpdateProvider);
+      expect(calls, 1);
+      expect(state.status, equals(UpdateStatus.available));
+    });
+
     test('handles GitHub API error gracefully', () async {
       final mockClient = MockClient((request) async {
         return http.Response('Rate limit exceeded', 403);
@@ -235,6 +290,26 @@ void main() {
       expect(File(installedPath!).existsSync(), isTrue);
       expect(File(installedPath!).readAsBytesSync(), equals(testBytes));
     });
+  });
+
+  test('throttles repeated checks within 30 minutes', () async {
+    int requestCount = 0;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.contains('/releases')) {
+        requestCount++;
+        return http.Response(_mockReleasesJson, 200, headers: {'content-type': 'application/json'});
+      }
+      return http.Response('Not found', 404);
+    });
+
+    final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+    addTearDown(container.dispose);
+
+    final notifier = container.read(appUpdateProvider.notifier);
+    await notifier.checkForUpdate(force: true);
+    await notifier.checkForUpdate();
+
+    expect(requestCount, equals(1));
   });
 
   group('System APK installer channel methods', () {

@@ -162,6 +162,8 @@ void main() {
           boardColors.validPremoves,
           material.Color(corePalette.error.get(40)).withValues(alpha: 0.30),
         );
+        expect(boardColors.whiteCoordBackground.coordinates, isTrue);
+        expect(boardColors.blackCoordBackground.coordinates, isTrue);
       }
     });
 
