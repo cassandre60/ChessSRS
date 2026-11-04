@@ -72,6 +72,19 @@ today's inventory or a fresh runtime pass.
 - **Owner decisions open:** Q7, Q8, Q12, Q13, Q14. Q10 was answered *fix then
   fail* and landed in #380; Q9 and Q11 were answered 2026-10-22.
 
+### Delivered 2026-11-04 — required checks report on every PR
+
+- **G-CIREPORT recurrence closed structurally** (gate-change PR;
+  `gate-approved` required). `.github/workflows/gates.yml` and `test.yml` no
+  longer filter the `pull_request` trigger by path. A PR touching only
+  `packaging/**` (#458), `translation/**`, `design/**`, an `android/`, `ios/`
+  or `linux/` file, `test_fixtures/` or a root config file started no run, so
+  both required checks stayed permanently "expected" and the merge was
+  impossible — `enforce_admins` is true, so even the owner could not override
+  it. `packaging/**` is what froze the AppImage permission fix (#458) and
+  therefore Release from 2026-11-02. The push filter and the Tests docs-only
+  fast lane are unchanged; every PR now reports both required checks.
+
 ### Measured 2026-10-24 — the lazy-expectedMoves path is closed (PERF-FIX-48)
 
 The option-3 handoff's direction 3 (lazy `RepertoireDecision.expectedMoves`,

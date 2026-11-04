@@ -103,7 +103,7 @@ void _writeNodeMoves(
   StringBuffer buffer,
   RepertoireNode node, {
   required Position position,
-  bool forceMoveNumber = false,
+  bool forceMoveNumber = true,
 }) {
   if (node.children.isEmpty) return;
 

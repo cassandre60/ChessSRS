@@ -9,9 +9,13 @@
 #   is the bootstrap PR that introduces the gates: the base has no scripts
 #   yet, so the workflow falls back to the PR tree with a visible warning and
 #   judges under owner review (G07 still flags every referee edit there).
-# - `docs/**` (except SPEC/GATES/strategy docs, which are named explicitly) is
-#   deliberately absent from the paths filter: a change touching only prose
-#   docs skips CI, preserving the cheap docs lane documented in AGENTS.md.
+# - No `paths` filter on `pull_request` (since 2026-11-04). Every PR must
+#   report "T1 fast gates"; a filter that omits any tracked path leaves the
+#   check permanently "expected" and blocks the merge for everyone, admin
+#   override included. It froze #133-#135, IMPLEMENTATION_PLAN.md PRs and
+#   #458's packaging/linux change. The gates cost seconds, so always running
+#   them is cheaper than enumerating paths. Markdown-only PRs still get a cheap
+#   gates run, and test.yml's docs-only classifier skips the Flutter steps.
 # - G07 approval path: the owner adds the `gate-approved` label to a
 #   gate-change/spec-change PR after review; only then do referee edits pass.
 # - Merge-queue entries (2026-10-23): the queue re-runs the gates against the
@@ -25,10 +29,6 @@
 #   the batch adds no protected edit of its own. G03/G05/G08/G10 run against
 #   the batch, which is exactly what the queue is for. Comparison against the
 #   group's own base (not a newer origin/main) keeps the judgment on the batch.
-# - The prose-docs bullet above was true until 2026-10-14 and is not any more:
-#   `**.md` and `docs/**` were added to the filters below so that a docs-only PR
-#   still reports both required checks. Those PRs are now cheap for the suite
-#   lane rather than for this one (see test.yml's docs-only fast lane).
 # - Nightly recall judges each red-team patch delta only
 #   (BASE_REF = the checkout SHA), so the gate commit itself is not re-judged.
 
@@ -41,47 +41,11 @@ on:
     # Without it the label fires no event and `gh run rerun` replays the
     # pre-label payload, so approval could only land via close/reopen.
     types: [opened, synchronize, reopened, labeled]
-    paths:
-      - 'lib/**'
-      - 'test/**'
-      - 'scripts/**'
-      - '.gates/**'
-      - 'redteam/**'
-      - 'SPEC.md'
-      - 'GATES.md'
-      - 'GATES_PLAN.md'
-      - 'QUALITY.md'
-      - 'TEST_STRATEGY.md'
-      - 'PRODUCT.md'
-      # AGENTS.md's loop tells every contributor to record what shipped in
-      # IMPLEMENTATION_PLAN.md. Without it here, a PR touching only that file runs neither
-      # this workflow nor test.yml, so the required "T1 fast gates" check never reports and
-      # branch protection blocks the merge permanently -- admin override included, because
-      # the check is "expected" and never arrives. Named individually rather than `**.md`:
-      # the cheap prose lane is deliberate (see docs-check.yml), and only this file records
-      # what shipped and what stays open.
-      - 'IMPLEMENTATION_PLAN.md'
-      - 'MVP.md'
-      - 'ARCHITECTURE.md'
-      - 'AGENTS.md'
-      - 'CLAUDE.md'
-      - 'CODEOWNERS'
-      - 'pubspec.yaml'
-      - 'analysis_options.yaml'
-      - 'build.yaml'
-      - '.github/**'
-      - 'verify'
-      # Docs and Markdown, added 2026-10-14. A PR touching only these used to run no
-      # workflow at all, so the required "T1 fast gates" never reported and the merge
-      # was blocked permanently — not failed, blocked, waiting on something that could
-      # never arrive. GitHub refuses that override for admins too. The failure mode is
-      # the real argument: it looks like a failing test, so the instinct is to go fix
-      # tests that never ran, and the only clue is this file's trigger list.
-      #
-      # Cost is ~30s of gates on a docs PR. Paying it is cheaper than the alternative,
-      # which was editing a file one had no reason to edit so this workflow would fire.
-      - '**.md'
-      - 'docs/**'
+    # No `paths` filter (since 2026-11-04): a PR touching a path outside the
+    # old list (packaging/** in #458; docs/** and IMPLEMENTATION_PLAN.md before
+    # it) started no run, so the required "T1 fast gates" check stayed
+    # permanently "expected" and the PR could never merge, admin override
+    # included. These gates cost seconds; every PR now reports.
     branches:
       - main
   # Merge-queue entries (gh-readonly-queue/main/*): no `paths` filter is
