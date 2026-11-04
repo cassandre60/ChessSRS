@@ -103,6 +103,7 @@ void main() {
 
       final exported = studyToPgn(original.study, original.chapters);
       expect(exported, contains('[FEN "$fen"]'));
+      expect(exported, contains('1... c5')); // L106 forceMoveNumber default
 
       final reimported = importPgn(exported, studyTitle: 'Black to move');
       expect(reimported.errors, isEmpty);

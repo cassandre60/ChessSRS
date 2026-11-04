@@ -1,6 +1,6 @@
 name: Tests
 
-# The path filter lists every input the job below actually reads, so that a change to one of
+# The push filter lists every input the job below actually reads, so that a change to one of
 # them cannot skip verification. Each entry earns its place:
 #   analysis_options.yaml  sets the dart format page width and the lint set
 #   pubspec.lock           dependency resolution
@@ -56,7 +56,9 @@ name: Tests
 #      classifier keeps a prose-only group cheap, everything else runs in full,
 #      and the check always reports (a required check that never arrives is the
 #      G-CIREPORT freeze this header already warns about).
-# Keep the push and pull_request filters identical.
+# 2026-11-04: the pull_request filter is gone (see the note there). The push
+# filter above stays because it only decides which main-branch runs happen; it
+# cannot delay a merge, so it no longer has to mirror the PR trigger.
 on:
   push:
     paths:
@@ -92,41 +94,14 @@ on:
       - 'docs/**'
     branches:
       - main
+  # No `paths` filter on pull_request (since 2026-11-04). Branch protection
+  # requires "Tests" on every PR, and any tracked path missing from a filter
+  # leaves the check permanently "expected": the merge is blocked for everyone,
+  # admin override included (G-CIREPORT — #133-#135, IMPLEMENTATION_PLAN.md, and
+  # #458's packaging/linux change). The suite stays cheap where it can: the
+  # docs-only classifier below skips the Flutter steps for a diff that is only
+  # Markdown under docs/. The push filter above cannot cause that block.
   pull_request:
-    paths:
-      - 'lib/**'
-      # lib/l10n is generated, but a regeneration-only PR still needs the
-      # "Tests" check to exist: branch protection requires it on every PR, and
-      # a filtered workflow leaves it permanently "expected" (same reason the
-      # docs and spec paths at the end of this list are listed).
-      - 'test/**'
-      - 'assets/**'
-      - 'scripts/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - 'analysis_options.yaml'
-      - 'build.yaml'
-      - '.github/**'
-      - '.gates/**'
-      - 'redteam/**'
-      - 'SPEC.md'
-      - 'GATES.md'
-      - 'GATES_PLAN.md'
-      - 'QUALITY.md'
-      - 'TEST_STRATEGY.md'
-      - 'PRODUCT.md'
-      - 'MVP.md'
-      - 'ARCHITECTURE.md'
-      - 'IMPLEMENTATION_PLAN.md'
-      - 'AGENTS.md'
-      - 'CLAUDE.md'
-      - 'CODEOWNERS'
-      - 'verify'
-      # Docs-only PRs need this workflow to trigger, not for coverage — no step below
-      # reads a Markdown file — but because branch protection requires a check named
-      # "Tests" and a workflow that never triggers leaves it permanently "expected".
-      - '**.md'
-      - 'docs/**'
     branches:
       - main
   # Merge-queue entries. `paths` is not supported on this event, so a queued

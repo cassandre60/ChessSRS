@@ -13,6 +13,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 APPDIR=$(mktemp -d /tmp/chesssrs_appdir_XXXXXX)
+chmod 755 "$APPDIR"
 trap 'rm -rf "$APPDIR"' EXIT
 
 mkdir -p "$APPDIR/usr/bin"
@@ -56,5 +57,6 @@ if ! "$APPIMAGETOOL" --version >/dev/null 2>&1; then
   cd - >/dev/null
 fi
 
+chmod -R a+rX "$APPDIR"
 ARCH=x86_64 "$APPIMAGETOOL" --no-appstream "$APPDIR" "$OUTPUT_DIR/chesssrs-${VERSION}-x86_64.AppImage"
 echo "AppImage created: $OUTPUT_DIR/chesssrs-${VERSION}-x86_64.AppImage"
