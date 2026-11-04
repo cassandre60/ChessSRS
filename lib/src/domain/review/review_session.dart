@@ -377,7 +377,18 @@ class ReviewSession {
 
     // By-line order (INV-066): same set, walking study, chapter, tree order.
     if (order == ReviewOrder.byLine) {
-      _ensureAllChaptersIndexed();
+      // Only the chapters the queue actually holds need their trees decoded.
+      // `_ensureAllChaptersIndexed()` decoded the whole library here, which made
+      // the product's default line order the slow path on a large library: a
+      // whole-library session paid to decode all ~300 chapter trees before the
+      // first frame, defeating the lazy per-chapter indexing. The chapters not
+      // in the queue are still indexed by the background pass below (and on
+      // demand), and the comparator only ever compares node ranks within one
+      // chapter, so a partial index orders the queue identically.
+      for (final chapterId in neededChapterIds) {
+        final chapter = _chapters[chapterId];
+        if (chapter != null) _indexChapterNodes(chapter);
+      }
       final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
       var n = 0;
       final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};

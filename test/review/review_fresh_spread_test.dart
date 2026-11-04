@@ -182,6 +182,32 @@ void main() {
     });
   });
 
+  group('by-line ordering (INV-066)', () {
+    test('does not decode chapters outside the queue', () {
+      // Twenty chapters, one fresh decision each, allowance one: only a single
+      // chapter holds queued work. Building the default by-line session must
+      // index on demand, not decode the other nineteen trees before the first
+      // frame (which made line order the slow path on a large library).
+      final library = buildLibrary(shape: {'big': (chapters: 20, perChapter: 1)});
+
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: library.studies,
+        chapters: library.chapters,
+        decisions: library.decisions,
+        reviewStates: const {},
+        order: ReviewOrder.byLine,
+        remainingNewQuota: 1,
+      );
+
+      expect(session.initialQueueCount, 1);
+      expect(
+        session.isNodeIndexComplete,
+        isFalse,
+        reason: 'a by-line session must index on demand, not decode the whole library up front',
+      );
+    });
+  });
+
   group('due-date tie handling', () {
     test('the daily cut does not keep a fixed insertion-order prefix on tied dates', () {
       // Twenty positions share one due instant. The quota keeps five. Insertion
