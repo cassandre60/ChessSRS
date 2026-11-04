@@ -236,4 +236,23 @@ void main() {
       }
     });
   });
+  group('OpeningExplorerRepository.getOpenDatabase', () {
+    test('parses chessdb response', () async {
+      const response =
+          '{"status":"ok","moves":[{"uci":"e2e4","san":"e4","winrate":"50.0","score":10}]}';
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn' && request.url.path == '/cdb.php') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      final result = await repo.getOpenDatabase('fen');
+      expect(result.moves.length, 1);
+    });
+  });
 }
