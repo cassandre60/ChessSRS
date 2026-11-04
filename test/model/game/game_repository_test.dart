@@ -277,4 +277,53 @@ void main() {
       expect(game.data.id, const GameId('aBcDeFgH'));
     });
   });
+
+  group('GameRepository.getUserGames pov', () {
+    test('attributes games won', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"winner":"black","lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/user/mightynanook') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final result = await repo.getUserGames(const UserId('mightynanook'));
+
+      expect(result.length, 1);
+      expect(result[0].pov, Side.white);
+    });
+  });
+
+  group('GameRepository.getBookmarkedGames pov', () {
+    test('attributes games to black when the auth user is not the white player', () async {
+      const response = '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"winner":"black","lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/api/games/export/bookmarks') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final result = await repo.getBookmarkedGames(
+        const AuthUser(
+          user: LightUser(id: UserId('testUser'), name: 'testUser'),
+          token: 'token',
+        ),
+      );
+
+      expect(result.length, 1);
+      expect(result[0].pov, Side.black);
+    });
+  });
 }
