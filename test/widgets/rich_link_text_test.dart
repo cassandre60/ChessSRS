@@ -159,6 +159,16 @@ void main() {
       expect(url.originText, 'www.example.com');
     });
 
+    test('linkify recursively parses trailing email after a first email', () {
+      final result = linkify('contact a@b.com and c@d.com');
+      final emails = result.whereType<EmailElement>().toList();
+      expect(emails, hasLength(2));
+      expect(emails[0].emailAddress, 'a@b.com');
+      expect(emails[1].emailAddress, 'c@d.com');
+      final texts = result.whereType<TextElement>().map((e) => e.text).join();
+      expect(texts, contains('and'));
+    });
+
     test('LinkifyElement originText defaults to text', () {
       final elem = TextElement('hello');
       expect(elem.originText, 'hello');
