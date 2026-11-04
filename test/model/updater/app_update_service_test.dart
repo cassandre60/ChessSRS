@@ -158,6 +158,25 @@ void main() {
       expect(state.status, equals(UpdateStatus.upToDate));
     });
 
+    test('marks upToDate when remote returns a non-list JSON body', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          '{"message":"Not an array"}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+
+      final state = container.read(appUpdateProvider);
+      expect(state.status, equals(UpdateStatus.upToDate));
+    });
+
     test('throttles a non-forced check within 30 minutes of a prior one', () async {
       var calls = 0;
       final mockClient = MockClient((request) async {
