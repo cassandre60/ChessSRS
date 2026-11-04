@@ -98,6 +98,12 @@ void main() {
       expect(email.emailAddress, 'user@example.com');
     });
 
+    test('strips a case-insensitive mailto prefix', () {
+      final result = linkify('contact me at MaIlTo:user@example.com please');
+      final email = result.firstWhere((e) => e is EmailElement) as EmailElement;
+      expect(email.emailAddress, 'user@example.com');
+    });
+
     test('detects @username mention', () {
       final result = linkify(
         'hello @user123 how are you?',
