@@ -894,10 +894,18 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           side: (context, wide, appWidth) => SrsReviewSide(
             wide: wide,
             lineFontSize: wide ? 28.0 : 24.0,
-            meta: _MetaView(
-              contextLabel: prompt.chapterTitle ?? prompt.studyTitle ?? '',
-              orientation: state.boardOrientation,
-              wide: wide,
+            meta: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MetaView(
+                  contextLabel: prompt.chapterTitle ?? prompt.studyTitle ?? '',
+                  orientation: state.boardOrientation,
+                  wide: wide,
+                ),
+                const SizedBox(height: 8),
+                _ReviewProgress(state: state, wide: wide),
+              ],
             ),
             line: showMoveHistory
                 ? SrsNotationLine(
@@ -1144,6 +1152,80 @@ class _MetaView extends StatelessWidget {
         const SizedBox(width: 12),
         turnWidget,
       ],
+    );
+  }
+}
+
+/// A quiet progress readout under the chapter title.
+///
+/// The screen used to show only the scope's total due count, which does not
+/// move while the user answers, and nothing about long-term retention — so
+/// there was no way to tell a productive session from a stuck one (owner
+/// report: "i have no idea if im learning anything"). This shows both: how far
+/// through today's queue the session is, and how much of the repertoire is
+/// actually learned.
+class _ReviewProgress extends StatelessWidget {
+  const _ReviewProgress({required this.state, required this.wide});
+
+  final ReviewScreenState state;
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final session = state.session;
+    final done = session?.completedCount ?? 0;
+    final total = session?.initialQueueCount ?? 0;
+    final remaining = session?.remainingDueCount ?? 0;
+    final progress = state.activeScopeProgress;
+    final retained = progress?.scheduledDecisions ?? 0;
+    final due = progress?.dueDecisions ?? 0;
+    final scopeTotal = progress?.totalDecisions ?? 0;
+
+    if (total == 0 && scopeTotal == 0) return const SizedBox.shrink();
+
+    final fraction = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    // "Retained" is the honest long-term figure: positions that have been
+    // presented and are not currently due again. Counting everything ever
+    // shown as "learned" read 100% after a single pass and told the user
+    // nothing (owner: "i have no idea if im learning anything").
+    final sessionText = '$done of $total done · $retained of $scopeTotal retained';
+    final detailText = '$remaining left this session · $due due';
+
+    return Semantics(
+      container: true,
+      label: '$sessionText. $detailText.',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: Row(
+                children: [
+                  if (fraction > 0)
+                    Expanded(
+                      flex: (fraction * 1000).round(),
+                      child: Container(height: 3, color: c.accent),
+                    ),
+                  if (fraction < 1)
+                    Expanded(
+                      flex: ((1 - fraction) * 1000).round(),
+                      child: Container(height: 3, color: c.hairlineSoft),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(sessionText, style: SrsText.meta(c.ink3)),
+            if (wide) ...[
+              const SizedBox(height: 1),
+              Text(detailText, style: SrsText.meta(c.ink3)),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

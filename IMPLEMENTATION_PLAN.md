@@ -656,6 +656,44 @@ Not covered by that run: capture-sound distinctness, check haptics, and the
 `/api/token/test` connection failure logged at startup (single observation, not
 investigated — likely transient, unconfirmed).
 
+### Review overhaul 2026-11-04 — even growth, honest progress, named drawers
+
+Owner-reported on the phone: *"the black and white drawers are confusing, i have
+no idea if im learning anything ... i got served the same line over and over
+everyday while all the others are lost."* Four changes, in `review_session.dart`,
+`review_service.dart`, `review_screen.dart`, `review_scope_drawer.dart`.
+
+1. **Fresh introductions grow the whole library, not its head.** The fresh
+   bucket was introduced by `sublist(0, allowance)` in import order, so a
+   20-a-day allowance stayed inside the first-imported study for weeks while
+   every other repertoire stayed invisible. Introductions now visit the
+   least-presented study (then least-presented chapter) first, interleaved one
+   per round, so a capped day samples every part of the library. Due-date ties
+   carry a random tie-break so a bulk backlog is not cut by insertion order.
+   Opponent-branch fallback with nothing due below it is now an even draw
+   instead of subtree-size weighting (which had the mainline dominating every
+   walk).
+2. **The drawer names its repertoire.** A title row (colour swatch + `White
+   repertoire` / `Black repertoire` + the colour's due count, then a
+   `N openings · M studies` summary) sits above the search field. The sheet
+   covers the top-bar squares, so the colour was previously unnamed on screen.
+3. **The review screen shows progress.** Under the chapter title: a 3px session
+   completion bar, `{done} of {total} done · {retained} of {scope} retained`,
+   and (wide) `{remaining} left this session · {due} due`. *Retained* is
+   `total - fresh - due`, so one pass does not read as mastery.
+4. **A wide-scope session reads the decision table once.** It previously read
+   it twice — a four-column projection for the summary, then the full rows for
+   the session — which on the owner's ~31k-decision library is the largest
+   avoidable cost in opening a session. `loadSessionAndSummary` now derives the
+   tally from the full rows it already reads, and passes them to `startSession`.
+
+**Evidence.** `test/review/review_fresh_spread_test.dart` and
+`test/view/review/review_progress_and_drawer_test.dart` (CI). A pure-Dart probe
+(`dart run`) over the domain, run against the pre-fix and post-fix tree by
+restoring the file: pre-fix `served=[a, a, a]` (one study three times) and 3/12
+studies touched over four days; post-fix `served=[a, b, c]` and 12/12.
+`dart analyze` clean on every touched file. Not runtime-validated on a device.
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any

@@ -849,7 +849,26 @@ class ReviewService {
     final chapterSides = preloadedChapterOrientations ?? await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
 
-    final tallyDecisions = await repository.getTallyDecisions();
+    // Wide scopes (all / side / opening) build their session from every
+    // decision row, so read those rows once and derive the tally from them.
+    // The old path read the table twice — a four-column projection for the
+    // summary and then the full rows for the session — which on a whole-library
+    // review of tens of thousands of decisions is the largest avoidable cost in
+    // opening a session. Narrow scopes keep the projection: their session reads
+    // only their own rows.
+    final wideScope = scope.chapterId == null && scope.studyId == null;
+    final allDecisions = wideScope ? await repository.getAllDecisions() : null;
+    final List<TallyDecision> tallyDecisions = allDecisions != null
+        ? [
+            for (final d in allDecisions)
+              (
+                id: d.id,
+                studyId: d.studyId,
+                chapterId: d.chapterId,
+                canonicalId: d.canonicalId,
+              ),
+          ]
+        : await repository.getTallyDecisions();
     final loadedData = await _loadReviewData(
       decisionIds: tallyDecisions.map((d) => d.id),
       canonicalIds: tallyDecisions.map((d) => d.canonicalId),
@@ -893,6 +912,7 @@ class ReviewService {
       preloadedExposureThrottle: loadedData.exposureThrottle,
       preloadedChapterOpenings: chapterOpenings,
       preloadedUnlockedDecisionIds: unlockedIds,
+      preloadedAllDecisions: allDecisions,
     );
 
     return (session: session, summary: summary);
