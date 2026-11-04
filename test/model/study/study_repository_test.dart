@@ -564,5 +564,42 @@ void main() {
       expect(study2.chapter.id.value, 'ch_2');
       expect(pgn2, contains('[Event "Advance Variation"]'));
     });
+
+    test('falls back to the first chapter when the requested chapter is unknown', () async {
+      final mockClient = MockClient((request) {
+        fail('Should not make network calls for local study: ${request.url}');
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final srsRepo = await container.read(srsStudyRepositoryProvider.future);
+
+      const localStudy = domain.Study(id: 'local_study_1', title: 'Caro-Kann Repertoire');
+      await srsRepo.saveStudy(localStudy);
+
+      final chapter1 = domain.Chapter(
+        id: 'ch_1',
+        studyId: localStudy.id,
+        sourceOrder: 0,
+        title: 'Main Line',
+        orientation: Side.black,
+      );
+      final chapter2 = domain.Chapter(
+        id: 'ch_2',
+        studyId: localStudy.id,
+        sourceOrder: 1,
+        title: 'Advance Variation',
+        orientation: Side.black,
+      );
+      await srsRepo.saveChapters([chapter1, chapter2]);
+
+      final repo = container.read(studyRepositoryProvider);
+      final (study, summary, pgn) = await repo.getStudy(
+        id: const StudyId('local_study_1'),
+        chapterId: const StudyChapterId('ch_missing'),
+      );
+
+      expect(study.chapter.id.value, 'ch_1');
+      expect(pgn, contains('[Event "Main Line"]'));
+    });
   });
 }
