@@ -58,6 +58,14 @@ void main() {
       );
       expect(find.text('0:01.0', findRichText: true), findsOneWidget);
     });
+
+    testWidgets('does not show tenths at exactly ten seconds by default', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: Clock(timeLeft: Duration(seconds: 10))));
+
+      expect(find.text('0:10', findRichText: true), findsOneWidget);
+    });
   });
 
   group('CountdownClockBuilder', () {

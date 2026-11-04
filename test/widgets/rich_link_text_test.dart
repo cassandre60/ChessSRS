@@ -35,6 +35,12 @@ void main() {
       expect(url.url, 'http://www.example.com');
     });
 
+    test('detects an uppercase URL scheme', () {
+      final result = linkify('visit HTTPS://EXAMPLE.COM now');
+      final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
+      expect(url.url.toUpperCase(), contains('EXAMPLE.COM'));
+    });
+
     test('humanizes URL display text', () {
       final result = linkify('visit https://example.com/path now');
       final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
@@ -98,6 +104,12 @@ void main() {
       expect(email.emailAddress, 'user@example.com');
     });
 
+    test('strips a case-insensitive mailto prefix', () {
+      final result = linkify('contact me at MaIlTo:user@example.com please');
+      final email = result.firstWhere((e) => e is EmailElement) as EmailElement;
+      expect(email.emailAddress, 'user@example.com');
+    });
+
     test('detects @username mention', () {
       final result = linkify(
         'hello @user123 how are you?',
@@ -157,6 +169,16 @@ void main() {
       final result = linkify('foo www.example.com bar');
       final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
       expect(url.originText, 'www.example.com');
+    });
+
+    test('linkify recursively parses trailing email after a first email', () {
+      final result = linkify('contact a@b.com and c@d.com');
+      final emails = result.whereType<EmailElement>().toList();
+      expect(emails, hasLength(2));
+      expect(emails[0].emailAddress, 'a@b.com');
+      expect(emails[1].emailAddress, 'c@d.com');
+      final texts = result.whereType<TextElement>().map((e) => e.text).join();
+      expect(texts, contains('and'));
     });
 
     test('LinkifyElement originText defaults to text', () {

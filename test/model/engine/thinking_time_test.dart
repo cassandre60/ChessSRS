@@ -98,6 +98,16 @@ void main() {
       expect(recapture, lessThan(quiet ~/ 2));
     });
 
+    test('a capture on a square the opponent did not just leave is not a recapture', () {
+      // 6...dxc6 lands on c6, but the opponent's last move was the king-side castle, so the
+      // bishop sitting there is not the piece that just arrived. The recapture factor must not
+      // fire on the mere presence of a piece on the target square.
+      final recapture = median(sample(position: afterBxc6, move: 'd7c6', lastMove: 'a4c6'));
+      final notRecapture = median(sample(position: afterBxc6, move: 'd7c6', lastMove: 'e1g1'));
+
+      expect(notRecapture, greaterThan(recapture * 2));
+    });
+
     test('a move that lands somewhere else is not a recapture', () {
       final afterCapture = median(sample(position: afterBxc6, move: 'h7h6', lastMove: 'a4c6'));
       final afterQuietMove = median(sample(position: afterBxc6, move: 'h7h6', lastMove: 'e1g1'));
@@ -111,6 +121,29 @@ void main() {
       final middlegame = median(sample(position: afterBxc6, move: 'h7h6'));
 
       expect(opening, lessThan(middlegame));
+    });
+
+    test('the opening window closes after eight plies', () {
+      // Ply 6 is still inside the opening window; ply 8 is the first one outside
+      // it. Castling is legal in both, so the move is held constant.
+      final throughSix = [
+        'e2e4',
+        'e7e5',
+        'g1f3',
+        'b8c6',
+        'f1b5',
+        'a7a6',
+      ].fold<Position>(Chess.initial, (position, uci) => position.play(Move.parse(uci)!));
+      final throughEight = [
+        ...['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6'],
+        'b5a4',
+        'g8f6',
+      ].fold<Position>(Chess.initial, (position, uci) => position.play(Move.parse(uci)!));
+
+      final opening = median(sample(position: throughSix, move: 'e1g1'));
+      final later = median(sample(position: throughEight, move: 'e1g1'));
+
+      expect(later, greaterThan(opening * 2));
     });
 
     test('a forced reply is played at once', () {

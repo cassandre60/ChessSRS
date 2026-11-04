@@ -61,6 +61,11 @@ void main() {
     });
   });
   group('DurationExtensions.toHoursMinutesSeconds()', () {
+    test('defaults to not showing tenths', () {
+      const d = Duration(minutes: 5, seconds: 30, milliseconds: 600);
+      expect(d.toHoursMinutesSeconds(), '05:30');
+    });
+
     test('formats without tenths correctly', () {
       const d = Duration(minutes: 5, seconds: 30, milliseconds: 600);
       expect(d.toHoursMinutesSeconds(showTenths: false), '05:30');

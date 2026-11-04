@@ -91,6 +91,21 @@ void main() {
       expect(UciCharPair.fromStringId('T\uE164').basePair, const UciCharPair('T', 'd'));
     });
 
+    test('recovers the base pair when the first plain char is at its lowest value', () {
+      // SPEC INV-010. A move from the first square (a1) maps to the lowest plain
+      // id character, so the private-use boundary has to be decoded with an
+      // inclusive lower bound - otherwise a disambiguated a1 id would not round
+      // trip through [UciCharPair.basePair].
+      final base = UciCharPair.fromMove(Move.parse('a1a2')!);
+      for (var index = 1; index <= 3; index++) {
+        expect(
+          UciCharPair.disambiguated(base, index).basePair,
+          base,
+          reason: 'duplicate index $index',
+        );
+      }
+    });
+
     test('refuses a duplicate index it cannot encode', () {
       // SPEC INV-011. Past the last index the encoding has, the only way to
       // answer would be to mint an id another duplicate already has. The
@@ -103,6 +118,20 @@ void main() {
         () => UciCharPair.disambiguated(base, 1000000000),
         throwsA(isA<ArgumentError>().having((e) => e.runtimeType, 'runtimeType', ArgumentError)),
       );
+    });
+    test('recovers the base pair when the first plain char is at its lowest value', () {
+      // SPEC INV-010. A move from the first square (a1) maps to the lowest plain
+      // id character, so the private-use boundary has to be decoded with an
+      // inclusive lower bound - otherwise a disambiguated a1 id would not round
+      // trip through [UciCharPair.basePair].
+      final base = UciCharPair.fromMove(Move.parse('a1a2')!);
+      for (var index = 1; index <= 3; index++) {
+        expect(
+          UciCharPair.disambiguated(base, index).basePair,
+          base,
+          reason: 'duplicate index $index',
+        );
+      }
     });
   });
 
