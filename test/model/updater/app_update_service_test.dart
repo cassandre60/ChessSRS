@@ -158,7 +158,6 @@ void main() {
       expect(state.status, equals(UpdateStatus.upToDate));
     });
 
-
     test('throttles a non-forced check within 30 minutes of a prior one', () async {
       var calls = 0;
       final mockClient = MockClient((request) async {
