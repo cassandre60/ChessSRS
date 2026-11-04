@@ -255,4 +255,26 @@ void main() {
       expect(result.length, 1);
     });
   });
+
+  group('GameRepository.getGame withBookmarked default', () {
+    test('does not send withBookmarked by default', () async {
+      const response = '''
+{"id":"aBcDeFgH","rated":false,"source":"import","import":{"date":"1972.08.31"},"variant":"standard","speed":"classical","perf":"classical","createdAt":1673443822389,"lastMoveAt":1673444036416,"status":"resign","players":{"white":{"name":"Fischer, Robert J."},"black":{"name":"Spassky, Boris V."}},"winner":"white","moves":"e4 e5 Nf3"}
+''';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/game/export/aBcDeFgH' &&
+            !request.url.queryParameters.containsKey('withBookmarked')) {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(gameRepositoryProvider);
+      final game = await repo.getGame(const GameId('aBcDeFgH'));
+
+      expect(game.data.id, const GameId('aBcDeFgH'));
+    });
+  });
 }
