@@ -43,7 +43,7 @@ tree on `merge_group`.
 | feature | new contracts approved in a dedicated spec-change PR first; reuse existing INVs when sufficient; property tests for new invariants (G05 checks citations, not strength) |
 | test-only | names the mutant, invariant, or ratchet it improves |
 | dependency | written reason + pubspec.yaml approval (G07); size/startup note |
-| docs | no product code; Markdown triggers both workflows (a filtered-out required check blocks the merge forever), but a diff that is only prose under `docs/**` takes the Tests job's docs-only fast lane; root Markdown (SPEC/GATES/QUALITY/TEST_STRATEGY/AGENTS) and `docs/screenshots` goldens still run the full suite |
+| docs | no product code; both required checks report on every PR (no `paths` filter on the PR trigger since 2026-11-04, because a filtered-out required check blocks the merge forever), and a diff that is only prose under `docs/**` takes the Tests job's docs-only fast lane; root Markdown (SPEC/GATES/QUALITY/TEST_STRATEGY/AGENTS) and `docs/screenshots` goldens still run the full suite |
 | gate-change / spec-change | separate PR, no product code, human approval (G07), red-team recall not reduced |
 
 ## Blind spots (known, accepted)

@@ -7,7 +7,7 @@
     "docs_truth.py": "de3a10b8fdfcbff5f017bf2bae8d2896c0678e11",
     "evidence.py": "f60f2bee0014c587c9dcd7a67341a15cf28d78ad",
     "flakes.py": "0fcef0acaa8886dacd6bc3c0f8b511b05b05312f",
-    "fleet.py": "da0745b5685c9f0b1b4ecb4ecf6b08b248117e9e",
+    "fleet.py": "ae22d61c60a9160f10d7f9faf790995647950f58",
     "fuzz_shrink.py": "e3a499f16d5d263cc4c8dd0948485ca8960a1f96",
     "ledger.py": "8c7a228316c9686f817faaf2588c986830884eb1",
     "ledger_validate.py": "183095abce4e4c3e6771e958d8c4ec804047c918",
@@ -38,6 +38,6 @@
   ],
   "local_path": "scripts/autonomous",
   "source": "cassandre60/skills",
-  "tree_sha": "ca0062e8ccebe866c58dddf18c6bca973af4df3a",
+  "tree_sha": "a7c508f34bef5b466b27bc4cba23207a54f04f44",
   "upstream_path": "skills/autonomous-improvement/scripts/autonomous"
 }
