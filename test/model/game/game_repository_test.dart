@@ -198,7 +198,10 @@ void main() {
       final container = await lichessClientContainer(mockClient);
       final repo = container.read(gameRepositoryProvider);
       final result = await repo.getBookmarkedGames(
-        const AuthUser(user: LightUser(id: UserId('testUser'), name: 'testUser'), token: 'token'),
+        const AuthUser(
+          user: LightUser(id: UserId('testUser'), name: 'testUser'),
+          token: 'token',
+        ),
       );
 
       expect(result.length, 1);
