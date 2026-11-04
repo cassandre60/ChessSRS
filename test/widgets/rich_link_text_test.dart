@@ -35,6 +35,12 @@ void main() {
       expect(url.url, 'http://www.example.com');
     });
 
+    test('detects an uppercase URL scheme', () {
+      final result = linkify('visit HTTPS://EXAMPLE.COM now');
+      final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
+      expect(url.url.toUpperCase(), contains('EXAMPLE.COM'));
+    });
+
     test('humanizes URL display text', () {
       final result = linkify('visit https://example.com/path now');
       final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
