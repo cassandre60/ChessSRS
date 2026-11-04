@@ -158,6 +158,28 @@ void main() {
       expect(state.status, equals(UpdateStatus.upToDate));
     });
 
+
+    test('throttles a non-forced check within 30 minutes of a prior one', () async {
+      var calls = 0;
+      final mockClient = MockClient((request) async {
+        calls++;
+        return http.Response(_mockReleasesJson, 200, headers: {'content-type': 'application/json'});
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+      expect(calls, 1);
+
+      await notifier.checkForUpdate(force: false);
+
+      final state = container.read(appUpdateProvider);
+      expect(calls, 1);
+      expect(state.status, equals(UpdateStatus.available));
+    });
+
     test('handles GitHub API error gracefully', () async {
       final mockClient = MockClient((request) async {
         return http.Response('Rate limit exceeded', 403);
