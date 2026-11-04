@@ -1,6 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-068 (fresh introduction under a daily allowance).
+import 'dart:math';
+
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/review/fresh_introduction_order.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -239,7 +241,7 @@ void main() {
           ),
       };
 
-      final session = ReviewEngine(clock: clock).createSession(
+      final session = ReviewEngine(clock: clock, random: Random(3)).createSession(
         studies: library.studies,
         chapters: library.chapters,
         decisions: library.decisions,
