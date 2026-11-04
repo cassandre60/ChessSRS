@@ -1,10 +1,10 @@
+import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
 import 'package:chess_srs/src/model/game/game_filter.dart';
 import 'package:chess_srs/src/model/game/game_repository.dart';
-import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
