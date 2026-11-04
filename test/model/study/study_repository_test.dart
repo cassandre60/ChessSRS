@@ -14,6 +14,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../../test_container.dart';
@@ -602,6 +603,19 @@ void main() {
 
       expect(study.chapter.id.value, 'ch_1');
       expect(pgn, contains('[Event "Main Line"]'));
+    });
+  });
+
+  group('StudyRepository.getStudiesByUsername', () {
+    test('throws ServerException when the server responds 400', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('', 400);
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      expect(() => repo.getStudiesByUsername('someuser'), throwsA(isA<ServerException>()));
     });
   });
 }
