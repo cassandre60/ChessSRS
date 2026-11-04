@@ -12,4 +12,9 @@ void main() {
     final gameStatus = Pick({'id': 30, 'name': 'mate'}).asGameStatusOrThrow();
     expect(gameStatus, GameStatus.mate);
   });
+
+  test('can decode status int', () {
+    final gameStatus = Pick(30).asGameStatusOrThrow();
+    expect(gameStatus, GameStatus.mate);
+  });
 }
