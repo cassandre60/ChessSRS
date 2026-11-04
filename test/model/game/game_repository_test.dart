@@ -1,9 +1,9 @@
 import 'package:chess_srs/src/model/common/id.dart';
+import 'package:chess_srs/src/model/common/perf.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
-import 'package:chess_srs/src/model/game/game_repository.dart';
 import 'package:chess_srs/src/model/game/game_filter.dart';
-import 'package:chess_srs/src/model/common/perf.dart';
+import 'package:chess_srs/src/model/game/game_repository.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,7 +156,8 @@ void main() {
   group('GameRepository.getUserGames perf filter', () {
     test('perfType is sent for a non-empty perf filter', () async {
       const response =
-          '''{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
+          '''
+{"id":"Huk88k3D","rated":false,"variant":"standard","speed":"blitz","perf":"blitz","createdAt":1673716450321,"lastMoveAt":1673716450321,"status":"noStart","players":{"white":{"user":{"name":"MightyNanook","id":"mightynanook"},"rating":1116},"black":{"user":{"name":"Thibault","id":"thibault"},"rating":1772}},"lastFen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"}
 ''';
 
       final mockClient = MockClient((request) {
@@ -172,7 +173,7 @@ void main() {
 
       final result = await repo.getUserGames(
         const UserId('testUser'),
-        filter: GameFilterState(perfs: ISet({Perf.blitz})),
+        filter: GameFilterState(perfs: ISet(const {Perf.blitz})),
       );
 
       expect(result.length, 1);
