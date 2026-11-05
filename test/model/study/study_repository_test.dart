@@ -617,5 +617,22 @@ void main() {
 
       expect(() => repo.getStudiesByUsername('someuser'), throwsA(isA<ServerException>()));
     });
+
+    test('parses a study ref from an NDJSON response', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          '{"id":"s1","name":"My Study","updatedAt":1699999999000}\n',
+          200,
+        );
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      final refs = await repo.getStudiesByUsername('someuser');
+      expect(refs, hasLength(1));
+      expect(refs.single.id.value, 's1');
+      expect(refs.single.name, 'My Study');
+    });
   });
 }
