@@ -22,6 +22,9 @@ python3 "$gates/banned_apis_check.py" --config .gates/banned-apis.json --root . 
 [[ "$TIER" == "t0" ]] && { echo "t0 ok"; exit 0; }
 
 # ---- t1 ---------------------------------------------------------------------------------
+step "G07 self-test (auto lane approves only additive catalog rows)"
+python3 "$gates/protected_paths_check_test.py" || fail "G07 self-test"
+
 step "G07 protected paths (base $BASE)"
 python3 "$gates/protected_paths_check.py" --base "$BASE" ${APPROVED:+--approved} || fail "G07 protected paths (referee edited)"
 
