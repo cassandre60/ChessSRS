@@ -95,6 +95,43 @@ void main() {
       await paginator.next();
       expect(storage.pageCalls(), 2, reason: 'the last page reported no further cursor');
     });
+
+    test('the paging guard resets after a successful fetch', () async {
+      final storage = MockHttpLogStorage();
+      var calls = 0;
+      when(
+        () => storage.page(
+          cursor: any(named: 'cursor'),
+          searchQuery: any(named: 'searchQuery'),
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((invocation) async {
+        calls++;
+        final cursor = invocation.namedArguments[#cursor] as int?;
+        if (cursor == null) return _page(['3', '2', '1'], next: 1);
+        if (cursor == 1) return _page(['0'], next: 2);
+        return _page(['final'], next: null);
+      });
+
+      final container = ProviderContainer(
+        overrides: [httpLogStorageProvider.overrideWith((ref) => Future.value(storage))],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(httpLogPaginatorProvider(null), (_, _) {});
+      addTearDown(subscription.close);
+
+      await container.read(httpLogPaginatorProvider(null).future);
+      expect(calls, 1, reason: 'the opening page');
+
+      final paginator = container.read(httpLogPaginatorProvider(null).notifier);
+      // Two genuinely sequential pages: the guard must release in between.
+      await paginator.next();
+      await paginator.next();
+
+      expect(calls, 3, reason: 'a stuck guard skips the second fetch');
+      final logs = container.read(httpLogPaginatorProvider(null)).requireValue.logs;
+      expect(logs.map((e) => e.httpLogId), equals(['3', '2', '1', '0', 'final']));
+    });
   });
 
   group('HttpLogPaginator delete button visibility', () {
