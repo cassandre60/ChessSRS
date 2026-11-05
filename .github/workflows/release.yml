@@ -267,3 +267,13 @@ jobs:
               --title "${GITHUB_REF_NAME}" \
               --notes-file notes.md
           fi
+
+  # Proof that what just shipped actually launches. Runs from the tag's tree
+  # after the release is published (and after a manual proof build's linux job).
+  # Non-gating on purpose: an xvfb/llvmpipe flake must not unpublish a build
+  # (TEST_STRATEGY §4). A failure here is reported on the run, not to users.
+  runtime-smoke:
+    name: Release runtime smoke
+    needs: [linux, publish]
+    if: always() && needs.linux.result == 'success'
+    uses: ./.github/workflows/runtime-smoke.yml

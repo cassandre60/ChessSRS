@@ -1,8 +1,9 @@
 name: Runtime smoke
 
 # Runs the real app on a real engine (Linux desktop, under a virtual display) and
-# drives a full import -> review -> persist loop. Dispatch-only, plus an optional
-# run on a published release: xvfb + software GL is slow and can flake, so this is
+# drives a full import -> review -> persist loop. It runs on demand, on the PR
+# that changes it, and once per release (called from release.yml after the
+# artifacts publish): xvfb + software GL is slow and can flake, so this is
 # "proof the app runs", not a per-PR gate. See integration_test/app_smoke_test.dart
 # and TEST_STRATEGY §4.
 
@@ -16,9 +17,13 @@ on:
     paths:
       - '.github/workflows/runtime-smoke.yml'
       - 'integration_test/**'
-  # Once per release: an actual launch is worth having when something ships.
-  release:
-    types: [published]
+  # Once per release, invoked by release.yml's `runtime-smoke` job.
+  #
+  # Not `release: [published]`: the Release workflow publishes with the built-in
+  # token, and GitHub never starts a workflow from an event that token created
+  # (anti-recursion), so that trigger never fired for a real release (verified
+  # on v1.9.0, 2026-11-05). A direct call is explicit and testable.
+  workflow_call:
 
 permissions:
   contents: read
