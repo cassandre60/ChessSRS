@@ -557,6 +557,11 @@ void main() {
       expect(study.chapter.setup.fromFen, isFalse);
       expect(study.chapter.practise, isFalse);
       expect(study.chapter.gamebook, isFalse);
+      expect(study.chapter.features.computer, isTrue);
+      expect(study.chapter.features.explorer, isTrue);
+      expect(study.liked, isFalse);
+      expect(study.features.cloneable, isFalse);
+      expect(study.features.sticky, isFalse);
       expect(summary, isNull);
       expect(pgn, contains('[Event "Main Line"]'));
 
