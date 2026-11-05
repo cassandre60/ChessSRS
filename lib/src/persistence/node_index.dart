@@ -45,6 +45,12 @@ Future<int> backfillNodeIndex(Database db) async {
   createNodeIndexTable(schema);
   await schema.commit(noResult: true);
 
+  // A minimal legacy fixture may predate srs_chapter (or its treeJson column);
+  // there is then nothing to index, and querying a missing table would fail the
+  // whole upgrade.
+  final columns = await db.rawQuery('PRAGMA table_info($kTableSrsChapter)');
+  if (!columns.any((c) => c['name'] == 'treeJson')) return 0;
+
   final chapters = await db.query(kTableSrsChapter, columns: ['id', 'treeJson']);
   final batch = db.batch();
   var inserted = 0;
