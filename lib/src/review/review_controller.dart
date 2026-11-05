@@ -433,6 +433,29 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
+    // Session-building settings read once at construction. Without a reload a
+    // change to any of them sat inert until the user switched scope or
+    // restarted the app, which reads as "the setting does nothing" (owner
+    // report: "it does not even do what it says"). Order, transpose scope,
+    // the daily new-position allowance and dynamic mode are all baked into the
+    // session, so a change rebuilds it; line continuity is deliberately absent
+    // (it is pushed into the live session, above).
+    ref.listen(
+      studyPreferencesProvider.select(
+        (p) => (
+          order: p.reviewOrder,
+          transpose: p.transposeScope,
+          newPerDay: p.maxNewPerDay,
+          dynamic: p.dynamicRepertoireMode,
+        ),
+      ),
+      (previous, next) {
+        if (previous != null && previous != next) {
+          reload();
+        }
+      },
+    );
+
     // Line continuity needs no session rebuild (which would drop in-memory
     // retests): it only steers future traversals, so push it into the live
     // session. Without this the flip sits inert until the next load.

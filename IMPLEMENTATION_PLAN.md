@@ -660,9 +660,9 @@ investigated — likely transient, unconfirmed).
 
 Owner-reported on the phone: *"the black and white drawers are confusing, i have
 no idea if im learning anything ... i got served the same line over and over
-everyday while all the others are lost."* Four changes, in
+everyday while all the others are lost."* Five changes, in
 `fresh_introduction_order.dart`, `review_session.dart`, `review_service.dart`,
-`review_screen.dart`, `review_scope_drawer.dart`.
+`review_screen.dart`, `review_scope_drawer.dart`, `review_controller.dart`.
 
 1. **Fresh introductions grow the whole library, not its head.** The fresh
    bucket was introduced by `sublist(0, allowance)` in import order, so a
@@ -689,15 +689,24 @@ everyday while all the others are lost."* Four changes, in
    the session — which on the owner's ~31k-decision library is the largest
    avoidable cost in opening a session. `loadSessionAndSummary` now derives the
    tally from the full rows it already reads, and passes them to `startSession`.
+5. **Review settings reach the live session.** `reviewOrder`, `transposeScope`,
+   `maxNewPerDay` and `dynamicRepertoireMode` are read once when a session is
+   built, but only `maxDailyReviews` and the scheduler had a change listener, so
+   changing the others in Settings did nothing until the user switched scope or
+   restarted — "it does not even do what it says". They now reload the session
+   on change (line continuity stays on the push-into-live-session path).
 
 **Evidence.** `test/review/review_fresh_spread_test.dart` and
-`test/view/review/review_progress_and_drawer_test.dart` (CI). A pure-Dart probe
-(`dart run`) over the domain: without the ordered policy a three-study library
-serves `[a, a, a]` (one study three times — the bug); with it, `[a, b, c]`, and
-four simulated days reach 12/12 studies. The same probe shows a 20-chapter
-by-line session with allowance one is `isNodeIndexComplete=false` (pre-fix
-`true`). `dart analyze` clean on every touched file; `domain_loc` 4046 of the
-4050 ratchet cap. Not runtime-validated on a device.
+`test/view/review/review_progress_and_drawer_test.dart`, both run locally with
+`taskset -c 0-1 fvm flutter test … --concurrency=1`: **8 tests, all passed**
+(bounded to two cores to avoid the wide-suite heat the repo's TEST_STRATEGY
+forbids). A pure-Dart probe (`dart run`) over the domain: without the ordered
+policy a three-study library serves `[a, a, a]` (one study three times — the
+bug); with it, `[a, b, c]`, and four simulated days reach 12/12 studies. The
+same probe shows a 20-chapter by-line session with allowance one is
+`isNodeIndexComplete=false` (pre-fix `true`). `dart analyze` clean on every
+touched file; `domain_loc` 4046 of the 4050 ratchet cap. Not runtime-validated
+on a device.
 
 ## Recording rule
 

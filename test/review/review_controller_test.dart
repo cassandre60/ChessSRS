@@ -1768,6 +1768,33 @@ void main() {
       },
     );
 
+    test('changing a session-building setting reaches the live session without a reload', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(pgnText: '1. e4 e5 2. Nf3 *', repertoireSide: Side.white);
+
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.dynamicRepertoireMode,
+        isFalse,
+      );
+
+      // No manual reload here: the controller is expected to rebuild the session
+      // itself when a session-building setting changes. Before the listener, the
+      // setting stayed inert until the user switched scope.
+      await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).requireValue.session?.dynamicRepertoireMode ??
+            false,
+      );
+
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.dynamicRepertoireMode,
+        isTrue,
+      );
+    });
+
     group('importLichessStudy', () {
       test('fetches PGN from Lichess and derives title from headers', () async {
         final mockClient = MockClient((request) async {
