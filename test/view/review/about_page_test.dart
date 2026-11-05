@@ -108,5 +108,5 @@ class _FakeAppUpdateNotifier extends AppUpdateNotifier {
   AppUpdateState build() => _initialState;
 
   @override
-  Future<void> checkForUpdate({bool force = false}) async {}
+  Future<void> checkForUpdate({bool force = false, DateTime? nowOverride}) async {}
 }

@@ -198,6 +198,26 @@ void main() {
       expect(state.status, equals(UpdateStatus.available));
     });
 
+    test('re-checks exactly 30 minutes after a prior successful check', () async {
+      var calls = 0;
+      final mockClient = MockClient((request) async {
+        calls++;
+        return http.Response(_mockReleasesJson, 200, headers: {'content-type': 'application/json'});
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      final base = DateTime(2024, 1, 1, 12, 0);
+      await notifier.checkForUpdate(force: true, nowOverride: base);
+      expect(calls, 1);
+
+      await notifier.checkForUpdate(nowOverride: base.add(const Duration(minutes: 30)));
+
+      expect(calls, 2);
+    });
+
     test('handles GitHub API error gracefully', () async {
       final mockClient = MockClient((request) async {
         return http.Response('Rate limit exceeded', 403);
