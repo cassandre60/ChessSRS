@@ -773,7 +773,9 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
     a candidate; the old whole-library node map remains as a lazy fallback for
     direct domain construction. Tests: "a transposed wrong move decodes only the
     target chapter" (2 of 12 chapters decoded vs 12 without the index) and "the
-    v22 upgrade backfills srs_node from every stored chapter tree".
+    v22 upgrade backfills srs_node from every stored chapter tree". The schema
+    version is now 22; the v21 backfill tests assert the current version (22),
+    which is why their `user_version` checks moved.
 
 **Remaining.** INV-050's design is now implemented; what is left is runtime
 validation on a device (TEST_STRATEGY §4), which only the owner can perform, and
