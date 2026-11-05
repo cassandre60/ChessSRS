@@ -636,6 +636,8 @@ void main() {
       expect(refs, hasLength(1));
       expect(refs.single.id.value, 's1');
       expect(refs.single.name, 'My Study');
+      // The server timestamps are epoch milliseconds in UTC.
+      expect(refs.single.updatedAt.isUtc, isTrue);
     });
   });
 }
