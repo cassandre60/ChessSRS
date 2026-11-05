@@ -1,5 +1,5 @@
-import 'package:chess_srs/src/model/engine/engine_spec.dart';
 import 'package:chess_srs/src/model/common/eval.dart';
+import 'package:chess_srs/src/model/engine/engine_spec.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
