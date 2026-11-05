@@ -113,6 +113,18 @@ jobs:
         working-directory: pr
         run: python3 "$TRUSTED/scripts/gates/banned_apis_check.py" --config "$TRUSTED/.gates/banned-apis.json" --root .
 
+      - name: G07 self-test (auto lane approves only additive catalog rows)
+        working-directory: pr
+        run: |
+          if [ -f "$TRUSTED/scripts/gates/protected_paths_check_test.py" ]; then
+            python3 "$TRUSTED/scripts/gates/protected_paths_check_test.py"
+          else
+            # Bootstrap PR that introduces the self-test: judge with the PR copy
+            # under owner review, the same trade the gate scripts take.
+            echo "::warning::self-test absent on base; running the PR copy under owner review"
+            python3 scripts/gates/protected_paths_check_test.py
+          fi
+
       - name: G07 protected paths (referee edits need approval)
         # PR-time only: a per-PR reviewer decision, read from that PR's labels.
         # A merge group is several PRs at once with no single label set, and a
