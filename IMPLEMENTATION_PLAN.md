@@ -756,15 +756,22 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
     "a study scope loads only its own review states, not the whole library"
     (a 500-decision study beside a 1-decision scope queries ≤5 state ids;
     pre-fix it queries all 501).
+13. **A same-day revisit no longer consumes the daily quota twice** (INV-031).
+    The session's queue cap and gate counted every completion against a
+    day-remaining budget, but the budget was computed from positions already
+    counted today — so re-answering one of those could conclude the day early
+    and leave due work unserved. `ReviewSession` now receives the day's counted
+    canonical ids (`countedToday`, fetched by `ReviewService`); those positions
+    add queue slots and are excluded from the gate
+    (`_newlyCompletedToday`). Test: "a same-day revisit does not consume the
+    daily quota twice" (one of three due positions already answered today; the
+    session must serve all three, not two).
 
-**Not fixed, recorded honestly.** (a) INV-050: a wrong move or a lapse can
+**Not fixed, recorded honestly.** INV-050: a wrong move or a lapse can
 synchronously decode every chapter tree for transposition/sibling lookup
 (`_findTransposedNode`/`_findSiblingGraphNodes`) if the background indexing pass
-has not finished; a real fix needs a FEN→node index (schema work). (b) INV-031:
-the session quota budget is day-remaining while its counter is per-session, so a
-position re-answered the same day can conclude a session up to the overlap early
-(reachable via the FSRS same-day path). None of (a)–(b) is the owner's reported
-behaviour; they are the honest remainder of the audit.
+has not finished; a real fix needs a FEN→node index (schema work). It is not the
+owner's reported behaviour; it is the honest remainder of the audit.
 
 ## Recording rule
 

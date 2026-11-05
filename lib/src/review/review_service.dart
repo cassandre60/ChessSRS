@@ -652,6 +652,7 @@ class ReviewService {
     int prefetchRefillThreshold = kDefaultPrefetchRefillThreshold,
     int? remainingDailyQuota,
     int? remainingNewQuota,
+    Set<String>? countedToday,
     int? generation,
     List<Study>? preloadedStudies,
     Map<String, ReviewState>? preloadedReviewStates,
@@ -765,6 +766,15 @@ class ReviewService {
             ? const <String>{}
             : await repository.getUnlockedDecisionIds());
 
+    // INV-031: positions already counted today are free to re-answer. Read the
+    // day's counted identities unless the caller supplied them, so a same-day
+    // revisit cannot consume the remaining quota (or a queue slot) twice.
+    final countedTodayIds =
+        countedToday ??
+        ((mode == ReviewMode.srs && remainingDailyQuota != null)
+            ? await repository.getTodayReviewedPositionIds(clock.now())
+            : const <String>{});
+
     final session = engine.createSession(
       studies: targetStudies,
       chapters: targetChapters,
@@ -777,6 +787,7 @@ class ReviewService {
       transposeScope: transposeScope,
       dynamicRepertoireMode: dynamicRepertoireMode,
       unlockedDecisionIds: unlockedIds,
+      countedToday: countedTodayIds,
       freshIntroductionOrder: freshIntroductionOrderFor(
         decisions: decisions,
         reviewStates: reviewStates,

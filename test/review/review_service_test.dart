@@ -617,6 +617,93 @@ void main() {
       }
     });
 
+    test('a same-day revisit does not consume the daily quota twice (INV-031)', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+      final service = ReviewService(repository: repo, clock: clock);
+
+      try {
+        const study = Study(id: 's_quota', title: 'Quota');
+        await repo.saveStudy(study);
+        final chapter = Chapter.create(studyId: study.id, sourceOrder: 0, title: 'Chapter');
+        await repo.saveChapter(chapter);
+        final decisions = [
+          for (var i = 0; i < 3; i++)
+            RepertoireDecision.create(
+              studyId: study.id,
+              chapterId: chapter.id,
+              nodeId: 'n$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+        ];
+        await repo.saveDecisions(decisions);
+
+        final now = clock.now();
+        final overdue = now.subtract(const Duration(days: 1));
+        // The first position was already answered earlier today, so it is in
+        // the day's counted set while still being due again (a same-day revisit).
+        final earlier = ReviewState(
+          decisionId: decisions[0].canonicalId,
+          firstReviewedAt: now,
+          lastReviewedAt: now,
+          nextDueAt: overdue,
+          repetitionCount: 1,
+        );
+        await repo.saveAnswerBatch(
+          knowledgeStates: [
+            PositionKnowledgeState.fromReviewState(
+              earlier,
+              canonicalId: decisions[0].canonicalId,
+            ),
+          ],
+          event: ReviewEvent(
+            decisionId: decisions[0].canonicalId,
+            when: now,
+            result: ReviewResult.correct,
+            oldState: earlier,
+            newState: earlier,
+          ),
+        );
+        // Two more positions are due but were never answered today.
+        for (final d in decisions.skip(1)) {
+          await repo.savePositionKnowledgeState(
+            PositionKnowledgeState(
+              canonicalId: d.canonicalId,
+              firstReviewedAt: overdue,
+              lastReviewedAt: overdue,
+              nextDueAt: overdue,
+              repetitionCount: 1,
+            ),
+          );
+        }
+
+        // maxDailyReviews = 3, one position already counted today => 2 left.
+        final result = await service.loadSessionAndSummary(
+          studies: [study],
+          remainingDailyQuota: 2,
+        );
+        final session = result.session;
+
+        final served = <String>[];
+        while (session.currentPrompt != null) {
+          served.add(session.currentPrompt!.decision.id);
+          session.submitMove(from: 'e2', to: 'e4');
+          if (served.length > 10) break;
+        }
+
+        expect(
+          served,
+          hasLength(3),
+          reason:
+              'the revisit is already counted today, so it must not use one of the two '
+              'remaining slots and leave a due position unserved',
+        );
+        expect(served.toSet(), decisions.map((d) => d.id).toSet());
+      } finally {
+        await db.close();
+      }
+    });
+
     test('a study scope loads only its own review states, not the whole library (INV-051)', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       final repo = _QueryCountRepository(db);

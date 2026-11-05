@@ -80,6 +80,7 @@ class ReviewSession {
     this.remainingNewQuota,
     this.dynamicRepertoireMode = false,
     this.unlockedDecisionIds = const {},
+    this.countedToday = const {},
     this.freshIntroductionOrder,
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
@@ -213,20 +214,20 @@ class ReviewSession {
         ..addAll(dueBucket)
         ..addAll(introduced);
 
-      if (remainingDailyQuota != null &&
+      // Already-counted positions are free to re-answer, so they add slots (INV-031).
+      final alreadyCounted =
+          _unbufferedQueue.where((d) => countedToday.contains(d.canonicalId)).length;
+      final queueCap = remainingDailyQuota == null ? null : remainingDailyQuota! + alreadyCounted;
+      if (queueCap != null &&
           remainingDailyQuota! >= 0 &&
-          _unbufferedQueue.length > remainingDailyQuota!) {
-        // Not "quota reached". Nothing has been reached here: the due queue is simply longer
-        // than what is left of today's allowance, so the session keeps the most urgent N. The
-        // old wording printed the *remaining* allowance next to the word "reached", so a user
-        // who had reviewed 6 of 100 read "Daily review quota (94) reached" and went looking for
-        // 94 reviews. It also never said how long the queue was, so a truncated queue left no
-        // trace of what was dropped.
+          _unbufferedQueue.length > queueCap) {
+        // Keep the most urgent N; this is not "quota reached", since nothing has
+        // been reached yet.
         _logger.info(
           'Due queue (${_unbufferedQueue.length}) is longer than the remaining daily quota '
-          '($remainingDailyQuota); keeping the $remainingDailyQuota most urgent',
+          '($remainingDailyQuota); keeping the $queueCap most urgent',
         );
-        _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
+        _unbufferedQueue.removeRange(queueCap, _unbufferedQueue.length);
       }
     }
 
@@ -357,6 +358,8 @@ class ReviewSession {
   final TransposeScope transposeScope;
   final bool dynamicRepertoireMode;
   final Set<String> unlockedDecisionIds;
+  /// Canonical ids already counted toward today's quota before this session.
+  final Set<String> countedToday;
 
   /// Fresh-backlog ordering policy; null keeps the database order.
   final FreshIntroductionOrder? freshIntroductionOrder;
@@ -581,6 +584,10 @@ class ReviewSession {
   /// a re-test of an already-completed lapse must not count twice, and a retry-driven session
   /// must not report zero (review-3 C1). One source of truth, by construction.
   int get completedCount => _completedDecisionIds.length;
+
+  /// This session's completions minus those already counted today (INV-031).
+  int get _newlyCompletedToday =>
+      _completedDecisionIds.length - _completedDecisionIds.where(countedToday.contains).length;
 
   /// Work this session will ask for: due positions plus fresh introductions.
   ///
@@ -958,7 +965,7 @@ class ReviewSession {
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
-            _completedDecisionIds.length >= remainingDailyQuota!;
+            _newlyCompletedToday >= remainingDailyQuota!;
         // Full line quizzes every step in order, even when not yet due. The
         // quota still caps prompted work — but it ends the walk instead of
         // auto-playing the user's own moves past it. In dynamic mode, locked
@@ -1151,11 +1158,9 @@ class ReviewSession {
   void _advanceToNextDue() {
     if (mode == ReviewMode.srs &&
         remainingDailyQuota != null &&
-        _completedDecisionIds.length >= remainingDailyQuota!) {
-      // The quota caps new work, not pending re-tests: they cost nothing (the set already holds
-      // them, INV-031) and the lapse handler promised them before the session ends (INV-021).
-      // Drop everything else so the day's allowance is honoured, then keep going only while a
-      // re-test is still owed; otherwise the session concludes here.
+        _newlyCompletedToday >= remainingDailyQuota!) {
+      // The quota caps new work, not pending re-tests (INV-021/031); keep those
+      // and drop the rest, concluding only when nothing is owed.
       final droppedNew =
           _dueQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length +
           _unbufferedQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length;
@@ -1163,7 +1168,7 @@ class ReviewSession {
       _unbufferedQueue.removeWhere((d) => !_pendingRetest.contains(d.canonicalId));
       if (_dueQueue.isEmpty && _unbufferedQueue.isEmpty) {
         _logger.info(
-          'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota), concluding review session',
+          'Daily review quota reached ($_newlyCompletedToday / $remainingDailyQuota), concluding review session',
         );
         _currentPrompt = null;
         return;
@@ -1209,10 +1214,9 @@ class ReviewSession {
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest decision on [target]'s ancestry chain, plus the node-id path
-  /// from it down to the target for dedicated walks. Null when the target
-  /// itself is the line start. Re-answered prefixes rehearse with practice
-  /// grading; in dynamic mode locked-unreviewed ancestors skip.
+  /// Earliest decision on [target]'s ancestry, with the node-id path down to it.
+  /// Null when the target itself starts the line; dynamic mode skips locked
+  /// unlearned ancestors.
   ({RepertoireDecision decision, RepertoireNode node, List<String> path})? _lineStartFor(
     RepertoireDecision target,
   ) {
@@ -1346,11 +1350,8 @@ class ReviewSession {
     return (expected: movePlayed, start: target);
   }
 
-  /// Transposition acceptance (P-TRANSPOSE, INV-065): returns the in-scope
-  /// node at the position the played move reaches, or null. Illegal moves,
-  /// out-of-scope targets, and targets without their own repertoire move
-  /// fail closed, preserving ordinary incorrect handling exactly.
-  /// Within-study scope additionally requires the target's study.
+  /// Transposition acceptance (INV-065): the in-scope node at the played move's
+  /// destination, else null. Illegal/out-of-scope targets fail closed.
   RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
     if (transposeScope == TransposeScope.off) return null;
     _ensureAllChaptersIndexed();
@@ -1433,12 +1434,9 @@ class ReviewSession {
 
   /// Selects the opponent response among multiple children.
   ///
-  /// Uses Listudy-inspired due-aware selection (docs/review.md §Opponent Variation Selection):
-  /// 1. Prioritizes opponent branches that lead to moves currently due for review.
-  /// 2. If multiple branches have due moves, selects among them using weighted
-  ///    randomness proportional to due move density.
-  /// 3. In practice mode or if no branch has due moves, selects among all branches
-  ///    using anti-repetition weighted randomness proportional to subtree size.
+  /// Due-aware (Listudy-inspired): prefer branches holding moves currently due,
+  /// weighted by due density. Otherwise draw evenly, so the mainline does not
+  /// dominate every walk.
   RepertoireNode _selectOpponentChild(
     RepertoireNode node,
     DateTime now,
