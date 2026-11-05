@@ -738,6 +738,12 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
     (`review_session.dart`, INV-068). The line-start and lapse-continue walks
     built prompts without the `_admittedFreshIds` gate the traversal branch
     applies, so a held-back fresh ancestor could be introduced through them.
+11. **PGN numeric annotation glyphs survive import and export**
+    (`repertoire_node.dart`, `json_adapters.dart`, `pgn_importer.dart`,
+    `pgn_exporter.dart`, PRODUCT §4.1). NAGs (`$1`, `$14`) were dropped on
+    import; `RepertoireNode` now carries them (treeJson blob, no schema change)
+    and the exporter writes them back. Domain budget kept by tightening the
+    node's class doc, not by trimming a check.
 
 **Not fixed, recorded honestly.** (a) INV-050: a wrong move or a lapse can
 synchronously decode every chapter tree for transposition/sibling lookup
@@ -745,14 +751,11 @@ synchronously decode every chapter tree for transposition/sibling lookup
 has not finished; a real fix needs a FEN→node index (schema work). (b) INV-031:
 the session quota budget is day-remaining while its counter is per-session, so a
 position re-answered the same day can conclude a session up to the overlap early
-(reachable via the FSRS same-day path). (c) PRODUCT §4.1: PGN NAGs (`!`, `?!`,
-`$14`) are still dropped — `RepertoireNode` has no NAG field and the importer
-never reads `PgnNodeData.nags`; adding one is domain code the `domain_loc`
-ratchet has no room for without a compensating cut. (d) INV-051: the due-summary
-pass walks every decision and loads every review state even for a one-chapter
-scope, because the drawer's per-study counts are computed in Dart; a bounded
-version needs SQL aggregation or a deferred drawer summary. None of (a)–(d) is
-the owner's reported behaviour; they are the honest remainder of the audit.
+(reachable via the FSRS same-day path). (c) INV-051: the due-summary pass walks
+every decision and loads every review state even for a one-chapter scope,
+because the drawer's per-study counts are computed in Dart; a bounded version
+needs SQL aggregation or a deferred drawer summary. None of (a)–(c) is the
+owner's reported behaviour; they are the honest remainder of the audit.
 
 ## Recording rule
 

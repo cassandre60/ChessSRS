@@ -3541,10 +3541,8 @@ void main() {
         title: 'Italian',
         repertoireSide: Side.white,
       );
-      expect(
-        container.read(reviewControllerProvider).requireValue.session!.continuity,
-        ReviewContinuity.dueOnly,
-      );
+      final session = container.read(reviewControllerProvider).requireValue.session!;
+      expect(session.continuity, ReviewContinuity.dueOnly);
 
       await container
           .read(studyPreferencesProvider.notifier)

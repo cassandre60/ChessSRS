@@ -699,6 +699,7 @@ RepertoireNode _buildChildren(
       fenKey: fenKey(nextFen),
       incomingMove: reperMove,
       comment: comment.isNotEmpty ? comment : null,
+      nags: data.nags ?? const [],
     );
 
     // Recurse into this child's subtree.
