@@ -620,10 +620,7 @@ void main() {
 
     test('parses a study ref from an NDJSON response', () async {
       final mockClient = MockClient((request) async {
-        return http.Response(
-          '{"id":"s1","name":"My Study","updatedAt":1699999999000}\n',
-          200,
-        );
+        return http.Response('{"id":"s1","name":"My Study","updatedAt":1699999999000}\n', 200);
       });
 
       final container = await makeTestContainer(mockClient);
