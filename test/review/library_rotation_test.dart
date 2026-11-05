@@ -177,11 +177,29 @@ void main() {
         reason: 'with nothing unlocked, dynamic mode has no fresh position to introduce',
       );
       expect(dynamicSession.initialQueueCount, 0);
+      expect(
+        dynamicSession.dynamicModeWithoutUnlocks,
+        isTrue,
+        reason: 'the review screen keys its freeze banner off this',
+      );
+
+      // One unlock is enough to introduce it again.
+      final unlocked = ReviewService(
+        repository: repo,
+        clock: seeded.clock,
+        dynamicRepertoireMode: true,
+      );
+      final unlockedSession = await unlocked.startSession(
+        preloadedUnlockedDecisionIds: {seeded.decision.id},
+      );
+      expect(unlockedSession.currentPrompt?.decision.id, seeded.decision.id);
+      expect(unlockedSession.dynamicModeWithoutUnlocks, isFalse);
 
       // Without dynamic mode the same position is introduced normally.
       final normal = ReviewService(repository: repo, clock: seeded.clock);
       final normalSession = await normal.startSession();
       expect(normalSession.currentPrompt?.decision.id, seeded.decision.id);
+      expect(normalSession.dynamicModeWithoutUnlocks, isFalse);
     } finally {
       await seeded.db.close();
     }

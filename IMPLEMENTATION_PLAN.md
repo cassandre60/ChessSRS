@@ -69,9 +69,10 @@ of the owner's real library, and each carries a fail-to-pass test.
   `review_transposition_test` (9), `review_engine_wiring_test` (7),
   `review_side_scope_test` (6), `review_service_test` (40), `test/db` (9),
   `migration_fixtures_test` (8) — all green.
-- **Not done this pass**: the "same line over and over" due-stream simulation on
-  a multi-day replica; the remaining ~138 ms build and the still-expensive
+- **Not done this pass**: the remaining ~138 ms build and the still-expensive
   in-scope `getNodeIndex` (design-level per `docs/performance-handoff.md`).
+  The "same line over and over" lead was diagnosed separately: see
+  DB-DYNAMIC-FREEZE.
 
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
@@ -585,11 +586,12 @@ remains a later option — never a redesign.
       2. `test/review/library_rotation_test.dart` answers such a decision across its interval: it leaves the due set (`getDueCount() == 0`), its `nextDueAt` is scheduled into the future, it returns when the interval elapses, and a second answer advances `repetitionCount`. The canonical knowledge row is written under the decision id (`canonicalStateId ?? id`).
       3. The earlier "no knowledge row that day" reading was the build on disk, not `main`: `position_knowledge_state` holds no UUID-keyed rows at all, while `saveAnswerBatch` writes one per answer in the same batch as the mirror.
       4. No scheduling change made. Do not edit the canonical rekey/backfill migrations.
-- [ ] **DB-DYNAMIC-FREEZE: dynamic mode with nothing unlocked makes every unlearned position unreachable** *(opened: 2026-11-05, confirmed)*
+- [x] **DB-DYNAMIC-FREEZE: dynamic mode with nothing unlocked makes every unlearned position unreachable** *(opened: 2026-11-05, surfaced in the UI: 2026-11-05)*
       1. Owner prefs: `dynamicRepertoireMode: true`; `srs_unlocked_decision` has **0** rows. Library evidence: 896 review events over 404 distinct occurrences but only **87** distinct canonical positions ever learned, heavy activity on 2026-10-15/16 and no new positions after — the same few lines, everything else lost.
       2. `ReviewSession` queues a fresh position in dynamic mode only when it is `isLearned` or in `unlockedDecisionIds` (`lib/src/domain/review/review_session.dart`, the `isUnlocked` gate). With zero unlocks only the learned set is schedulable. Pinned by `test/review/library_rotation_test.dart` ("dynamic mode with nothing unlocked introduces no fresh position"), which fails when the gate is removed.
-      3. The only unlock entry point is the review-screen pending-unlock banner (`reviewController.unlockPendingLine`, `review_screen.dart`), raised while reviewing an off-repertoire move. With no fresh material the mode is effectively invisible: nothing tells the user why the library stopped growing.
-      4. **Owner decision needed (product semantics):** (a) surface "N lines unlocked · dynamic mode on" with a one-tap unlock or turn-off in review/settings; (b) when dynamic mode has no unlocked positions in scope, introduce the daily fresh allowance anyway; (c) keep the semantics and make the settings state unmistakable. Do not change INV-068 queue composition without that decision.
+      3. Owner chose to surface it rather than change the scheduling contract. `ReviewSession.dynamicModeWithoutUnlocks` now drives a `DynamicFreezeBanner` in both review branches (a queued prompt and the nothing-due view): it states that only learned positions are scheduled and offers a one-tap **Turn off**. Settings shows the unlocked count in the toggle's help, with an explicit "nothing new can be introduced" state at zero.
+      4. Evidence: `test/view/review/dynamic_freeze_banner_test.dart` asserts the copy and the action (fails when the button is a no-op); `test/review/library_rotation_test.dart` asserts the condition for off / on-without-unlocks / on-with-one-unlock; `review_screen_test` 53 and `srs_settings_screen_test` 18 green, `--concurrency=1`. `unlockedDecisionCountProvider` is invalidated on unlock.
+      5. Not verified on device: the banner and the settings line are UI, and no runtime/visual environment is available here. Owner check: with dynamic mode on and no unlocks, open review and confirm the banner appears and **Turn off** resumes introductions.
 
 ### Open — product backlog (deferred, unscheduled; owner-reported 2026-10-03)
 - [x] **P-ORDER: present the same due set in line order** *(done: 2026-10-03, extended 2026-10-04)* — new `ReviewOrder` setting (Due date | By line | Random, default By line): same urgency-selected set and quota cut, consecutive prompts follow study/chapter/tree order (SPEC INV-066). Researched against Listudy line-walking and chessrs due queues first.

@@ -348,6 +348,11 @@ class ReviewSession {
   final bool dynamicRepertoireMode;
   final Set<String> unlockedDecisionIds;
 
+  /// Dynamic mode with nothing unlocked cannot introduce a single new
+  /// position: only already-learned lines are schedulable. The review screen
+  /// says so rather than letting the library look broken.
+  bool get dynamicModeWithoutUnlocks => dynamicRepertoireMode && unlockedDecisionIds.isEmpty;
+
   /// Canonical ids already counted toward today's quota before this session.
   final Set<String> countedToday;
 

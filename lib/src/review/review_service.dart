@@ -56,6 +56,16 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   );
 });
 
+/// Number of lines the dynamic repertoire has unlocked.
+///
+/// Dynamic mode schedules a fresh position only once it is learned or
+/// unlocked, so this count is the honest answer to "why is the library not
+/// growing": zero means no new position can be introduced at all.
+final unlockedDecisionCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final repo = await ref.watch(srsStudyRepositoryProvider.future);
+  return (await repo.getUnlockedDecisionIds()).length;
+});
+
 /// Application service orchestrating review sessions, local persistence,
 /// and SRS updates.
 class DueCountsSummary {
