@@ -47,8 +47,7 @@ const int kDefaultPrefetchRefillThreshold = 3;
 const int kSynchronousIndexingChapterBudget = 8;
 
 /// Fresh-backlog ordering policy injected by the app; null keeps database order.
-typedef FreshIntroductionOrder =
-    List<RepertoireDecision> Function(List<RepertoireDecision> fresh);
+typedef FreshIntroductionOrder = List<RepertoireDecision> Function(List<RepertoireDecision> fresh);
 
 /// A node in the flat FEN→node index supplied by the app (`srs_node`).
 typedef NodePosition = ({String chapterId, String nodeId, int nodeRank});
@@ -212,12 +211,11 @@ class ReviewSession {
         ..addAll(introduced);
 
       // Already-counted positions are free to re-answer, so they add slots (INV-031).
-      final alreadyCounted =
-          _unbufferedQueue.where((d) => countedToday.contains(d.canonicalId)).length;
+      final alreadyCounted = _unbufferedQueue
+          .where((d) => countedToday.contains(d.canonicalId))
+          .length;
       final queueCap = remainingDailyQuota == null ? null : remainingDailyQuota! + alreadyCounted;
-      if (queueCap != null &&
-          remainingDailyQuota! >= 0 &&
-          _unbufferedQueue.length > queueCap) {
+      if (queueCap != null && remainingDailyQuota! >= 0 && _unbufferedQueue.length > queueCap) {
         // Keep the most urgent N; this is not "quota reached", since nothing has
         // been reached yet.
         _logger.info(
@@ -349,6 +347,7 @@ class ReviewSession {
   final TransposeScope transposeScope;
   final bool dynamicRepertoireMode;
   final Set<String> unlockedDecisionIds;
+
   /// Canonical ids already counted toward today's quota before this session.
   final Set<String> countedToday;
 
@@ -1381,12 +1380,13 @@ class ReviewSession {
       ];
     }
     if (refs == null || refs.isEmpty) return null;
-    final ordered = [...refs]..sort((a, b) {
-      final c = (_chapterListIndex[a.chapterId] ?? 0).compareTo(
-        _chapterListIndex[b.chapterId] ?? 0,
-      );
-      return c != 0 ? c : a.nodeRank.compareTo(b.nodeRank);
-    });
+    final ordered = [...refs]
+      ..sort((a, b) {
+        final c = (_chapterListIndex[a.chapterId] ?? 0).compareTo(
+          _chapterListIndex[b.chapterId] ?? 0,
+        );
+        return c != 0 ? c : a.nodeRank.compareTo(b.nodeRank);
+      });
     RepertoireNode? fallback;
     for (final ref in ordered) {
       final chapter = _chapters[ref.chapterId];

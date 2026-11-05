@@ -30,11 +30,8 @@ FreshIntroductionOrder freshIntroductionOrderFor({
     byStudy[d.studyId] = (byStudy[d.studyId] ?? 0) + 1;
     byChapter[d.chapterId] = (byChapter[d.chapterId] ?? 0) + 1;
   }
-  return (fresh) => spreadFreshIntroductions(
-    fresh,
-    presentedByStudy: byStudy,
-    presentedByChapter: byChapter,
-  );
+  return (fresh) =>
+      spreadFreshIntroductions(fresh, presentedByStudy: byStudy, presentedByChapter: byChapter);
 }
 
 /// Orders [fresh] so a capped introduction grows the whole library evenly
@@ -87,10 +84,11 @@ List<List<RepertoireDecision>> _leastPresentedFirst(
 ) {
   final ordered = groups.entries.toList(growable: false);
   final rank = <String, int>{for (var i = 0; i < ordered.length; i++) ordered[i].key: i};
-  final sorted = [...ordered]..sort((a, b) {
-    final byCount = (presented[a.key] ?? 0).compareTo(presented[b.key] ?? 0);
-    return byCount != 0 ? byCount : rank[a.key]!.compareTo(rank[b.key]!);
-  });
+  final sorted = [...ordered]
+    ..sort((a, b) {
+      final byCount = (presented[a.key] ?? 0).compareTo(presented[b.key] ?? 0);
+      return byCount != 0 ? byCount : rank[a.key]!.compareTo(rank[b.key]!);
+    });
   return [for (final entry in sorted) entry.value];
 }
 

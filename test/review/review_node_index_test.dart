@@ -21,9 +21,11 @@ void main() {
       if (root == null) continue;
       var rank = 0;
       void walk(RepertoireNode node) {
-        index
-            .putIfAbsent(node.fenKey, () => <NodePosition>[])
-            .add((chapterId: chapter.id, nodeId: node.id, nodeRank: rank++));
+        index.putIfAbsent(node.fenKey, () => <NodePosition>[]).add((
+          chapterId: chapter.id,
+          nodeId: node.id,
+          nodeRank: rank++,
+        ));
         for (final child in node.children) {
           walk(child);
         }

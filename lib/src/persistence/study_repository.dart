@@ -15,13 +15,7 @@ typedef TallyDecision = ({String id, String studyId, String chapterId, String ca
 /// count above zero; [due] = presented and scheduled no later than the instant;
 /// [fresh] = never presented. `learned` is not the complement of `fresh` (a
 /// lapsed position is learned and due), exactly as `dueStatusOf` defines them.
-typedef ChapterDueCounts = ({
-  String chapterId,
-  int total,
-  int learned,
-  int due,
-  int fresh,
-});
+typedef ChapterDueCounts = ({String chapterId, int total, int learned, int due, int fresh});
 
 /// One node's position identity in the flat `srs_node` index (INV-050).
 typedef NodeRef = ({String chapterId, String nodeId, int nodeRank});

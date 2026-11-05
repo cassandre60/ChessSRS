@@ -1001,12 +1001,7 @@ class ReviewService {
     final List<TallyDecision> tallyDecisions = allDecisions != null
         ? [
             for (final d in allDecisions)
-              (
-                id: d.id,
-                studyId: d.studyId,
-                chapterId: d.chapterId,
-                canonicalId: d.canonicalId,
-              ),
+              (id: d.id, studyId: d.studyId, chapterId: d.chapterId, canonicalId: d.canonicalId),
           ]
         : await repository.getTallyDecisions();
     final loadedData = await _loadReviewData(

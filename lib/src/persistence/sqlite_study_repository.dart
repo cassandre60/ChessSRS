@@ -347,9 +347,7 @@ class SqliteStudyRepository implements StudyRepository {
             // a legacy row with a NULL canonicalStateId stores its knowledge and
             // answer under the decision id, so a delete that only read the
             // column left that row orphaned forever (INV-004/INV-069).
-            canonicalIds.add(
-              (cId == null || cId.isEmpty) ? r['id']! as String : cId,
-            );
+            canonicalIds.add((cId == null || cId.isEmpty) ? r['id']! as String : cId);
           }
 
           // Events and legacy per-occurrence rows keyed by the occurrence id

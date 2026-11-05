@@ -26,12 +26,9 @@ void main() {
   /// fresh decisions, appended study by study — the import order the old
   /// head-of-list cut followed. Every decision expects e2e4 from the standard
   /// start position, so a prompt can be answered by playing that move.
-  ({
-    List<Study> studies,
-    List<Chapter> chapters,
-    List<RepertoireDecision> decisions,
-  })
-  buildLibrary({required Map<String, ({int chapters, int perChapter})> shape}) {
+  ({List<Study> studies, List<Chapter> chapters, List<RepertoireDecision> decisions}) buildLibrary({
+    required Map<String, ({int chapters, int perChapter})> shape,
+  }) {
     final studies = <Study>[];
     final chapters = <Chapter>[];
     final decisions = <RepertoireDecision>[];
@@ -58,12 +55,7 @@ void main() {
 
   /// The production fresh-ordering policy over a built library.
   FreshIntroductionOrder orderFor(
-    ({
-      List<Study> studies,
-      List<Chapter> chapters,
-      List<RepertoireDecision> decisions,
-    })
-    library, {
+    ({List<Study> studies, List<Chapter> chapters, List<RepertoireDecision> decisions}) library, {
     Map<String, ReviewState> states = const {},
   }) => freshIntroductionOrderFor(decisions: library.decisions, reviewStates: states);
 
@@ -112,11 +104,7 @@ void main() {
     });
 
     test('a capped introduction samples every chapter of one study', () {
-      final library = buildLibrary(
-        shape: {
-          'solo': (chapters: 2, perChapter: 5),
-        },
-      );
+      final library = buildLibrary(shape: {'solo': (chapters: 2, perChapter: 5)});
 
       final session = ReviewEngine(clock: clock).createSession(
         studies: library.studies,
@@ -141,9 +129,7 @@ void main() {
       // four days every study must have been touched; the head cut would still
       // be inside study #1.
       final library = buildLibrary(
-        shape: {
-          for (var s = 0; s < 12; s++) 's$s': (chapters: 1, perChapter: 5),
-        },
+        shape: {for (var s = 0; s < 12; s++) 's$s': (chapters: 1, perChapter: 5)},
       );
 
       final learned = <String, ReviewState>{};
@@ -178,10 +164,7 @@ void main() {
 
     test('spreading never changes how many positions are introduced', () {
       final library = buildLibrary(
-        shape: {
-          'a': (chapters: 3, perChapter: 4),
-          'b': (chapters: 2, perChapter: 4),
-        },
+        shape: {'a': (chapters: 3, perChapter: 4), 'b': (chapters: 2, perChapter: 4)},
       );
 
       final session = ReviewEngine(clock: clock).createSession(

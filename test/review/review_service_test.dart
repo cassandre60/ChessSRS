@@ -651,10 +651,7 @@ void main() {
         );
         await repo.saveAnswerBatch(
           knowledgeStates: [
-            PositionKnowledgeState.fromReviewState(
-              earlier,
-              canonicalId: decisions[0].canonicalId,
-            ),
+            PositionKnowledgeState.fromReviewState(earlier, canonicalId: decisions[0].canonicalId),
           ],
           event: ReviewEvent(
             decisionId: decisions[0].canonicalId,
@@ -704,59 +701,66 @@ void main() {
       }
     });
 
-    test('a study scope loads only its own review states, not the whole library (INV-051)', () async {
-      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
-      final repo = _QueryCountRepository(db);
-      final service = ReviewService(repository: repo, clock: clock);
+    test(
+      'a study scope loads only its own review states, not the whole library (INV-051)',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = _QueryCountRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
 
-      try {
-        const big = Study(id: 's_big', title: 'Big');
-        await repo.saveStudy(big);
-        final bigChapter = Chapter.create(studyId: big.id, sourceOrder: 0, title: 'Big chapter');
-        await repo.saveChapter(bigChapter);
-        await repo.saveDecisions([
-          for (var i = 0; i < 500; i++)
+        try {
+          const big = Study(id: 's_big', title: 'Big');
+          await repo.saveStudy(big);
+          final bigChapter = Chapter.create(studyId: big.id, sourceOrder: 0, title: 'Big chapter');
+          await repo.saveChapter(bigChapter);
+          await repo.saveDecisions([
+            for (var i = 0; i < 500; i++)
+              RepertoireDecision.create(
+                studyId: big.id,
+                chapterId: bigChapter.id,
+                nodeId: 'b$i',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+          ]);
+
+          const small = Study(id: 's_small', title: 'Small');
+          await repo.saveStudy(small);
+          final smallChapter = Chapter.create(
+            studyId: small.id,
+            sourceOrder: 0,
+            title: 'Small chapter',
+          );
+          await repo.saveChapter(smallChapter);
+          await repo.saveDecisions([
             RepertoireDecision.create(
-              studyId: big.id,
-              chapterId: bigChapter.id,
-              nodeId: 'b$i',
+              studyId: small.id,
+              chapterId: smallChapter.id,
+              nodeId: 's0',
               expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
             ),
-        ]);
+          ]);
 
-        const small = Study(id: 's_small', title: 'Small');
-        await repo.saveStudy(small);
-        final smallChapter = Chapter.create(studyId: small.id, sourceOrder: 0, title: 'Small chapter');
-        await repo.saveChapter(smallChapter);
-        await repo.saveDecisions([
-          RepertoireDecision.create(
-            studyId: small.id,
-            chapterId: smallChapter.id,
-            nodeId: 's0',
-            expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
-          ),
-        ]);
+          final (:session, :summary) = await service.loadSessionAndSummary(
+            studies: [big, small],
+            scope: const ReviewScope.study('s_small'),
+          );
 
-        final (:session, :summary) = await service.loadSessionAndSummary(
-          studies: [big, small],
-          scope: const ReviewScope.study('s_small'),
-        );
-
-        expect(session.scope, const ReviewScope.study('s_small'));
-        // The summary still describes the whole library, because the drawer needs it...
-        expect(summary.studyProgress['s_big']?.totalDecisions, 500);
-        expect(summary.totalFreshCount, 1);
-        // ...but the session read only the scope's states, never the 500-row study.
-        expect(
-          repo.reviewStateIdsQueried,
-          lessThanOrEqualTo(5),
-          reason: "a one-chapter scope must not read the library's review states (INV-051)",
-        );
-        expect(repo.knowledgeStateIdsQueried, lessThanOrEqualTo(5));
-      } finally {
-        await db.close();
-      }
-    });
+          expect(session.scope, const ReviewScope.study('s_small'));
+          // The summary still describes the whole library, because the drawer needs it...
+          expect(summary.studyProgress['s_big']?.totalDecisions, 500);
+          expect(summary.totalFreshCount, 1);
+          // ...but the session read only the scope's states, never the 500-row study.
+          expect(
+            repo.reviewStateIdsQueried,
+            lessThanOrEqualTo(5),
+            reason: "a one-chapter scope must not read the library's review states (INV-051)",
+          );
+          expect(repo.knowledgeStateIdsQueried, lessThanOrEqualTo(5));
+        } finally {
+          await db.close();
+        }
+      },
+    );
 
     // SPEC INV-030: loadSessionAndSummary produces both session and due summary in a single pass.
     test('loadSessionAndSummary yields matching summary and active session in one pass', () async {

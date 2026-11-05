@@ -1219,10 +1219,7 @@ class _ReviewProgress extends StatelessWidget {
             ),
             const SizedBox(height: 5),
             Text(sessionText, style: SrsText.meta(c.ink3)),
-            if (wide) ...[
-              const SizedBox(height: 1),
-              Text(detailText, style: SrsText.meta(c.ink3)),
-            ],
+            if (wide) ...[const SizedBox(height: 1), Text(detailText, style: SrsText.meta(c.ink3))],
           ],
         ),
       ),
