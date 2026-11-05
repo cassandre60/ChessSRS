@@ -13,6 +13,7 @@
 
 import 'dart:io';
 
+import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/domain/domain.dart';
@@ -30,6 +31,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // The real app binding, because settings providers read SharedPreferences.
+  // In the app this happens in `main()`; here nothing else would do it.
+  final lichessBinding = AppLichessBinding.ensureInitialized();
+  setUpAll(() => lichessBinding.preloadSharedPreferences());
 
   testWidgets('a user imports a PGN and answers the first review prompt', (tester) async {
     // The desktop database path the app itself uses (sqflite ffi), on a temp file.
