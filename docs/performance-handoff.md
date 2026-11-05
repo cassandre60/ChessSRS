@@ -404,3 +404,52 @@ background pass progressively decodes the rest so the work overlaps
 think-time. The implementation brief is
 `docs/tasks/PERF-FIX-49-session-start-fen-key.md`; equivalence evidence and
 before/after numbers land with its PR.
+
+---
+
+## 13. Node index dominates the build (2026-11-05)
+
+Measured on a fresh copy of the owner's library, median of 15 after 3 warmups,
+single worker. The copy carries `user_version` 22 (`main`'s schema): the
+owner's file is v23 from the un-pushed `fix/import-chapter-orientation` branch,
+a data-only orientation repair with no DDL, so the shape measured is real
+(63 studies, 312 chapters, 33,784 decisions, 87 knowledge states, 71,359
+`srs_node` rows).
+
+Run under the owner's stored `StudyPrefs` (maxNewPerDay 100, maxDailyReviews 0,
+`byLine`/`fullLine`, dynamic mode, FSRS, **`transposeScope: off`**) — not the
+harness defaults:
+
+| Measurement | Median |
+|---|---|
+| whole-library `startSession()` | 1077 ms |
+| whole-library `loadSessionAndSummary()` | 1369 ms |
+| owner config, `transposeScope: off` | 487 ms |
+| owner config, `transposeScope: inScope` | 490 ms |
+| `repo.getNodeIndex(active chapters)` | 376 ms |
+| owner config with new quota vs uncapped | 502 ms vs 494 ms |
+
+Two findings, both surprising against §9/§10's attribution:
+
+1. **The node index, not the constructor's chapter loop, dominates the build.**
+   `startSession` always loaded `getNodeIndex()` for the whole scope; on this
+   library that maps 71,359 rows. It is a single query + map build, and it was
+   never separated out in §10's parts table, so it hid inside "session build".
+2. **The daily/new quota barely changes session build** (502 vs 494 ms). The
+   cost is O(all decisions) — the classification loop and the fresh-ordering
+   pass over every never-reviewed decision run before the cap trims the queue.
+
+**Fix landed** (`e95eae93b`, `perf(review)`): the index serves transposition
+acceptance alone (INV-065) and every lookup returns early when
+`transposeScope == off`, so the load is skipped for that setting. Owner
+session build **487 ms → 138 ms**; the app wires the setting from prefs into
+`ReviewService`, so it reaches the running app. Regression test:
+`test/review/session_node_index_load_test.dart`.
+
+Still open, unchanged by this pass: the **in-scope** load (545 ms) is real and
+still paid by users who leave transposition on (the preference default is
+`inScope`). Making that index lazy or scoped is the design-level direction §10
+already flagged, not a patch. The harness `real_library_session_cost_test.dart`
+builds with the domain defaults (`inScope`), so its number does not move for
+the owner's `off` setting — treat it as the in-scope figure and read this
+section for the owner's configuration.

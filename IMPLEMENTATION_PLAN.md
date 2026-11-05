@@ -17,6 +17,62 @@ today's inventory or a fresh runtime pass.
 - Performance findings: docs/performance-handoff.md and its measurement brief;
   older noisy medians below are not optimization proof.
 
+### Delivered 2026-11-05 — downgrade no longer deletes the library; session start measured and cut
+
+Local commits on `fix/downgrade-archive` (not yet pushed). Both changes were
+driven by the owner's mandate ("instant", reliable memory), measured on a copy
+of the owner's real library, and each carries a fail-to-pass test.
+
+- **Data-loss hazard closed** (`b716ee9bc`, `fix(db)`). sqflite's
+  `onDatabaseDowngradeDelete` deleted the file whenever an older build opened a
+  newer schema — a rollback across builds wiped every study, decision and
+  review-history row (flagged by the 2026-09-30 release audit, never fixed).
+  `openAppDatabase` now snapshots the newer database to `<db>.pre-downgrade.bak`
+  and fails with `DatabaseNewerVersionException`, leaving the original file
+  untouched. The snapshot runs on its own connection after the refused open
+  closes, because SQLite refuses `VACUUM INTO` inside sqflite's exclusive open
+  transaction (which is where the downgrade callback runs) — a first attempt
+  inside the callback silently produced no archive.
+  - `test/db/downgrade_archive_test.dart` (2 tests): a v23 database opened by
+    the v22 build refuses, archives a readable standalone copy with its rows,
+    and leaves the live file at v23; two refused opens leave exactly one
+    archive slot. **Fails on the pre-fix handler** (open succeeds on a wiped,
+    empty database), **passes on this one**. `test/db/` (9) and
+    `test/persistence/migration_fixtures_test.dart` (8) green, `--concurrency=1`.
+- **Session start measured on the real library**, owner configuration
+  (`maxNewPerDay=100`, `maxDailyReviews=0`, `byLine`/`fullLine`, dynamic mode,
+  FSRS, `transposeScope=off`) rather than the harness defaults. Whole-library
+  `startSession()`/`loadSessionAndSummary()` were 1077/1369 ms; attribution put
+  `getNodeIndex` at **376 ms** of the ~490 ms build, while the daily/new quota
+  barely moved it (502 ms capped vs 494 ms uncapped — the cost is O(all
+  decisions), not queue size).
+- **Frequency-only win landed** (`e95eae93b`, `perf(review)`).
+  `startSession` unconditionally loaded the flat FEN→node index for the whole
+  scope, but its only consumer is transposition acceptance (INV-065) and every
+  lookup returns early when `transposeScope == off`. Skipping that load took
+  the owner's session build from **487 ms to 138 ms** (−349 ms). The app wires
+  `transposeScope` from `studyPrefs` into `ReviewService`, so the setting
+  reaches the running app.
+  - `test/review/session_node_index_load_test.dart` (2 tests): off ⇒ zero index
+    loads; in scope ⇒ the index loads. **Fails on the pre-fix always-load path.**
+    Adjacent suites stay green (list below).
+- **Measurement caveat (do not misread).** The owner's file is schema **v23**
+  (the un-pushed `fix/import-chapter-orientation` branch); `main` is v22, so the
+  run used a fresh copy of the owner's DB with `user_version` normalised to 22.
+  v23 is a data-only orientation repair with no DDL, so the tables and row
+  counts are the measured shape (63 studies, 312 chapters, **33,784 decisions**,
+  87 knowledge states, 71,359 `srs_node` rows). Re-measure on the owner's file
+  directly once v23 lands on `main`.
+- **Move path judged in budget**: `move_latency_test` median **3.2 ms**, p90
+  15.9 ms, max 15.9 ms — inside QUALITY §4.1's 16 ms (batch median oracle).
+- **Verification runs** (`--concurrency=1`): `review_node_index_test` (2),
+  `review_transposition_test` (9), `review_engine_wiring_test` (7),
+  `review_side_scope_test` (6), `review_service_test` (40), `test/db` (9),
+  `migration_fixtures_test` (8) — all green.
+- **Not done this pass**: the "same line over and over" due-stream simulation on
+  a multi-day replica; the remaining ~138 ms build and the still-expensive
+  in-scope `getNodeIndex` (design-level per `docs/performance-handoff.md`).
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
@@ -524,6 +580,11 @@ remains a later option — never a redesign.
 - [ ] **F-MOBILELOGIN: email-code sign-in on a real device** *(opened: 2026-10-02)*
       1. Desktop sign-in goes through loopback OAuth (#125) and is verified; the mobile-code path is not, because no device was attached.
       2. This is the only path that exercises #123's query-parameter fallback on `/auth/mobile-code/email` and `/bearer`. Needs an Android or iOS device against `lichess.org`, now the default host — no `--dart-define`.
+- [ ] **DB-CANON-GAP: 451 decisions carry no `canonicalStateId`, and a day's answers wrote no knowledge row** *(opened: 2026-11-05, unconfirmed)*
+      1. On a copy of the owner's library (63 studies, 33,784 decisions): `srs_decision` has **33,333** rows with `canonicalStateId` set and **451** NULL; the 15 decisions answered on 2026-11-05 are in the NULL set, and `position_knowledge_state` gained **no** row that day (its newest `lastReviewedAt` is 2026-10-15 and all 87 rows are overdue since September), while `srs_review_state` mirrors were refreshed (15 rows at 15:34Z; 17 review events today).
+      2. `saveAnswerBatch` writes the knowledge upsert **and** the mirrors in one transaction, so this is not explained by the write path alone — the NULL `canonicalStateId` is the distinguishing fact. It cannot be concluded from SQL; it needs a run.
+      3. **Hypothesis (test before touching anything):** an unmapped decision's answer never maintains a canonical knowledge row, so its scheduled date cannot advance and the position is re-served while unmapped — the closest thing yet to the owner's "same line over and over" report. Reproduce with a focused repository/service test: a decision with `canonicalStateId` NULL, answered across two simulated days, must both gain a knowledge row and stop being due (or the unmapped path must be shown to fall back to the `srs_review_state` mirror for its date).
+      4. The queries behind (1) are plain `sqlite3` over the copy and should be quoted verbatim when this is promoted to a task. Do **not** edit the canonical rekey/backfill migrations on this evidence alone.
 
 ### Open — product backlog (deferred, unscheduled; owner-reported 2026-10-03)
 - [x] **P-ORDER: present the same due set in line order** *(done: 2026-10-03, extended 2026-10-04)* — new `ReviewOrder` setting (Due date | By line | Random, default By line): same urgency-selected set and quota cut, consecutive prompts follow study/chapter/tree order (SPEC INV-066). Researched against Listudy line-walking and chessrs due queues first.
