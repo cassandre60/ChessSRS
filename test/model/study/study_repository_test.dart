@@ -556,6 +556,12 @@ void main() {
       expect(study.chapter.setup.orientation, Side.black);
       expect(study.chapter.setup.fromFen, isFalse);
       expect(study.chapter.practise, isFalse);
+      expect(study.chapter.gamebook, isFalse);
+      expect(study.chapter.features.computer, isTrue);
+      expect(study.chapter.features.explorer, isTrue);
+      expect(study.liked, isFalse);
+      expect(study.features.cloneable, isFalse);
+      expect(study.features.sticky, isFalse);
       expect(summary, isNull);
       expect(pgn, contains('[Event "Main Line"]'));
 
@@ -616,6 +622,47 @@ void main() {
       final repo = container.read(studyRepositoryProvider);
 
       expect(() => repo.getStudiesByUsername('someuser'), throwsA(isA<ServerException>()));
+    });
+
+    test('parses a study ref from an NDJSON response', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response('{"id":"s1","name":"My Study","updatedAt":1699999999000}\n', 200);
+      });
+
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      final refs = await repo.getStudiesByUsername('someuser');
+      expect(refs, hasLength(1));
+      expect(refs.single.id.value, 's1');
+      expect(refs.single.name, 'My Study');
+      // The server timestamps are epoch milliseconds in UTC.
+      expect(refs.single.updatedAt.isUtc, isTrue);
+    });
+  });
+
+  group('StudyRepository.createChapter', () {
+    test('sends variant when provided', () async {
+      const studyId = StudyId('study1');
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/study/$studyId/import-pgn' &&
+            request.body.contains('variant=chess960')) {
+          return http.Response('{"chapters":[{"id":"ch_1"}]}', 200);
+        }
+        return http.Response('', 400);
+      });
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      const chapter = CreateStudyChapterPayload(
+        pgn: '1. e4 e5 *',
+        name: 'Chapter',
+        orientation: Side.white,
+        variant: Variant.chess960,
+      );
+      final ids = await repo.createChapter(studyId, chapter);
+      expect(ids, hasLength(1));
+      expect(ids.single.value, 'ch_1');
     });
   });
 }

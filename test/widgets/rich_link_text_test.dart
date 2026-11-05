@@ -325,5 +325,94 @@ void main() {
       final child = inner.children!.first as TextSpan;
       expect(child.style, isNotNull);
     });
+
+    testWidgets('re-linkifies when the text changes', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: RichLinkText(text: 'visit https://old.example.com')),
+      );
+      expect(
+        tester.widget<RichText>(find.byType(RichText)).text.toPlainText(),
+        contains('old.example.com'),
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: RichLinkText(text: 'visit https://new.example.com')),
+      );
+      await tester.pump();
+
+      final plainText = tester.widget<RichText>(find.byType(RichText)).text.toPlainText();
+      expect(plainText, contains('new.example.com'));
+      expect(plainText, isNot(contains('old.example.com')));
+    });
+
+    testWidgets('wires a recognizer when onOpen is added after first build', (
+      WidgetTester tester,
+    ) async {
+      LinkableElement? tapped;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(child: RichLinkText(text: 'https://example.com')),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(text: 'https://example.com', onOpen: (link) => tapped = link),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('example.com'));
+      await tester.pump();
+      expect(tapped, isNotNull);
+      expect(tapped!.url, 'https://example.com');
+    });
+
+    testWidgets('rebuilds link mapping when linkifiers change', (WidgetTester tester) async {
+      LinkableElement? tapped;
+      void onOpen(LinkableElement link) {
+        tapped = link;
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(
+                text: 'https://example.com',
+                linkifiers: const [],
+                onOpen: onOpen,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(
+                text: 'https://example.com',
+                linkifiers: defaultLinkifiers,
+                onOpen: onOpen,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('example.com'));
+      await tester.pump();
+      expect(tapped, isNotNull);
+      expect(tapped!.url, 'https://example.com');
+    });
   });
 }
