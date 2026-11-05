@@ -17,6 +17,37 @@ today's inventory or a fresh runtime pass.
 - Performance findings: docs/performance-handoff.md and its measurement brief;
   older noisy medians below are not optimization proof.
 
+### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
+
+- **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
+  became a single-quoted literal, and the migration fixtures now pin the
+  stored `dflt_value == "'white'"` on every fixture version. The new
+  assertion was proven to fail on the pre-fix code (v10 fixture upgrading
+  through the ALTER stored the double-quoted token). A sweep for other
+  double-quoted SQL literals in shipped DDL found none.
+- **Register dispositions recorded** in the same PR: R1-F4 fixed by #166,
+  R2-F2 by #88, Review-4 C1 by `fromReviewState` + the targeted upsert,
+  Review-4 C2 by the UTC write conversion — each verified against the tree
+  before being written, so the register no longer advertises already-fixed
+  work. R1-F5 and C3 stay latent as written.
+- **The 2026-11-05 review-loop overhaul re-verified independently.** On the
+  fresh checkout (generated code regenerated after pull): `review_fresh_spread_test`
+  (6), `review_node_index_test` (2), `review_service_test` (40),
+  `scope_split_drawers_test` + `review_progress_and_drawer_test` (15) all
+  green, `--concurrency=1`. The `Runtime smoke` dispatched at `v1.9.0` (the
+  released overhaul) and again at `d9d0a5779` (**success**: real import →
+  review answer → persisted review, under xvfb).
+- **Code-path audits with no defect found**: the fresh-introduction policy's
+  production wiring (`ReviewService` injects `freshIntroductionOrderFor`
+  from the scope's decisions/states), the due-first queue split with the
+  INV-068 fresh-debt rule, the live-settings reload path (generation-claimed
+  loads; continuity folded into a rebuild rather than a silent stale service),
+  and the `srs_node` index invalidation (`saveChapter`/`saveChapters` replace
+  rows, chapter deletes clean them, imports mint fresh ids so no replace
+  collision is reachable).
+- **Blocked on owner**: the on-device checks in `docs/manual-test-log.md`
+  ("Review overhaul 2026-11-05") and one-word decisions Q7, Q8, Q12, Q13, Q14.
+
 ### Reconciled dispositions (2026-10-21)
 
 - Firebase/FCM were removed; C1/C2 are no longer grey/kept. CUT_PROPOSALS owns cuts.
