@@ -777,7 +777,14 @@ class ReviewService {
 
     // Flat FEN→node index: a transposition lookup then decodes only the chapter
     // that holds the target, instead of every chapter tree (INV-050).
-    final nodeIndex = await repository.getNodeIndex(targetChapters.map((c) => c.id).toList());
+    //
+    // It serves transposition acceptance alone (INV-065), and every lookup
+    // returns early when transposeScope is off — so with transposition disabled
+    // the load would map every node of the scope for nothing (71k rows on the
+    // owner's library, ~0.4 s of session start). Skip it there.
+    final nodeIndex = transposeScope == TransposeScope.off
+        ? const <String, List<NodePosition>>{}
+        : await repository.getNodeIndex(targetChapters.map((c) => c.id).toList());
 
     final session = engine.createSession(
       studies: targetStudies,
