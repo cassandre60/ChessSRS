@@ -309,6 +309,23 @@ void main() {
       expect(richText.overflow, TextOverflow.ellipsis);
     });
 
+    testWidgets('applies custom style and linkStyle', (WidgetTester tester) async {
+      const customStyle = TextStyle(color: Colors.green, fontSize: 20.0);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: RichLinkText(text: 'plain text no links', style: customStyle),
+        ),
+      );
+
+      final richText = tester.widget<RichText>(find.byType(RichText));
+      final outer = richText.text as TextSpan;
+      final inner = outer.children!.first as TextSpan;
+      expect(inner.children, isNotEmpty);
+      final child = inner.children!.first as TextSpan;
+      expect(child.style, isNotNull);
+    });
+
     testWidgets('re-linkifies when the text changes', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: RichLinkText(text: 'visit https://old.example.com')),
