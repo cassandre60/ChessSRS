@@ -79,13 +79,12 @@ void main() {
 
     // The line reports both halves the owner asked for: how far through today's
     // queue the session is, and how much of the repertoire is retained.
-    expect(find.textContaining('of'), findsWidgets);
-    expect(find.textContaining('retained'), findsOneWidget);
     expect(
       find.textContaining('done ·'),
       findsOneWidget,
       reason: 'the session progress line must be on screen during review, not only when idle',
     );
+    expect(find.textContaining('retained'), findsOneWidget);
   });
 
   testWidgets('the colour drawer names its repertoire before listing anything', (tester) async {
@@ -93,7 +92,7 @@ void main() {
     await pumpUntilFound(tester, find.byTooltip('White repertoire'));
 
     await tester.tap(find.byTooltip('White repertoire'));
-    await tester.pumpAndSettle();
+    await pumpUntilFound(tester, find.text('White repertoire'));
 
     // The title is the only visible text carrying the colour's name (the
     // top-bar tooltip is not a Text unless it is being shown).
