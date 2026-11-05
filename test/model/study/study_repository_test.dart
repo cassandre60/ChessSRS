@@ -654,7 +654,7 @@ void main() {
       final container = await makeTestContainer(mockClient);
       final repo = container.read(studyRepositoryProvider);
 
-      final chapter = CreateStudyChapterPayload(
+      const chapter = CreateStudyChapterPayload(
         pgn: '1. e4 e5 *',
         name: 'Chapter',
         orientation: Side.white,
