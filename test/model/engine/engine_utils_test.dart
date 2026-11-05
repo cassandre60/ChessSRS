@@ -1,6 +1,8 @@
 import 'package:chess_srs/src/model/engine/engine_spec.dart';
+import 'package:chess_srs/src/model/common/eval.dart';
 import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Position position(String fen) => Chess.fromSetup(Setup.parseFen(fen));
@@ -57,6 +59,12 @@ void main() {
       expect(hasNonStandardMaterial(position('4k3/8/8/8/8/8/PPPPPPPP/2B1KB2 w - - 0 1')), isFalse);
     });
 
+    test('a second dark-squared bishop with a full pawn set counts as a promotion', () {
+      // Eight pawns and two dark-squared bishops: one of the bishops must have been promoted,
+      // so material is non-standard.
+      expect(hasNonStandardMaterial(position('4k3/8/8/8/8/4B3/PPPPPPPP/2B4K w - - 0 1')), isTrue);
+    });
+
     test('material is judged for both sides', () {
       expect(hasNonStandardMaterial(position('qqqqk3/pppppppp/8/8/8/8/8/4K3 w - - 0 1')), isTrue);
     });
@@ -93,6 +101,22 @@ void main() {
       expect(t.turn, Side.white);
       expect(t.halfmoves, p.halfmoves + 1);
       expect(t.fullmoves, p.fullmoves + 1);
+    });
+  });
+
+  group('pickBestEval', () {
+    test('prefers a threat-mode local eval even when a saved eval exists', () {
+      final local = LocalEval(
+        position: Chess.initial,
+        depth: 1,
+        nodes: 1,
+        pvs: IList(),
+        millis: 1,
+        searchTime: Duration.zero,
+        threatMode: true,
+      );
+      final saved = CloudEval(position: Chess.initial, depth: 100, nodes: 100, pvs: IList());
+      expect(pickBestEval(localEval: local, savedEval: saved, serverEval: null), same(local));
     });
   });
 }
