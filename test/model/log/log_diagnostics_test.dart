@@ -221,6 +221,15 @@ void main() {
           newStateJson TEXT NOT NULL
         )
       ''');
+      await db.execute('''
+        CREATE TABLE srs_node(
+          chapterId TEXT NOT NULL,
+          nodeId TEXT NOT NULL,
+          fenKey TEXT NOT NULL,
+          nodeRank INTEGER NOT NULL,
+          PRIMARY KEY (chapterId, nodeId)
+        )
+      ''');
 
       const pgn = '1. e4 e5 *';
       final importResult = importPgn(pgn, studyTitle: 'Performance Timing Study');

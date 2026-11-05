@@ -1174,6 +1174,121 @@ void main() {
     );
 
     test(
+      'deleteStudy removes the knowledge row a NULL-canonical decision keyed by its own id',
+      () async {
+        // A legacy decision row with no canonicalStateId stores its answer under
+        // the decision id (`RepertoireDecision.canonicalId == canonicalStateId ?? id`).
+        // A delete that only read the column left that row orphaned forever
+        // (INV-004): it still counted toward the day's new-position allowance and
+        // was still readable by the deleted id.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final study = Study(id: 's-legacy', title: 'Legacy', createdAt: now, updatedAt: now);
+          final chapter = Chapter(id: 'ch-legacy', studyId: study.id, sourceOrder: 0);
+          const decision = RepertoireDecision(
+            id: 'dec-legacy',
+            studyId: 's-legacy',
+            chapterId: 'ch-legacy',
+            nodeId: 'n-legacy',
+            expectedMoves: [],
+          );
+          const knowledge = PositionKnowledgeState(
+            canonicalId: 'dec-legacy',
+            repetitionCount: 3,
+            stability: 10.0,
+          );
+
+          await repo.saveStudy(study);
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(decision);
+          await repo.savePositionKnowledgeState(knowledge);
+          expect(await repo.getPositionKnowledgeState('dec-legacy'), isNotNull);
+
+          await repo.deleteStudy(study.id);
+
+          expect(
+            await repo.getPositionKnowledgeState('dec-legacy'),
+            isNull,
+            reason: 'the delete must follow the canonicalStateId ?? id fallback',
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
+      'deleteChapter removes the knowledge row a NULL-canonical decision keyed by its own id',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final study = Study(id: 's-legacy', title: 'Legacy', createdAt: now, updatedAt: now);
+          final chapter = Chapter(id: 'ch-legacy', studyId: study.id, sourceOrder: 0);
+          const decision = RepertoireDecision(
+            id: 'dec-legacy',
+            studyId: 's-legacy',
+            chapterId: 'ch-legacy',
+            nodeId: 'n-legacy',
+            expectedMoves: [],
+          );
+          const knowledge = PositionKnowledgeState(
+            canonicalId: 'dec-legacy',
+            repetitionCount: 1,
+            stability: 5.0,
+          );
+
+          await repo.saveStudy(study);
+          await repo.saveChapter(chapter);
+          await repo.saveDecision(decision);
+          await repo.savePositionKnowledgeState(knowledge);
+
+          await repo.deleteChapter(chapter.id);
+
+          expect(await repo.getPositionKnowledgeState('dec-legacy'), isNull);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
+      'getChaptersByStudyIds returns every requested study in order past the old 50 threshold',
+      () async {
+        // The old >50 branch read every chapter row (treeJson included) and
+        // filtered in memory. The chunked IN rewrite must still return exactly
+        // the requested studies, in the requested order.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+
+        try {
+          final now = DateTime.utc(2026, 9, 16, 12, 0, 0);
+          final ids = <String>[];
+          for (var i = 0; i < 60; i++) {
+            final study = Study(id: 's$i', title: 'S$i', createdAt: now, updatedAt: now);
+            await repo.saveStudy(study);
+            await repo.saveChapter(Chapter(id: 'c$i', studyId: study.id, sourceOrder: 0));
+            ids.add(study.id);
+          }
+
+          final all = await repo.getChaptersByStudyIds(ids);
+          expect(all.map((c) => c.studyId).toList(), ids);
+
+          final subset = ids.sublist(55);
+          final onlySubset = await repo.getChaptersByStudyIds(subset);
+          expect(onlySubset.map((c) => c.studyId).toList(), subset);
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test(
       'deleteStudy preserves shared canonical events and mirrors referenced by another study',
       () async {
         final db = await openAppDatabase(databaseFactoryFfi, dbPath);

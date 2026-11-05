@@ -25,6 +25,7 @@ Map<String, dynamic> repertoireNodeToJson(RepertoireNode node) => {
   'fenKey': node.fenKey,
   if (node.incomingMove != null) 'incomingMove': repertoireMoveToJson(node.incomingMove!),
   if (node.comment != null) 'comment': node.comment,
+  if (node.nags.isNotEmpty) 'nags': node.nags,
   if (node.children.isNotEmpty)
     'children': node.children.map(repertoireNodeToJson).toList(growable: false),
 };
@@ -34,6 +35,7 @@ RepertoireNode repertoireNodeFromJson(Map<String, dynamic> json) {
       ? repertoireMoveFromJson(Map<String, dynamic>.from(json['incomingMove'] as Map))
       : null;
   final rawChildren = json['children'] as List<dynamic>?;
+  final rawNags = json['nags'] as List<dynamic>?;
   final children = rawChildren != null
       ? rawChildren
             .map((c) => repertoireNodeFromJson(Map<String, dynamic>.from(c as Map)))
@@ -45,6 +47,7 @@ RepertoireNode repertoireNodeFromJson(Map<String, dynamic> json) {
     fenKey: json['fenKey'] as String,
     incomingMove: incoming,
     comment: json['comment'] as String?,
+    nags: rawNags?.map((n) => n as int).toList(growable: false) ?? const [],
     children: children,
   );
 }

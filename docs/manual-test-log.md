@@ -15,6 +15,45 @@ tried is not verified, however green its CI was.
 
 ## Open
 
+### Review overhaul 2026-11-05 — the owner-reported fixes
+
+**What changed.** Five user-facing behaviours in the review loop (PR #502):
+
+1. *Fresh material is spread.* New positions are introduced from the
+   least-presented study, then chapter, first, and interleaved, instead of
+   always from the first-imported study.
+2. *The colour drawer names itself.* It now shows `White repertoire` /
+   `Black repertoire` plus a `N openings · M studies` summary.
+3. *The screen shows progress.* Under the chapter title: a session bar and
+   `{done} of {total} done · {retained} of {scope} retained`.
+4. *Settings apply live* — review order, transposed-move scope, positions per
+   day, dynamic mode and line continuity take effect without a restart.
+5. *Wrong moves are cheap*: a wrong move no longer decodes every chapter tree
+   (v22 `srs_node` index).
+
+**What the tests prove.** The domain/session behaviour (fresh spread
+`[a,a,a]`→`[a,b,c]`; 12/12 studies reached over four simulated days; lazy
+indexing; the quota/allowance/delete/transposition rules) and the widgets (the
+drawer title renders; the progress line renders). What they cannot prove is how
+it feels on your phone with your real library.
+
+**What only you can check** (TEST_STRATEGY §4). Import/keep a repertoire, start
+a review, and confirm:
+
+- **Variety.** Over a few days, new positions come from *different* studies, not
+  the same line every time; a line you keep failing still returns, but it is no
+  longer the whole session.
+- **Drawers.** Tap the white square, then the black square: each sheet shows its
+  own colour name and only that colour's material; tapping inside the sheet
+  switches colour without closing it.
+- **Progress.** The line under the chapter title counts up as you answer, and
+  `retained` goes up as due positions clear — it is not stuck at 0% or 100%.
+- **Live settings.** In Settings, change *Review order*, *New positions per
+  day*, or *Line continuity* while a session is open; the next positions reflect
+  the change without leaving the screen.
+- **Speed.** Answering, including a wrong answer and a retry, feels immediate
+  (no pause while the app thinks).
+
 ### 1. PGN comment shapes moved to one shared file (refactor, `pgn_shapes.dart`)
 
 **What changed.** Nothing visible on purpose: the 15-line `PgnCommentShape → Shape`

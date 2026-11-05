@@ -1005,6 +1005,27 @@ void main() {
       );
     });
 
+    test(
+      'names a moveless chapter in an otherwise valid import instead of storing it silently',
+      () {
+        // SPEC INV-011: a malformed chapter is quarantined, never half-applied. The
+        // valid game must still import, but the chapter that trains nothing must be
+        // reported — before this it was stored with an empty error list, so the
+        // import read as clean while holding a blank-board chapter.
+        const pgn = '''
+[Event "Good Game"]
+
+1. e4 e5 2. Nf3 *
+
+[Event "Empty Game"]
+''';
+        final result = importPgn(pgn);
+
+        expect(result.decisions, isNotEmpty, reason: 'the valid game still trains');
+        expect(result.errors.map((e) => e.chapterTitle), contains('Empty Game'));
+      },
+    );
+
     test('a real repertoire still imports without errors', () {
       final result = importPgn('1. e4 e5 2. Nf3 *');
 

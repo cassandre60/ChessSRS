@@ -42,21 +42,17 @@ const int kDefaultPrefetchBatchSize = 25;
 /// live on this side of the boundary.
 const int kDefaultPrefetchRefillThreshold = 3;
 
-/// How many not-yet-node-indexed chapters a session decodes synchronously at
-/// construction before handing the remainder to the background pass.
-///
-/// A small backlog costs single-digit milliseconds and completes inside the
-/// constructor — no scheduled work, no timer a test environment has to drain.
-/// A large one (whole-library review, hundreds of chapters) is what v21
-/// exists to defer.
+/// How many chapters a session decodes synchronously before the background
+/// pass takes the rest.
 const int kSynchronousIndexingChapterBudget = 8;
 
-/// Active review session state machine.
-///
-/// Encapsulates queue management, move validation against repertoire (Invariant §2.1),
-/// auto-traversal through opponent replies and already-learned user moves (Invariant §2.4),
-/// queue prefetching and buffering (chessrs PracticeMainPanel.tsx semantics),
-/// and deterministic time testing via [Clock] (Invariant §3.2).
+/// Fresh-backlog ordering policy injected by the app; null keeps database order.
+typedef FreshIntroductionOrder = List<RepertoireDecision> Function(List<RepertoireDecision> fresh);
+
+/// A node in the flat FEN→node index supplied by the app (`srs_node`).
+typedef NodePosition = ({String chapterId, String nodeId, int nodeRank});
+
+/// Active review session state machine: queue, grading, traversal, prefetch.
 class ReviewSession {
   ReviewSession({
     required List<Study> studies,
@@ -76,6 +72,9 @@ class ReviewSession {
     this.remainingNewQuota,
     this.dynamicRepertoireMode = false,
     this.unlockedDecisionIds = const {},
+    this.countedToday = const {},
+    this.nodeIndex = const {},
+    this.freshIntroductionOrder,
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
     Random? random,
@@ -86,6 +85,9 @@ class ReviewSession {
        _decisionsById = {for (final d in decisions) d.id: d},
        _decisionForNode = {for (final d in decisions) d.nodeId: d},
        _chaptersList = chapters {
+    for (var i = 0; i < _chaptersList.length; i++) {
+      _chapterListIndex[_chaptersList[i].id] = i;
+    }
     for (final d in decisions) {
       _decisionsByCanonicalId[d.canonicalId] = d;
       _decisionsByChapter.putIfAbsent(d.chapterId, () => []).add(d);
@@ -176,6 +178,8 @@ class ReviewSession {
       // pool sorted by date: fresh positions carry no date at all, so a date
       // sort floats them to the front and buries the recall work the user is
       // actually answerable for.
+      //
+      // Most-overdue first; equal due dates keep list order (suite-pinned).
       dueBucket.sort((a, b) {
         final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
         final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
@@ -187,16 +191,15 @@ class ReviewSession {
         return dueA.compareTo(dueB);
       });
 
-      // Introduce at most `remainingNewQuota` never-presented positions; the
-      // rest stay fresh for a later day instead of counting as work.
-      var introduced = freshBucket;
+      // Cap the introductions; the injected policy grows the whole library.
+      var introduced = freshIntroductionOrder?.call(freshBucket) ?? freshBucket;
       final newAllowance = remainingNewQuota;
-      if (newAllowance != null && newAllowance >= 0 && freshBucket.length > newAllowance) {
-        introduced = freshBucket.sublist(0, newAllowance);
+      if (newAllowance != null && newAllowance >= 0 && introduced.length > newAllowance) {
         _logger.info(
           'Fresh backlog (${freshBucket.length}) exceeds the daily new-position '
-          'allowance ($remainingNewQuota); holding back ${freshBucket.length - introduced.length}',
+          'allowance ($remainingNewQuota); holding back ${freshBucket.length - newAllowance}',
         );
+        introduced = introduced.sublist(0, newAllowance);
       }
       // The positions this session may introduce. The ones the allowance held
       // back are not in the queue, and a walk that reaches one must not ask it
@@ -207,30 +210,23 @@ class ReviewSession {
         ..addAll(dueBucket)
         ..addAll(introduced);
 
-      if (remainingDailyQuota != null &&
-          remainingDailyQuota! >= 0 &&
-          _unbufferedQueue.length > remainingDailyQuota!) {
-        // Not "quota reached". Nothing has been reached here: the due queue is simply longer
-        // than what is left of today's allowance, so the session keeps the most urgent N. The
-        // old wording printed the *remaining* allowance next to the word "reached", so a user
-        // who had reviewed 6 of 100 read "Daily review quota (94) reached" and went looking for
-        // 94 reviews. It also never said how long the queue was, so a truncated queue left no
-        // trace of what was dropped.
+      // Already-counted positions are free to re-answer, so they add slots (INV-031).
+      final alreadyCounted = _unbufferedQueue
+          .where((d) => countedToday.contains(d.canonicalId))
+          .length;
+      final queueCap = remainingDailyQuota == null ? null : remainingDailyQuota! + alreadyCounted;
+      if (queueCap != null && remainingDailyQuota! >= 0 && _unbufferedQueue.length > queueCap) {
+        // Keep the most urgent N; this is not "quota reached", since nothing has
+        // been reached yet.
         _logger.info(
           'Due queue (${_unbufferedQueue.length}) is longer than the remaining daily quota '
-          '($remainingDailyQuota); keeping the $remainingDailyQuota most urgent',
+          '($remainingDailyQuota); keeping the $queueCap most urgent',
         );
-        _unbufferedQueue.removeRange(remainingDailyQuota!, _unbufferedQueue.length);
+        _unbufferedQueue.removeRange(queueCap, _unbufferedQueue.length);
       }
     }
 
-    // Index chapters holding decisions in queue (both SRS and practice mode).
-    // The decision maps are tree-free since v21 — the row carries its node's
-    // fen key — so nothing here decodes a chapter tree. The node maps the
-    // prompts need are indexed for the prompted chapter on demand
-    // (_ensureChapterNodesIndexed) and for everything else by the background
-    // pass kicked below, with every reader still able to finish the job
-    // synchronously.
+    // Index the queued chapters' tree-free decision maps.
     final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
     for (final chapter in chapters) {
       if (neededChapterIds.contains(chapter.id)) {
@@ -256,7 +252,11 @@ class ReviewSession {
 
     // By-line order (INV-066): same set, walking study, chapter, tree order.
     if (order == ReviewOrder.byLine) {
-      _ensureAllChaptersIndexed();
+      // Index only the queued chapters; the background pass does the rest.
+      for (final chapterId in neededChapterIds) {
+        final chapter = _chapters[chapterId];
+        if (chapter != null) _indexChapterNodes(chapter);
+      }
       final studyIndex = <String, int>{for (var i = 0; i < studies.length; i++) studies[i].id: i};
       var n = 0;
       final nodeOrder = <String, int>{for (final id in _nodesById.keys) id: n++};
@@ -347,6 +347,15 @@ class ReviewSession {
   final TransposeScope transposeScope;
   final bool dynamicRepertoireMode;
   final Set<String> unlockedDecisionIds;
+
+  /// Canonical ids already counted toward today's quota before this session.
+  final Set<String> countedToday;
+
+  /// Flat FEN→nodes index (INV-050); empty falls back to decoding trees.
+  final Map<String, List<NodePosition>> nodeIndex;
+
+  /// Fresh-backlog ordering policy; null keeps the database order.
+  final FreshIntroductionOrder? freshIntroductionOrder;
   final Scheduler scheduler;
   final Clock clock;
   final Random _random;
@@ -407,7 +416,6 @@ class ReviewSession {
   final Map<String, int> _nodeDfsRank = {};
   int _nodeDfsRankCounter = 0;
   final Map<String, String> _canonicalByFenMove = {};
-  final Map<String, int> _nodeCountCache = {};
 
   /// Builds the decision maps for [chapter] from its rows. The position a
   /// decision sits on comes from the row's own fen key; a row the v21 backfill
@@ -466,12 +474,9 @@ class ReviewSession {
     _allChaptersIndexed = true;
   }
 
-  /// Decodes the remaining chapter trees between event-loop turns so the cost
-  /// overlaps the user's think-time instead of the first frame. Purely an
-  /// optimization: every reader completes missing node maps synchronously, so
-  /// correctness never depends on how far this has got. The loop keeps
-  /// `_chaptersList` order, which preserves the candidate order the
-  /// transposition lookup documents.
+  /// Decodes the remaining chapter trees between event-loop turns, overlapping
+  /// the user's think-time. Purely an optimization; every reader completes
+  /// missing node maps synchronously.
   Future<void> _indexRemainingNodesInBackground() async {
     // Let the first frame paint before any decoding runs.
     await Future<void>.delayed(Duration.zero);
@@ -524,13 +529,16 @@ class ReviewSession {
   /// the position above it.
   final Set<String> _admittedFreshIds = {};
 
+  /// Whether [d] is a fresh position the day's allowance held back; practice is exempt (INV-068).
+  bool _isHeldBackFresh(RepertoireDecision d) =>
+      mode == ReviewMode.srs &&
+      _freshAtQueueTime.contains(d.canonicalId) &&
+      !_admittedFreshIds.contains(d.canonicalId);
+
   /// Whether the session still holds due work (INV-068).
   ///
-  /// Fresh introductions come after the due work, so a walk that reaches a
-  /// fresh position while due work is still queued stops there instead of
-  /// asking it. Only positions the queue holds count: a position already
-  /// answered, or one the daily quota set aside, is not work in front of the
-  /// user.
+  /// A walk that reaches a fresh position while due work is queued stops there;
+  /// only positions still in the queue count.
   bool _hasQueuedDueWork(DateTime now) {
     for (final d in _dueQueue) {
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
@@ -564,6 +572,10 @@ class ReviewSession {
   /// must not report zero (review-3 C1). One source of truth, by construction.
   int get completedCount => _completedDecisionIds.length;
 
+  /// This session's completions minus those already counted today (INV-031).
+  int get _newlyCompletedToday =>
+      _completedDecisionIds.length - _completedDecisionIds.where(countedToday.contains).length;
+
   /// Work this session will ask for: due positions plus fresh introductions.
   ///
   /// Named "due count" for the callers that have always read it as queue size
@@ -582,6 +594,9 @@ class ReviewSession {
   /// ensure) finishes the chapters. Diagnostic and test seam for the indexing
   /// schedule; nothing behavioral reads it.
   bool get isNodeIndexComplete => _allChaptersIndexed;
+
+  /// Chapters whose trees have been decoded (INV-050 test seam).
+  int get decodedChapterCount => _nodeIndexedChapterIds.length;
 
   /// Due positions the scope held when this session was built, before the
   /// daily quota trimmed the queue.
@@ -940,7 +955,7 @@ class ReviewSession {
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
-            _completedDecisionIds.length >= remainingDailyQuota!;
+            _newlyCompletedToday >= remainingDailyQuota!;
         // Full line quizzes every step in order, even when not yet due. The
         // quota still caps prompted work — but it ends the walk instead of
         // auto-playing the user's own moves past it. In dynamic mode, locked
@@ -1095,6 +1110,8 @@ class ReviewSession {
     final nextNode = _guidedChild(userChild.children) ?? userChild.children.first;
     final nextDecision = _decisionForNode[nextNode.id];
     if (nextDecision == null) return false;
+    // INV-068: don't introduce a held-back fresh position by walking the line.
+    if (_isHeldBackFresh(nextDecision)) return false;
     _dequeueDecision(nextDecision);
     _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
     _logger.info(
@@ -1131,11 +1148,9 @@ class ReviewSession {
   void _advanceToNextDue() {
     if (mode == ReviewMode.srs &&
         remainingDailyQuota != null &&
-        _completedDecisionIds.length >= remainingDailyQuota!) {
-      // The quota caps new work, not pending re-tests: they cost nothing (the set already holds
-      // them, INV-031) and the lapse handler promised them before the session ends (INV-021).
-      // Drop everything else so the day's allowance is honoured, then keep going only while a
-      // re-test is still owed; otherwise the session concludes here.
+        _newlyCompletedToday >= remainingDailyQuota!) {
+      // The quota caps new work, not pending re-tests (INV-021/031); keep those
+      // and drop the rest, concluding only when nothing is owed.
       final droppedNew =
           _dueQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length +
           _unbufferedQueue.where((d) => !_pendingRetest.contains(d.canonicalId)).length;
@@ -1143,7 +1158,7 @@ class ReviewSession {
       _unbufferedQueue.removeWhere((d) => !_pendingRetest.contains(d.canonicalId));
       if (_dueQueue.isEmpty && _unbufferedQueue.isEmpty) {
         _logger.info(
-          'Daily review quota reached (${_completedDecisionIds.length} / $remainingDailyQuota), concluding review session',
+          'Daily review quota reached ($_newlyCompletedToday / $remainingDailyQuota), concluding review session',
         );
         _currentPrompt = null;
         return;
@@ -1172,7 +1187,8 @@ class ReviewSession {
       // mid-line drop into another variation.
       final guided = _lineStartAttempted.remove(nextDecision.canonicalId);
       final start = _lineStartFor(nextDecision);
-      if (start != null) {
+      // INV-068: don't open a held-back fresh ancestor (practice is exempt).
+      if (start != null && !_isHeldBackFresh(start.decision)) {
         if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
         if (!guided) _dueQueue.insert(0, nextDecision);
         _dequeueDecision(start.decision);
@@ -1188,10 +1204,9 @@ class ReviewSession {
     _currentPrompt = _buildPrompt(decision: nextDecision, node: node);
   }
 
-  /// Earliest decision on [target]'s ancestry chain, plus the node-id path
-  /// from it down to the target for dedicated walks. Null when the target
-  /// itself is the line start. Re-answered prefixes rehearse with practice
-  /// grading; in dynamic mode locked-unreviewed ancestors skip.
+  /// Earliest decision on [target]'s ancestry, with the node-id path down to it.
+  /// Null when the target itself starts the line; dynamic mode skips locked
+  /// unlearned ancestors.
   ({RepertoireDecision decision, RepertoireNode node, List<String> path})? _lineStartFor(
     RepertoireDecision target,
   ) {
@@ -1325,14 +1340,10 @@ class ReviewSession {
     return (expected: movePlayed, start: target);
   }
 
-  /// Transposition acceptance (P-TRANSPOSE, INV-065): returns the in-scope
-  /// node at the position the played move reaches, or null. Illegal moves,
-  /// out-of-scope targets, and targets without their own repertoire move
-  /// fail closed, preserving ordinary incorrect handling exactly.
-  /// Within-study scope additionally requires the target's study.
+  /// Transposition acceptance (INV-065): the in-scope node at the played move's
+  /// destination, else null. Illegal/out-of-scope targets fail closed.
   RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
     if (transposeScope == TransposeScope.off) return null;
-    _ensureAllChaptersIndexed();
     // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
     Position position;
     try {
@@ -1358,21 +1369,27 @@ class ReviewSession {
     final parts = next.fen.split(' ');
     if (parts.length < 4) return null;
     final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    // Candidates in the order eager indexing always produced: chapters in
-    // _chaptersList order, depth-first within a chapter. Chapters may now be
-    // indexed in any schedule (prompt-time, background), so the sort — not
-    // insertion order — is what keeps the choice among equally valid targets
-    // identical to the pre-v21 behavior.
-    final candidates = [...(_nodesByFenKey[key] ?? const <RepertoireNode>[])]
+    // Prefer the flat index: it names the chapter holding each candidate, so only
+    // that chapter's tree is decoded (INV-050). Without it, fall back lazily.
+    var refs = nodeIndex[key];
+    if (refs == null && nodeIndex.isEmpty) {
+      _ensureAllChaptersIndexed();
+      refs = [
+        for (final n in _nodesByFenKey[key] ?? const <RepertoireNode>[])
+          (chapterId: _chapterOfNode[n.id]!, nodeId: n.id, nodeRank: _nodeDfsRank[n.id] ?? 0),
+      ];
+    }
+    if (refs == null || refs.isEmpty) return null;
+    final ordered = [...refs]
       ..sort((a, b) {
-        final chapterA = _chapterListIndex[_chapterOfNode[a.id]] ?? _chaptersList.length;
-        final chapterB = _chapterListIndex[_chapterOfNode[b.id]] ?? _chaptersList.length;
-        if (chapterA != chapterB) return chapterA.compareTo(chapterB);
-        return (_nodeDfsRank[a.id] ?? 0).compareTo(_nodeDfsRank[b.id] ?? 0);
+        final c = (_chapterListIndex[a.chapterId] ?? 0).compareTo(
+          _chapterListIndex[b.chapterId] ?? 0,
+        );
+        return c != 0 ? c : a.nodeRank.compareTo(b.nodeRank);
       });
     RepertoireNode? fallback;
-    for (final node in candidates) {
-      final chapter = _chapters[_chapterOfNode[node.id]];
+    for (final ref in ordered) {
+      final chapter = _chapters[ref.chapterId];
       if (chapter == null ||
           !scope.matches(
             studyId: chapter.studyId,
@@ -1383,16 +1400,12 @@ class ReviewSession {
           (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
         continue;
       }
-      final incoming = node.incomingMove;
-      if (incoming != null && incoming.matches(movePlayed)) {
-        // The line the user is actually following: the repertoire used the
-        // same move to get here.
-        return node;
-      }
-      // The position is in scope, but the repertoire arrived here another way.
-      // The position is what INV-065 is about — interchangeable pieces reach
-      // the same square set by different moves — so this node is a valid
-      // target. Kept as the fallback in case no node matches the arrival.
+      _ensureChapterNodesIndexed(ref.chapterId);
+      final node = _nodesById[ref.nodeId];
+      if (node == null) continue;
+      // The line the user is actually following: the repertoire used the same
+      // move to get here, else the position is still a valid target (INV-065).
+      if (node.incomingMove?.matches(movePlayed) == true) return node;
       fallback ??= node;
     }
     return fallback;
@@ -1412,12 +1425,9 @@ class ReviewSession {
 
   /// Selects the opponent response among multiple children.
   ///
-  /// Uses Listudy-inspired due-aware selection (docs/review.md §Opponent Variation Selection):
-  /// 1. Prioritizes opponent branches that lead to moves currently due for review.
-  /// 2. If multiple branches have due moves, selects among them using weighted
-  ///    randomness proportional to due move density.
-  /// 3. In practice mode or if no branch has due moves, selects among all branches
-  ///    using anti-repetition weighted randomness proportional to subtree size.
+  /// Due-aware (Listudy-inspired): prefer branches holding moves currently due,
+  /// weighted by due density. Otherwise draw evenly, so the mainline does not
+  /// dominate every walk.
   RepertoireNode _selectOpponentChild(
     RepertoireNode node,
     DateTime now,
@@ -1443,15 +1453,8 @@ class ReviewSession {
       return _selectWeighted(dueChildren, dueCounts);
     }
 
-    // Fallback: weight by total subtree size so larger variations get proportionate practice
-    final subtreeSizes = <RepertoireNode, int>{};
-    for (final child in node.children) {
-      subtreeSizes[child] = _nodeCountCache.putIfAbsent(
-        child.id,
-        () => _countNodesInSubtree(child),
-      );
-    }
-    return _selectWeighted(node.children, subtreeSizes);
+    // Nothing due below: an even draw, not subtree-size weighting.
+    return node.children[_random.nextInt(node.children.length)];
   }
 
   /// Selects the user continuation to auto-play when several are recorded.
@@ -1522,14 +1525,6 @@ class ReviewSession {
         : (unlockedDecisionIds.contains(d.id) || unlockedDecisionIds.contains(d.canonicalId));
   }
 
-  int _countNodesInSubtree(RepertoireNode node) {
-    var count = 1;
-    for (final child in node.children) {
-      count += _countNodesInSubtree(child);
-    }
-    return count;
-  }
-
   RepertoireNode _selectWeighted(
     List<RepertoireNode> candidates,
     Map<RepertoireNode, int> weights,
@@ -1576,11 +1571,18 @@ class ReviewSession {
   }
 
   List<GraphNode> _findSiblingGraphNodes(RepertoireDecision decision) {
-    _ensureAllChaptersIndexed();
-    final node = _nodesById[decision.nodeId];
-    if (node == null) return const [];
+    // Sibling coupling only needs the tree-free decision maps (INV-050).
+    for (final chapter in _chaptersList) {
+      _indexChapterDecisions(chapter);
+    }
+    var fenKey = decision.fenKey;
+    if (fenKey == null) {
+      _ensureChapterNodesIndexed(decision.chapterId);
+      fenKey = _nodesById[decision.nodeId]?.fenKey;
+    }
+    if (fenKey == null) return const [];
 
-    final candidates = _decisionsByFenKey[node.fenKey];
+    final candidates = _decisionsByFenKey[fenKey];
     if (candidates == null || candidates.isEmpty) return const [];
 
     final siblings = <GraphNode>[];
@@ -1590,7 +1592,7 @@ class ReviewSession {
         siblings.add(
           GraphNode(
             decisionId: other.canonicalId,
-            fen4: node.fenKey,
+            fen4: fenKey,
             expectedMoveUci: m.uci,
             hasCanonicalIdentity: other.canonicalStateId != null,
           ),

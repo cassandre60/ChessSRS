@@ -9,18 +9,9 @@ import 'package:chess_srs/src/domain/repertoire_move.dart';
 
 /// A node in the repertoire position tree.
 ///
-/// Each node represents a distinct chess position (identified by its 4-field
-/// FEN key). The edges to children are the legal moves from this position.
-/// The incoming move ([incomingMove]) is the move that led to this position
-/// from its parent.
-///
-/// **Variation preservation**: multiple children at any node are first-class
-/// siblings — they represent PGN recursive annotation variations (RAVs).
-/// They must never be flattened or silently dropped (QUALITY.md §2.2).
-///
-/// **Position identity**: [fen] is the full FEN; [fenKey] is the normalized
-/// 4-field FEN (placement + turn + castling + en-passant) used as a stable
-/// identity key (QUALITY.md §2.3).
+/// [fen] is the full FEN; [fenKey] the normalized 4-field identity key
+/// (QUALITY.md §2.3). Multiple children are first-class PGN variations
+/// (QUALITY.md §2.2). [incomingMove] is the move that led here from the parent.
 class RepertoireNode {
   const RepertoireNode({
     required this.id,
@@ -28,6 +19,7 @@ class RepertoireNode {
     required this.fenKey,
     this.incomingMove,
     this.comment,
+    this.nags = const [],
     this.children = const [],
   });
 
@@ -49,6 +41,7 @@ class RepertoireNode {
     required String fenKey,
     required RepertoireMove incomingMove,
     String? comment,
+    List<int> nags = const [],
   }) {
     return RepertoireNode(
       id: newId(),
@@ -56,6 +49,7 @@ class RepertoireNode {
       fenKey: fenKey,
       incomingMove: incomingMove,
       comment: comment,
+      nags: nags,
       children: const [],
     );
   }
@@ -77,6 +71,9 @@ class RepertoireNode {
   /// PGN comment text for this position, if any.
   final String? comment;
 
+  /// PGN numeric annotation glyphs for the move into this position (`$1`, `$14`).
+  final List<int> nags;
+
   /// Child positions reachable by legal moves from this position.
   /// Order matters: first child is the mainline; others are variations.
   final List<RepertoireNode> children;
@@ -92,6 +89,7 @@ class RepertoireNode {
       fenKey: fenKey,
       incomingMove: incomingMove,
       comment: comment,
+      nags: nags,
       children: [...children, child],
     );
   }
@@ -112,6 +110,7 @@ class RepertoireNode {
     List<RepertoireNode>? children,
     String? comment,
     RepertoireMove? incomingMove,
+    List<int>? nags,
   }) {
     return RepertoireNode(
       id: id,
@@ -119,6 +118,7 @@ class RepertoireNode {
       fenKey: fenKey,
       incomingMove: incomingMove ?? this.incomingMove,
       comment: comment ?? this.comment,
+      nags: nags ?? this.nags,
       children: children ?? this.children,
     );
   }

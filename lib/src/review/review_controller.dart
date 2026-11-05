@@ -433,18 +433,36 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     });
 
-    // Line continuity needs no session rebuild (which would drop in-memory
-    // retests): it only steers future traversals, so push it into the live
-    // session. Without this the flip sits inert until the next load.
-    ref.listen(studyPreferencesProvider.select((p) => p.reviewContinuity), (previous, next) {
-      _logger.info(
-        'Review continuity preference changed to $next (was $previous); '
-        'live session present: ${state.value?.session != null}',
-      );
-      if (previous != null && previous != next) {
-        state.value?.session?.continuity = next;
-      }
-    });
+    // Session-building settings read once at construction. Without a reload a
+    // change to any of them sat inert until the user switched scope or
+    // restarted the app, which reads as "the setting does nothing" (owner
+    // report: "it does not even do what it says"). Order, transpose scope,
+    // the daily new-position allowance and dynamic mode are all baked into the
+    // session, so a change rebuilds it; line continuity is deliberately absent
+    // (it is pushed into the live session, above).
+    ref.listen(
+      studyPreferencesProvider.select(
+        (p) => (
+          order: p.reviewOrder,
+          transpose: p.transposeScope,
+          newPerDay: p.maxNewPerDay,
+          dynamic: p.dynamicRepertoireMode,
+          continuity: p.reviewContinuity,
+        ),
+      ),
+      (previous, next) {
+        if (previous != null && previous != next) {
+          reload();
+        }
+      },
+    );
+
+    // Line continuity is read once when a session is built, and — unlike the
+    // old "push it into the live session" shortcut — it must rebuild, because
+    // `reviewServiceProvider` watches it: changing it constructs a fresh service
+    // whose `_activeSession` is null, so merely mutating `state.session` left
+    // the next move throwing 'No active review session'. Rebuilding installs a
+    // session on the new service. It is folded into the listener below.
 
     // Ensure repository provider is ready before building review state
     await ref.watch(srsStudyRepositoryProvider.future);
@@ -893,6 +911,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     // session as a scope change is. Claiming a generation supersedes any load already running:
     // that load's counts were computed from a pool this toggle has just invalidated.
     final generation = ++_generation;
+    // This path may refresh counts without starting a session, so tell the
+    // service explicitly: otherwise a start still in flight would install itself
+    // as the active session behind the screen (INV-032).
+    _service.supersedeSessionsBefore(generation);
 
     // 1. Optimistic UI update: flip isActive immediately so user sees instant feedback
     final updatedStudies = currentState.studies

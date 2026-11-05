@@ -25,6 +25,42 @@ import 'package:material_ui/material_ui.dart';
 
 final _logger = Logger('ReviewScopeDrawer');
 
+/// One-line summary of what a colour's drawer holds, shown under its title.
+String _drawerSummary({required List<String> myStudyIds, required List<String> myOpenings}) {
+  final studies = myStudyIds.length;
+  final openings = myOpenings.length;
+  final parts = <String>[
+    if (openings > 0) '$openings ${openings == 1 ? 'opening' : 'openings'}',
+    if (studies > 0) '$studies ${studies == 1 ? 'study' : 'studies'}',
+  ];
+  return parts.isEmpty ? 'No material yet' : parts.join(' · ');
+}
+
+/// The colour square repeated inside the drawer, so the title has a visual
+/// anchor that matches the square that opened it.
+class _ColourSwatch extends StatelessWidget {
+  const _ColourSwatch({required this.side});
+
+  final Side side;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final fill = side == Side.white
+        ? (c.isDark ? const Color(0xFFECEEF1) : const Color(0xFFFFFFFF))
+        : (c.isDark ? const Color(0xFF10141B) : const Color(0xFF151A22));
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: c.hairline),
+      ),
+    );
+  }
+}
+
 /// Modal scope selector (hybrid of Diagram bottom sheet and rich repertoire list).
 ///
 /// One drawer per repertoire colour, opened by the matching square in the top
@@ -209,6 +245,45 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                       ),
                       const SizedBox(height: 8),
                     ],
+
+                    // Name the drawer's colour. The two squares in the top bar
+                    // only say "White" or "Black" to someone who already knows
+                    // the convention, and once the sheet covers the bar there
+                    // is nothing left on screen to say which repertoire this
+                    // list belongs to (owner report: "the black and white
+                    // drawers are confusing"). The title states it, the swatch
+                    // repeats the square's fill, and the summary says how much
+                    // material and work the colour holds.
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(20, isWide ? 18 : 2, 20, 0),
+                      child: Row(
+                        children: [
+                          _ColourSwatch(side: side),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              ReviewScopeDrawer.sideLabel(side, context.l10n),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: SrsText.scopeName(c.ink),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '${reviewState.sideProgress[side]?.dueDecisions ?? 0} '
+                            '${context.l10n.mobileReviewDueWord}',
+                            style: SrsText.due(c.ink2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(20, 3, 20, isWide ? 10 : 6),
+                      child: Text(
+                        _drawerSummary(myStudyIds: myStudyIds, myOpenings: myOpenings),
+                        style: SrsText.rowSub(c.ink3),
+                      ),
+                    ),
 
                     // Search field matching demo (.search)
                     Container(

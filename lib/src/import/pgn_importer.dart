@@ -284,6 +284,11 @@ ImportResult importPgn(
   final chapters = <Chapter>[];
   final decisions = <RepertoireDecision>[];
   final errors = <ImportError>[];
+  // Chapters that trained nothing and reported no error of their own. Reported
+  // only once the whole import is known: when nothing at all was trainable the
+  // single global error below is the better message, but when other chapters
+  // did train, an empty one must not slip through silently (INV-011).
+  final emptyChapterTitles = <String>[];
 
   for (var i = 0; i < games.length; i++) {
     final game = games[i];
@@ -356,25 +361,37 @@ ImportResult importPgn(
     );
     chapters.add(chapter);
 
-    // Derive decisions for this chapter.
+    // Derive decisions for this chapter, into its own list so the chapter can be
+    // judged on its own.
+    final explicitTag = headers['Orientation']?.trim().toLowerCase();
+    final effectiveDecisionSide =
+        repertoireSide ??
+        (explicitTag == 'black'
+            ? Side.black
+            : explicitTag == 'white'
+            ? Side.white
+            : chapterOrientation);
+    final chapterDecisions = <RepertoireDecision>[];
     if (root != null) {
-      final explicitTag = headers['Orientation']?.trim().toLowerCase();
-      final effectiveDecisionSide =
-          repertoireSide ??
-          (explicitTag == 'black'
-              ? Side.black
-              : explicitTag == 'white'
-              ? Side.white
-              : chapterOrientation);
-
       _deriveDecisions(
         root,
         study.id,
         chapter.id,
         startPosition.turn,
         effectiveDecisionSide,
-        decisions,
+        chapterDecisions,
       );
+    }
+    decisions.addAll(chapterDecisions);
+
+    // A chapter that trains nothing and reported no error of its own used to be
+    // stored silently: a moveless game, or a side the user does not train,
+    // produced an empty chapter inside an otherwise successful import, so the
+    // import read as clean while holding a blank-board entry (INV-011). Record
+    // it for the summary below. The chapter is kept, because an illegal move or
+    // bad FEN already truncates a chapter with its own error.
+    if (chapterDecisions.isEmpty && chapterErrors.isEmpty) {
+      emptyChapterTitles.add(chapterTitle);
     }
   }
 
@@ -395,6 +412,20 @@ ImportResult importPgn(
             'the selected side.',
       ),
     );
+  } else if (decisions.isNotEmpty && emptyChapterTitles.isNotEmpty) {
+    // Some chapters trained, so the global "nothing to train" message would be
+    // wrong; name each empty chapter instead.
+    for (final title in emptyChapterTitles) {
+      errors.add(
+        ImportError(
+          chapterTitle: title,
+          moveIndex: -1,
+          message:
+              'No positions to train for the selected side in this chapter; '
+              'it was imported empty.',
+        ),
+      );
+    }
   }
 
   _logger.info(
@@ -668,6 +699,7 @@ RepertoireNode _buildChildren(
       fenKey: fenKey(nextFen),
       incomingMove: reperMove,
       comment: comment.isNotEmpty ? comment : null,
+      nags: data.nags ?? const [],
     );
 
     // Recurse into this child's subtree.

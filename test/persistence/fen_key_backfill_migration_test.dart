@@ -200,7 +200,7 @@ void main() {
 
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
       try {
-        expect((await db.rawQuery('PRAGMA user_version')).single['user_version'], 21);
+        expect((await db.rawQuery('PRAGMA user_version')).single['user_version'], 22);
         final row = await db.query(kTableSrsDecision, where: "id = 'dec-1'");
         expect(row.single['fenKey'], _childFen);
       } finally {
