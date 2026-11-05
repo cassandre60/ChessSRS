@@ -75,6 +75,29 @@ void main() {
       expect(reVariation.comment, 'Anti-Sicilian');
     });
 
+    test('a numeric annotation glyph (NAG) is read from the PGN', () {
+      // PRODUCT §4.1: "Extract move comments and NAGs without corrupting tree
+      // structure." NAGs used to be dropped on import.
+      final result = importPgn('1. e4 \$1 e5 \$14 2. Nf3 *', studyTitle: 'NAGs');
+      final e4 = result.chapters.first.root!.children.first;
+      expect(e4.nags, const [1]);
+      expect(e4.children.first.nags, const [14]);
+    });
+
+    test('numeric annotation glyphs survive export and re-import', () {
+      // SPEC INV-014.
+      const pgn = '1. e4 \$1 e5 \$14 2. Nf3 *';
+      final original = importPgn(pgn, studyTitle: 'NAGs');
+
+      final exported = studyToPgn(original.study, original.chapters);
+      expect(exported, contains('\$1'));
+      expect(exported, contains('\$14'));
+
+      final reimported = importPgn(exported, studyTitle: 'NAGs');
+      expect(reimported.chapters.first.root!.children.first.nags, const [1]);
+      expect(reimported.chapters.first.root!.children.first.children.first.nags, const [14]);
+    });
+
     test('custom starting FEN is preserved in SetUp and FEN headers', () {
       const fen = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
       const pgn = '[FEN "$fen"]\n[SetUp "1"]\n\n2. Nf3 d6 *';

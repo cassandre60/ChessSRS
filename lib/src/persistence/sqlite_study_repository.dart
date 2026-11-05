@@ -9,6 +9,7 @@ import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/fast_date_parser.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
+import 'package:chess_srs/src/persistence/node_index.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:chess_srs/src/persistence/study_repository.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -113,6 +114,16 @@ class SqliteStudyRepository implements StudyRepository {
           );
         }
         await chapterBatch.commit(noResult: true);
+
+        final nodeBatch = txn.batch();
+        for (final chapter in result.chapters) {
+          final root = chapter.root;
+          if (root == null) continue;
+          for (final row in nodeRowsForChapter(chapter.id, root)) {
+            nodeBatch.insert(kTableSrsNode, row, conflictAlgorithm: ConflictAlgorithm.replace);
+          }
+        }
+        await nodeBatch.commit(noResult: true);
 
         final decisionBatch = txn.batch();
         for (final d in result.decisions) {
@@ -297,6 +308,13 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<void> deleteStudy(String id) async {
     await _db.transaction((txn) async {
+      // Flat node rows belong to the study's chapters (no FK cascade is relied
+      // on: test databases open without `PRAGMA foreign_keys`).
+      await txn.delete(
+        kTableSrsNode,
+        where: 'chapterId IN (SELECT id FROM $kTableSrsChapter WHERE studyId = ?)',
+        whereArgs: [id],
+      );
       // Find all decisions belonging to this study
       final decisions = await txn.query(
         kTableSrsDecision,
@@ -319,15 +337,17 @@ class SqliteStudyRepository implements StudyRepository {
 
           final canonicalRows = await txn.query(
             kTableSrsDecision,
-            columns: ['canonicalStateId'],
+            columns: ['id', 'canonicalStateId'],
             where: 'id IN ($placeholders)',
             whereArgs: chunk,
           );
           for (final r in canonicalRows) {
             final cId = r['canonicalStateId'] as String?;
-            if (cId != null && cId.isNotEmpty) {
-              canonicalIds.add(cId);
-            }
+            // Mirrors `RepertoireDecision.canonicalId` (`canonicalStateId ?? id`):
+            // a legacy row with a NULL canonicalStateId stores its knowledge and
+            // answer under the decision id, so a delete that only read the
+            // column left that row orphaned forever (INV-004/INV-069).
+            canonicalIds.add((cId == null || cId.isEmpty) ? r['id']! as String : cId);
           }
 
           // Events and legacy per-occurrence rows keyed by the occurrence id
@@ -403,6 +423,7 @@ class SqliteStudyRepository implements StudyRepository {
       _chapterRow(chapter),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _replaceChapterNodes(_db, chapter);
   }
 
   @override
@@ -416,6 +437,9 @@ class SqliteStudyRepository implements StudyRepository {
       );
     }
     await batch.commit(noResult: true);
+    for (final chapter in chapters) {
+      await _replaceChapterNodes(_db, chapter);
+    }
   }
 
   @override
@@ -439,34 +463,29 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds, {Side? side}) async {
     if (studyIds.isEmpty) return const [];
-    final sideFilter = side != null ? 'orientation = ?' : null;
-    final sideArgs = side != null ? [side.name] : const <String>[];
+    // Chunked `IN (?)` rather than the old ">50 studies reads every chapter row
+    // and filters in memory": the studyIds come from the active pool, and the
+    // unfiltered read also pulled the treeJson blob of every inactive study's
+    // chapters into memory on every session load. 400 matches the repository's
+    // bound-argument convention and is far under SQLite's limit.
+    const chunkSize = 400;
+    final sideFilter = side != null ? 'AND orientation = ?' : '';
+    final sideArgs = side != null ? <Object?>[side.name] : const <Object?>[];
 
-    List<Chapter> chapters;
-    if (studyIds.length > 50) {
-      final idSet = studyIds.toSet();
+    final chapters = <Chapter>[];
+    for (var i = 0; i < studyIds.length; i += chunkSize) {
+      final chunk = studyIds.sublist(
+        i,
+        i + chunkSize > studyIds.length ? studyIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
       final rows = await _db.query(
         kTableSrsChapter,
-        where: sideFilter,
-        whereArgs: sideArgs.isEmpty ? null : sideArgs,
+        where: 'studyId IN ($placeholders) $sideFilter',
+        whereArgs: [...chunk, ...sideArgs],
         orderBy: 'sourceOrder ASC',
       );
-      chapters = rows
-          .where((r) => idSet.contains(r['studyId']! as String))
-          .map(_chapterFromRow)
-          .toList(growable: false);
-    } else {
-      final placeholders = List.filled(studyIds.length, '?').join(',');
-      final whereClause = sideFilter != null
-          ? 'studyId IN ($placeholders) AND $sideFilter'
-          : 'studyId IN ($placeholders)';
-      final rows = await _db.query(
-        kTableSrsChapter,
-        where: whereClause,
-        whereArgs: [...studyIds, ...sideArgs],
-        orderBy: 'sourceOrder ASC',
-      );
-      chapters = rows.map(_chapterFromRow).toList(growable: false);
+      chapters.addAll(rows.map(_chapterFromRow));
     }
 
     final byStudy = <String, List<Chapter>>{};
@@ -511,6 +530,7 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<void> deleteChapter(String id) async {
     await _db.transaction((txn) async {
+      await txn.delete(kTableSrsNode, where: 'chapterId = ?', whereArgs: [id]);
       final decisions = await txn.query(
         kTableSrsDecision,
         columns: ['id', 'canonicalStateId'],
@@ -518,11 +538,16 @@ class SqliteStudyRepository implements StudyRepository {
         whereArgs: [id],
       );
       final decisionIds = decisions.map((d) => d['id']! as String).toList();
-      final canonicalIds = decisions
-          .map((d) => d['canonicalStateId'] as String?)
-          .whereType<String>()
-          .where((c) => c.isNotEmpty)
-          .toSet();
+      // `canonicalStateId ?? id`, matching `RepertoireDecision.canonicalId`: a
+      // legacy NULL row keeps its knowledge state under the decision id, which
+      // a column-only read missed, leaving an orphaned row (INV-004/INV-069).
+      final canonicalIds = <String>{
+        for (final d in decisions)
+          if (d['canonicalStateId'] == null || (d['canonicalStateId']! as String).isEmpty)
+            d['id']! as String
+          else
+            d['canonicalStateId']! as String,
+      };
 
       if (decisionIds.isNotEmpty) {
         // Rows keyed by the per-occurrence id belong to this chapter outright.
@@ -704,6 +729,119 @@ class SqliteStudyRepository implements StudyRepository {
           );
         })
         .toList(growable: false);
+  }
+
+  @override
+  Future<List<ChapterDueCounts>> getChapterDueCounts({required DateTime now}) async {
+    // The effective state is the canonical knowledge row (authority, INV-016/017),
+    // falling back to the legacy per-occurrence mirror. The joins are on primary
+    // keys, so they cannot multiply a decision's row.
+    final nowIso = now.toUtc().toIso8601String();
+    final rows = await _db.rawQuery(
+      '''
+      SELECT d.chapterId AS chapterId,
+        COUNT(*) AS total,
+        SUM(CASE WHEN COALESCE(k.repetitionCount, r.repetitionCount, 0) > 0
+                 THEN 1 ELSE 0 END) AS learned,
+        SUM(CASE WHEN k.canonicalId IS NULL AND r.decisionId IS NULL
+                 THEN 1 ELSE 0 END) AS fresh,
+        SUM(CASE WHEN (k.canonicalId IS NOT NULL OR r.decisionId IS NOT NULL)
+                  AND (
+                    CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END IS NULL
+                    OR CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END <= ?
+                  )
+                 THEN 1 ELSE 0 END) AS due
+      FROM $kTableSrsDecision d
+      LEFT JOIN $kTablePositionKnowledgeState k
+        ON k.canonicalId = COALESCE(d.canonicalStateId, d.id)
+      LEFT JOIN $kTableSrsReviewState r ON r.decisionId = d.id
+      GROUP BY d.chapterId
+      ''',
+      [nowIso],
+    );
+    return [
+      for (final row in rows)
+        (
+          chapterId: row['chapterId']! as String,
+          total: ((row['total'] as num?) ?? 0).toInt(),
+          learned: ((row['learned'] as num?) ?? 0).toInt(),
+          due: ((row['due'] as num?) ?? 0).toInt(),
+          fresh: ((row['fresh'] as num?) ?? 0).toInt(),
+        ),
+    ];
+  }
+
+  @override
+  Future<Map<Side, int>> getActiveSideDueCounts({required DateTime now}) async {
+    final nowIso = now.toUtc().toIso8601String();
+    final rows = await _db.rawQuery(
+      '''
+      SELECT c.orientation AS orientation,
+        COUNT(DISTINCT COALESCE(d.canonicalStateId, d.id)) AS due
+      FROM $kTableSrsStudy s
+      JOIN $kTableSrsChapter c ON c.studyId = s.id
+      JOIN $kTableSrsDecision d ON d.chapterId = c.id
+      LEFT JOIN $kTablePositionKnowledgeState k
+        ON k.canonicalId = COALESCE(d.canonicalStateId, d.id)
+      LEFT JOIN $kTableSrsReviewState r ON r.decisionId = d.id
+      WHERE s.isActive = 1
+        AND (k.canonicalId IS NOT NULL OR r.decisionId IS NOT NULL)
+        AND (
+          CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END IS NULL
+          OR CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END <= ?
+        )
+      GROUP BY c.orientation
+      ''',
+      [nowIso],
+    );
+    final counts = {Side.white: 0, Side.black: 0};
+    for (final row in rows) {
+      final side = (row['orientation'] as String?) == 'black' ? Side.black : Side.white;
+      counts[side] = ((row['due'] as num?) ?? 0).toInt();
+    }
+    return counts;
+  }
+
+  @override
+  Future<Map<String, List<NodeRef>>> getNodeIndex(List<String> chapterIds) async {
+    if (chapterIds.isEmpty) return const {};
+    const chunkSize = 400;
+    final result = <String, List<NodeRef>>{};
+    for (var i = 0; i < chapterIds.length; i += chunkSize) {
+      final chunk = chapterIds.sublist(
+        i,
+        i + chunkSize > chapterIds.length ? chapterIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.query(
+        kTableSrsNode,
+        columns: ['chapterId', 'nodeId', 'fenKey', 'nodeRank'],
+        where: 'chapterId IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      for (final row in rows) {
+        final fenKey = row['fenKey']! as String;
+        result.putIfAbsent(fenKey, () => <NodeRef>[]).add((
+          chapterId: row['chapterId']! as String,
+          nodeId: row['nodeId']! as String,
+          nodeRank: (row['nodeRank']! as num).toInt(),
+        ));
+      }
+    }
+    return result;
+  }
+
+  /// Replaces [chapter]'s flat node rows from its tree. A rootless chapter
+  /// (e.g. a test fixture) simply clears any stale rows.
+  Future<void> _replaceChapterNodes(DatabaseExecutor txn, Chapter chapter) async {
+    await txn.delete(kTableSrsNode, where: 'chapterId = ?', whereArgs: [chapter.id]);
+    final root = chapter.root;
+    if (root == null) return;
+    final batch = txn.batch();
+    for (final row in nodeRowsForChapter(chapter.id, root)) {
+      batch.insert(kTableSrsNode, row, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   @override

@@ -11,6 +11,7 @@ const kTableSrsReviewEvent = 'srs_review_event';
 const kTablePositionKnowledgeState = 'position_knowledge_state';
 const kTableSrsStudyRemote = 'srs_study_remote';
 const kTableSrsUnlockedDecision = 'srs_unlocked_decision';
+const kTableSrsNode = 'srs_node';
 
 void createSrsTables(Batch batch) {
   batch.execute('''
@@ -155,5 +156,29 @@ void createSrsTables(Batch batch) {
   batch.execute('''
     CREATE INDEX IF NOT EXISTS idx_srs_unlocked_decision_decisionId
     ON $kTableSrsUnlockedDecision(decisionId);
+  ''');
+
+  // A flat FEN -> node index, so the transposition lookup can find candidate
+  // positions without decoding chapter trees (INV-050). `nodeRank` is the
+  // depth-first pre-order rank inside the chapter; it preserves the candidate
+  // ordering the old in-memory node map produced.
+  createNodeIndexTable(batch);
+}
+
+/// The `srs_node` table and its FEN index. Shared by create and the v22 backfill.
+void createNodeIndexTable(Batch batch) {
+  batch.execute('''
+    CREATE TABLE IF NOT EXISTS $kTableSrsNode (
+      chapterId TEXT NOT NULL,
+      nodeId TEXT NOT NULL,
+      fenKey TEXT NOT NULL,
+      nodeRank INTEGER NOT NULL,
+      PRIMARY KEY (chapterId, nodeId),
+      FOREIGN KEY (chapterId) REFERENCES $kTableSrsChapter(id) ON DELETE CASCADE
+    );
+  ''');
+  batch.execute('''
+    CREATE INDEX IF NOT EXISTS idx_srs_node_fenKey
+    ON $kTableSrsNode(fenKey);
   ''');
 }

@@ -9,6 +9,17 @@ import 'package:dartchess/dartchess.dart' show Side;
 /// omitting moves and node IDs to avoid decoding JSON move lists.
 typedef TallyDecision = ({String id, String studyId, String chapterId, String canonicalId});
 
+/// Per-chapter status counts at one instant, computed in SQL.
+///
+/// [total] = decisions in the chapter; [learned] = positions with a repetition
+/// count above zero; [due] = presented and scheduled no later than the instant;
+/// [fresh] = never presented. `learned` is not the complement of `fresh` (a
+/// lapsed position is learned and due), exactly as `dueStatusOf` defines them.
+typedef ChapterDueCounts = ({String chapterId, int total, int learned, int due, int fresh});
+
+/// One node's position identity in the flat `srs_node` index (INV-050).
+typedef NodeRef = ({String chapterId, String nodeId, int nodeRank});
+
 /// Abstract interface for local persistence of studies, chapters, trees,
 /// decisions, and spaced repetition review states.
 abstract class StudyRepository {
@@ -104,6 +115,24 @@ abstract class StudyRepository {
   /// Returns a lightweight projection of all decisions for due-summary tallies,
   /// omitting moves and node IDs to avoid decoding JSON move lists.
   Future<List<TallyDecision>> getTallyDecisions();
+
+  /// Per-chapter due/fresh/learned/total counts at [now], aggregated in SQL.
+  ///
+  /// The due summary needs every position's status, but deserialising every
+  /// state into Dart is what INV-051 forbids. This returns one row per chapter
+  /// instead, so a narrow scope can build the whole-library summary without
+  /// reading the review-state tables into memory.
+  Future<List<ChapterDueCounts>> getChapterDueCounts({required DateTime now});
+
+  /// Due positions per repertoire side across active studies, distinct by
+  /// canonical position (INV-030/016), computed in SQL.
+  Future<Map<Side, int>> getActiveSideDueCounts({required DateTime now});
+
+  /// Flat FEN→node references for [chapterIds], keyed by fenKey (INV-050).
+  ///
+  /// Lets the transposition lookup find the chapter holding a position without
+  /// decoding every chapter tree.
+  Future<Map<String, List<NodeRef>>> getNodeIndex(List<String> chapterIds);
 
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);

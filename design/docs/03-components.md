@@ -97,11 +97,14 @@ Regions, top to bottom (all fixed; only the slot's *content* changes):
 | Region | Narrow | Wide |
 |---|---|---|
 | **Meta** | one row: context label left, side-to-move right; 13.5 `ink2` | two stacked lines: context label, then side-to-move; gap 8; padding-top 2 |
+| **Progress** | 3px bar + 13.5 `ink3` line (`{done} of {total} done · {retained} of {scope} retained`) | same, plus a second `ink3` line (`{remaining} left this session · {due} due`) |
 | **Notation line** | margin-top 8; 21px; min-height = 2 lines | margin-top 22; `clamp(23, 2.4% width, 31)`; line-height 1.3; min-height = 2 lines |
 | **Slot** | flex 1, scrolls; padding 10/0/22; bottom fade over the last 22px | flex 1, scrolls; padding-top 26; no fade |
 | **Actions** | min-height 56; padding 6/0/4; Skip left, Continue right | same |
 
 The wide column's height equals the board's height and its bottom edge aligns with the board's bottom edge.
+
+- **Progress readout:** sits under the meta row (margin-top 8). A 3px `hairlineSoft` track with an `accent` fill for the session's completion, then the counts. *Retained* is `total - fresh - due` for the scope — positions presented and not currently due — not "everything ever shown", so a single pass does not read as mastery. It exists because the screen otherwise showed only the scope's due debt, which does not move as the user answers, leaving no way to tell a productive session from a stuck one.
 
 - **Side-to-move indicator:** an 11px circle (outline 1.5px `ink`; filled `ink` for Black) + `White to play` / `Black to play`.
 - **Context label:** the study's chapter title (one line). Do not invent text.
@@ -143,6 +146,8 @@ radius 16. **Narrow** → bottom sheet, left/right/bottom inset 8, radius 22, ma
 Background `surface`, sheet shadow (`02` §4). Scrim behind (`scrim`, 140 ms). Dismiss: scrim tap, Esc, selecting a row.
 
 Contents:
+A **title row** sits above the search field: a 16px colour swatch (the top-bar square's fill), the colour's name (`White repertoire` / `Black repertoire`, 17/600 `ink`), the colour's due numeral at the right, and a 12.5 `ink3` line below naming what the drawer holds (`{openings} openings · {studies} studies`). Without it the sheet covers the bar and nothing on screen says which repertoire the list belongs to (owner report: "the black and white drawers are confusing").
+
 1. **Search field** (fixed): padding 14/18, magnifier icon 18px stroke `ink3`, input 16, placeholder `Search` (`ink3`), bottom hairline. Autofocus on
    devices with a hardware keyboard only (avoid raising the soft keyboard on touch). Filters rows by case-insensitive substring within this drawer's colour; empty result: `Nothing matches “{q}”.` (`ink2` 15, padding 28/18).
 2. **Scrollable list** with group titles `Openings`, `Studies` (12.5/500 `ink3`, padding 14/18/4). No combined `Everywhere` or `Repertoires` group — the colour is established by the drawer.

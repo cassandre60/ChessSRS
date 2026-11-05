@@ -73,6 +73,10 @@ void main() {
       List<Override> extraOverrides = const [],
       StudyRepository? repository,
       SoundService? soundService,
+      // Production's `reviewServiceProvider` watches `reviewContinuity`, so the
+      // service is rebuilt when it changes. Tests that flip continuity must opt
+      // in to that shape to be meaningful.
+      bool watchContinuity = false,
     }) {
       // The service and the repository provider must be handed the same instance: the service
       // reads through whatever repository it was built with, and a test that gates one but not
@@ -88,6 +92,9 @@ void main() {
               repository: store,
               scheduler: ref.watch(schedulerProvider),
               clock: clock,
+              reviewContinuity: watchContinuity
+                  ? ref.watch(studyPreferencesProvider.select((p) => p.reviewContinuity))
+                  : ReviewContinuity.dueOnly,
               dynamicRepertoireMode: ref.watch(
                 studyPreferencesProvider.select((p) => p.dynamicRepertoireMode),
               ),
@@ -1767,6 +1774,33 @@ void main() {
         expect((session.scheduler as EaseScalingScheduler).ease, 3.0);
       },
     );
+
+    test('changing a session-building setting reaches the live session without a reload', () async {
+      final container = createContainer();
+      final controller = container.read(reviewControllerProvider.notifier);
+
+      await controller.importPgnText(pgnText: '1. e4 e5 2. Nf3 *', repertoireSide: Side.white);
+
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.dynamicRepertoireMode,
+        isFalse,
+      );
+
+      // No manual reload here: the controller is expected to rebuild the session
+      // itself when a session-building setting changes. Before the listener, the
+      // setting stayed inert until the user switched scope.
+      await container.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode();
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).requireValue.session?.dynamicRepertoireMode ??
+            false,
+      );
+
+      expect(
+        container.read(reviewControllerProvider).requireValue.session!.dynamicRepertoireMode,
+        isTrue,
+      );
+    });
 
     group('importLichessStudy', () {
       test('fetches PGN from Lichess and derives title from headers', () async {
@@ -3494,10 +3528,12 @@ void main() {
     });
 
     test('changing the continuity preference updates the live session', () async {
-      // SPEC INV-030. Line continuity steers future traversals, so it has to
-      // reach the session that is already running instead of waiting for the
-      // next load.
-      final container = createContainer();
+      // SPEC INV-030. Line continuity steers future traversals, but it is read
+      // when a session is built and `reviewServiceProvider` watches it, so the
+      // change rebuilds the service. The controller must therefore reload: the
+      // old shortcut mutated `state.session` and left the rebuilt service with
+      // no active session, so the next move threw 'No active review session'.
+      final container = createContainer(watchContinuity: true);
       final controller = container.read(reviewControllerProvider.notifier);
 
       await controller.importPgnText(
@@ -3512,10 +3548,16 @@ void main() {
           .read(studyPreferencesProvider.notifier)
           .setReviewContinuity(ReviewContinuity.fullLine);
 
+      await waitUntil(
+        () =>
+            container.read(reviewControllerProvider).requireValue.session?.continuity ==
+            ReviewContinuity.fullLine,
+      );
+
       expect(
-        session.continuity,
-        ReviewContinuity.fullLine,
-        reason: 'the live session kept the previous continuity setting',
+        container.read(reviewServiceProvider).activeSession,
+        isNotNull,
+        reason: 'the rebuilt service must hold the session it grades against',
       );
     });
   });

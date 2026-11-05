@@ -617,6 +617,151 @@ void main() {
       }
     });
 
+    test('a same-day revisit does not consume the daily quota twice (INV-031)', () async {
+      final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+      final repo = SqliteStudyRepository(db);
+      final service = ReviewService(repository: repo, clock: clock);
+
+      try {
+        const study = Study(id: 's_quota', title: 'Quota');
+        await repo.saveStudy(study);
+        final chapter = Chapter.create(studyId: study.id, sourceOrder: 0, title: 'Chapter');
+        await repo.saveChapter(chapter);
+        final decisions = [
+          for (var i = 0; i < 3; i++)
+            RepertoireDecision.create(
+              studyId: study.id,
+              chapterId: chapter.id,
+              nodeId: 'n$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+        ];
+        await repo.saveDecisions(decisions);
+
+        final now = clock.now();
+        final overdue = now.subtract(const Duration(days: 1));
+        // The first position was already answered earlier today, so it is in
+        // the day's counted set while still being due again (a same-day revisit).
+        final earlier = ReviewState(
+          decisionId: decisions[0].canonicalId,
+          firstReviewedAt: now,
+          lastReviewedAt: now,
+          nextDueAt: overdue,
+          repetitionCount: 1,
+        );
+        await repo.saveAnswerBatch(
+          knowledgeStates: [
+            PositionKnowledgeState.fromReviewState(earlier, canonicalId: decisions[0].canonicalId),
+          ],
+          event: ReviewEvent(
+            decisionId: decisions[0].canonicalId,
+            when: now,
+            result: ReviewResult.correct,
+            oldState: earlier,
+            newState: earlier,
+          ),
+        );
+        // Two more positions are due but were never answered today.
+        for (final d in decisions.skip(1)) {
+          await repo.savePositionKnowledgeState(
+            PositionKnowledgeState(
+              canonicalId: d.canonicalId,
+              firstReviewedAt: overdue,
+              lastReviewedAt: overdue,
+              nextDueAt: overdue,
+              repetitionCount: 1,
+            ),
+          );
+        }
+
+        // maxDailyReviews = 3, one position already counted today => 2 left.
+        final result = await service.loadSessionAndSummary(
+          studies: [study],
+          remainingDailyQuota: 2,
+        );
+        final session = result.session;
+
+        final served = <String>[];
+        while (session.currentPrompt != null) {
+          served.add(session.currentPrompt!.decision.id);
+          session.submitMove(from: 'e2', to: 'e4');
+          if (served.length > 10) break;
+        }
+
+        expect(
+          served,
+          hasLength(3),
+          reason:
+              'the revisit is already counted today, so it must not use one of the two '
+              'remaining slots and leave a due position unserved',
+        );
+        expect(served.toSet(), decisions.map((d) => d.id).toSet());
+      } finally {
+        await db.close();
+      }
+    });
+
+    test(
+      'a study scope loads only its own review states, not the whole library (INV-051)',
+      () async {
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = _QueryCountRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          const big = Study(id: 's_big', title: 'Big');
+          await repo.saveStudy(big);
+          final bigChapter = Chapter.create(studyId: big.id, sourceOrder: 0, title: 'Big chapter');
+          await repo.saveChapter(bigChapter);
+          await repo.saveDecisions([
+            for (var i = 0; i < 500; i++)
+              RepertoireDecision.create(
+                studyId: big.id,
+                chapterId: bigChapter.id,
+                nodeId: 'b$i',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+          ]);
+
+          const small = Study(id: 's_small', title: 'Small');
+          await repo.saveStudy(small);
+          final smallChapter = Chapter.create(
+            studyId: small.id,
+            sourceOrder: 0,
+            title: 'Small chapter',
+          );
+          await repo.saveChapter(smallChapter);
+          await repo.saveDecisions([
+            RepertoireDecision.create(
+              studyId: small.id,
+              chapterId: smallChapter.id,
+              nodeId: 's0',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            ),
+          ]);
+
+          final (:session, :summary) = await service.loadSessionAndSummary(
+            studies: [big, small],
+            scope: const ReviewScope.study('s_small'),
+          );
+
+          expect(session.scope, const ReviewScope.study('s_small'));
+          // The summary still describes the whole library, because the drawer needs it...
+          expect(summary.studyProgress['s_big']?.totalDecisions, 500);
+          expect(summary.totalFreshCount, 1);
+          // ...but the session read only the scope's states, never the 500-row study.
+          expect(
+            repo.reviewStateIdsQueried,
+            lessThanOrEqualTo(5),
+            reason: "a one-chapter scope must not read the library's review states (INV-051)",
+          );
+          expect(repo.knowledgeStateIdsQueried, lessThanOrEqualTo(5));
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
     // SPEC INV-030: loadSessionAndSummary produces both session and due summary in a single pass.
     test('loadSessionAndSummary yields matching summary and active session in one pass', () async {
       final db = await openAppDatabase(databaseFactoryFfi, dbPath);
@@ -1265,6 +1410,55 @@ void main() {
             generation: 2,
           );
           expect(service.activeSession, same(fast));
+        } finally {
+          await db.close();
+        }
+      });
+
+      test('a superseded start cannot install behind a non-session change', () async {
+        // SPEC INV-032. The controller bumps its generation for changes that do
+        // not start a session (a study toggle that only refreshes counts). A
+        // start still in flight must not then install itself as the grader: the
+        // screen would show one scope while moves graded another.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          for (final id in ['s_a', 's_b']) {
+            await repo.saveStudy(Study(id: id, title: id, createdAt: now, updatedAt: now));
+            final chapter = Chapter.create(studyId: id, sourceOrder: 0, title: 'Chapter');
+            await repo.saveChapter(chapter);
+            await repo.saveDecisions([
+              RepertoireDecision.create(
+                studyId: id,
+                chapterId: chapter.id,
+                nodeId: 'n_$id',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+            ]);
+          }
+
+          final current = await service.startSession(
+            scope: const ReviewScope.study('s_a'),
+            generation: 1,
+          );
+          expect(service.activeSession, same(current));
+
+          // The controller claims generation 2 without starting a session.
+          service.supersedeSessionsBefore(2);
+
+          // A generation-1 start lands late; it must not take the active slot.
+          final stale = await service.startSession(
+            scope: const ReviewScope.study('s_b'),
+            generation: 1,
+          );
+          expect(stale.scope, const ReviewScope.study('s_b'));
+          expect(
+            service.activeSession,
+            same(current),
+            reason: 'the superseded start installed itself as the active session',
+          );
         } finally {
           await db.close();
         }
@@ -2297,6 +2491,11 @@ class _QueryCountRepository extends SqliteStudyRepository {
   int knowledgeStateBatchReads = 0;
   int allDecisionsReads = 0;
 
+  /// Total ids handed to the state readers, so a test can prove a narrow load
+  /// never asks for the whole library's states (INV-051).
+  int reviewStateIdsQueried = 0;
+  int knowledgeStateIdsQueried = 0;
+
   /// Reads of the whole unlocked-decision table, which only dynamic
   /// repertoire mode has any use for (INV-051).
   int unlockedDecisionReads = 0;
@@ -2310,12 +2509,14 @@ class _QueryCountRepository extends SqliteStudyRepository {
   @override
   Future<List<ReviewState>> getReviewStatesByIds(List<String> ids) {
     reviewStateBatchReads++;
+    reviewStateIdsQueried += ids.length;
     return super.getReviewStatesByIds(ids);
   }
 
   @override
   Future<List<PositionKnowledgeState>> getKnowledgeStatesByCanonicalIds(List<String> ids) {
     knowledgeStateBatchReads++;
+    knowledgeStateIdsQueried += ids.length;
     return super.getKnowledgeStatesByCanonicalIds(ids);
   }
 

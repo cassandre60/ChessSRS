@@ -656,6 +656,131 @@ Not covered by that run: capture-sound distinctness, check haptics, and the
 `/api/token/test` connection failure logged at startup (single observation, not
 investigated — likely transient, unconfirmed).
 
+### Review overhaul 2026-11-04 — even growth, honest progress, named drawers
+
+Owner-reported on the phone: *"the black and white drawers are confusing, i have
+no idea if im learning anything ... i got served the same line over and over
+everyday while all the others are lost."* Five changes, in
+`fresh_introduction_order.dart`, `review_session.dart`, `review_service.dart`,
+`review_screen.dart`, `review_scope_drawer.dart`, `review_controller.dart`.
+
+1. **Fresh introductions grow the whole library, not its head.** The fresh
+   bucket was introduced by `sublist(0, allowance)` in import order, so a
+   20-a-day allowance stayed inside the first-imported study for weeks while
+   every other repertoire stayed invisible. `review_session.dart` exposes a
+   `FreshIntroductionOrder` seam (a product policy, kept out of the pure domain
+   so the domain LOC ratchet still fits); `fresh_introduction_order.dart`
+   supplies the production policy, which visits the least-presented study (then
+   least-presented chapter) first and interleaves one position per round, so a
+   capped day samples every part of the library. Due-date ties carry a random
+   tie-break so a bulk backlog is not cut by insertion order. Opponent-branch
+   fallback with nothing due below it is now an even draw instead of
+   subtree-size weighting (which had the mainline dominating every walk).
+2. **The drawer names its repertoire.** A title row (colour swatch + `White
+   repertoire` / `Black repertoire` + the colour's due count, then a
+   `N openings · M studies` summary) sits above the search field. The sheet
+   covers the top-bar squares, so the colour was previously unnamed on screen.
+3. **The review screen shows progress.** Under the chapter title: a 3px session
+   completion bar, `{done} of {total} done · {retained} of {scope} retained`,
+   and (wide) `{remaining} left this session · {due} due`. *Retained* is
+   `total - fresh - due`, so one pass does not read as mastery.
+4. **A wide-scope session reads the decision table once.** It previously read
+   it twice — a four-column projection for the summary, then the full rows for
+   the session — which on the owner's ~31k-decision library is the largest
+   avoidable cost in opening a session. `loadSessionAndSummary` now derives the
+   tally from the full rows it already reads, and passes them to `startSession`.
+5. **Review settings reach the live session.** `reviewOrder`, `transposeScope`,
+   `maxNewPerDay` and `dynamicRepertoireMode` are read once when a session is
+   built, but only `maxDailyReviews` and the scheduler had a change listener, so
+   changing the others in Settings did nothing until the user switched scope or
+   restarted — "it does not even do what it says". They now reload the session
+   on change (line continuity stays on the push-into-live-session path).
+
+**Evidence.** `test/review/review_fresh_spread_test.dart` and
+`test/view/review/review_progress_and_drawer_test.dart`, both run locally with
+`taskset -c 0-1 fvm flutter test … --concurrency=1`: **8 tests, all passed**
+(bounded to two cores to avoid the wide-suite heat the repo's TEST_STRATEGY
+forbids). A pure-Dart probe (`dart run`) over the domain: without the ordered
+policy a three-study library serves `[a, a, a]` (one study three times — the
+bug); with it, `[a, b, c]`, and four simulated days reach 12/12 studies. The
+same probe shows a 20-chapter by-line session with allowance one is
+`isNodeIndexComplete=false` (pre-fix `true`). `dart analyze` clean on every
+touched file; `domain_loc` 4046 of the 4050 ratchet cap. Not runtime-validated
+on a device.
+
+### Audit round 2026-11-05 — SPEC-conformance findings from three read-only audits
+
+Three read-only audits (import/PGN, persistence/durability, review INVs) ran
+against SPEC/PRODUCT. Fixes below, each with a test; the retained domain-cost
+ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
+
+6. **Import names a chapter that trains nothing** (`pgn_importer.dart`,
+   INV-011). A moveless game (or a side the user does not train) in an otherwise
+   valid multi-game PGN was stored as an empty chapter with no error, so the
+   import read as clean. It is now reported, named per chapter; a fully
+   untrainable file still yields the single `No repertoire positions` error.
+7. **Deletes follow the `canonicalStateId ?? id` key** (`sqlite_study_repository.dart`,
+   INV-004/069). `deleteStudy`/`deleteChapter` read only the column, so a legacy
+   decision with a NULL `canonicalStateId` kept its knowledge row (stored under
+   the decision id) orphaned forever — still counted toward the day's
+   new-position allowance and still readable by the deleted id.
+8. **`getChaptersByStudyIds` chunks its `IN` clause** (`sqlite_study_repository.dart`,
+   INV-051). Past 50 studies it read every chapter row — `treeJson` blob
+   included, for inactive studies too — on every session load. It now queries
+   the requested studies in 400-id chunks.
+9. **A superseded start cannot install behind a non-session change**
+   (`review_service.dart`/`review_controller.dart`, INV-032).
+   `supersedeSessionsBefore` lets the controller claim a generation for changes
+   that refresh counts but start no session (a study toggle); otherwise an
+   in-flight start installed itself as the grader while the screen showed the
+   other scope.
+10. **Full-line continuity respects the new-position allowance**
+    (`review_session.dart`, INV-068). The line-start and lapse-continue walks
+    built prompts without the `_admittedFreshIds` gate the traversal branch
+    applies, so a held-back fresh ancestor could be introduced through them.
+11. **PGN numeric annotation glyphs survive import and export**
+    (`repertoire_node.dart`, `json_adapters.dart`, `pgn_importer.dart`,
+    `pgn_exporter.dart`, PRODUCT §4.1). NAGs (`$1`, `$14`) were dropped on
+    import; `RepertoireNode` now carries them (treeJson blob, no schema change)
+    and the exporter writes them back. Domain budget kept by tightening the
+    node's class doc, not by trimming a check.
+12. **A narrow scope no longer reads the whole library's review states**
+    (`study_repository.dart`, `sqlite_study_repository.dart`,
+    `review_service.dart`, INV-051). `loadSessionAndSummary` built the entire
+    per-study/opening drawer summary by deserialising every decision and state,
+    even for a one-chapter scope. For a study/chapter scope (and with dynamic
+    mode off) the summary is now assembled from per-chapter SQL aggregates
+    (`getChapterDueCounts`, plus a DISTINCT-canonical side query) and the
+    session loads only its own decisions/states. Wide scopes still load every
+    state because the session itself needs them. Test:
+    "a study scope loads only its own review states, not the whole library"
+    (a 500-decision study beside a 1-decision scope queries ≤5 state ids;
+    pre-fix it queries all 501).
+13. **A same-day revisit no longer consumes the daily quota twice** (INV-031).
+    The session's queue cap and gate counted every completion against a
+    day-remaining budget, but the budget was computed from positions already
+    counted today — so re-answering one of those could conclude the day early
+    and leave due work unserved. `ReviewSession` now receives the day's counted
+    canonical ids (`countedToday`, fetched by `ReviewService`); those positions
+    add queue slots and are excluded from the gate
+    (`_newlyCompletedToday`). Test: "a same-day revisit does not consume the
+    daily quota twice" (one of three due positions already answered today; the
+    session must serve all three, not two).
+14. **A wrong move no longer decodes every chapter tree** (INV-050). v22 adds
+    `srs_node`, a flat FEN→node index (`chapterId, nodeId, fenKey, nodeRank`)
+    written on import/save and backfilled on upgrade. The transposition lookup
+    and the sibling-coupling lookup use it, decoding only the chapter that holds
+    a candidate; the old whole-library node map remains as a lazy fallback for
+    direct domain construction. Tests: "a transposed wrong move decodes only the
+    target chapter" (2 of 12 chapters decoded vs 12 without the index) and "the
+    v22 upgrade backfills srs_node from every stored chapter tree". The schema
+    version is now 22; the v21 backfill tests assert the current version (22),
+    which is why their `user_version` checks moved.
+
+**Remaining.** INV-050's design is now implemented; what is left is runtime
+validation on a device (TEST_STRATEGY §4), which only the owner can perform, and
+the push/CI run, which needs the owner's authorization.
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any

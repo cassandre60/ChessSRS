@@ -170,15 +170,21 @@ void main() {
     expect(inDrawer(find.text('Sicilian Defense')), findsNothing);
   });
 
-  testWidgets('neither drawer spells out the colour or offers an everywhere row', (tester) async {
-    for (final side in [Side.white, Side.black]) {
-      await pumpDrawer(tester, side);
+  testWidgets('the White drawer names its colour and offers no everywhere row', (tester) async {
+    // Owner report 2026-11-04: the unlabelled sheet was confusing, so the
+    // drawer now states the repertoire it lists. The aggregate "All
+    // studies"/"Repertoires" rows stay gone.
+    await pumpDrawer(tester, Side.white);
+    expect(inDrawer(find.text('All studies')), findsNothing);
+    expect(inDrawer(find.text('Repertoires')), findsNothing);
+    expect(inDrawer(find.text('White repertoire')), findsOneWidget);
+  });
 
-      expect(inDrawer(find.text('All studies')), findsNothing);
-      expect(inDrawer(find.text('Repertoires')), findsNothing);
-      expect(inDrawer(find.textContaining('White repertoire')), findsNothing);
-      expect(inDrawer(find.textContaining('Black repertoire')), findsNothing);
-    }
+  testWidgets('the Black drawer names its colour and offers no everywhere row', (tester) async {
+    await pumpDrawer(tester, Side.black);
+    expect(inDrawer(find.text('All studies')), findsNothing);
+    expect(inDrawer(find.text('Repertoires')), findsNothing);
+    expect(inDrawer(find.text('Black repertoire')), findsOneWidget);
   });
 
   testWidgets('the in-drawer switch moves to the other colour in one tap', (tester) async {

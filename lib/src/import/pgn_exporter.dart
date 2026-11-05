@@ -99,6 +99,13 @@ String studyToPgn(Study study, List<Chapter> chapters) {
   return buffer.toString();
 }
 
+/// Writes [node]'s PGN numeric annotation glyphs (`$1`, `$14`) after its move.
+void _writeNags(StringBuffer buffer, RepertoireNode node) {
+  for (final nag in node.nags) {
+    buffer.write('\$$nag ');
+  }
+}
+
 void _writeNodeMoves(
   StringBuffer buffer,
   RepertoireNode node, {
@@ -119,6 +126,7 @@ void _writeNodeMoves(
       buffer.write('${position.fullmoves}... ');
     }
     buffer.write('${move.san} ');
+    _writeNags(buffer, mainline);
 
     if (mainline.comment != null && mainline.comment!.trim().isNotEmpty) {
       buffer.write('{${mainline.comment!.trim()}} ');
@@ -137,6 +145,7 @@ void _writeNodeMoves(
           varBuffer.write('${position.fullmoves}... ');
         }
         varBuffer.write('${varMove.san} ');
+        _writeNags(varBuffer, variation);
 
         if (variation.comment != null && variation.comment!.trim().isNotEmpty) {
           varBuffer.write('{${variation.comment!.trim()}} ');
