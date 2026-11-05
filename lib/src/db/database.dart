@@ -207,7 +207,10 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
           }
           if (oldVersion < 11) {
             batch.execute(
-              'ALTER TABLE $kTableSrsChapter ADD COLUMN orientation TEXT NOT NULL DEFAULT "white"',
+              // A single-quoted literal: a double-quoted token is an identifier
+              // in SQLite, and a build compiled with SQLITE_DQS=0 would refuse
+              // the migration instead of falling back to the string (R2-F4).
+              "ALTER TABLE $kTableSrsChapter ADD COLUMN orientation TEXT NOT NULL DEFAULT 'white'",
             );
           }
           if (oldVersion < 12) {
