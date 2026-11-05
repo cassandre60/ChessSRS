@@ -640,4 +640,29 @@ void main() {
       expect(refs.single.updatedAt.isUtc, isTrue);
     });
   });
+
+  group('StudyRepository.createChapter', () {
+    test('sends variant when provided', () async {
+      const studyId = StudyId('study1');
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/study/$studyId/import-pgn' &&
+            request.body.contains('variant=chess960')) {
+          return http.Response('{"chapters":[{"id":"ch_1"}]}', 200);
+        }
+        return http.Response('', 400);
+      });
+      final container = await makeTestContainer(mockClient);
+      final repo = container.read(studyRepositoryProvider);
+
+      final chapter = CreateStudyChapterPayload(
+        pgn: '1. e4 e5 *',
+        name: 'Chapter',
+        orientation: Side.white,
+        variant: Variant.chess960,
+      );
+      final ids = await repo.createChapter(studyId, chapter);
+      expect(ids, hasLength(1));
+      expect(ids.single.value, 'ch_1');
+    });
+  });
 }
