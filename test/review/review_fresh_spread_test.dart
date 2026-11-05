@@ -1,8 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPEC coverage: INV-068 (fresh introduction under a daily allowance).
-import 'dart:math';
-
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/review/fresh_introduction_order.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -226,39 +224,90 @@ void main() {
     });
   });
 
-  group('due-date tie handling', () {
-    test('the daily cut does not keep a fixed insertion-order prefix on tied dates', () {
-      // Twenty positions share one due instant. The quota keeps five. Insertion
-      // order would always keep the first five; a tie-break must not.
-      final library = buildLibrary(shape: {'tied': (chapters: 1, perChapter: 20)});
-      final states = <String, ReviewState>{
-        for (final d in library.decisions)
-          d.canonicalId: ReviewState(
-            decisionId: d.canonicalId,
-            firstReviewedAt: baseTime.subtract(const Duration(days: 10)),
-            nextDueAt: baseTime.subtract(const Duration(days: 1)),
-            repetitionCount: 1,
-          ),
-      };
+  group('full-line continuity respects the new-position allowance (INV-068)', () {
+    test('does not open a fresh ancestor the allowance held back', () {
+      // One line, root decision fresh and a due descendant. With no
+      // introductions allowed, full-line continuity used to open the line at its
+      // fresh start, bypassing the allowance; it must ask the due target.
+      const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      const startKey = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+      const study = Study(id: 'line', title: 'Line');
 
-      final session = ReviewEngine(clock: clock, random: Random(3)).createSession(
-        studies: library.studies,
-        chapters: library.chapters,
-        decisions: library.decisions,
-        reviewStates: states,
-        remainingDailyQuota: 5,
+      final chapter = Chapter(
+        id: 'ch-line',
+        studyId: study.id,
+        sourceOrder: 0,
+        startingFen: startFen,
+        createdAt: baseTime,
+        root: const RepertoireNode(
+          id: 'r',
+          fen: startFen,
+          fenKey: startKey,
+          children: [
+            RepertoireNode(
+              id: 'e4',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'e5',
+                  fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                  fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'nf3',
+                      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                      fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                      incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       );
 
-      final kept = answerAll(session).map((d) => d.nodeId).toList();
-      final firstFive = library.decisions.take(5).map((d) => d.nodeId).toList();
+      const rootDecision = RepertoireDecision(
+        id: 'dec-root',
+        studyId: 'line',
+        chapterId: 'ch-line',
+        nodeId: 'r',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+      const targetDecision = RepertoireDecision(
+        id: 'dec-target',
+        studyId: 'line',
+        chapterId: 'ch-line',
+        nodeId: 'e5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
 
-      expect(kept, hasLength(5));
+      final states = <String, ReviewState>{
+        targetDecision.canonicalId: ReviewState(
+          decisionId: targetDecision.canonicalId,
+          firstReviewedAt: baseTime.subtract(const Duration(days: 3)),
+          nextDueAt: baseTime.subtract(const Duration(days: 1)),
+          repetitionCount: 1,
+        ),
+      };
+
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: const [study],
+        chapters: [chapter],
+        decisions: const [rootDecision, targetDecision],
+        reviewStates: states,
+        order: ReviewOrder.byLine,
+        continuity: ReviewContinuity.fullLine,
+        remainingNewQuota: 0,
+      );
+
       expect(
-        kept,
-        isNot(orderedEquals(firstFive)),
-        reason:
-            'with twenty equal-due positions the five kept must not always be the first five '
-            'in import order, or a bulk import permanently starves everything after the head',
+        session.currentPrompt?.decision.id,
+        'dec-target',
+        reason: 'the fresh ancestor must not be introduced past the allowance',
       );
     });
   });

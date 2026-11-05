@@ -708,6 +708,46 @@ same probe shows a 20-chapter by-line session with allowance one is
 touched file; `domain_loc` 4046 of the 4050 ratchet cap. Not runtime-validated
 on a device.
 
+### Audit round 2026-11-05 — SPEC-conformance findings from three read-only audits
+
+Three read-only audits (import/PGN, persistence/durability, review INVs) ran
+against SPEC/PRODUCT. Fixes below, each with a test; the retained domain-cost
+ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
+
+6. **Import names a chapter that trains nothing** (`pgn_importer.dart`,
+   INV-011). A moveless game (or a side the user does not train) in an otherwise
+   valid multi-game PGN was stored as an empty chapter with no error, so the
+   import read as clean. It is now reported, named per chapter; a fully
+   untrainable file still yields the single `No repertoire positions` error.
+7. **Deletes follow the `canonicalStateId ?? id` key** (`sqlite_study_repository.dart`,
+   INV-004/069). `deleteStudy`/`deleteChapter` read only the column, so a legacy
+   decision with a NULL `canonicalStateId` kept its knowledge row (stored under
+   the decision id) orphaned forever — still counted toward the day's
+   new-position allowance and still readable by the deleted id.
+8. **`getChaptersByStudyIds` chunks its `IN` clause** (`sqlite_study_repository.dart`,
+   INV-051). Past 50 studies it read every chapter row — `treeJson` blob
+   included, for inactive studies too — on every session load. It now queries
+   the requested studies in 400-id chunks.
+9. **A superseded start cannot install behind a non-session change**
+   (`review_service.dart`/`review_controller.dart`, INV-032).
+   `supersedeSessionsBefore` lets the controller claim a generation for changes
+   that refresh counts but start no session (a study toggle); otherwise an
+   in-flight start installed itself as the grader while the screen showed the
+   other scope.
+10. **Full-line continuity respects the new-position allowance**
+    (`review_session.dart`, INV-068). The line-start and lapse-continue walks
+    built prompts without the `_admittedFreshIds` gate the traversal branch
+    applies, so a held-back fresh ancestor could be introduced through them.
+
+**Not fixed, recorded honestly.** (a) INV-050: a wrong move or a lapse can
+synchronously decode every chapter tree for transposition/sibling lookup
+(`_findTransposedNode`/`_findSiblingGraphNodes`) if the background indexing pass
+has not finished; a real fix needs a FEN→node index (schema work). (b) INV-031:
+the session quota budget is day-remaining while its counter is per-session, so a
+position re-answered the same day can conclude a session up to the overlap early
+(reachable via the FSRS same-day path). Both are edge paths, not the owner's
+reported behaviour.
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any

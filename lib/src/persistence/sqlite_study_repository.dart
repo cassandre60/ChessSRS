@@ -319,15 +319,19 @@ class SqliteStudyRepository implements StudyRepository {
 
           final canonicalRows = await txn.query(
             kTableSrsDecision,
-            columns: ['canonicalStateId'],
+            columns: ['id', 'canonicalStateId'],
             where: 'id IN ($placeholders)',
             whereArgs: chunk,
           );
           for (final r in canonicalRows) {
             final cId = r['canonicalStateId'] as String?;
-            if (cId != null && cId.isNotEmpty) {
-              canonicalIds.add(cId);
-            }
+            // Mirrors `RepertoireDecision.canonicalId` (`canonicalStateId ?? id`):
+            // a legacy row with a NULL canonicalStateId stores its knowledge and
+            // answer under the decision id, so a delete that only read the
+            // column left that row orphaned forever (INV-004/INV-069).
+            canonicalIds.add(
+              (cId == null || cId.isEmpty) ? r['id']! as String : cId,
+            );
           }
 
           // Events and legacy per-occurrence rows keyed by the occurrence id
@@ -439,34 +443,29 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<List<Chapter>> getChaptersByStudyIds(List<String> studyIds, {Side? side}) async {
     if (studyIds.isEmpty) return const [];
-    final sideFilter = side != null ? 'orientation = ?' : null;
-    final sideArgs = side != null ? [side.name] : const <String>[];
+    // Chunked `IN (?)` rather than the old ">50 studies reads every chapter row
+    // and filters in memory": the studyIds come from the active pool, and the
+    // unfiltered read also pulled the treeJson blob of every inactive study's
+    // chapters into memory on every session load. 400 matches the repository's
+    // bound-argument convention and is far under SQLite's limit.
+    const chunkSize = 400;
+    final sideFilter = side != null ? 'AND orientation = ?' : '';
+    final sideArgs = side != null ? <Object?>[side.name] : const <Object?>[];
 
-    List<Chapter> chapters;
-    if (studyIds.length > 50) {
-      final idSet = studyIds.toSet();
+    final chapters = <Chapter>[];
+    for (var i = 0; i < studyIds.length; i += chunkSize) {
+      final chunk = studyIds.sublist(
+        i,
+        i + chunkSize > studyIds.length ? studyIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
       final rows = await _db.query(
         kTableSrsChapter,
-        where: sideFilter,
-        whereArgs: sideArgs.isEmpty ? null : sideArgs,
+        where: 'studyId IN ($placeholders) $sideFilter',
+        whereArgs: [...chunk, ...sideArgs],
         orderBy: 'sourceOrder ASC',
       );
-      chapters = rows
-          .where((r) => idSet.contains(r['studyId']! as String))
-          .map(_chapterFromRow)
-          .toList(growable: false);
-    } else {
-      final placeholders = List.filled(studyIds.length, '?').join(',');
-      final whereClause = sideFilter != null
-          ? 'studyId IN ($placeholders) AND $sideFilter'
-          : 'studyId IN ($placeholders)';
-      final rows = await _db.query(
-        kTableSrsChapter,
-        where: whereClause,
-        whereArgs: [...studyIds, ...sideArgs],
-        orderBy: 'sourceOrder ASC',
-      );
-      chapters = rows.map(_chapterFromRow).toList(growable: false);
+      chapters.addAll(rows.map(_chapterFromRow));
     }
 
     final byStudy = <String, List<Chapter>>{};
@@ -518,11 +517,16 @@ class SqliteStudyRepository implements StudyRepository {
         whereArgs: [id],
       );
       final decisionIds = decisions.map((d) => d['id']! as String).toList();
-      final canonicalIds = decisions
-          .map((d) => d['canonicalStateId'] as String?)
-          .whereType<String>()
-          .where((c) => c.isNotEmpty)
-          .toSet();
+      // `canonicalStateId ?? id`, matching `RepertoireDecision.canonicalId`: a
+      // legacy NULL row keeps its knowledge state under the decision id, which
+      // a column-only read missed, leaving an orphaned row (INV-004/INV-069).
+      final canonicalIds = <String>{
+        for (final d in decisions)
+          if (d['canonicalStateId'] == null || (d['canonicalStateId']! as String).isEmpty)
+            d['id']! as String
+          else
+            d['canonicalStateId']! as String,
+      };
 
       if (decisionIds.isNotEmpty) {
         // Rows keyed by the per-occurrence id belong to this chapter outright.

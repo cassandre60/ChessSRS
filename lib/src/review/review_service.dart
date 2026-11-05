@@ -502,6 +502,20 @@ class ReviewService {
   /// showing it — it just does not get to be the one that answers moves.
   int _activeGeneration = 0;
 
+  /// Marks every session start older than [generation] as superseded, without
+  /// starting a session.
+  ///
+  /// Call when the controller invalidates the screen for a reason that does not
+  /// itself rebuild the session — a study toggle that only refreshes counts.
+  /// Without this, a start still in flight keeps `generation >= _activeGeneration`
+  /// true and installs itself as the active session behind the screen the user
+  /// is actually looking at, so the next move grades one scope's board against
+  /// the other scope's prompt (INV-032). The current [_activeSession] is left in
+  /// place: the controller still shows it, and grading must keep working.
+  void supersedeSessionsBefore(int generation) {
+    if (generation > _activeGeneration) _activeGeneration = generation;
+  }
+
   /// Loads every study once plus the chapters of the active ones, optionally filtered.
   ///
   /// The three multi-study scope branches of [startSession] each repeated this same

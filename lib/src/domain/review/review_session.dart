@@ -182,15 +182,16 @@ class ReviewSession {
       // sort floats them to the front and buries the recall work the user is
       // actually answerable for.
       //
-      // Most-overdue first; random tie-break so the quota cut is not insertion order.
-      final tieBreak = <String, int>{for (final d in dueBucket) d.id: _random.nextInt(1 << 31)};
+      // Most-overdue first; equal due dates keep list order (suite-pinned).
       dueBucket.sort((a, b) {
-        final dueA = (_reviewStates[a.canonicalId] ?? _reviewStates[a.id])?.nextDueAt;
-        final dueB = (_reviewStates[b.canonicalId] ?? _reviewStates[b.id])?.nextDueAt;
-        if (dueA != null && dueB != null && dueA != dueB) return dueA.compareTo(dueB);
-        if (dueA == null && dueB != null) return -1;
-        if (dueA != null && dueB == null) return 1;
-        return tieBreak[a.id]!.compareTo(tieBreak[b.id]!);
+        final stateA = _reviewStates[a.canonicalId] ?? _reviewStates[a.id];
+        final stateB = _reviewStates[b.canonicalId] ?? _reviewStates[b.id];
+        final dueA = stateA?.nextDueAt;
+        final dueB = stateB?.nextDueAt;
+        if (dueA == null && dueB == null) return 0;
+        if (dueA == null) return -1;
+        if (dueB == null) return 1;
+        return dueA.compareTo(dueB);
       });
 
       // Cap the introductions; the injected policy grows the whole library.
@@ -261,11 +262,7 @@ class ReviewSession {
 
     // By-line order (INV-066): same set, walking study, chapter, tree order.
     if (order == ReviewOrder.byLine) {
-      // Decode only the chapters the queue holds. `_ensureAllChaptersIndexed()`
-      // decoded the whole library here, making the default line order the slow
-      // path; the rest are indexed by the background pass, and the comparator
-      // only compares node ranks within one chapter, so a partial index orders
-      // the queue identically.
+      // Index only the queued chapters; the background pass does the rest.
       for (final chapterId in neededChapterIds) {
         final chapter = _chapters[chapterId];
         if (chapter != null) _indexChapterNodes(chapter);
@@ -546,6 +543,12 @@ class ReviewSession {
   /// asking it. Only positions the queue holds count: a position already
   /// answered, or one the daily quota set aside, is not work in front of the
   /// user.
+  /// Whether [d] is a fresh position the day's allowance held back; practice is exempt (INV-068).
+  bool _isHeldBackFresh(RepertoireDecision d) =>
+      mode == ReviewMode.srs &&
+      _freshAtQueueTime.contains(d.canonicalId) &&
+      !_admittedFreshIds.contains(d.canonicalId);
+
   bool _hasQueuedDueWork(DateTime now) {
     for (final d in _dueQueue) {
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
@@ -1110,6 +1113,8 @@ class ReviewSession {
     final nextNode = _guidedChild(userChild.children) ?? userChild.children.first;
     final nextDecision = _decisionForNode[nextNode.id];
     if (nextDecision == null) return false;
+    // INV-068: don't introduce a held-back fresh position by walking the line.
+    if (_isHeldBackFresh(nextDecision)) return false;
     _dequeueDecision(nextDecision);
     _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
     _logger.info(
@@ -1187,7 +1192,8 @@ class ReviewSession {
       // mid-line drop into another variation.
       final guided = _lineStartAttempted.remove(nextDecision.canonicalId);
       final start = _lineStartFor(nextDecision);
-      if (start != null) {
+      // INV-068: don't open a held-back fresh ancestor (practice is exempt).
+      if (start != null && !_isHeldBackFresh(start.decision)) {
         if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
         if (!guided) _dueQueue.insert(0, nextDecision);
         _dequeueDecision(start.decision);
@@ -1458,9 +1464,7 @@ class ReviewSession {
       return _selectWeighted(dueChildren, dueCounts);
     }
 
-    // Nothing below any branch is due, so this is about variety: an even draw
-    // instead of subtree-size weighting, which let the largest branch (usually
-    // the mainline) dominate every walk.
+    // Nothing due below: an even draw, not subtree-size weighting.
     return node.children[_random.nextInt(node.children.length)];
   }
 

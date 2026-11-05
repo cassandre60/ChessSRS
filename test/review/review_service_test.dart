@@ -1269,6 +1269,55 @@ void main() {
           await db.close();
         }
       });
+
+      test('a superseded start cannot install behind a non-session change', () async {
+        // SPEC INV-032. The controller bumps its generation for changes that do
+        // not start a session (a study toggle that only refreshes counts). A
+        // start still in flight must not then install itself as the grader: the
+        // screen would show one scope while moves graded another.
+        final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+        final repo = SqliteStudyRepository(db);
+        final service = ReviewService(repository: repo, clock: clock);
+
+        try {
+          for (final id in ['s_a', 's_b']) {
+            await repo.saveStudy(Study(id: id, title: id, createdAt: now, updatedAt: now));
+            final chapter = Chapter.create(studyId: id, sourceOrder: 0, title: 'Chapter');
+            await repo.saveChapter(chapter);
+            await repo.saveDecisions([
+              RepertoireDecision.create(
+                studyId: id,
+                chapterId: chapter.id,
+                nodeId: 'n_$id',
+                expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+              ),
+            ]);
+          }
+
+          final current = await service.startSession(
+            scope: const ReviewScope.study('s_a'),
+            generation: 1,
+          );
+          expect(service.activeSession, same(current));
+
+          // The controller claims generation 2 without starting a session.
+          service.supersedeSessionsBefore(2);
+
+          // A generation-1 start lands late; it must not take the active slot.
+          final stale = await service.startSession(
+            scope: const ReviewScope.study('s_b'),
+            generation: 1,
+          );
+          expect(stale.scope, const ReviewScope.study('s_b'));
+          expect(
+            service.activeSession,
+            same(current),
+            reason: 'the superseded start installed itself as the active session',
+          );
+        } finally {
+          await db.close();
+        }
+      });
     });
 
     // SPEC INV-068.
