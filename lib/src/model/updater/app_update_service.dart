@@ -32,8 +32,8 @@ class AppUpdateNotifier extends Notifier<AppUpdateState> {
 
   /// Checks for newer releases from GitHub.
   /// Throttled to once every 30 minutes unless [force] is true.
-  Future<void> checkForUpdate({bool force = false}) async {
-    final now = DateTime.now();
+  Future<void> checkForUpdate({bool force = false, DateTime? nowOverride}) async {
+    final now = nowOverride ?? DateTime.now();
     if (!force &&
         _lastCheckedAt != null &&
         now.difference(_lastCheckedAt!).inMinutes < 30 &&
