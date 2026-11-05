@@ -99,6 +99,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   freezed: ^4.0.1
+  # Runtime smoke only: drives the real app on a real engine in CI (see
+  # integration_test/app_smoke_test.dart and .github/workflows/runtime-smoke.yml).
+  integration_test:
+    sdk: flutter
   json_serializable: ^6.14.1
   lint: ^2.8.0
   mocktail: ^1.0.5
