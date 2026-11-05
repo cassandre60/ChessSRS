@@ -6,6 +6,14 @@ given for each. Fixed findings are tracked by their PR instead. See `review-prog
 
 ## R1-F4: PGN export silently drops moves that fail to replay
 
+**Fixed by #166** (verified against the tree on 2026-11-05): `_playMove` now
+throws `PgnExportException` with the move, position and a logged warning, and
+`_startingPosition` refuses an unparseable stored FEN the same way, so an
+export that cannot replay a line fails loudly instead of losing moves.
+
+<details>
+<summary>Original finding</summary>
+
 **Suggested label:** `bug`
 
 **Found by:** whole-codebase review, Round 1, finding R1-F4.
@@ -14,6 +22,7 @@ given for each. Fixed findings are tracked by their PR instead. See `review-prog
 `_writeNodeMoves` in `lib/src/import/pgn_exporter.dart` calls `_playMove`, which returns `null` when a stored move cannot be replayed. The code then writes nothing for that move and skips its entire subtree (`if (nextPos != null) ...`). The exported PGN is missing moves with no error or log entry, so the user cannot tell the export is incomplete.
 
 **Suggested change:** log a warning with the chapter and move, and return the count of dropped moves so the caller can surface it, for example in the export dialog. Add a test that feeds a tree with one illegal stored move and asserts the warning or count.
+</details>
 
 ## R1-F5: A brace in a PGN comment would truncate it on export (not reachable today)
 
@@ -30,6 +39,14 @@ PGN brace comments end at the first `}`. `chapterToPgn` writes comments as `{...
 
 ## R2-F2: ON DELETE CASCADE is declared but foreign_keys is never enabled
 
+**Fixed by #88** (verified against the tree on 2026-11-05): `openAppDatabase`
+runs `PRAGMA foreign_keys = ON` in `onConfigure` (`lib/src/db/database.dart`).
+The shipped migrations remove the ghost clauses the older schema missed
+(schema v18), so enforcement does not fire on writers that never declared it.
+
+<details>
+<summary>Original finding</summary>
+
 **Suggested label:** `bug`
 
 **Found by:** whole-codebase review, Round 2 (`docs/review-program.md`), finding R2-F2.
@@ -40,8 +57,20 @@ The schema declares `FOREIGN KEY ... ON DELETE CASCADE` (`lib/src/persistence/sr
 Deletes are done by hand: `deleteStudy` and `deleteChapter` remove the child rows in `sqlite_study_repository.dart`, and they do so correctly today. The risk is the next delete path. Anyone who relies on the schema's cascade, rather than the manual code, will leave orphaned chapters, decisions, or review rows with no error.
 
 **Suggested change:** either enable `PRAGMA foreign_keys=ON` in `onConfigure` and check that existing deletes still pass, or remove the `ON DELETE CASCADE` clauses so the schema stops promising behaviour it does not have. The first is the safer default. It needs a migration-safe check, because enabling enforcement on existing data can fail if any orphan already exists. Test both the enforced cascade and the orphan case.
+</details>
 
 ## R2-F4: v11 migration uses a double-quoted string as a SQL default
+
+**Fixed 2026-11-05** in the diff that closes this register (database.dart):
+the default became `DEFAULT 'white'`, and
+`test/persistence/migration_fixtures_test.dart` now pins the *stored* default
+(`PRAGMA table_info(...).dflt_value == "'white'"`) on the fixture path where
+old databases migrate through the v11 `ADD COLUMN`. The assertion was proven
+to fail on the pre-fix code, where the migrated column stored the
+double-quoted token.
+
+<details>
+<summary>Original finding</summary>
 
 **Suggested label:** `bug`
 
@@ -51,8 +80,18 @@ Deletes are done by hand: `deleteStudy` and `deleteChapter` remove the child row
 The v11 migration in `lib/src/db/database.dart` uses a double-quoted string as a column default: `ADD COLUMN orientation TEXT NOT NULL DEFAULT \"white\"`. In SQLite a double-quoted token is an identifier. It is only read as a string literal through the legacy DQS fallback. SQLite builds compiled with `SQLITE_DQS=0` reject this, and the migration would fail on those builds.
 
 **Suggested change:** use a single-quoted literal, `DEFAULT 'white'`, in the migration. The current database shape is unchanged, so this is a text-only change, but add a test that runs the migration on an old-schema database.
+</details>
 
 ## Review-4 C1: every persisted answer erases latency telemetry
+
+**Fixed by the two PRs the finding suggested (verified against the tree on
+2026-11-05):** `PositionKnowledgeState.fromReviewState` exists and is used at
+the submit path, and `saveAnswerBatch` writes the knowledge row with a
+targeted upsert (`_knowledgeStateUpsertSql`) instead of `INSERT OR REPLACE`,
+so un-touched columns such as the latency fields survive.
+
+<details>
+<summary>Original finding</summary>
 
 **Suggested label:** `bug`
 
@@ -73,8 +112,16 @@ existing `toReviewState()` and use it at all three sites, so the omission become
 rather than merely fixed; (2) change the knowledge-state write to an upsert touching only the
 columns being written, or read-modify-write the latency fields. Add a test that stores latency,
 answers, and reads it back intact.
+</details>
 
 ## Review-4 C2: timestamps are local time with no offset
+
+**Fixed (verified against the tree on 2026-11-05):** every writer stores
+`toUtc().toIso8601String()` with the `Z` offset now, so a zone change no
+longer reinterprets stored instants.
+
+<details>
+<summary>Original finding</summary>
 
 **Suggested label:** `bug`
 
@@ -94,6 +141,7 @@ five hours later than earned.
 reinterpret-existing-rows-as-UTC caveat): write `toUtc().toIso8601String()`, read with
 `.toUtc()`, or move to epoch-millisecond columns. Test with a fixed clock across a simulated
 zone change.
+</details>
 
 ## Review-4 C3: sub-millisecond precision is truncated on the round-trip
 

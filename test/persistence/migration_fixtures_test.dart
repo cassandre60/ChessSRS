@@ -511,6 +511,16 @@ Future<void> _expectCurrentSchema(Database db) async {
   expect(await columnsOf(kTableSrsDecision), containsAll(<String>['canonicalStateId', 'fenKey']));
   expect(await columnsOf(kTableSrsReviewState), containsAll(<String>['difficulty']));
   expect(await columnsOf(kTablePositionKnowledgeState), containsAll(<String>['lastExposedAt']));
+
+  // The orientation column's stored default is a single-quoted literal on
+  // every path that creates it — the current schema and the v11 migration
+  // alike. A double-quoted default (R2-F4) still works on builds compiled
+  // with the legacy double-quote fallback, but is refused outright by a
+  // SQLite build with SQLITE_DQS=0, so the literal shape itself is pinned.
+  final orientationDefault =
+      (await db.rawQuery('PRAGMA table_info($kTableSrsChapter)'))
+          .singleWhere((c) => c['name'] == 'orientation')['dflt_value'];
+  expect(orientationDefault, "'white'");
   expect(
     await namesOf('table'),
     containsAll(<String>[
