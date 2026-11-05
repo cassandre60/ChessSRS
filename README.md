@@ -24,9 +24,22 @@ and evidence ledger; this summary is not a fresh runtime-verification claim.
 
 ## Development
 
+**After every `git pull` — not only in a fresh worktree — regenerate the
+build_runner output.** It is gitignored, and a stale copy fails to compile with
+errors inside `*.freezed.dart` that point at the generated file, not at the
+source that changed (`flutter run` does not run code generation; CI does).
+
 ```bash
 fvm flutter pub get
-fvm dart run build_runner build # required in a fresh worktree before compiling
+fvm dart run build_runner build
+
+# or both of the above, then run:
+scripts/dev_run.sh -d linux
+```
+
+Then the usual bounded loop:
+
+```bash
 fvm flutter analyze <touched paths>
 fvm flutter test <affected test file> --concurrency=1
 fvm flutter run -d linux

@@ -82,6 +82,15 @@ docs-only fast lane for a diff that is *only* Markdown under `docs/**`; root
 Markdown (including `TEST_STRATEGY.md`, which a test parses) still runs the full
 suite. GATES specifies the post-commit fast check and required evidence.
 
+**Generated code is gitignored — regenerate after every `git pull`.** The
+build_runner outputs (`*.freezed.dart`, `*.g.dart`) are not committed. Run
+`fvm dart run build_runner build` after **every pull**, not only in a fresh
+worktree: `flutter run` and `flutter test` do not regenerate, so a checkout whose
+sources moved but whose generated files did not fails to compile with errors
+*inside the generated files*. CI regenerates before compiling, so a green CI run
+does **not** prove a local checkout is fresh; check it before reporting a local
+build. `scripts/dev_run.sh` runs `pub get`, codegen and the app in one step.
+
 ### Isolation: one worktree per task
 
 The only repository is **cassandre60/ChessSRS**. The archived
