@@ -373,5 +373,46 @@ void main() {
       expect(tapped, isNotNull);
       expect(tapped!.url, 'https://example.com');
     });
+
+    testWidgets('rebuilds link mapping when linkifiers change', (WidgetTester tester) async {
+      LinkableElement? tapped;
+      void onOpen(LinkableElement link) {
+        tapped = link;
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(
+                text: 'https://example.com',
+                linkifiers: const [],
+                onOpen: onOpen,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(
+                text: 'https://example.com',
+                linkifiers: defaultLinkifiers,
+                onOpen: onOpen,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('example.com'));
+      await tester.pump();
+      expect(tapped, isNotNull);
+      expect(tapped!.url, 'https://example.com');
+    });
   });
 }
