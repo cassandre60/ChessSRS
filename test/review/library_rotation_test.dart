@@ -178,7 +178,7 @@ void main() {
       );
       expect(dynamicSession.initialQueueCount, 0);
       expect(
-        dynamicSession.dynamicModeWithoutUnlocks,
+        dynamicSession.dynamicRepertoireMode && dynamicSession.unlockedDecisionIds.isEmpty,
         isTrue,
         reason: 'the review screen keys its freeze banner off this',
       );
@@ -193,13 +193,19 @@ void main() {
         preloadedUnlockedDecisionIds: {seeded.decision.id},
       );
       expect(unlockedSession.currentPrompt?.decision.id, seeded.decision.id);
-      expect(unlockedSession.dynamicModeWithoutUnlocks, isFalse);
+      expect(
+        unlockedSession.dynamicRepertoireMode && unlockedSession.unlockedDecisionIds.isEmpty,
+        isFalse,
+      );
 
       // Without dynamic mode the same position is introduced normally.
       final normal = ReviewService(repository: repo, clock: seeded.clock);
       final normalSession = await normal.startSession();
       expect(normalSession.currentPrompt?.decision.id, seeded.decision.id);
-      expect(normalSession.dynamicModeWithoutUnlocks, isFalse);
+      expect(
+        normalSession.dynamicRepertoireMode && normalSession.unlockedDecisionIds.isEmpty,
+        isFalse,
+      );
     } finally {
       await seeded.db.close();
     }

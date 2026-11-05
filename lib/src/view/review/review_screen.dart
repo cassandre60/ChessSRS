@@ -349,6 +349,7 @@ class _NothingDueView extends ConsumerWidget {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
     final progress = state.activeScopeProgress;
+    final session = state.session;
     // The three INV-068 states, read straight off the progress record so they
     // partition the scope instead of being re-derived from `learned`, which put
     // every due-but-unlearned position in two segments at once.
@@ -413,7 +414,9 @@ class _NothingDueView extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (state.session?.dynamicModeWithoutUnlocks ?? false)
+                        if (session != null &&
+                            session.dynamicRepertoireMode &&
+                            session.unlockedDecisionIds.isEmpty)
                           const _FreezeBannerHost(),
                         Text(
                           displayTitle,
@@ -1001,7 +1004,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     // position: only already-learned lines are scheduled. Say so instead of
     // letting the library look broken ("it serves the same line every day").
     final session = state.session;
-    if (session != null && session.dynamicModeWithoutUnlocks) {
+    if (session != null && session.dynamicRepertoireMode && session.unlockedDecisionIds.isEmpty) {
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
