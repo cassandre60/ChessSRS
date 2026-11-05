@@ -309,21 +309,23 @@ void main() {
       expect(richText.overflow, TextOverflow.ellipsis);
     });
 
-    testWidgets('applies custom style and linkStyle', (WidgetTester tester) async {
-      const customStyle = TextStyle(color: Colors.green, fontSize: 20.0);
-
+    testWidgets('re-linkifies when the text changes', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: RichLinkText(text: 'plain text no links', style: customStyle),
-        ),
+        const MaterialApp(home: RichLinkText(text: 'visit https://old.example.com')),
+      );
+      expect(
+        tester.widget<RichText>(find.byType(RichText)).text.toPlainText(),
+        contains('old.example.com'),
       );
 
-      final richText = tester.widget<RichText>(find.byType(RichText));
-      final outer = richText.text as TextSpan;
-      final inner = outer.children!.first as TextSpan;
-      expect(inner.children, isNotEmpty);
-      final child = inner.children!.first as TextSpan;
-      expect(child.style, isNotNull);
+      await tester.pumpWidget(
+        const MaterialApp(home: RichLinkText(text: 'visit https://new.example.com')),
+      );
+      await tester.pump();
+
+      final plainText = tester.widget<RichText>(find.byType(RichText)).text.toPlainText();
+      expect(plainText, contains('new.example.com'));
+      expect(plainText, isNot(contains('old.example.com')));
     });
   });
 }
