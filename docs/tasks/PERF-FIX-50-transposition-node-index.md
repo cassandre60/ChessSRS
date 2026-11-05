@@ -1,7 +1,8 @@
 # PERF-FIX-50 — A FEN→node index so a wrong move never decodes the library
 
-Status: **plan only, not implemented.** Tracked as the honest remainder of the
-2026-11-05 audit (INV-050). Read this before starting the work.
+Status: **implemented 2026-11-05** (v22 `srs_node`, backfill, import/save writes,
+session lookup, boundedness + migration tests). Kept as the design record.
+Read this before changing the index.
 
 ## 1. The symptom
 

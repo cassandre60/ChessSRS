@@ -9,6 +9,7 @@ import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/fast_date_parser.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
+import 'package:chess_srs/src/persistence/node_index.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:chess_srs/src/persistence/study_repository.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -113,6 +114,16 @@ class SqliteStudyRepository implements StudyRepository {
           );
         }
         await chapterBatch.commit(noResult: true);
+
+        final nodeBatch = txn.batch();
+        for (final chapter in result.chapters) {
+          final root = chapter.root;
+          if (root == null) continue;
+          for (final row in nodeRowsForChapter(chapter.id, root)) {
+            nodeBatch.insert(kTableSrsNode, row, conflictAlgorithm: ConflictAlgorithm.replace);
+          }
+        }
+        await nodeBatch.commit(noResult: true);
 
         final decisionBatch = txn.batch();
         for (final d in result.decisions) {
@@ -297,6 +308,13 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<void> deleteStudy(String id) async {
     await _db.transaction((txn) async {
+      // Flat node rows belong to the study's chapters (no FK cascade is relied
+      // on: test databases open without `PRAGMA foreign_keys`).
+      await txn.delete(
+        kTableSrsNode,
+        where: 'chapterId IN (SELECT id FROM $kTableSrsChapter WHERE studyId = ?)',
+        whereArgs: [id],
+      );
       // Find all decisions belonging to this study
       final decisions = await txn.query(
         kTableSrsDecision,
@@ -407,6 +425,7 @@ class SqliteStudyRepository implements StudyRepository {
       _chapterRow(chapter),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _replaceChapterNodes(_db, chapter);
   }
 
   @override
@@ -420,6 +439,9 @@ class SqliteStudyRepository implements StudyRepository {
       );
     }
     await batch.commit(noResult: true);
+    for (final chapter in chapters) {
+      await _replaceChapterNodes(_db, chapter);
+    }
   }
 
   @override
@@ -510,6 +532,7 @@ class SqliteStudyRepository implements StudyRepository {
   @override
   Future<void> deleteChapter(String id) async {
     await _db.transaction((txn) async {
+      await txn.delete(kTableSrsNode, where: 'chapterId = ?', whereArgs: [id]);
       final decisions = await txn.query(
         kTableSrsDecision,
         columns: ['id', 'canonicalStateId'],
@@ -779,6 +802,48 @@ class SqliteStudyRepository implements StudyRepository {
       counts[side] = ((row['due'] as num?) ?? 0).toInt();
     }
     return counts;
+  }
+
+  @override
+  Future<Map<String, List<NodeRef>>> getNodeIndex(List<String> chapterIds) async {
+    if (chapterIds.isEmpty) return const {};
+    const chunkSize = 400;
+    final result = <String, List<NodeRef>>{};
+    for (var i = 0; i < chapterIds.length; i += chunkSize) {
+      final chunk = chapterIds.sublist(
+        i,
+        i + chunkSize > chapterIds.length ? chapterIds.length : i + chunkSize,
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.query(
+        kTableSrsNode,
+        columns: ['chapterId', 'nodeId', 'fenKey', 'nodeRank'],
+        where: 'chapterId IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      for (final row in rows) {
+        final fenKey = row['fenKey']! as String;
+        result.putIfAbsent(fenKey, () => <NodeRef>[]).add((
+          chapterId: row['chapterId']! as String,
+          nodeId: row['nodeId']! as String,
+          nodeRank: (row['nodeRank']! as num).toInt(),
+        ));
+      }
+    }
+    return result;
+  }
+
+  /// Replaces [chapter]'s flat node rows from its tree. A rootless chapter
+  /// (e.g. a test fixture) simply clears any stale rows.
+  Future<void> _replaceChapterNodes(DatabaseExecutor txn, Chapter chapter) async {
+    await txn.delete(kTableSrsNode, where: 'chapterId = ?', whereArgs: [chapter.id]);
+    final root = chapter.root;
+    if (root == null) return;
+    final batch = txn.batch();
+    for (final row in nodeRowsForChapter(chapter.id, root)) {
+      batch.insert(kTableSrsNode, row, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   @override

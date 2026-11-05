@@ -492,7 +492,7 @@ Future<void> _seedSharedSideInstall(Database db) async {
 Future<void> _expectCurrentSchema(Database db) async {
   expect(
     (await db.rawQuery('PRAGMA user_version')).single['user_version'],
-    21,
+    22,
     reason: 'the upgrade must persist the new schema version',
   );
 
@@ -517,6 +517,7 @@ Future<void> _expectCurrentSchema(Database db) async {
       kTablePositionKnowledgeState,
       kTableSrsStudyRemote,
       kTableSrsUnlockedDecision,
+      kTableSrsNode,
     ]),
   );
   expect(
@@ -529,6 +530,7 @@ Future<void> _expectCurrentSchema(Database db) async {
       'idx_srs_study_remote_remoteStudyId',
       'idx_srs_unlocked_decision_decisionId',
       'idx_srs_review_state_nextDueAt',
+      'idx_srs_node_fenKey',
     ]),
   );
   expect(await db.rawQuery('PRAGMA foreign_key_list($kTableSrsReviewState)'), isEmpty);

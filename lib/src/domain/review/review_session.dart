@@ -42,25 +42,18 @@ const int kDefaultPrefetchBatchSize = 25;
 /// live on this side of the boundary.
 const int kDefaultPrefetchRefillThreshold = 3;
 
-/// How many not-yet-node-indexed chapters a session decodes synchronously at
-/// construction before handing the remainder to the background pass.
-///
-/// A small backlog costs single-digit milliseconds and completes inside the
-/// constructor — no scheduled work, no timer a test environment has to drain.
-/// A large one (whole-library review, hundreds of chapters) is what v21
-/// exists to defer.
+/// How many chapters a session decodes synchronously before the background
+/// pass takes the rest.
 const int kSynchronousIndexingChapterBudget = 8;
 
 /// Fresh-backlog ordering policy injected by the app; null keeps database order.
 typedef FreshIntroductionOrder =
     List<RepertoireDecision> Function(List<RepertoireDecision> fresh);
 
-/// Active review session state machine.
-///
-/// Encapsulates queue management, move validation against repertoire (Invariant §2.1),
-/// auto-traversal through opponent replies and already-learned user moves (Invariant §2.4),
-/// queue prefetching and buffering (chessrs PracticeMainPanel.tsx semantics),
-/// and deterministic time testing via [Clock] (Invariant §3.2).
+/// A node in the flat FEN→node index supplied by the app (`srs_node`).
+typedef NodePosition = ({String chapterId, String nodeId, int nodeRank});
+
+/// Active review session state machine: queue, grading, traversal, prefetch.
 class ReviewSession {
   ReviewSession({
     required List<Study> studies,
@@ -81,6 +74,7 @@ class ReviewSession {
     this.dynamicRepertoireMode = false,
     this.unlockedDecisionIds = const {},
     this.countedToday = const {},
+    this.nodeIndex = const {},
     this.freshIntroductionOrder,
     GraphAwareReviewCoordinator? coordinator,
     Map<String, DateTime>? initialExposureThrottle,
@@ -92,6 +86,9 @@ class ReviewSession {
        _decisionsById = {for (final d in decisions) d.id: d},
        _decisionForNode = {for (final d in decisions) d.nodeId: d},
        _chaptersList = chapters {
+    for (var i = 0; i < _chaptersList.length; i++) {
+      _chapterListIndex[_chaptersList[i].id] = i;
+    }
     for (final d in decisions) {
       _decisionsByCanonicalId[d.canonicalId] = d;
       _decisionsByChapter.putIfAbsent(d.chapterId, () => []).add(d);
@@ -231,13 +228,7 @@ class ReviewSession {
       }
     }
 
-    // Index chapters holding decisions in queue (both SRS and practice mode).
-    // The decision maps are tree-free since v21 — the row carries its node's
-    // fen key — so nothing here decodes a chapter tree. The node maps the
-    // prompts need are indexed for the prompted chapter on demand
-    // (_ensureChapterNodesIndexed) and for everything else by the background
-    // pass kicked below, with every reader still able to finish the job
-    // synchronously.
+    // Index the queued chapters' tree-free decision maps.
     final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
     for (final chapter in chapters) {
       if (neededChapterIds.contains(chapter.id)) {
@@ -361,6 +352,9 @@ class ReviewSession {
   /// Canonical ids already counted toward today's quota before this session.
   final Set<String> countedToday;
 
+  /// Flat FEN→nodes index (INV-050); empty falls back to decoding trees.
+  final Map<String, List<NodePosition>> nodeIndex;
+
   /// Fresh-backlog ordering policy; null keeps the database order.
   final FreshIntroductionOrder? freshIntroductionOrder;
   final Scheduler scheduler;
@@ -481,12 +475,9 @@ class ReviewSession {
     _allChaptersIndexed = true;
   }
 
-  /// Decodes the remaining chapter trees between event-loop turns so the cost
-  /// overlaps the user's think-time instead of the first frame. Purely an
-  /// optimization: every reader completes missing node maps synchronously, so
-  /// correctness never depends on how far this has got. The loop keeps
-  /// `_chaptersList` order, which preserves the candidate order the
-  /// transposition lookup documents.
+  /// Decodes the remaining chapter trees between event-loop turns, overlapping
+  /// the user's think-time. Purely an optimization; every reader completes
+  /// missing node maps synchronously.
   Future<void> _indexRemainingNodesInBackground() async {
     // Let the first frame paint before any decoding runs.
     await Future<void>.delayed(Duration.zero);
@@ -539,19 +530,16 @@ class ReviewSession {
   /// the position above it.
   final Set<String> _admittedFreshIds = {};
 
-  /// Whether the session still holds due work (INV-068).
-  ///
-  /// Fresh introductions come after the due work, so a walk that reaches a
-  /// fresh position while due work is still queued stops there instead of
-  /// asking it. Only positions the queue holds count: a position already
-  /// answered, or one the daily quota set aside, is not work in front of the
-  /// user.
   /// Whether [d] is a fresh position the day's allowance held back; practice is exempt (INV-068).
   bool _isHeldBackFresh(RepertoireDecision d) =>
       mode == ReviewMode.srs &&
       _freshAtQueueTime.contains(d.canonicalId) &&
       !_admittedFreshIds.contains(d.canonicalId);
 
+  /// Whether the session still holds due work (INV-068).
+  ///
+  /// A walk that reaches a fresh position while due work is queued stops there;
+  /// only positions still in the queue count.
   bool _hasQueuedDueWork(DateTime now) {
     for (final d in _dueQueue) {
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
@@ -607,6 +595,9 @@ class ReviewSession {
   /// ensure) finishes the chapters. Diagnostic and test seam for the indexing
   /// schedule; nothing behavioral reads it.
   bool get isNodeIndexComplete => _allChaptersIndexed;
+
+  /// Chapters whose trees have been decoded (INV-050 test seam).
+  int get decodedChapterCount => _nodeIndexedChapterIds.length;
 
   /// Due positions the scope held when this session was built, before the
   /// daily quota trimmed the queue.
@@ -1354,7 +1345,6 @@ class ReviewSession {
   /// destination, else null. Illegal/out-of-scope targets fail closed.
   RepertoireNode? _findTransposedNode(ReviewPrompt prompt, RepertoireMove movePlayed) {
     if (transposeScope == TransposeScope.off) return null;
-    _ensureAllChaptersIndexed();
     // 4-field FEN identity (QUALITY.md §2.3), recomputed: domain owns no FEN helpers.
     Position position;
     try {
@@ -1380,21 +1370,26 @@ class ReviewSession {
     final parts = next.fen.split(' ');
     if (parts.length < 4) return null;
     final key = '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    // Candidates in the order eager indexing always produced: chapters in
-    // _chaptersList order, depth-first within a chapter. Chapters may now be
-    // indexed in any schedule (prompt-time, background), so the sort — not
-    // insertion order — is what keeps the choice among equally valid targets
-    // identical to the pre-v21 behavior.
-    final candidates = [...(_nodesByFenKey[key] ?? const <RepertoireNode>[])]
-      ..sort((a, b) {
-        final chapterA = _chapterListIndex[_chapterOfNode[a.id]] ?? _chaptersList.length;
-        final chapterB = _chapterListIndex[_chapterOfNode[b.id]] ?? _chaptersList.length;
-        if (chapterA != chapterB) return chapterA.compareTo(chapterB);
-        return (_nodeDfsRank[a.id] ?? 0).compareTo(_nodeDfsRank[b.id] ?? 0);
-      });
+    // Prefer the flat index: it names the chapter holding each candidate, so only
+    // that chapter's tree is decoded (INV-050). Without it, fall back lazily.
+    var refs = nodeIndex[key];
+    if (refs == null && nodeIndex.isEmpty) {
+      _ensureAllChaptersIndexed();
+      refs = [
+        for (final n in _nodesByFenKey[key] ?? const <RepertoireNode>[])
+          (chapterId: _chapterOfNode[n.id]!, nodeId: n.id, nodeRank: _nodeDfsRank[n.id] ?? 0),
+      ];
+    }
+    if (refs == null || refs.isEmpty) return null;
+    final ordered = [...refs]..sort((a, b) {
+      final c = (_chapterListIndex[a.chapterId] ?? 0).compareTo(
+        _chapterListIndex[b.chapterId] ?? 0,
+      );
+      return c != 0 ? c : a.nodeRank.compareTo(b.nodeRank);
+    });
     RepertoireNode? fallback;
-    for (final node in candidates) {
-      final chapter = _chapters[_chapterOfNode[node.id]];
+    for (final ref in ordered) {
+      final chapter = _chapters[ref.chapterId];
       if (chapter == null ||
           !scope.matches(
             studyId: chapter.studyId,
@@ -1405,16 +1400,12 @@ class ReviewSession {
           (transposeScope == TransposeScope.withinStudy && chapter.studyId != prompt.studyId)) {
         continue;
       }
-      final incoming = node.incomingMove;
-      if (incoming != null && incoming.matches(movePlayed)) {
-        // The line the user is actually following: the repertoire used the
-        // same move to get here.
-        return node;
-      }
-      // The position is in scope, but the repertoire arrived here another way.
-      // The position is what INV-065 is about — interchangeable pieces reach
-      // the same square set by different moves — so this node is a valid
-      // target. Kept as the fallback in case no node matches the arrival.
+      _ensureChapterNodesIndexed(ref.chapterId);
+      final node = _nodesById[ref.nodeId];
+      if (node == null) continue;
+      // The line the user is actually following: the repertoire used the same
+      // move to get here, else the position is still a valid target (INV-065).
+      if (node.incomingMove?.matches(movePlayed) == true) return node;
       fallback ??= node;
     }
     return fallback;
@@ -1580,11 +1571,18 @@ class ReviewSession {
   }
 
   List<GraphNode> _findSiblingGraphNodes(RepertoireDecision decision) {
-    _ensureAllChaptersIndexed();
-    final node = _nodesById[decision.nodeId];
-    if (node == null) return const [];
+    // Sibling coupling only needs the tree-free decision maps (INV-050).
+    for (final chapter in _chaptersList) {
+      _indexChapterDecisions(chapter);
+    }
+    var fenKey = decision.fenKey;
+    if (fenKey == null) {
+      _ensureChapterNodesIndexed(decision.chapterId);
+      fenKey = _nodesById[decision.nodeId]?.fenKey;
+    }
+    if (fenKey == null) return const [];
 
-    final candidates = _decisionsByFenKey[node.fenKey];
+    final candidates = _decisionsByFenKey[fenKey];
     if (candidates == null || candidates.isEmpty) return const [];
 
     final siblings = <GraphNode>[];
@@ -1594,7 +1592,7 @@ class ReviewSession {
         siblings.add(
           GraphNode(
             decisionId: other.canonicalId,
-            fen4: node.fenKey,
+            fen4: fenKey,
             expectedMoveUci: m.uci,
             hasCanonicalIdentity: other.canonicalStateId != null,
           ),

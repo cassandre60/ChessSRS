@@ -766,12 +766,18 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
     (`_newlyCompletedToday`). Test: "a same-day revisit does not consume the
     daily quota twice" (one of three due positions already answered today; the
     session must serve all three, not two).
+14. **A wrong move no longer decodes every chapter tree** (INV-050). v22 adds
+    `srs_node`, a flat FEN→node index (`chapterId, nodeId, fenKey, nodeRank`)
+    written on import/save and backfilled on upgrade. The transposition lookup
+    and the sibling-coupling lookup use it, decoding only the chapter that holds
+    a candidate; the old whole-library node map remains as a lazy fallback for
+    direct domain construction. Tests: "a transposed wrong move decodes only the
+    target chapter" (2 of 12 chapters decoded vs 12 without the index) and "the
+    v22 upgrade backfills srs_node from every stored chapter tree".
 
-**Not fixed, recorded honestly.** INV-050: a wrong move or a lapse can
-synchronously decode every chapter tree for transposition/sibling lookup
-(`_findTransposedNode`/`_findSiblingGraphNodes`) if the background indexing pass
-has not finished; a real fix needs a FEN→node index (schema work). It is not the
-owner's reported behaviour; it is the honest remainder of the audit.
+**Remaining.** INV-050's design is now implemented; what is left is runtime
+validation on a device (TEST_STRATEGY §4), which only the owner can perform, and
+the push/CI run, which needs the owner's authorization.
 
 ## Recording rule
 

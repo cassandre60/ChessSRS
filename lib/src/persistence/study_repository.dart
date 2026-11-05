@@ -23,6 +23,9 @@ typedef ChapterDueCounts = ({
   int fresh,
 });
 
+/// One node's position identity in the flat `srs_node` index (INV-050).
+typedef NodeRef = ({String chapterId, String nodeId, int nodeRank});
+
 /// Abstract interface for local persistence of studies, chapters, trees,
 /// decisions, and spaced repetition review states.
 abstract class StudyRepository {
@@ -130,6 +133,12 @@ abstract class StudyRepository {
   /// Due positions per repertoire side across active studies, distinct by
   /// canonical position (INV-030/016), computed in SQL.
   Future<Map<Side, int>> getActiveSideDueCounts({required DateTime now});
+
+  /// Flat FEN→node references for [chapterIds], keyed by fenKey (INV-050).
+  ///
+  /// Lets the transposition lookup find the chapter holding a position without
+  /// decoding every chapter tree.
+  Future<Map<String, List<NodeRef>>> getNodeIndex(List<String> chapterIds);
 
   // Position Knowledge States (canonical SRS memory layer)
   Future<void> savePositionKnowledgeState(PositionKnowledgeState state);

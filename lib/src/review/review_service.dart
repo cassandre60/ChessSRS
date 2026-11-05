@@ -775,6 +775,10 @@ class ReviewService {
             ? await repository.getTodayReviewedPositionIds(clock.now())
             : const <String>{});
 
+    // Flat FEN→node index: a transposition lookup then decodes only the chapter
+    // that holds the target, instead of every chapter tree (INV-050).
+    final nodeIndex = await repository.getNodeIndex(targetChapters.map((c) => c.id).toList());
+
     final session = engine.createSession(
       studies: targetStudies,
       chapters: targetChapters,
@@ -787,6 +791,7 @@ class ReviewService {
       transposeScope: transposeScope,
       dynamicRepertoireMode: dynamicRepertoireMode,
       unlockedDecisionIds: unlockedIds,
+      nodeIndex: nodeIndex,
       countedToday: countedTodayIds,
       freshIntroductionOrder: freshIntroductionOrderFor(
         decisions: decisions,
