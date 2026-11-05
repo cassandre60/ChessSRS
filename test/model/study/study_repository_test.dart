@@ -556,6 +556,7 @@ void main() {
       expect(study.chapter.setup.orientation, Side.black);
       expect(study.chapter.setup.fromFen, isFalse);
       expect(study.chapter.practise, isFalse);
+      expect(study.chapter.gamebook, isFalse);
       expect(summary, isNull);
       expect(pgn, contains('[Event "Main Line"]'));
 
