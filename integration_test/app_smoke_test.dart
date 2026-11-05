@@ -13,6 +13,7 @@
 
 import 'dart:io';
 
+import 'package:chess_srs/l10n/l10n.dart';
 import 'package:chess_srs/src/binding.dart';
 import 'package:chess_srs/src/db/database.dart';
 import 'package:chess_srs/src/design/design.dart';
@@ -26,6 +27,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:l10n_esperanto/l10n_esperanto.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -63,7 +65,18 @@ void main() {
         ],
         child: SrsTheme(
           colors: colors,
-          child: MaterialApp(theme: srsThemeData(colors), home: const ReviewScreen()),
+          child: MaterialApp(
+            // Mirror production: the review screen reads AppLocalizations.
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+              MaterialLocalizationsEo.delegate,
+              CupertinoLocalizationsEo.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: srsThemeData(colors),
+            home: const ReviewScreen(),
+          ),
         ),
       ),
     );
