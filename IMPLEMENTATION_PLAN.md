@@ -745,8 +745,14 @@ synchronously decode every chapter tree for transposition/sibling lookup
 has not finished; a real fix needs a FEN→node index (schema work). (b) INV-031:
 the session quota budget is day-remaining while its counter is per-session, so a
 position re-answered the same day can conclude a session up to the overlap early
-(reachable via the FSRS same-day path). Both are edge paths, not the owner's
-reported behaviour.
+(reachable via the FSRS same-day path). (c) PRODUCT §4.1: PGN NAGs (`!`, `?!`,
+`$14`) are still dropped — `RepertoireNode` has no NAG field and the importer
+never reads `PgnNodeData.nags`; adding one is domain code the `domain_loc`
+ratchet has no room for without a compensating cut. (d) INV-051: the due-summary
+pass walks every decision and loads every review state even for a one-chapter
+scope, because the drawer's per-study counts are computed in Dart; a bounded
+version needs SQL aggregation or a deferred drawer summary. None of (a)–(d) is
+the owner's reported behaviour; they are the honest remainder of the audit.
 
 ## Recording rule
 
