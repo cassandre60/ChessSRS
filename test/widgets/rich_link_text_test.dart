@@ -344,5 +344,34 @@ void main() {
       expect(plainText, contains('new.example.com'));
       expect(plainText, isNot(contains('old.example.com')));
     });
+
+    testWidgets('wires a recognizer when onOpen is added after first build', (
+      WidgetTester tester,
+    ) async {
+      LinkableElement? tapped;
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(child: RichLinkText(text: 'https://example.com')),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: IntrinsicWidth(
+              child: RichLinkText(text: 'https://example.com', onOpen: (link) => tapped = link),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('example.com'));
+      await tester.pump();
+      expect(tapped, isNotNull);
+      expect(tapped!.url, 'https://example.com');
+    });
   });
 }
