@@ -711,6 +711,77 @@ class SqliteStudyRepository implements StudyRepository {
   }
 
   @override
+  Future<List<ChapterDueCounts>> getChapterDueCounts({required DateTime now}) async {
+    // The effective state is the canonical knowledge row (authority, INV-016/017),
+    // falling back to the legacy per-occurrence mirror. The joins are on primary
+    // keys, so they cannot multiply a decision's row.
+    final nowIso = now.toUtc().toIso8601String();
+    final rows = await _db.rawQuery(
+      '''
+      SELECT d.chapterId AS chapterId,
+        COUNT(*) AS total,
+        SUM(CASE WHEN COALESCE(k.repetitionCount, r.repetitionCount, 0) > 0
+                 THEN 1 ELSE 0 END) AS learned,
+        SUM(CASE WHEN k.canonicalId IS NULL AND r.decisionId IS NULL
+                 THEN 1 ELSE 0 END) AS fresh,
+        SUM(CASE WHEN (k.canonicalId IS NOT NULL OR r.decisionId IS NOT NULL)
+                  AND (
+                    CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END IS NULL
+                    OR CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END <= ?
+                  )
+                 THEN 1 ELSE 0 END) AS due
+      FROM $kTableSrsDecision d
+      LEFT JOIN $kTablePositionKnowledgeState k
+        ON k.canonicalId = COALESCE(d.canonicalStateId, d.id)
+      LEFT JOIN $kTableSrsReviewState r ON r.decisionId = d.id
+      GROUP BY d.chapterId
+      ''',
+      [nowIso],
+    );
+    return [
+      for (final row in rows)
+        (
+          chapterId: row['chapterId']! as String,
+          total: ((row['total'] as num?) ?? 0).toInt(),
+          learned: ((row['learned'] as num?) ?? 0).toInt(),
+          due: ((row['due'] as num?) ?? 0).toInt(),
+          fresh: ((row['fresh'] as num?) ?? 0).toInt(),
+        ),
+    ];
+  }
+
+  @override
+  Future<Map<Side, int>> getActiveSideDueCounts({required DateTime now}) async {
+    final nowIso = now.toUtc().toIso8601String();
+    final rows = await _db.rawQuery(
+      '''
+      SELECT c.orientation AS orientation,
+        COUNT(DISTINCT COALESCE(d.canonicalStateId, d.id)) AS due
+      FROM $kTableSrsStudy s
+      JOIN $kTableSrsChapter c ON c.studyId = s.id
+      JOIN $kTableSrsDecision d ON d.chapterId = c.id
+      LEFT JOIN $kTablePositionKnowledgeState k
+        ON k.canonicalId = COALESCE(d.canonicalStateId, d.id)
+      LEFT JOIN $kTableSrsReviewState r ON r.decisionId = d.id
+      WHERE s.isActive = 1
+        AND (k.canonicalId IS NOT NULL OR r.decisionId IS NOT NULL)
+        AND (
+          CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END IS NULL
+          OR CASE WHEN k.canonicalId IS NOT NULL THEN k.nextDueAt ELSE r.nextDueAt END <= ?
+        )
+      GROUP BY c.orientation
+      ''',
+      [nowIso],
+    );
+    final counts = {Side.white: 0, Side.black: 0};
+    for (final row in rows) {
+      final side = (row['orientation'] as String?) == 'black' ? Side.black : Side.white;
+      counts[side] = ((row['due'] as num?) ?? 0).toInt();
+    }
+    return counts;
+  }
+
+  @override
   Future<Set<String>> getUnlockedDecisionIds({String? studyId}) async {
     List<Map<String, Object?>> rows;
     if (studyId != null) {

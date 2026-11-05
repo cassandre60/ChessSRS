@@ -141,6 +141,7 @@ class _DueTally {
        studyLearned = {for (final s in studies) s.id: 0},
        studyFresh = {for (final s in studies) s.id: 0},
        _chapterSides = chapterSides,
+       _chapterStudyIds = chapterStudyIds,
        _trimmedOpenings = {
          for (final e in chapterOpenings.entries)
            if (e.value != null && e.value!.trim().isNotEmpty) e.key: e.value!.trim(),
@@ -186,6 +187,7 @@ class _DueTally {
 
   final List<Study> studies;
   final Map<String, Side> _chapterSides;
+  final Map<String, String> _chapterStudyIds;
   final Map<String, String> _trimmedOpenings;
 
   final Map<String, int> studyDueCounts;
@@ -376,6 +378,75 @@ class _DueTally {
     if (!countable) return;
     if (isDue) totalDueCount++;
     if (isQueueFresh) totalFreshCount++;
+  }
+
+  /// Folds one chapter's SQL-aggregated counts into the tallies.
+  ///
+  /// The bounded counterpart of [add]: the whole-library summary needs every
+  /// position's status, but a narrow scope must not deserialise every state to
+  /// get it (INV-051). Per-chapter sums are exact for a narrow scope, where
+  /// cross-study canonical dedupe does not apply.
+  void addChapterCounts(
+    ChapterDueCounts counts, {
+    required Set<String> activeStudyIds,
+    required ReviewScope scope,
+  }) {
+    final studyId = _chapterStudyIds[counts.chapterId];
+    if (studyId == null) return;
+    final side = _chapterSides[counts.chapterId] ?? Side.white;
+    final isActive = activeStudyIds.contains(studyId);
+    final opening = _trimmedOpenings[counts.chapterId];
+
+    chapterTotals[counts.chapterId] = (chapterTotals[counts.chapterId] ?? 0) + counts.total;
+    chapterLearned[counts.chapterId] = (chapterLearned[counts.chapterId] ?? 0) + counts.learned;
+    chapterFresh[counts.chapterId] = (chapterFresh[counts.chapterId] ?? 0) + counts.fresh;
+    chapterDue[counts.chapterId] = (chapterDue[counts.chapterId] ?? 0) + counts.due;
+
+    if (studyTotals.containsKey(studyId)) {
+      studyTotals[studyId] = (studyTotals[studyId] ?? 0) + counts.total;
+      studyLearned[studyId] = (studyLearned[studyId] ?? 0) + counts.learned;
+      studyFresh[studyId] = (studyFresh[studyId] ?? 0) + counts.fresh;
+      studyDueCounts[studyId] = (studyDueCounts[studyId] ?? 0) + counts.due;
+
+      final totals = studySideTotals.putIfAbsent(studyId, () => {Side.white: 0, Side.black: 0});
+      totals[side] = totals[side]! + counts.total;
+      final learned = studySideLearned.putIfAbsent(studyId, () => {Side.white: 0, Side.black: 0});
+      learned[side] = learned[side]! + counts.learned;
+      final fresh = studySideFresh.putIfAbsent(studyId, () => {Side.white: 0, Side.black: 0});
+      fresh[side] = fresh[side]! + counts.fresh;
+      final due = studySideDue.putIfAbsent(studyId, () => {Side.white: 0, Side.black: 0});
+      due[side] = due[side]! + counts.due;
+    }
+
+    if (isActive) {
+      sideTotals[side] = sideTotals[side]! + counts.total;
+      sideLearned[side] = sideLearned[side]! + counts.learned;
+      sideFresh[side] = sideFresh[side]! + counts.fresh;
+      if (opening != null) {
+        openingTotals[opening] = (openingTotals[opening] ?? 0) + counts.total;
+        openingLearned[opening] = (openingLearned[opening] ?? 0) + counts.learned;
+        openingFresh[opening] = (openingFresh[opening] ?? 0) + counts.fresh;
+        openingDueCounts[opening] = (openingDueCounts[opening] ?? 0) + counts.due;
+      }
+    }
+
+    if (!scope.matches(
+      studyId: studyId,
+      chapterId: counts.chapterId,
+      openingFamily: opening,
+      side: side,
+    )) {
+      return;
+    }
+    totalDueCount += counts.due;
+    totalFreshCount += counts.fresh;
+  }
+
+  /// Fills the per-side due tallies from the SQL DISTINCT-canonical query.
+  void setSideDueCounts(Map<Side, int> counts) {
+    for (final side in Side.values) {
+      sideDueCounts[side] = counts[side] ?? 0;
+    }
   }
 
   DueCountsSummary toSummary() {
@@ -867,6 +938,40 @@ class ReviewService {
     final chapterOpenings = await repository.getChapterOpenings();
     final chapterSides = preloadedChapterOrientations ?? await repository.getChapterOrientations();
     final chapterStudyIds = await repository.getChapterStudyIds();
+    final now = clock.now();
+
+    // Narrow scopes (study / chapter) are the case INV-051 is about: the drawer
+    // needs per-study counts, but the session only needs its own positions.
+    // Build the summary from per-chapter SQL aggregates and let startSession
+    // load only the scope's states, instead of deserialising every state in the
+    // library. Dynamic mode needs per-decision unlocks, so it keeps the exact
+    // path below.
+    if (!dynamicRepertoireMode && (scope.studyId != null || scope.chapterId != null)) {
+      final chapterCounts = await repository.getChapterDueCounts(now: now);
+      final sideDue = await repository.getActiveSideDueCounts(now: now);
+      final tally = _DueTally(
+        studies: studies,
+        chapterOpenings: chapterOpenings,
+        chapterSides: chapterSides,
+        chapterStudyIds: chapterStudyIds,
+      );
+      for (final counts in chapterCounts) {
+        tally.addChapterCounts(counts, activeStudyIds: activeStudyIds, scope: scope);
+      }
+      tally.setSideDueCounts(sideDue);
+      final summary = tally.toSummary();
+      final session = await startSession(
+        scope: scope,
+        mode: mode,
+        prefetchBatchSize: prefetchBatchSize,
+        prefetchRefillThreshold: prefetchRefillThreshold,
+        remainingDailyQuota: remainingDailyQuota,
+        remainingNewQuota: remainingNewQuota,
+        generation: generation,
+        preloadedStudies: studies,
+      );
+      return (session: session, summary: summary);
+    }
 
     // Wide scopes (all / side / opening) build their session from every
     // decision row, so read those rows once and derive the tally from them.
@@ -893,7 +998,6 @@ class ReviewService {
       canonicalIds: tallyDecisions.map((d) => d.canonicalId),
     );
 
-    final now = clock.now();
     final unlockedIds = (tallyDecisions.isEmpty || !dynamicRepertoireMode)
         ? const <String>{}
         : await repository.getUnlockedDecisionIds();

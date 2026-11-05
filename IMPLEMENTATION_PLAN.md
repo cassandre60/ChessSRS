@@ -744,6 +744,18 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
     import; `RepertoireNode` now carries them (treeJson blob, no schema change)
     and the exporter writes them back. Domain budget kept by tightening the
     node's class doc, not by trimming a check.
+12. **A narrow scope no longer reads the whole library's review states**
+    (`study_repository.dart`, `sqlite_study_repository.dart`,
+    `review_service.dart`, INV-051). `loadSessionAndSummary` built the entire
+    per-study/opening drawer summary by deserialising every decision and state,
+    even for a one-chapter scope. For a study/chapter scope (and with dynamic
+    mode off) the summary is now assembled from per-chapter SQL aggregates
+    (`getChapterDueCounts`, plus a DISTINCT-canonical side query) and the
+    session loads only its own decisions/states. Wide scopes still load every
+    state because the session itself needs them. Test:
+    "a study scope loads only its own review states, not the whole library"
+    (a 500-decision study beside a 1-decision scope queries ≤5 state ids;
+    pre-fix it queries all 501).
 
 **Not fixed, recorded honestly.** (a) INV-050: a wrong move or a lapse can
 synchronously decode every chapter tree for transposition/sibling lookup
@@ -751,11 +763,8 @@ synchronously decode every chapter tree for transposition/sibling lookup
 has not finished; a real fix needs a FEN→node index (schema work). (b) INV-031:
 the session quota budget is day-remaining while its counter is per-session, so a
 position re-answered the same day can conclude a session up to the overlap early
-(reachable via the FSRS same-day path). (c) INV-051: the due-summary pass walks
-every decision and loads every review state even for a one-chapter scope,
-because the drawer's per-study counts are computed in Dart; a bounded version
-needs SQL aggregation or a deferred drawer summary. None of (a)–(c) is the
-owner's reported behaviour; they are the honest remainder of the audit.
+(reachable via the FSRS same-day path). None of (a)–(b) is the owner's reported
+behaviour; they are the honest remainder of the audit.
 
 ## Recording rule
 
