@@ -174,6 +174,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     }
     return save(state.copyWith(dynamicRepertoireOpeningIds: current));
   }
+
+  Future<void> toggleCompactReviewHud() {
+    return save(state.copyWith(compactReviewHud: !state.compactReviewHud));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -230,6 +234,8 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: false) required bool dynamicRepertoireMode,
     @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireStudyIds,
     @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireOpeningIds,
+    // Compact review HUD: hides verbose progress readouts and study context labels.
+    @JsonKey(defaultValue: false) required bool compactReviewHud,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -259,6 +265,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     dynamicRepertoireMode: false,
     dynamicRepertoireStudyIds: {},
     dynamicRepertoireOpeningIds: {},
+    compactReviewHud: false,
   );
 
   bool isDynamicRepertoireEnabled({String? studyId, String? openingFamily}) {

@@ -255,26 +255,56 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                     // repeats the square's fill, and the summary says how much
                     // material and work the colour holds.
                     Padding(
-                      padding: EdgeInsets.fromLTRB(20, isWide ? 18 : 2, 20, 0),
-                      child: Row(
-                        children: [
-                          _ColourSwatch(side: side),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              ReviewScopeDrawer.sideLabel(side, context.l10n),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: SrsText.scopeName(c.ink),
+                      padding: EdgeInsets.fromLTRB(12, isWide ? 14 : 2, 12, 0),
+                      child: SrsPressable(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          ref.read(reviewControllerProvider.notifier).selectSide(side);
+                        },
+                        semanticLabel:
+                            'All ${ReviewScopeDrawer.sideLabel(side, context.l10n)}, '
+                            '${reviewState.sideProgress[side]?.dueDecisions ?? 0} due',
+                        radius: 8,
+                        builder: (context, hovered, pressed) {
+                          final isGeneralSelected =
+                              activeScope.studyId == null &&
+                              activeScope.chapterId == null &&
+                              activeScope.openingFamily == null &&
+                              (activeScope.side == null || activeScope.side == side);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isGeneralSelected
+                                  ? (c.isDark ? const Color(0xFF1E2530) : const Color(0xFFF0F3F7))
+                                  : (hovered ? c.hairlineSoft : const Color(0x00000000)),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '${reviewState.sideProgress[side]?.dueDecisions ?? 0} '
-                            '${context.l10n.mobileReviewDueWord}',
-                            style: SrsText.due(c.ink2),
-                          ),
-                        ],
+                            child: Row(
+                              children: [
+                                _ColourSwatch(side: side),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    ReviewScopeDrawer.sideLabel(side, context.l10n),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: SrsText.scopeName(c.ink),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '${reviewState.sideProgress[side]?.dueDecisions ?? 0} '
+                                  '${context.l10n.mobileReviewDueWord}',
+                                  style: SrsText.due(c.ink2),
+                                ),
+                                if (isGeneralSelected) ...[
+                                  const SizedBox(width: 6),
+                                  Icon(Symbols.check_rounded, size: 18, color: c.accent),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                     Padding(

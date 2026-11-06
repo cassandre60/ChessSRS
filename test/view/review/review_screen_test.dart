@@ -2778,6 +2778,82 @@ void main() {
         reason: 'at the breakpoint the side-by-side row fits the window it asked for',
       );
     });
+
+    testWidgets('in general review study and chapter names are withheld from the screen', (tester) async {
+      const pgn = '''
+[Event "Italian Game"]
+[ChapterName "Giuoco Piano"]
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 *
+''';
+      final importResult = importPgn(
+        pgn,
+        studyTitle: 'Italian Game Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      // In general review scope (all White studies), study and chapter names are withheld to prevent spoilers
+      expect(find.text('Giuoco Piano'), findsNothing);
+      expect(find.text('Italian Game Study'), findsNothing);
+      expect(find.text('White to play'), findsOneWidget);
+    });
+
+    testWidgets('compactReviewHud hides detailed progress lines and shows succinct counter in top bar', (tester) async {
+      const pgn = '''
+[Event "Scotch Game"]
+[ChapterName "Main Line"]
+1. e4 e5 2. Nf3 Nc6 3. d4 exd4 *
+''';
+      final importResult = importPgn(
+        pgn,
+        studyTitle: 'Scotch Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      // Turn on compactReviewHud
+      final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
+      await container.read(studyPreferencesProvider.notifier).toggleCompactReviewHud();
+      await tester.pumpAndSettle();
+
+      // Detailed progress lines under the board are hidden
+      expect(find.textContaining('done ·'), findsNothing);
+      expect(find.textContaining('retained'), findsNothing);
+    });
   });
 }
 

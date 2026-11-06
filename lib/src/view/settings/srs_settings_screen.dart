@@ -381,6 +381,16 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                                   onChanged: (_) => studyNotifier.toggleSrsDiagnostics(),
                                 ),
                               ),
+                              _SettingRow(
+                                label: 'Compact review HUD',
+                                help:
+                                    'Hide detailed progress lines and move study/session counters into the top bar.',
+                                control: SrsSwitch(
+                                  value: studyPrefs.compactReviewHud,
+                                  semanticLabel: 'Compact review HUD',
+                                  onChanged: (_) => studyNotifier.toggleCompactReviewHud(),
+                                ),
+                              ),
                             ],
                           ),
 
