@@ -612,6 +612,15 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
               .read(reviewControllerProvider.notifier)
               .startPracticeMode(scope: ReviewScope.study(study.id, side: side));
         },
+        onUnlockStudy: () {
+          Navigator.of(dialogContext).pop();
+          ref.read(reviewControllerProvider.notifier).unlockStudy(study.id);
+          showSnackBar(
+            context,
+            'Added all lines from ${study.title} to daily training',
+            type: SnackBarType.success,
+          );
+        },
         onCreateOpposite: () {
           Navigator.of(dialogContext).pop();
           final other = side == Side.white ? Side.black : Side.white;
@@ -963,6 +972,7 @@ class StudyActionsSheet extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onCreateOpposite,
+    this.onUnlockStudy,
     this.anchor,
   });
 
@@ -982,6 +992,7 @@ class StudyActionsSheet extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback? onUnlockStudy;
 
   /// Creates this same study's positions in the other colour, which is where
   /// most imports go wrong: a whole repertoire imported as White when the lines
@@ -1036,6 +1047,12 @@ class StudyActionsSheet extends StatelessWidget {
             subtitle: context.l10n.mobileReviewPracticeSubtitle,
             onPressed: onPractice,
           ),
+          if (onUnlockStudy != null)
+            SrsSheetRow(
+              label: 'Unlock study for training',
+              subtitle: 'Add all lines in this study to daily review queue',
+              onPressed: onUnlockStudy,
+            ),
         ]),
         Container(height: 1, color: c.hairline),
         group([

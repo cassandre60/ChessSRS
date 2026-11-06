@@ -557,7 +557,7 @@ class _NothingDueView extends ConsumerWidget {
                         Text(
                           state.isDailyLimitReached
                               ? context.l10n.mobileReviewNothingDuePracticeStillAvailable
-                              : context.l10n.mobileReviewNothingDuePracticeDoesNotChangeSchedule,
+                              : '${context.l10n.mobileReviewNothingDuePracticeDoesNotChangeSchedule} Play moves on the board to explore new variations; lines you play join your daily training.',
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],

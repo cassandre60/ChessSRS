@@ -1,6 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:async';
+
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/import/lichess_study_importer.dart';
 import 'package:chess_srs/src/import/pgn_exporter.dart';
@@ -894,6 +896,26 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     await _loadAndPublish(current.scope, current.mode);
   }
 
+  /// Unlocks all decisions in [studyId] into active SRS review.
+  Future<void> unlockStudy(String studyId) async {
+    final current = state.asData?.value;
+    if (current == null) return;
+    final allDecisions = await _repository.getDecisionsByStudy(studyId);
+    final decisionIds = allDecisions.map((d) => d.id).toSet();
+    await _repository.unlockDecisions(decisionIds);
+    await _loadAndPublish(current.scope, current.mode);
+  }
+
+  /// Locks all decisions in [studyId] back into dormant reference material.
+  Future<void> lockStudy(String studyId) async {
+    final current = state.asData?.value;
+    if (current == null) return;
+    final allDecisions = await _repository.getDecisionsByStudy(studyId);
+    final decisionIds = allDecisions.map((d) => d.id).toSet();
+    await _repository.lockDecisions(decisionIds);
+    await _loadAndPublish(current.scope, current.mode);
+  }
+
   /// Dismisses the pending line unlock prompt without adding to SRS.
   void dismissUnlockPrompt() {
     final current = state.asData?.value;
@@ -1480,7 +1502,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       currentState.currentPrompt?.decision.canonicalId,
     );
 
-    // In Practice Mode under dynamic repertoire mode: check if this was an unreviewed, un-unlocked line
+    // Under dynamic repertoire mode in practice: check if this was an unreviewed, un-unlocked line
     ({String decisionId, String chapterId, String moveSan})? pendingUnlock;
     if (currentState.isPracticeMode && _service.dynamicRepertoireMode) {
       final prompt = currentState.currentPrompt;
