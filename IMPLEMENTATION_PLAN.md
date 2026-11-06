@@ -96,6 +96,24 @@ from a fixed 2026-11-06 clock):
   ("Review rotation — 2026-11-06"): Line continuity → Due only, dynamic mode off, banner with
   **Turn off**, rotation coverage over days.
 
+### Measured 2026-11-06 — post-fix, owner's actual configuration
+
+Re-measured on a fresh consistent online backup of the owner's library (`.backup` taken while the
+app was open, integrity ok; v22-normalized for `main`'s schema; the v23 on-device data is a
+data-only repair with no DDL):
+
+- Owner's stored config (dynamic on, `fullLine`, By line, `transposeScope: off`): session build
+  with preloads **154 ms** — from 487 ms before the node-index skip. The fix reaches the running
+  app because prefs are wired into `ReviewService`.
+- Full-rotation config (dynamic off, `dueOnly`): **340 ms** — the bigger queue built for coverage,
+  still well inside interactive time.
+- Whole-library `startSession()` (the harness default, `transposeScope: inScope`): **1074 ms** —
+  unchanged, as expected; that path has the node index load by design.
+- `due queries only` ≈ **211 ms**, dominated by row mapping rather than SQLite.
+- On-device library has moved on: 908 review events and **101** knowledge rows (14 new since
+  2026-11-05) — the owner is using it; the app is not frozen anymore that way, but the per-card
+  prefix repetition under fullLine remains as designed and the owner declined the remedy.
+
 ### Owner decision 2026-11-06 — the fullLine remedy declined
 
 The owner declined the two-switch remedy (Line continuity → Due only, dynamic mode off) and keeps
