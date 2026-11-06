@@ -43,6 +43,12 @@ repeating it. Zero code is required; these are your Settings.
    and `chess_srs.db.pre-downgrade.bak` next to the database. (Not something to try on your real
    device — this is the 2026-11-06 archive-and-refuse fix on `main`'s read of the new v23.)
 
+**Owner decision (2026-11-06).** The owner declined the two-switch remedy and keeps the current
+settings. The rotation issue remains as designed with fullLine; the in-app banner is the supported
+escape when the owner reconsiders — it explains the freeze and offers a one-tap **Turn off** right
+in the review screen, with no need to open Settings. The measured evidence above remains valid if
+this is revisited.
+
 ### Review overhaul 2026-11-05 — the owner-reported fixes
 
 **What changed.** Five user-facing behaviours in the review loop (PR #502):

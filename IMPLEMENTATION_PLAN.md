@@ -96,6 +96,19 @@ from a fixed 2026-11-06 clock):
   ("Review rotation — 2026-11-06"): Line continuity → Due only, dynamic mode off, banner with
   **Turn off**, rotation coverage over days.
 
+### Owner decision 2026-11-06 — the fullLine remedy declined
+
+The owner declined the two-switch remedy (Line continuity → Due only, dynamic mode off) and keeps
+the current settings: Dynamic repertoire mode on · Line continuity Full line · Review order By
+line. The repetition therefore stays as designed with fullLine (the prefix rehearsal is required for
+bypassed sidelines), and the in-app banner shipped on `fix/downgrade-archive` is the supported
+escape when the owner reconsiders: it names the freeze and offers one-tap **Turn off** in the
+review screen. The measured evidence in the entry above remains valid if revisited, and the owner
+checks for the banner path are in `docs/manual-test-log.md` ("Review rotation — 2026-11-06").
+No code for a fix exists: the prefix rehearsal is not redundant, and its removal makes bypassed
+sidelines unreachable (three pinned fullLine continuity tests prove this; the attempt was made and
+reverted).
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
