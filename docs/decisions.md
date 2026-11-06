@@ -237,3 +237,22 @@ Consequences:
 
 Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
 something other than its batch.
+
+## D019 — A missed full-line guided walk must not consume its target
+
+Decision: In full-line review continuity, when a queued target's dedicated
+(guided) walk cannot deliver it — because the user's correct answer at the
+shared line start diverged from the guide route — the session returns the
+target to the queue (one honest retry per canonical per session, then a logged
+hold-back; the next session's admission pass re-admits fresh positions either
+way). The prefix rehearsal and by-line ordering are unchanged.
+
+Date: 2026-11-06
+Reason: Transposition chapters legitimately record several valid moves at a
+line start; the invisible guide route picks one, so an otherwise-correct
+answer could silently consume an admitted introduction (owner session
+2026-11-06 lost three of the day's 81 introductions this way, issue #542).
+Numbering note: numbered against main. The unmerged
+`fix/import-chapter-orientation` branch also carries a D019 (line adoption);
+renumber it to D020 when both land to keep one decision per number.
+Link: issue #542, PR of the same batch.

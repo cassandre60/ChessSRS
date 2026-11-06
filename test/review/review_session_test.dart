@@ -2156,6 +2156,143 @@ void main() {
       expect(third.autoPlayedMoves.map((m) => m.move.san), ['c5', 'd4', 'd5']);
       expect(third.nextPrompt?.decision.id, 'dec-g2');
     });
+
+    test('a guided walk that misses its target returns it to the queue for a later pass', () {
+      // A transposition-shaped line start: two valid user moves, and the guide
+      // routes through the one the user did not play. The user's divergence is
+      // a correct repertoire answer, so the missed target must rejoin the
+      // queue instead of being consumed (it was admitted for introduction).
+      //
+      // Line (ch-1): user owns both e4 and d4 at the line start.
+      // - e4 branch: reply c5, then the queued target expects e5 (admitted).
+      // - d4 branch: reply d5 whose decision below is fresh but NOT admitted
+      //   (the allowance cut falls before it), so the walk stops there.
+      // Line (ch-2): a fresh target asked directly at its own line start.
+      const root = RepertoireNode(
+        id: 'node-f-root',
+        fen: _fenStart,
+        fenKey: _fenKeyStart,
+        children: [
+          RepertoireNode(
+            id: 'node-f-e4',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mE4,
+            children: [
+              RepertoireNode(
+                id: 'node-f-c5',
+                fen: _fenC5,
+                fenKey: _fenKeyC5,
+                incomingMove: _mC5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-f-e5',
+                    fen: _fenE5,
+                    fenKey: _fenKeyE5,
+                    incomingMove: _mE5,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'node-f-d4',
+            fen: _fenStart,
+            fenKey: _fenKeyStart,
+            incomingMove: _mD4,
+            children: [
+              RepertoireNode(
+                id: 'node-f-d4-opp',
+                fen: _fenD5AfterD4,
+                fenKey: _fenKeyD5AfterD4,
+                incomingMove: _mD5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-f-d4-leaf',
+                    fen: _fenStart,
+                    fenKey: _fenKeyStart,
+                    incomingMove: _mNc6,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      const otherRoot = RepertoireNode(
+        id: 'node-f-other-root',
+        fen: _fenStart,
+        fenKey: _fenKeyE5,
+        children: [
+          RepertoireNode(
+            id: 'node-f-other-reply',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mD4,
+          ),
+        ],
+      );
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(root),
+          _chapterOf(otherRoot, chapterId: 'ch-2', sourceOrder: 1),
+        ],
+        decisions: [
+          // Admission order = list order; the allowance admits the first two.
+          _decision(
+            id: 'dec-f-t1',
+            nodeId: 'node-f-c5',
+            expectedMoves: const [_mE5],
+            canonicalStateId: 'can-f-t1',
+          ),
+          _decision(
+            id: 'dec-f-t2',
+            nodeId: 'node-f-other-root',
+            expectedMoves: const [_mD4],
+            canonicalStateId: 'can-f-t2',
+            chapterId: 'ch-2',
+          ),
+          // Fresh but beyond the allowance: the walk below the user's d4 stops here.
+          _decision(
+            id: 'dec-f-hb',
+            nodeId: 'node-f-d4-opp',
+            expectedMoves: const [_mNc6],
+            canonicalStateId: 'can-f-hb',
+          ),
+          _decision(
+            id: 'dec-f-ls',
+            nodeId: 'node-f-root',
+            expectedMoves: const [_mE4, _mD4],
+            canonicalStateId: 'can-f-ls',
+          ),
+        ],
+        // The line start is learned but not due: reachable only as a walk start.
+        reviewStates: {'can-f-ls': _scheduledState('can-f-ls')},
+        remainingNewQuota: 2,
+        order: ReviewOrder.byLine,
+        continuity: ReviewContinuity.fullLine,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-f-ls');
+
+      // First pass: the user answers d4 (valid, off-guide). The walk stops at
+      // the un-admitted fresh decision, and the target re-opens the line start.
+      final first = session.submitMove(from: 'd2', to: 'd4');
+      expect(first.isCorrect, isTrue);
+      expect(first.nextPrompt?.decision.id, 'dec-f-ls');
+
+      // Second pass: the guide is armed but the user plays d4 again, so the
+      // guide cannot help and the walk misses again.
+      final second = session.submitMove(from: 'd2', to: 'd4');
+      expect(second.isCorrect, isTrue);
+      expect(second.nextPrompt?.decision.id, 'dec-f-t2');
+
+      // Third pass: after the other line is walked, the missed target must come
+      // back — the session may not consume an admitted introduction silently.
+      final third = session.submitMove(from: 'd2', to: 'd4');
+      expect(third.isCorrect, isTrue);
+      expect(third.nextPrompt?.decision.id, 'dec-f-ls');
+    });
   });
 
   group('ReviewSession move logging', () {
