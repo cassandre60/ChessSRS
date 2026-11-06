@@ -593,6 +593,20 @@ remains a later option — never a redesign.
       4. Evidence: `test/view/review/dynamic_freeze_banner_test.dart` asserts the copy and the action (fails when the button is a no-op); `test/review/library_rotation_test.dart` asserts the condition for off / on-without-unlocks / on-with-one-unlock; `review_screen_test` 53 and `srs_settings_screen_test` 18 green, `--concurrency=1`. `unlockedDecisionCountProvider` is invalidated on unlock.
       5. Not verified on device: the banner and the settings line are UI, and no runtime/visual environment is available here. Owner check: with dynamic mode on and no unlocks, open review and confirm the banner appears and **Turn off** resumes introductions.
 
+- [ ] **REVIEW-FULLLINE-REPEAT: Full-line continuity re-walks a line's shared prefix for every queued card** *(opened: 2026-11-06, confirmed)*
+      1. Measured on a copy of the owner's library, 300 answered prompts per configuration (real `ReviewService`, FSRS, `transposeScope: off`, quota 100 new / unlimited):
+         | order / continuity | served | distinct |
+         |---|---|---|
+         | byLine / **fullLine** | 300 | **27** |
+         | dueDate / **fullLine** | 300 | **65** |
+         | byLine / dueOnly | 300 | 300 |
+         | dueDate / dueOnly | 300 | 300 |
+         `fullLine` is the trigger. With `dueOnly`, every prompt is a distinct position; with `fullLine`, the session re-prompts a small set.
+      2. Mechanism (temporary probe of `_advanceToNextDue`'s fullLine branch): a queued mid-line card opens at its line start (P-CONTINUITY), and every card behind the same shared prefix re-prompts that start and the prefix. Day shape: queue 413 (313 due + 100 fresh), 300 prompts cover ~27 positions.
+      3. **This is the owner's configuration** (`byLine` + `fullLine`, dynamic mode). It is the direct cause of "served the same line over and over", and it is independent of the dynamic-mode freeze: with dynamic mode **off** the same repetition occurs (32 distinct / 300). The DB-DYNAMIC-FREEZE surface fix addresses which positions are eligible, not the repetition.
+      4. Design context: P-CONTINUITY (done 2026-10-16, owner-verified) deliberately plays a queued card from its line start, and a sideline missed by the first walk gets a guided second walk — so the double prompt per card is intended. The cross-card repetition is its cost. `docs/recursive-agent-improvement-strategy.md` already lists "Session Quota & Continuity" loop-absence fuzzing as planned, not built. **Not an infinite loop**: the queue drains; this is repetition/efficiency, not non-termination.
+      5. **Owner decision needed** (changes presentation pinned by INV-066/INV-022, so the home is updated first, not a silent edit): (a) serve each line once — a walk that covers a line prompts all its due cards in that walk instead of reopening the line per card; (b) keep the semantics and only remove the redundant prompt when the first walk already covered the target's prefix; (c) accept the repetition as the cost of whole-line play.
+
 ### Open — product backlog (deferred, unscheduled; owner-reported 2026-10-03)
 - [x] **P-ORDER: present the same due set in line order** *(done: 2026-10-03, extended 2026-10-04)* — new `ReviewOrder` setting (Due date | By line | Random, default By line): same urgency-selected set and quota cut, consecutive prompts follow study/chapter/tree order (SPEC INV-066). Researched against Listudy line-walking and chessrs due queues first.
 - [x] **P-COLLAPSE: collapsible scope-drawer groups** *(done: 2026-10-03)* — Everywhere/Openings/Studies headers toggle their groups (44px targets, screen-reader expanded/collapsed announcements); state persists per group in `StudyPrefs.collapsedScopeGroups` across closes and restarts. Search overrides collapse (every match shows). Drawer capture eyeballed: headers render with chevrons, no overflow (icons are tofu in the capture env, as are all icons there — verified against the symbols package instead).
