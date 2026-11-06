@@ -15,6 +15,34 @@ tried is not verified, however green its CI was.
 
 ## Open
 
+### Review rotation — 2026-11-06 — your library was frozen to ~87 positions
+
+**Measured evidence (headless, your real library, 300 answers/day on a copy).**
+
+Your current settings (Dynamic repertoire mode = on · Line continuity = Full line · By line) serve a
+small, repeating set: 26 distinct positions on day 1, 0 new after, and 14 repeats-of-yesterday every
+day — your ~87 learned positions, looping.
+
+With the two Settings changes below (dynamic mode off · continuity Due only), the same copy of your
+library served 300 new positions on day 1, then 114, 105, 121 and 100 on days 2–5 — **740 distinct
+positions in 5 days, none repeated from yesterday**. The rotation covers the library instead of
+repeating it. Zero code is required; these are your Settings.
+
+**What only you can check (TEST_STRATEGY §4).** On your device with your library:
+
+1. Settings → Review & SRS → **Line continuity = Due only** (keeps review order = By line).
+2. Settings → Review & SRS → **Dynamic repertoire mode = off** (your library has 87 learned
+   positions and 0 unlocked lines, so nothing new can be introduced while it is on).
+3. Start a review and watch the progress line: a **new** position arrives; across 2–3 days the
+   rotation moves through the library instead of returning to the same few lines.
+4. Turn Dynamic repertoire mode back on and open review: a banner appears —
+   "Dynamic mode is on and no lines are unlocked… Turn off". Tap **Turn off** and confirm fresh
+   positions resume. (If the banner is absent or its button does nothing, that is a defect —
+   report it.)
+5. Downgrade protection: never deletes your library; on an older-build accident you get a refusal
+   and `chess_srs.db.pre-downgrade.bak` next to the database. (Not something to try on your real
+   device — this is the 2026-11-06 archive-and-refuse fix on `main`'s read of the new v23.)
+
 ### Review overhaul 2026-11-05 — the owner-reported fixes
 
 **What changed.** Five user-facing behaviours in the review loop (PR #502):

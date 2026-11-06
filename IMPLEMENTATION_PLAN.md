@@ -74,6 +74,28 @@ of the owner's real library, and each carries a fail-to-pass test.
   The "same line over and over" lead was diagnosed separately: see
   DB-DYNAMIC-FREEZE.
 
+### Measured 2026-11-06 — the fullLine remedy validates on the owner's library
+
+Headless run on a copy of the owner's library (300 answers/day, FSRS, transpose off, days counted
+from a fixed 2026-11-06 clock):
+
+- Current settings (**dynamic on**, `fullLine`, By line): 26 distinct on day 1, 0 new after, 14
+  repeats-of-yesterday every day — the learned ~87 positions loop.
+- Remedy (**dynamic off**, `dueOnly`, By line): 300 / 114 / 105 / 121 / 100 new positions on days
+  1–5 → **740 distinct in 5 days, 0 repeat-yesterday**, session start 389–534 ms.
+- `dueOnly` with dynamic mode on: 240 distinct day 1, then nothing — the unlocked-set freeze,
+  independent of continuity (as designed: dynamic mode gates introductions).
+- Corrections to the 2026-11-05 record: the `487 ms → 138 ms` figure measured the build portion with
+  preloads; the end-to-end path (queries + build) on the owner's data is ~0.5–0.8 s. And
+  fullLine alone is not the repetition — the dynamic-mode unlock freeze is what caps fresh
+  introductions while it is on.
+- The repetition was proven to be fullLine's designed cost (the queue drains), not a loop, and the
+  prefix rehearsal is required: removing it makes bypassed sidelines unreachable, so no such change
+  was made. The remedy is a Settings choice, not code.
+- Pending owner device checks are recorded in `docs/manual-test-log.md`
+  ("Review rotation — 2026-11-06"): Line continuity → Due only, dynamic mode off, banner with
+  **Turn off**, rotation coverage over days.
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
