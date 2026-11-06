@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
+import 'package:chess_srs/src/persistence/chapter_orientation_repair_migration.dart';
 import 'package:chess_srs/src/persistence/fen_key_backfill_migration.dart';
 import 'package:chess_srs/src/persistence/node_index.dart';
 import 'package:chess_srs/src/persistence/opening_name_repair_migration.dart';
@@ -109,7 +110,7 @@ Future<Database> _openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
-      version: 22,
+      version: 23,
       onConfigure: (db) async {
         final version = await _getDatabaseVersion(db);
         _logger.info('SQLite version: $version');
@@ -442,6 +443,26 @@ Future<Database> _openAppDatabase(DatabaseFactory dbFactory, String path) {
         if (oldVersion < 22) {
           final nodes = await backfillNodeIndex(db);
           _logger.info('Node index backfill: $nodes nodes indexed');
+        }
+
+        // v23 repairs chapter orientations and re-derives decisions for chapters
+        // whose study or chapter title explicitly indicates the intended perspective (INV-013),
+        // correcting chapters where an overly strict keyword check or custom starting FEN
+        // inverted the player perspective.
+        if (oldVersion < 23) {
+          final repaired = await repairChapterOrientations(db);
+          _logger.info(
+            'Chapter orientation repair: ${repaired.repaired} chapters repaired, '
+            '${repaired.unchanged} unchanged',
+          );
+          if (repaired.repaired > 0) {
+            await db.delete(
+              kTablePositionKnowledgeState,
+              where:
+                  'NOT EXISTS (SELECT 1 FROM $kTableSrsDecision d WHERE d.canonicalStateId = $kTablePositionKnowledgeState.canonicalId)',
+            );
+            await sweepOrphanedReviewStates(db);
+          }
         }
 
         _logger.info('Database schema upgraded successfully to v$newVersion');

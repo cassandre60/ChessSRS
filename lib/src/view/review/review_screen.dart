@@ -348,6 +348,7 @@ class _NothingDueView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
+    final studyPrefs = ref.watch(studyPreferencesProvider);
     final progress = state.activeScopeProgress;
     final session = state.session;
     // The three INV-068 states, read straight off the progress record so they
@@ -397,6 +398,8 @@ class _NothingDueView extends ConsumerWidget {
             SrsTopBar(
               activeSide: state.activeSide,
               dueCount: 0,
+              compactHud: studyPrefs.compactReviewHud,
+              completedCount: state.session?.completedCount,
               isPracticeMode: state.isPracticeMode,
               onSidePressed: (side) => _openColourDrawer(context, side),
               onOverflowPressed: () => _openSettings(context),
@@ -562,7 +565,7 @@ class _NothingDueView extends ConsumerWidget {
                         Text(
                           state.isDailyLimitReached
                               ? context.l10n.mobileReviewNothingDuePracticeStillAvailable
-                              : context.l10n.mobileReviewNothingDuePracticeDoesNotChangeSchedule,
+                              : '${context.l10n.mobileReviewNothingDuePracticeDoesNotChangeSchedule} Play moves on the board to explore new variations; lines you play join your daily training.',
                           style: TextStyle(fontFamily: SrsText.ui, fontSize: 13.5, color: c.ink3),
                         ),
                       ],
@@ -743,6 +746,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
     final showAnnotations = ref.watch(studyPreferencesProvider.select((p) => p.showAnnotations));
     final showDiagnostics = ref.watch(studyPreferencesProvider.select((p) => p.srsDiagnostics));
     final showMoveHistory = ref.watch(studyPreferencesProvider.select((p) => p.showMoveHistory));
+    final compactReviewHud = ref.watch(studyPreferencesProvider.select((p) => p.compactReviewHud));
 
     final isLapse = state.feedback == ReviewFeedback.incorrect;
     final isAnswerRevealed = isLapse || state.revealedComment != null || state.isAwaitingAdvance;
@@ -834,6 +838,8 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             activeSide: state.activeSide,
             dueCount: state.totalDueCount,
             isPracticeMode: state.isPracticeMode,
+            compactHud: compactReviewHud,
+            completedCount: state.session?.completedCount,
             onSidePressed: (side) => _openColourDrawer(context, side),
             onOverflowPressed: () => _openSettings(context),
             onExitPractice: state.isPracticeMode
@@ -896,50 +902,62 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
               ],
             ),
           ),
-          side: (context, wide, appWidth) => SrsReviewSide(
-            wide: wide,
-            lineFontSize: wide ? 28.0 : 24.0,
-            meta: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _MetaView(
-                  contextLabel: prompt.chapterTitle ?? prompt.studyTitle ?? '',
-                  orientation: state.boardOrientation,
-                  wide: wide,
-                ),
-                const SizedBox(height: 8),
-                _ReviewProgress(state: state, wide: wide),
-              ],
-            ),
-            line: showMoveHistory
-                ? SrsNotationLine(
-                    moves: prompt.moveHistory,
-                    answerSan: isAnswerRevealed ? prompt.expectedMoves.firstOrNull?.san : null,
-                    showBlank: !isAnswerRevealed,
-                    wide: wide,
-                    wideWidth: appWidth,
-                  )
-                : null,
-            slot: _buildSlotContent(
-              context,
+          side: (context, wide, appWidth) {
+            final isGeneralScope =
+                state.scope.studyId == null &&
+                state.scope.chapterId == null &&
+                state.scope.openingFamily == null;
+            final hideContextLabel = isGeneralScope || compactReviewHud;
+            final contextLabel = hideContextLabel
+                ? ''
+                : (prompt.chapterTitle ?? prompt.studyTitle ?? '');
+            return SrsReviewSide(
               wide: wide,
-              isLapse: isLapse,
-              expectedMoveSan: prompt.expectedMoves.firstOrNull?.san ?? state.expectedMove?.san,
-              comment: comment,
-              showDiagnostics: showDiagnostics,
-              state: state,
-            ),
-            actions: _buildActions(
-              context,
-              isAwaitingAdvance: state.isAwaitingAdvance,
-              isLapse: isLapse,
-              canReveal: state.expectedMove != null,
-              onSkip: onSkip,
-              onRevealAnswer: onRevealAnswer,
-              onContinue: onContinue,
-            ),
-          ),
+              lineFontSize: wide ? 28.0 : 24.0,
+              meta: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MetaView(
+                    contextLabel: contextLabel,
+                    orientation: state.boardOrientation,
+                    wide: wide,
+                  ),
+                  if (!compactReviewHud) ...[
+                    const SizedBox(height: 8),
+                    _ReviewProgress(state: state, wide: wide),
+                  ],
+                ],
+              ),
+              line: showMoveHistory
+                  ? SrsNotationLine(
+                      moves: prompt.moveHistory,
+                      answerSan: isAnswerRevealed ? prompt.expectedMoves.firstOrNull?.san : null,
+                      showBlank: !isAnswerRevealed,
+                      wide: wide,
+                      wideWidth: appWidth,
+                    )
+                  : null,
+              slot: _buildSlotContent(
+                context,
+                wide: wide,
+                isLapse: isLapse,
+                expectedMoveSan: prompt.expectedMoves.firstOrNull?.san ?? state.expectedMove?.san,
+                comment: comment,
+                showDiagnostics: showDiagnostics,
+                state: state,
+              ),
+              actions: _buildActions(
+                context,
+                isAwaitingAdvance: state.isAwaitingAdvance,
+                isLapse: isLapse,
+                canReveal: state.expectedMove != null,
+                onSkip: onSkip,
+                onRevealAnswer: onRevealAnswer,
+                onContinue: onContinue,
+              ),
+            );
+          },
         ),
       ),
     );
@@ -1147,25 +1165,32 @@ class _MetaView extends StatelessWidget {
       ],
     );
 
-    final labelWidget = Text(
-      contextLabel,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: SrsText.meta(c.ink2),
-    );
+    final hasLabel = contextLabel.isNotEmpty;
+    final labelWidget = hasLabel
+        ? Text(
+            contextLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: SrsText.meta(c.ink2),
+          )
+        : null;
+
+    if (!hasLabel) {
+      return turnWidget;
+    }
 
     if (wide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
-        children: [labelWidget, const SizedBox(height: 8), turnWidget],
+        children: [labelWidget!, const SizedBox(height: 8), turnWidget],
       );
     }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Flexible(child: labelWidget),
+        Flexible(child: labelWidget!),
         const SizedBox(width: 12),
         turnWidget,
       ],

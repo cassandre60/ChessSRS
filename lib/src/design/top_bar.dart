@@ -25,6 +25,8 @@ class SrsTopBar extends StatelessWidget {
     this.onOverflowPressed,
     this.onExitPractice,
     this.wide = false,
+    this.compactHud = false,
+    this.completedCount,
   });
 
   /// Shown in place of the squares on a screen with no scope to switch, such as
@@ -47,6 +49,8 @@ class SrsTopBar extends StatelessWidget {
   final VoidCallback? onOverflowPressed;
   final VoidCallback? onExitPractice;
   final bool wide;
+  final bool compactHud;
+  final int? completedCount;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +104,10 @@ class SrsTopBar extends StatelessWidget {
                 ),
               ),
             ),
+            if (compactHud && completedCount != null && completedCount! > 0) ...[
+              const SizedBox(width: 6),
+              Text('· $completedCount done', style: SrsText.due(c.ink3)),
+            ],
           ] else
             Text.rich(
               TextSpan(
@@ -109,6 +117,10 @@ class SrsTopBar extends StatelessWidget {
                     text: ' ${context.l10n.mobileReviewDueWord}',
                     style: SrsText.due(c.ink2),
                   ),
+                  if (compactHud && completedCount != null && completedCount! > 0) ...[
+                    TextSpan(text: ' · ', style: SrsText.due(c.ink3)),
+                    TextSpan(text: '$completedCount done', style: SrsText.due(c.ink3)),
+                  ],
                 ],
               ),
             ),

@@ -237,3 +237,15 @@ Consequences:
 
 Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
 something other than its batch.
+
+## D019 — Line adoption as an overlay on reference content
+
+Decision: User repertoire line adoption operates as a mutable overlay over immutable reference content.
+1. When unreviewed book branches are played on the board (in practice/explore mode or during review), the branch is automatically adopted and unlocked into the daily training schedule without blocking confirmation modals.
+2. Forgiving alternative move grading: playing an alternative in-scope repertoire move during review accepts the move and adopts the line alongside existing weapons without recording an incorrect lapse.
+3. New-card daily introduction limit defaults to 10 positions/day (configurable in SRS settings).
+4. Whole-study activation: users can unlock or lock an entire study into their daily training schedule in a single action from the study actions sheet.
+
+Date: 2026-11-05
+Reason: Eliminates empty 0-due dead ends on newly imported studies, removes modal confirmation fatigue, and decouples immutable reference PGN studies from the player's personal active choices.
+Link: docs/tasks/FEAT-REP-43-dynamic-repertoire-branch-selection.md
