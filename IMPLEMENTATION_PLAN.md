@@ -958,8 +958,13 @@ Owner-reported: `flutter run` printed ~86 "newer available" lines and asked for
    `equatable` 2.1.0→3.0.0; `gtk` leaves as a stale transitive). The Linux plugin
    registrant re-syncs with the moved plugins: the retired `gtk` plugin goes out
    and the missing `app_links_linux` registration goes in. No `pubspec.yaml`
-   change, so the G07/G11 approval lane does not apply. Evidence: local
-   `./scripts/gates.sh t1` green (G05 45/45, G10 ratchets hold); the full suite
+   change, so the G07/G11 approval lane does not apply. **First CI run failed
+   G01** — the move deprecated members the project called (file_picker 13.3
+   `saveFile`'s no-op `type`/`allowedExtensions`; riverpod 3.5's container
+   `exists`), fixed in the follow-up commit inside this PR (7 app_test.dart
+   sites moved to `container.read(provider.exists)`, 2 no-op args dropped).
+   Evidence: local `./scripts/gates.sh t1` green (G05 45/45, G10 ratchets
+   hold), analyzer clean, `test/app_test.dart` 34/34 single-worker; full suite
    (G01 + G04) runs on CI as the accept path. Not runtime-validated.
 2. **#534 — `.github/dependabot.yml`** gate-change PR: protected `.github/*`
    handled on the dedicated lane with the `gate-approved` label per the owner's
