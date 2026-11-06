@@ -89,7 +89,23 @@ final getDbSizeInBytesProvider = FutureProvider<int>((Ref ref) async {
 }, name: 'GetDbSizeInBytesProvider');
 
 /// Opens the app database.
-Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
+///
+/// A database written by a newer schema is refused, never wiped: the snapshot
+/// is written by [_archiveNewerDatabase] and [DatabaseNewerVersionException] is
+/// thrown at the caller. The archive runs here, after the refused open has
+/// closed, rather than inside the downgrade callback — sqflite invokes that
+/// callback within its exclusive open transaction, and SQLite refuses
+/// `VACUUM INTO` there.
+Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) async {
+  try {
+    return await _openAppDatabase(dbFactory, path);
+  } on DatabaseNewerVersionException catch (error) {
+    error.archivePath = await _archiveNewerDatabase(dbFactory, path);
+    rethrow;
+  }
+}
+
+Future<Database> _openAppDatabase(DatabaseFactory dbFactory, String path) {
   return dbFactory.openDatabase(
     path,
     options: OpenDatabaseOptions(
@@ -430,10 +446,132 @@ Future<Database> openAppDatabase(DatabaseFactory dbFactory, String path) {
 
         _logger.info('Database schema upgraded successfully to v$newVersion');
       },
-      onDowngrade: onDatabaseDowngradeDelete,
+      onDowngrade: _onDatabaseDowngradeRefuseDowngrade,
     ),
   );
 }
+
+/// Raised when the stored database is *newer* than the build opening it —
+/// the user is running an app version that predates the data's schema.
+///
+/// The old `onDatabaseDowngradeDelete` policy answered this by deleting the
+/// file: a rollback wiped the entire repertoire library. This error keeps the
+/// data and stops the open instead. [archivePath] names the snapshot written
+/// next to the database just before the refusal (see [_archiveNewerDatabase]);
+/// it is null only when even the copy failed, and the original file is
+/// preserved either way.
+class DatabaseNewerVersionException implements Exception {
+  DatabaseNewerVersionException(this.oldVersion, this.newVersion);
+
+  final int oldVersion;
+  final int newVersion;
+
+  /// The snapshot saved before the refusal, or null when none was written.
+  String? archivePath;
+
+  bool get archiveWritten => archivePath != null;
+
+  @override
+  String toString() {
+    final snapshot = archiveWritten
+        ? 'A snapshot of the library was saved at $archivePath.'
+        : 'No snapshot could be written, but the library itself was not touched.';
+    return 'Database schema v$oldVersion is newer than this build understands '
+        '(v$newVersion). Nothing was deleted. $snapshot '
+        'Update the app to open this library.';
+  }
+}
+
+/// The downgrade policy: refuse, never wipe (release-audit item "database
+/// downgrade path", 2026-09-30).
+///
+/// Every path that once relied on `onDatabaseDowngradeDelete` deleted the
+/// file on downgrade — silently removing every study, decision and
+/// review-history row when an older build opened a newer database. A memory
+/// app treats that as never acceptable. The open is stopped here with
+/// [DatabaseNewerVersionException]; [openAppDatabase] writes the recovery
+/// snapshot immediately afterwards, once this connection has closed. The
+/// archive deliberately does not run here: this callback is invoked inside
+/// sqflite's exclusive open transaction, and SQLite refuses `VACUUM INTO`
+/// there.
+void _onDatabaseDowngradeRefuseDowngrade(Database db, int oldVersion, int newVersion) {
+  _logger.warning(
+    'Downgrade attempt v$oldVersion → v$newVersion: refusing to open newer '
+    'data; preserving the library for a recovery snapshot.',
+  );
+  throw DatabaseNewerVersionException(oldVersion, newVersion);
+}
+
+/// Snapshots the newer database to `$path.pre-downgrade.bak`, returning the
+/// archive path, or null if no snapshot could be written.
+///
+/// Runs on a connection of its own, after the refused open has closed, so
+/// `VACUUM INTO` is legal and yields a standalone, WAL-consistent file. If
+/// that is unavailable, the database and its side files are copied instead.
+/// One slot is reused; the previous snapshot survives until the new one is
+/// complete, so a failed archive never destroys the last good copy.
+Future<String?> _archiveNewerDatabase(DatabaseFactory dbFactory, String path) async {
+  final archivePath = '$path.pre-downgrade.bak';
+  final stagingPath = '$archivePath.new';
+  if (!await File(path).exists()) return null;
+  try {
+    for (final suffix in const ['', '-wal', '-shm']) {
+      await _deleteIfPresent('$stagingPath$suffix');
+    }
+    try {
+      await _vacuumInto(dbFactory, path, stagingPath);
+    } catch (e, st) {
+      _logger.warning('VACUUM INTO snapshot failed; copying the database files instead', e, st);
+      for (final suffix in const ['', '-wal', '-shm']) {
+        await _deleteIfPresent('$stagingPath$suffix');
+      }
+      await _copyDatabaseFiles(path, stagingPath);
+    }
+    // Swap the finished snapshot into the single archive slot only now that a
+    // replacement exists.
+    for (final suffix in const ['', '-wal', '-shm']) {
+      await _deleteIfPresent('$archivePath$suffix');
+    }
+    for (final suffix in const ['', '-wal', '-shm']) {
+      final staged = File('$stagingPath$suffix');
+      if (await staged.exists()) await staged.rename('$archivePath$suffix');
+    }
+    _logger.warning('Refused downgrade open; library snapshot written to $archivePath');
+    return archivePath;
+  } catch (e, st) {
+    _logger.warning('Snapshot before refusal failed; refusing without a copy', e, st);
+    for (final suffix in const ['', '-wal', '-shm']) {
+      await _deleteIfPresent('$stagingPath$suffix');
+    }
+    return null;
+  }
+}
+
+Future<void> _vacuumInto(DatabaseFactory dbFactory, String path, String destination) async {
+  final source = await dbFactory.openDatabase(path, options: OpenDatabaseOptions(readOnly: true));
+  try {
+    await source.execute("VACUUM INTO '${_escapeArchivePath(destination)}'");
+  } finally {
+    await source.close();
+  }
+}
+
+Future<void> _copyDatabaseFiles(String path, String destination) async {
+  await File(path).copy(destination);
+  for (final side in const ['-wal', '-shm']) {
+    final sideFile = File('$path$side');
+    if (await sideFile.exists()) await sideFile.copy('$destination$side');
+  }
+}
+
+Future<void> _deleteIfPresent(String path) async {
+  final file = File(path);
+  if (await file.exists()) await file.delete();
+}
+
+/// VACUUM INTO treats its argument as SQL text, so a quote inside a path must
+/// be escaped; the platform path comes from the OS, not the user.
+String _escapeArchivePath(String path) => path.replaceAll("'", "''");
 
 void _createPuzzleBatchTableV3(Batch batch) {
   batch.execute('DROP TABLE IF EXISTS puzzle_batchs');

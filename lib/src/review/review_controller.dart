@@ -890,6 +890,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     await _repository.unlockDecisions(decisionIdsToUnlock);
+    // The settings status line and the review freeze banner both read this;
+    // unlocking is the one action that changes it.
+    ref.invalidate(unlockedDecisionCountProvider);
     state = AsyncData(current.copyWith(clearPendingUnlock: true));
     await _loadAndPublish(current.scope, current.mode);
   }

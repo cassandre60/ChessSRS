@@ -14,6 +14,7 @@ import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:chess_srs/src/model/study/study_preferences.dart';
 import 'package:chess_srs/src/model/updater/app_update.dart';
 import 'package:chess_srs/src/model/updater/app_update_service.dart';
+import 'package:chess_srs/src/review/review_service.dart';
 import 'package:chess_srs/src/review/srs_settings_providers.dart';
 import 'package:chess_srs/src/view/account/account_menu.dart';
 import 'package:chess_srs/src/view/review/about_page.dart';
@@ -84,6 +85,7 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
     final mediaQuery = MediaQuery.of(context);
     final studyPrefs = ref.watch(studyPreferencesProvider);
     final studyNotifier = ref.read(studyPreferencesProvider.notifier);
+    final unlockedCount = ref.watch(unlockedDecisionCountProvider).asData?.value;
     final generalPrefs = ref.watch(generalPreferencesProvider);
     final generalNotifier = ref.read(generalPreferencesProvider.notifier);
     final boardPrefs = ref.watch(boardPreferencesProvider);
@@ -303,8 +305,13 @@ class _SrsSettingsScreenState extends ConsumerState<SrsSettingsScreen> {
                               ),
                               _SettingRow(
                                 label: 'Dynamic repertoire mode',
-                                help:
-                                    'Only schedule lines you choose to play; unplayed branches remain reference material.',
+                                help: !studyPrefs.dynamicRepertoireMode
+                                    ? 'Only schedule lines you choose to play; unplayed branches remain reference material.'
+                                    : unlockedCount == null
+                                    ? 'On. Fresh positions are introduced only after you unlock them during review.'
+                                    : unlockedCount == 0
+                                    ? 'On, but no lines are unlocked yet — review only covers positions you have already learned, so nothing new can be introduced. Play a new branch in review and choose "Add to SRS", or turn this off.'
+                                    : 'On. $unlockedCount line${unlockedCount == 1 ? '' : 's'} unlocked; unplayed branches remain reference material.',
                                 control: SrsSwitch(
                                   value: studyPrefs.dynamicRepertoireMode,
                                   semanticLabel: 'Dynamic repertoire mode',
