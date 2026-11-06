@@ -947,6 +947,38 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
 validation on a device (TEST_STRATEGY §4), which only the owner can perform, and
 the push/CI run, which needs the owner's authorization.
 
+### Dependency freshness 2026-11-06 — in-range lockfile refresh + Dependabot
+
+Owner-reported: `flutter run` printed ~86 "newer available" lines and asked for
+"always latest versions". Trace issue #532.
+
+1. **#533 — `pubspec.lock` refresh within sitting constraints.** 75 entries move
+   (4 cross a major the existing constraints already allowed:
+   `_fe_analyzer_shared` 108→111, `build` 4.0.11→5.0.0, `code_assets` 1.2.1→2.2.0,
+   `equatable` 2.1.0→3.0.0; `gtk` leaves as a stale transitive). The Linux plugin
+   registrant re-syncs with the moved plugins: the retired `gtk` plugin goes out
+   and the missing `app_links_linux` registration goes in. No `pubspec.yaml`
+   change, so the G07/G11 approval lane does not apply. **First CI run failed
+   G01** — the move deprecated members the project called (file_picker 13.3
+   `saveFile`'s no-op `type`/`allowedExtensions`; riverpod 3.5's container
+   `exists`), fixed in the follow-up commit inside this PR (7 app_test.dart
+   sites moved to `container.read(provider.exists)`, 2 no-op args dropped).
+   Evidence: local `./scripts/gates.sh t1` green (G05 45/45, G10 ratchets
+   hold), analyzer clean, `test/app_test.dart` 34/34 single-worker; full suite
+   (G01 + G04) runs on CI as the accept path. Not runtime-validated.
+2. **#534 — `.github/dependabot.yml`** gate-change PR: protected `.github/*`
+   handled on the dedicated lane with the `gate-approved` label per the owner's
+   recorded "Approve as drafted" consent (session chat, 2026-11-06). Weekly
+   Dependabot PRs for pub at the root and npm under `scripts/`: minor/patch
+   grouped one PR per ecosystem per week, majors arrive as separate one-package
+   PRs. Manifest PRs still carry the protected `pubspec.yaml`, so they need the
+   label per PR — the bot opens and discloses; it never self-merges.
+3. **Deliberate non-goals:** no blind `--major-versions` sweep. chessground 11,
+   flutter_appauth 13 and the analyzer-coupled codegen majors ride the bot's
+   separate per-package PRs. The git-pinned engine refs (`multistockfish`, `lc0`)
+   and the `flutter: 3.47.7` environment floor are unchanged on purpose
+   (pubspec comments; `engine_refactor.md` §13).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
