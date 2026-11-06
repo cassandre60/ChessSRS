@@ -17,6 +17,116 @@ today's inventory or a fresh runtime pass.
 - Performance findings: docs/performance-handoff.md and its measurement brief;
   older noisy medians below are not optimization proof.
 
+### Delivered 2026-11-05 — downgrade no longer deletes the library; session start measured and cut
+
+Local commits on `fix/downgrade-archive` (not yet pushed). Both changes were
+driven by the owner's mandate ("instant", reliable memory), measured on a copy
+of the owner's real library, and each carries a fail-to-pass test.
+
+- **Data-loss hazard closed** (`b716ee9bc`, `fix(db)`). sqflite's
+  `onDatabaseDowngradeDelete` deleted the file whenever an older build opened a
+  newer schema — a rollback across builds wiped every study, decision and
+  review-history row (flagged by the 2026-09-30 release audit, never fixed).
+  `openAppDatabase` now snapshots the newer database to `<db>.pre-downgrade.bak`
+  and fails with `DatabaseNewerVersionException`, leaving the original file
+  untouched. The snapshot runs on its own connection after the refused open
+  closes, because SQLite refuses `VACUUM INTO` inside sqflite's exclusive open
+  transaction (which is where the downgrade callback runs) — a first attempt
+  inside the callback silently produced no archive.
+  - `test/db/downgrade_archive_test.dart` (2 tests): a v23 database opened by
+    the v22 build refuses, archives a readable standalone copy with its rows,
+    and leaves the live file at v23; two refused opens leave exactly one
+    archive slot. **Fails on the pre-fix handler** (open succeeds on a wiped,
+    empty database), **passes on this one**. `test/db/` (9) and
+    `test/persistence/migration_fixtures_test.dart` (8) green, `--concurrency=1`.
+- **Session start measured on the real library**, owner configuration
+  (`maxNewPerDay=100`, `maxDailyReviews=0`, `byLine`/`fullLine`, dynamic mode,
+  FSRS, `transposeScope=off`) rather than the harness defaults. Whole-library
+  `startSession()`/`loadSessionAndSummary()` were 1077/1369 ms; attribution put
+  `getNodeIndex` at **376 ms** of the ~490 ms build, while the daily/new quota
+  barely moved it (502 ms capped vs 494 ms uncapped — the cost is O(all
+  decisions), not queue size).
+- **Frequency-only win landed** (`e95eae93b`, `perf(review)`).
+  `startSession` unconditionally loaded the flat FEN→node index for the whole
+  scope, but its only consumer is transposition acceptance (INV-065) and every
+  lookup returns early when `transposeScope == off`. Skipping that load took
+  the owner's session build from **487 ms to 138 ms** (−349 ms). The app wires
+  `transposeScope` from `studyPrefs` into `ReviewService`, so the setting
+  reaches the running app.
+  - `test/review/session_node_index_load_test.dart` (2 tests): off ⇒ zero index
+    loads; in scope ⇒ the index loads. **Fails on the pre-fix always-load path.**
+    Adjacent suites stay green (list below).
+- **Measurement caveat (do not misread).** The owner's file is schema **v23**
+  (the un-pushed `fix/import-chapter-orientation` branch); `main` is v22, so the
+  run used a fresh copy of the owner's DB with `user_version` normalised to 22.
+  v23 is a data-only orientation repair with no DDL, so the tables and row
+  counts are the measured shape (63 studies, 312 chapters, **33,784 decisions**,
+  87 knowledge states, 71,359 `srs_node` rows). Re-measure on the owner's file
+  directly once v23 lands on `main`.
+- **Move path judged in budget**: `move_latency_test` median **3.2 ms**, p90
+  15.9 ms, max 15.9 ms — inside QUALITY §4.1's 16 ms (batch median oracle).
+- **Verification runs** (`--concurrency=1`): `review_node_index_test` (2),
+  `review_transposition_test` (9), `review_engine_wiring_test` (7),
+  `review_side_scope_test` (6), `review_service_test` (40), `test/db` (9),
+  `migration_fixtures_test` (8) — all green.
+- **Not done this pass**: the remaining ~138 ms build and the still-expensive
+  in-scope `getNodeIndex` (design-level per `docs/performance-handoff.md`).
+  The "same line over and over" lead was diagnosed separately: see
+  DB-DYNAMIC-FREEZE.
+
+### Measured 2026-11-06 — the fullLine remedy validates on the owner's library
+
+Headless run on a copy of the owner's library (300 answers/day, FSRS, transpose off, days counted
+from a fixed 2026-11-06 clock):
+
+- Current settings (**dynamic on**, `fullLine`, By line): 26 distinct on day 1, 0 new after, 14
+  repeats-of-yesterday every day — the learned ~87 positions loop.
+- Remedy (**dynamic off**, `dueOnly`, By line): 300 / 114 / 105 / 121 / 100 new positions on days
+  1–5 → **740 distinct in 5 days, 0 repeat-yesterday**, session start 389–534 ms.
+- `dueOnly` with dynamic mode on: 240 distinct day 1, then nothing — the unlocked-set freeze,
+  independent of continuity (as designed: dynamic mode gates introductions).
+- Corrections to the 2026-11-05 record: the `487 ms → 138 ms` figure measured the build portion with
+  preloads; the end-to-end path (queries + build) on the owner's data is ~0.5–0.8 s. And
+  fullLine alone is not the repetition — the dynamic-mode unlock freeze is what caps fresh
+  introductions while it is on.
+- The repetition was proven to be fullLine's designed cost (the queue drains), not a loop, and the
+  prefix rehearsal is required: removing it makes bypassed sidelines unreachable, so no such change
+  was made. The remedy is a Settings choice, not code.
+- Pending owner device checks are recorded in `docs/manual-test-log.md`
+  ("Review rotation — 2026-11-06"): Line continuity → Due only, dynamic mode off, banner with
+  **Turn off**, rotation coverage over days.
+
+### Measured 2026-11-06 — post-fix, owner's actual configuration
+
+Re-measured on a fresh consistent online backup of the owner's library (`.backup` taken while the
+app was open, integrity ok; v22-normalized for `main`'s schema; the v23 on-device data is a
+data-only repair with no DDL):
+
+- Owner's stored config (dynamic on, `fullLine`, By line, `transposeScope: off`): session build
+  with preloads **154 ms** — from 487 ms before the node-index skip. The fix reaches the running
+  app because prefs are wired into `ReviewService`.
+- Full-rotation config (dynamic off, `dueOnly`): **340 ms** — the bigger queue built for coverage,
+  still well inside interactive time.
+- Whole-library `startSession()` (the harness default, `transposeScope: inScope`): **1074 ms** —
+  unchanged, as expected; that path has the node index load by design.
+- `due queries only` ≈ **211 ms**, dominated by row mapping rather than SQLite.
+- On-device library has moved on: 908 review events and **101** knowledge rows (14 new since
+  2026-11-05) — the owner is using it; the app is not frozen anymore that way, but the per-card
+  prefix repetition under fullLine remains as designed and the owner declined the remedy.
+
+### Owner decision 2026-11-06 — the fullLine remedy declined
+
+The owner declined the two-switch remedy (Line continuity → Due only, dynamic mode off) and keeps
+the current settings: Dynamic repertoire mode on · Line continuity Full line · Review order By
+line. The repetition therefore stays as designed with fullLine (the prefix rehearsal is required for
+bypassed sidelines), and the in-app banner shipped on `fix/downgrade-archive` is the supported
+escape when the owner reconsiders: it names the freeze and offers one-tap **Turn off** in the
+review screen. The measured evidence in the entry above remains valid if revisited, and the owner
+checks for the banner path are in `docs/manual-test-log.md` ("Review rotation — 2026-11-06").
+No code for a fix exists: the prefix rehearsal is not redundant, and its removal makes bypassed
+sidelines unreachable (three pinned fullLine continuity tests prove this; the attempt was made and
+reverted).
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
@@ -524,6 +634,31 @@ remains a later option — never a redesign.
 - [ ] **F-MOBILELOGIN: email-code sign-in on a real device** *(opened: 2026-10-02)*
       1. Desktop sign-in goes through loopback OAuth (#125) and is verified; the mobile-code path is not, because no device was attached.
       2. This is the only path that exercises #123's query-parameter fallback on `/auth/mobile-code/email` and `/bearer`. Needs an Android or iOS device against `lichess.org`, now the default host — no `--dart-define`.
+- [x] **DB-CANON-GAP: REFUTED — a NULL `canonicalStateId` does not strand a position** *(opened 2026-11-05, refuted 2026-11-05)*
+      1. The observation stands: 451 of 33,784 decisions carry `canonicalStateId` NULL, and the decisions answered on 2026-11-05 are among them.
+      2. `test/review/library_rotation_test.dart` answers such a decision across its interval: it leaves the due set (`getDueCount() == 0`), its `nextDueAt` is scheduled into the future, it returns when the interval elapses, and a second answer advances `repetitionCount`. The canonical knowledge row is written under the decision id (`canonicalStateId ?? id`).
+      3. The earlier "no knowledge row that day" reading was the build on disk, not `main`: `position_knowledge_state` holds no UUID-keyed rows at all, while `saveAnswerBatch` writes one per answer in the same batch as the mirror.
+      4. No scheduling change made. Do not edit the canonical rekey/backfill migrations.
+- [x] **DB-DYNAMIC-FREEZE: dynamic mode with nothing unlocked makes every unlearned position unreachable** *(opened: 2026-11-05, surfaced in the UI: 2026-11-05)*
+      1. Owner prefs: `dynamicRepertoireMode: true`; `srs_unlocked_decision` has **0** rows. Library evidence: 896 review events over 404 distinct occurrences but only **87** distinct canonical positions ever learned, heavy activity on 2026-10-15/16 and no new positions after — the same few lines, everything else lost.
+      2. `ReviewSession` queues a fresh position in dynamic mode only when it is `isLearned` or in `unlockedDecisionIds` (`lib/src/domain/review/review_session.dart`, the `isUnlocked` gate). With zero unlocks only the learned set is schedulable. Pinned by `test/review/library_rotation_test.dart` ("dynamic mode with nothing unlocked introduces no fresh position"), which fails when the gate is removed.
+      3. Owner chose to surface it rather than change the scheduling contract. `ReviewSession.dynamicModeWithoutUnlocks` now drives a `DynamicFreezeBanner` in both review branches (a queued prompt and the nothing-due view): it states that only learned positions are scheduled and offers a one-tap **Turn off**. Settings shows the unlocked count in the toggle's help, with an explicit "nothing new can be introduced" state at zero.
+      4. Evidence: `test/view/review/dynamic_freeze_banner_test.dart` asserts the copy and the action (fails when the button is a no-op); `test/review/library_rotation_test.dart` asserts the condition for off / on-without-unlocks / on-with-one-unlock; `review_screen_test` 53 and `srs_settings_screen_test` 18 green, `--concurrency=1`. `unlockedDecisionCountProvider` is invalidated on unlock.
+      5. Not verified on device: the banner and the settings line are UI, and no runtime/visual environment is available here. Owner check: with dynamic mode on and no unlocks, open review and confirm the banner appears and **Turn off** resumes introductions.
+
+- [ ] **REVIEW-FULLLINE-REPEAT: Full-line continuity re-walks a line's shared prefix for every queued card** *(opened: 2026-11-06, confirmed)*
+      1. Measured on a copy of the owner's library, 300 answered prompts per configuration (real `ReviewService`, FSRS, `transposeScope: off`, quota 100 new / unlimited):
+         | order / continuity | served | distinct |
+         |---|---|---|
+         | byLine / **fullLine** | 300 | **27** |
+         | dueDate / **fullLine** | 300 | **65** |
+         | byLine / dueOnly | 300 | 300 |
+         | dueDate / dueOnly | 300 | 300 |
+         `fullLine` is the trigger. With `dueOnly`, every prompt is a distinct position; with `fullLine`, the session re-prompts a small set.
+      2. Mechanism (temporary probe of `_advanceToNextDue`'s fullLine branch): a queued mid-line card opens at its line start (P-CONTINUITY), and every card behind the same shared prefix re-prompts that start and the prefix. Day shape: queue 413 (313 due + 100 fresh), 300 prompts cover ~27 positions.
+      3. Mechanism (probe, since removed): a queued mid-line card opens at its line start, and the *same line is re-walked for every card queued behind the shared prefix*. Propose the rehearsal is **required, not redundant**: when an ancestor decision was already answered with the other expected move, the only way to reach the branch holding the bypassed target is to re-prompt the prefix with practice grading and let the user take the unplayed move. Without it, a bypassed sideline is permanently unreachable — "play each line once" cannot be had without losing whole-line coverage (owner candidate fix (a) is unsafe as drafted; SPEC INV-022 traversal and the pinned continuity tests both express this).
+      4. **This is the owner's configuration** (`byLine` + `fullLine`, dynamic mode). It reproduces with dynamic mode off, so the DB-DYNAMIC-FREEZE surface fix is necessary but not sufficient.
+      5. No behaviour changed. The practical remedy is a preference, not code: Line continuity = Due only with order = By line (recall-only rotation in line order). If the owner still rejects the repetition cost, the change needed is product-level (an explicit `Auto-play answered prefixes` option that *pre-selects the branch* toward the queued card, accepting that it can never be used to learn bypassed sidelines) — not a bug patch, and it does not exist as an implementation today.
 
 ### Open — product backlog (deferred, unscheduled; owner-reported 2026-10-03)
 - [x] **P-ORDER: present the same due set in line order** *(done: 2026-10-03, extended 2026-10-04)* — new `ReviewOrder` setting (Due date | By line | Random, default By line): same urgency-selected set and quota cut, consecutive prompts follow study/chapter/tree order (SPEC INV-066). Researched against Listudy line-walking and chessrs due queues first.
@@ -811,6 +946,38 @@ ratchet was kept green by compacting the new code (`domain_loc` 4050/4050).
 **Remaining.** INV-050's design is now implemented; what is left is runtime
 validation on a device (TEST_STRATEGY §4), which only the owner can perform, and
 the push/CI run, which needs the owner's authorization.
+
+### Dependency freshness 2026-11-06 — in-range lockfile refresh + Dependabot
+
+Owner-reported: `flutter run` printed ~86 "newer available" lines and asked for
+"always latest versions". Trace issue #532.
+
+1. **#533 — `pubspec.lock` refresh within sitting constraints.** 75 entries move
+   (4 cross a major the existing constraints already allowed:
+   `_fe_analyzer_shared` 108→111, `build` 4.0.11→5.0.0, `code_assets` 1.2.1→2.2.0,
+   `equatable` 2.1.0→3.0.0; `gtk` leaves as a stale transitive). The Linux plugin
+   registrant re-syncs with the moved plugins: the retired `gtk` plugin goes out
+   and the missing `app_links_linux` registration goes in. No `pubspec.yaml`
+   change, so the G07/G11 approval lane does not apply. **First CI run failed
+   G01** — the move deprecated members the project called (file_picker 13.3
+   `saveFile`'s no-op `type`/`allowedExtensions`; riverpod 3.5's container
+   `exists`), fixed in the follow-up commit inside this PR (7 app_test.dart
+   sites moved to `container.read(provider.exists)`, 2 no-op args dropped).
+   Evidence: local `./scripts/gates.sh t1` green (G05 45/45, G10 ratchets
+   hold), analyzer clean, `test/app_test.dart` 34/34 single-worker; full suite
+   (G01 + G04) runs on CI as the accept path. Not runtime-validated.
+2. **#534 — `.github/dependabot.yml`** gate-change PR: protected `.github/*`
+   handled on the dedicated lane with the `gate-approved` label per the owner's
+   recorded "Approve as drafted" consent (session chat, 2026-11-06). Weekly
+   Dependabot PRs for pub at the root and npm under `scripts/`: minor/patch
+   grouped one PR per ecosystem per week, majors arrive as separate one-package
+   PRs. Manifest PRs still carry the protected `pubspec.yaml`, so they need the
+   label per PR — the bot opens and discloses; it never self-merges.
+3. **Deliberate non-goals:** no blind `--major-versions` sweep. chessground 11,
+   flutter_appauth 13 and the analyzer-coupled codegen majors ride the bot's
+   separate per-package PRs. The git-pinned engine refs (`multistockfish`, `lc0`)
+   and the `flutter: 3.47.7` environment floor are unchanged on purpose
+   (pubspec comments; `engine_refactor.md` §13).
 
 ## Recording rule
 
