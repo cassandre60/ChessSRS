@@ -2779,7 +2779,9 @@ void main() {
       );
     });
 
-    testWidgets('in general review study and chapter names are withheld from the screen', (tester) async {
+    testWidgets('in general review study and chapter names are withheld from the screen', (
+      tester,
+    ) async {
       const pgn = '''
 [Event "Italian Game"]
 [ChapterName "Giuoco Piano"]
@@ -2815,45 +2817,44 @@ void main() {
       expect(find.text('White to play'), findsOneWidget);
     });
 
-    testWidgets('compactReviewHud hides detailed progress lines and shows succinct counter in top bar', (tester) async {
-      const pgn = '''
+    testWidgets(
+      'compactReviewHud hides detailed progress lines and shows succinct counter in top bar',
+      (tester) async {
+        const pgn = '''
 [Event "Scotch Game"]
 [ChapterName "Main Line"]
 1. e4 e5 2. Nf3 Nc6 3. d4 exd4 *
 ''';
-      final importResult = importPgn(
-        pgn,
-        studyTitle: 'Scotch Study',
-        repertoireSide: Side.white,
-      );
-      await tester.runAsync(() async {
-        await repo.saveImportResult(importResult);
-      });
+        final importResult = importPgn(pgn, studyTitle: 'Scotch Study', repertoireSide: Side.white);
+        await tester.runAsync(() async {
+          await repo.saveImportResult(importResult);
+        });
 
-      final app = await makeTestProviderScopeApp(
-        tester,
-        home: const ReviewScreen(),
-        overrides: {
-          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
-          clockProvider: clockProvider.overrideWithValue(clock),
-          reviewServiceProvider: reviewServiceProvider.overrideWith(
-            (ref) => ReviewService(repository: repo, clock: clock),
-          ),
-        },
-      );
+        final app = await makeTestProviderScopeApp(
+          tester,
+          home: const ReviewScreen(),
+          overrides: {
+            srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+            clockProvider: clockProvider.overrideWithValue(clock),
+            reviewServiceProvider: reviewServiceProvider.overrideWith(
+              (ref) => ReviewService(repository: repo, clock: clock),
+            ),
+          },
+        );
 
-      await tester.pumpWidget(app);
-      await pumpUntilFound(tester, find.byType(Chessboard));
+        await tester.pumpWidget(app);
+        await pumpUntilFound(tester, find.byType(Chessboard));
 
-      // Turn on compactReviewHud
-      final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
-      await container.read(studyPreferencesProvider.notifier).toggleCompactReviewHud();
-      await tester.pumpAndSettle();
+        // Turn on compactReviewHud
+        final container = ProviderScope.containerOf(tester.element(find.byType(ReviewScreen)));
+        await container.read(studyPreferencesProvider.notifier).toggleCompactReviewHud();
+        await tester.pumpAndSettle();
 
-      // Detailed progress lines under the board are hidden
-      expect(find.textContaining('done ·'), findsNothing);
-      expect(find.textContaining('retained'), findsNothing);
-    });
+        // Detailed progress lines under the board are hidden
+        expect(find.textContaining('done ·'), findsNothing);
+        expect(find.textContaining('retained'), findsNothing);
+      },
+    );
   });
 }
 

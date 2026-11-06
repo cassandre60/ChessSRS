@@ -898,11 +898,14 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             ),
           ),
           side: (context, wide, appWidth) {
-            final isGeneralScope = state.scope.studyId == null &&
+            final isGeneralScope =
+                state.scope.studyId == null &&
                 state.scope.chapterId == null &&
                 state.scope.openingFamily == null;
             final hideContextLabel = isGeneralScope || compactReviewHud;
-            final contextLabel = hideContextLabel ? '' : (prompt.chapterTitle ?? prompt.studyTitle ?? '');
+            final contextLabel = hideContextLabel
+                ? ''
+                : (prompt.chapterTitle ?? prompt.studyTitle ?? '');
             return SrsReviewSide(
               wide: wide,
               lineFontSize: wide ? 28.0 : 24.0,

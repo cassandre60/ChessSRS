@@ -196,7 +196,11 @@ void main() {
         expect(chRows.first['orientation'], 'white');
 
         // Decisions must now train White: 4. e5
-        final decRows = await db.query(kTableSrsDecision, where: 'chapterId = ?', whereArgs: [chapterId]);
+        final decRows = await db.query(
+          kTableSrsDecision,
+          where: 'chapterId = ?',
+          whereArgs: [chapterId],
+        );
         expect(decRows.length, 1);
         final expected = decodeExpectedMoves(decRows.first['expectedMoves']! as String);
         expect(expected.first.san, 'e5');

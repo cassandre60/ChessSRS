@@ -119,10 +119,7 @@ class SrsTopBar extends StatelessWidget {
                   ),
                   if (compactHud && completedCount != null && completedCount! > 0) ...[
                     TextSpan(text: ' · ', style: SrsText.due(c.ink3)),
-                    TextSpan(
-                      text: '$completedCount done',
-                      style: SrsText.due(c.ink3),
-                    ),
+                    TextSpan(text: '$completedCount done', style: SrsText.due(c.ink3)),
                   ],
                 ],
               ),
