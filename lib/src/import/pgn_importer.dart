@@ -479,14 +479,14 @@ Future<ImportResult> importPgnAsync(
 /// 4. Player tags: e.g. White "?" vs Black "Sicilian", or player containing "Repertoire"
 /// 5. Start position turn: if the custom FEN has Black to move
 /// 6. Default: White.
-Side resolveChapterOrientation(
-  PgnHeaders headers, {
-  Side? explicitSide,
-  Side startTurn = Side.white,
-}) {
-  if (explicitSide != null) return explicitSide;
-
-  // 2. Explicit Orientation tag
+/// The side a chapter's own tags or titles *explicitly* name, or null when they
+/// name neither.
+///
+/// The v23 repair rewrites stored data, so it must never guess: a guess that is
+/// wrong flips a legitimate Black repertoire to White and re-derives its
+/// decisions. [resolveChapterOrientation] keeps its default-to-White fallback
+/// for imports (INV-013); migrations use this instead.
+Side? explicitChapterOrientation(PgnHeaders headers) {
   final orientationTag = headers['Orientation']?.trim().toLowerCase();
   if (orientationTag == 'black') {
     _logger.fine('Orientation resolved via explicit header: black');
@@ -497,9 +497,6 @@ Side resolveChapterOrientation(
     return Side.white;
   }
 
-  // 3. Event / ChapterName / StudyName keyword heuristics. Also read the
-  // plain Chapter/Study tags our own exporter writes (Lichess uses
-  // ChapterName/StudyName), so self round-trips keep the signal.
   final titleCandidates = [
     headers['ChapterName'],
     headers['Chapter'],
@@ -507,26 +504,53 @@ Side resolveChapterOrientation(
     headers['StudyName'],
     headers['Study'],
   ];
-  final blackKeywords = RegExp(
-    r'(\bfor black\b|\bas black\b|\[black\]|\(black\)|\bblack repertoire\b|\bvs white\b)',
-    caseSensitive: false,
-  );
-  final whiteKeywords = RegExp(
-    r'(\bfor white\b|\bas white\b|\[white\]|\(white\)|\bwhite repertoire\b|\bvs black\b)',
-    caseSensitive: false,
-  );
-
   for (final candidate in titleCandidates) {
     if (candidate == null || candidate.trim().isEmpty) continue;
-    if (blackKeywords.hasMatch(candidate)) {
+    if (_blackOrientationKeywords.hasMatch(candidate)) {
       _logger.fine('Orientation resolved via keyword in "$candidate": black');
       return Side.black;
     }
-    if (whiteKeywords.hasMatch(candidate)) {
+    if (_whiteOrientationKeywords.hasMatch(candidate)) {
       _logger.fine('Orientation resolved via keyword in "$candidate": white');
       return Side.white;
     }
   }
+  return null;
+}
+
+final _blackOrientationKeywords = RegExp(
+  r'(\bfor\s+black\b|\bas\s+black\b|\bwith\s+black\b|\bfrom\s+black(?:\x27s)?\b|'
+  r'\[black\]|\(black\)|(?:^|[\s_\-\[\(])black\s*\[|\[black\]\s*|'
+  r'\bblack\s+repertoire\b|\brepertoire\s+(?:for\s+)?black\b|\bblack\s+side\b|'
+  r'(?:^|[\s_\-\[\(])black\s*(?:vs\.?|v\.?|-vs-|_vs_)\b|'
+  r'\b(?:vs\.?|v\.?|-vs-|_vs_)\s*white\b|^\[?\s*black\s*[:\-\]]|'
+  r'^\[?\s*black\s+(?:repertoire|opening|ideas?|quizz|study|moves?)\b|'
+  r'\bblack-vs-|\bblack_vs_\b)',
+  caseSensitive: false,
+);
+final _whiteOrientationKeywords = RegExp(
+  r'(\bfor\s+white\b|\bas\s+white\b|\bwith\s+white\b|\bfrom\s+white(?:\x27s)?\b|'
+  r'\[white\]|\(white\)|(?:^|[\s_\-\[\(])white\s*\[|\[white\]\s*|'
+  r'\bwhite\s+repertoire\b|\brepertoire\s+(?:for\s+)?white\b|\bwhite\s+side\b|'
+  r'(?:^|[\s_\-\[\(])white\s*(?:vs\.?|v\.?|-vs-|_vs_)\b|'
+  r'\b(?:vs\.?|v\.?|-vs-|_vs_)\s*black\b|^\[?\s*white\s*[:\-\]]|'
+  r'^\[?\s*white\s+(?:repertoire|opening|ideas?|quizz|study|moves?|e4|d4|c4|nf3)\b|'
+  r'\bwhite-vs-|\bwhite_vs_\b)',
+  caseSensitive: false,
+);
+
+Side resolveChapterOrientation(
+  PgnHeaders headers, {
+  Side? explicitSide,
+  Side startTurn = Side.white,
+}) {
+  if (explicitSide != null) return explicitSide;
+
+  // 2. Explicit Orientation tag and 3. title-keyword heuristics. Shared with
+  // the v23 repair migration, which uses the same matcher without the
+  // default-to-White fallback. `explicitChapterOrientation` logs the match.
+  final explicit = explicitChapterOrientation(headers);
+  if (explicit != null) return explicit;
 
   // 4. Player tags heuristic
   final white = headers['White']?.trim();
@@ -552,11 +576,19 @@ Side resolveChapterOrientation(
     return Side.white;
   }
 
-  // 4. The side to move in a custom starting position. With no other signal this is the only
-  //    thing left that says whose moves the chapter is about, and defaulting to White instead
-  //    shifts the whole tree a ply: every decision derived from it asks the player for a move
-  //    their opponent plays.
-  if (startTurn == Side.black) {
+  // 5. The side to move in a custom starting position, but ONLY if there are no titles
+  //    (a raw headless FEN snippet). If a study or chapter has a title, defaulting to Black
+  //    merely because the author set up a tabia where the opponent is to move (e.g. White
+  //    preparing against the French after 3. Nc3) erroneously turns White opening studies
+  //    into Black repertoires (SPEC INV-013: default to White).
+  final hasTitle = [
+    headers['ChapterName'],
+    headers['Chapter'],
+    headers['Event'],
+    headers['StudyName'],
+    headers['Study'],
+  ].any((c) => c != null && c.trim().isNotEmpty && c.trim() != '?' && c.trim() != '*');
+  if (!hasTitle && startTurn == Side.black) {
     _logger.fine('Orientation resolved via starting position turn: black');
     return Side.black;
   }
@@ -716,6 +748,19 @@ RepertoireNode _buildChildren(
   }
 
   return current;
+}
+
+/// Derives [RepertoireDecision]s from a position tree for a chapter.
+List<RepertoireDecision> deriveDecisionsForChapter({
+  required RepertoireNode root,
+  required String studyId,
+  required String chapterId,
+  required Side repertoireSide,
+  Side startSide = Side.white,
+}) {
+  final out = <RepertoireDecision>[];
+  _deriveDecisions(root, studyId, chapterId, startSide, repertoireSide, out);
+  return out;
 }
 
 /// Derives [RepertoireDecision]s from a position tree.

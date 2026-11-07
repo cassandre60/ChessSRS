@@ -21,6 +21,17 @@ void main() {
       expect(resolveChapterOrientation({'Event': 'French Defense (Black)'}), Side.black);
       expect(resolveChapterOrientation({'Event': 'Caro-Kann as Black'}), Side.black);
       expect(resolveChapterOrientation({'Event': 'Nimzo-Indian vs White'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'Black Vs [Italian]'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'Black vs 1.d4'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'Black [Vienna]'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'Black [Spanish]'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'Black opening cool ideas'}), Side.black);
+      expect(
+        resolveChapterOrientation({'Event': 'Black moves to play by heart in 0.1 s'}),
+        Side.black,
+      );
+      expect(resolveChapterOrientation({'Event': 'Black Quizz'}), Side.black);
+      expect(resolveChapterOrientation({'Event': 'lichess_study_black-vs-italian'}), Side.black);
     });
 
     test('reads the plain Study/Chapter tags our exporter writes', () {
@@ -35,6 +46,46 @@ void main() {
       expect(resolveChapterOrientation({'Event': 'Italian Game for White'}), Side.white);
       expect(resolveChapterOrientation({'ChapterName': 'Scotch [White]'}), Side.white);
       expect(resolveChapterOrientation({'Event': 'London System as White'}), Side.white);
+      expect(
+        resolveChapterOrientation({
+          'StudyName': 'White [French Defense][Final]',
+        }, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White Vs [French]'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White vs French'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White vs. Sicilian'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White [Caro-Kann]'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White [Spanish]'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White opening ideas'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({'StudyName': 'White e4 Quizz'}, startTurn: Side.black),
+        Side.white,
+      );
+      expect(
+        resolveChapterOrientation({
+          'Event': 'lichess_study_white-vs-french',
+        }, startTurn: Side.black),
+        Side.white,
+      );
     });
 
     test('detects orientation from player tags with placeholder opponent', () {
@@ -69,6 +120,28 @@ void main() {
         resolveChapterOrientation({'White': 'White Repertoire', 'Black': 'Karpov'}),
         Side.white,
       );
+      expect(
+        resolveChapterOrientation({'White': 'Kasparov', 'Black': 'Black Repertoire'}),
+        Side.black,
+      );
+    });
+
+    test('resolves White orientation for White study chapters starting after 1. e4', () {
+      const pgn = '''
+[Event "White Vs [French]: Opening [Nc3 Bb4]"]
+[StudyName "White Vs [French]"]
+[ChapterName "Opening [Nc3 Bb4]"]
+[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]
+[SetUp "1"]
+
+1... e6 2. d4 d5 3. Nc3 Bb4 *
+''';
+      final result = importPgn(pgn);
+      expect(result.chapters.first.orientation, Side.white);
+      // Moves for White should be derived as decisions: 2. d4 and 3. Nc3
+      expect(result.decisions.length, 2);
+      expect(result.decisions.first.expectedMoves.first.san, 'd4');
+      expect(result.decisions.last.expectedMoves.first.san, 'Nc3');
     });
 
     test('explicitSide parameter overrides headers', () {

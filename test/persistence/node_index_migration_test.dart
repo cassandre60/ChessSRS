@@ -63,7 +63,7 @@ void main() {
 
       final upgraded = await openAppDatabase(databaseFactoryFfi, dbPath);
       try {
-        expect((await upgraded.rawQuery('PRAGMA user_version')).single['user_version'], 22);
+        expect((await upgraded.rawQuery('PRAGMA user_version')).single['user_version'], 23);
         final rows = await upgraded.query(
           kTableSrsNode,
           where: 'chapterId = ?',
