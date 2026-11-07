@@ -133,7 +133,7 @@ void main() {
         // the upgrade never duplicated the row.
         await db.close();
         final reopened = await openAppDatabase(databaseFactoryFfi, dbPath);
-        expect((await reopened.rawQuery('PRAGMA user_version')).single['user_version'], 22);
+        expect((await reopened.rawQuery('PRAGMA user_version')).single['user_version'], 23);
         final rows = await reopened.query(kTableSrsDecision);
         expect(rows, hasLength(1), reason: 'the retried backfill duplicated the decision row');
         expect(rows.single['fenKey'], _childFen);
@@ -185,7 +185,7 @@ void main() {
       await _seedV20Fixture(dbPath);
 
       final upgraded = await openAppDatabase(databaseFactoryFfi, dbPath);
-      expect((await upgraded.rawQuery('PRAGMA user_version')).single['user_version'], 22);
+      expect((await upgraded.rawQuery('PRAGMA user_version')).single['user_version'], 23);
       expect((await upgraded.query(kTableSrsDecision)).single['fenKey'], _childFen);
       await upgraded.close();
 

@@ -25,6 +25,17 @@ class ChapterOrientationRepairResult {
 /// correcting chapters where an overly strict keyword check or custom starting FEN
 /// inverted the player perspective.
 Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecutor db) async {
+  // Guarded on the tables existing, as v18/v20/v21 are: hand-built fixtures
+  // (and only fixtures) can carry a version without the SRS tables.
+  for (final table in const [kTableSrsChapter, kTableSrsStudy]) {
+    final rows = await db.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    );
+    if (rows.isEmpty) {
+      return const ChapterOrientationRepairResult(repaired: 0, unchanged: 0);
+    }
+  }
   final rows = await db.rawQuery('''
     SELECT c.id, c.studyId, s.title AS studyTitle, c.title AS chapterTitle,
            c.startingFen, c.orientation, c.treeJson
@@ -63,9 +74,12 @@ Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecuto
       if (studyTitle.isNotEmpty) 'Study': studyTitle,
     };
 
-    final resolved = resolveChapterOrientation(headers, startTurn: startTurn);
-
-    if (resolved == currentOrientation) {
+    // Conservative by design: the repair only flips a chapter when its own
+    // titles name a side. It must never infer a side from the starting-FEN turn
+    // or from the absence of a keyword — a wrong guess rewrites a legitimate
+    // Black repertoire into a White one and re-derives (deletes) its decisions.
+    final resolved = explicitChapterOrientation(headers);
+    if (resolved == null || resolved == currentOrientation) {
       unchanged++;
       continue;
     }

@@ -121,87 +121,87 @@ void main() {
       expect(rerun.unchanged, 1);
     });
 
-    test(
-      'repairs studies named after opponent openings (e.g. French Defense) without explicit color keywords',
-      () async {
-        const studyId = 'study-french-bible';
-        const chapterId = 'ch-french-bible-1';
-        final now = DateTime.now().toUtc().toIso8601String();
+    test('leaves an unlabelled tabia alone: no explicit side means no repair', () async {
+      const studyId = 'study-french-bible';
+      const chapterId = 'ch-french-bible-1';
+      final now = DateTime.now().toUtc().toIso8601String();
 
-        // Study title has no "White" keyword, but is an opening name
-        await db.insert(kTableSrsStudy, {
-          'id': studyId,
-          'title': 'French Defense Listudy Bible',
-          'createdAt': now,
-          'updatedAt': now,
-          'isActive': 1,
-        });
+      // Study title has no "White" keyword, but is an opening name
+      await db.insert(kTableSrsStudy, {
+        'id': studyId,
+        'title': 'French Defense Listudy Bible',
+        'createdAt': now,
+        'updatedAt': now,
+        'isActive': 1,
+      });
 
-        // Tabia after 1. e4 e6 2. d4 d5 3. Nc3 (Black to move)
-        const startingFen = 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq - 0 1';
-        const rootNode = RepertoireNode(
-          id: 'root-tabia',
-          fen: startingFen,
-          fenKey: 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq -',
-          children: [
-            RepertoireNode(
-              id: 'node-nf6',
-              fen: 'rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 1 2',
-              fenKey: 'rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq -',
-              incomingMove: RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
-              children: [
-                RepertoireNode(
-                  id: 'node-e5',
-                  fen: 'rnbqkb1r/ppp2ppp/4pn2/3pP3/3P4/2N5/PPP2PPP/R1BQKBNR b KQkq - 0 2',
-                  fenKey: 'rnbqkb1r/ppp2ppp/4pn2/3pP3/3P4/2N5/PPP2PPP/R1BQKBNR b KQkq -',
-                  incomingMove: RepertoireMove(from: 'e4', to: 'e5', san: 'e5'),
-                ),
-              ],
-            ),
-          ],
-        );
+      // Tabia after 1. e4 e6 2. d4 d5 3. Nc3 (Black to move)
+      const startingFen = 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq - 0 1';
+      const rootNode = RepertoireNode(
+        id: 'root-tabia',
+        fen: startingFen,
+        fenKey: 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'node-nf6',
+            fen: 'rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 1 2',
+            fenKey: 'rnbqkb1r/ppp2ppp/4pn2/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR w KQkq -',
+            incomingMove: RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'rnbqkb1r/ppp2ppp/4pn2/3pP3/3P4/2N5/PPP2PPP/R1BQKBNR b KQkq - 0 2',
+                fenKey: 'rnbqkb1r/ppp2ppp/4pn2/3pP3/3P4/2N5/PPP2PPP/R1BQKBNR b KQkq -',
+                incomingMove: RepertoireMove(from: 'e4', to: 'e5', san: 'e5'),
+              ),
+            ],
+          ),
+        ],
+      );
 
-        final treeJson = jsonEncode(repertoireNodeToJson(rootNode));
+      final treeJson = jsonEncode(repertoireNodeToJson(rootNode));
 
-        // Was wrongly imported as black because startTurn was black
-        await db.insert(kTableSrsChapter, {
-          'id': chapterId,
-          'studyId': studyId,
-          'sourceOrder': 0,
-          'title': 'Opening [Nce2 f4] Main Lines',
-          'startingFen': startingFen,
-          'createdAt': now,
-          'treeJson': treeJson,
-          'orientation': 'black',
-        });
+      // Was wrongly imported as black because startTurn was black
+      await db.insert(kTableSrsChapter, {
+        'id': chapterId,
+        'studyId': studyId,
+        'sourceOrder': 0,
+        'title': 'Opening [Nce2 f4] Main Lines',
+        'startingFen': startingFen,
+        'createdAt': now,
+        'treeJson': treeJson,
+        'orientation': 'black',
+      });
 
-        await db.insert(kTableSrsDecision, {
-          'id': 'dec-old-black-nf6',
-          'studyId': studyId,
-          'chapterId': chapterId,
-          'nodeId': 'root-tabia',
-          'expectedMoves': encodeExpectedMoves([
-            const RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
-          ]),
-          'canonicalStateId': 'canon-old-nf6',
-          'fenKey': 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq -',
-        });
+      await db.insert(kTableSrsDecision, {
+        'id': 'dec-old-black-nf6',
+        'studyId': studyId,
+        'chapterId': chapterId,
+        'nodeId': 'root-tabia',
+        'expectedMoves': encodeExpectedMoves([
+          const RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
+        ]),
+        'canonicalStateId': 'canon-old-nf6',
+        'fenKey': 'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/2N5/PPP2PPP/R1BQKBNR b KQkq -',
+      });
 
-        // Run repair
-        final result = await repairChapterOrientations(db);
-        expect(result.repaired, 1);
+      // Run repair. The title names no side, so the repair must NOT guess:
+      // flipping here is the corruption mode the conservative rule prevents.
+      final result = await repairChapterOrientations(db);
+      expect(result.repaired, 0);
+      expect(result.unchanged, 1);
 
-        // Orientation must default to white per INV-013, not black
-        final chRows = await db.query(kTableSrsChapter, where: 'id = ?', whereArgs: [chapterId]);
-        expect(chRows.first['orientation'], 'white');
-
-        // Decisions must now train White: 4. e5
-        final decRows = await db.query(kTableSrsDecision, where: 'chapterId = ?', whereArgs: [chapterId]);
-        expect(decRows.length, 1);
-        final expected = decodeExpectedMoves(decRows.first['expectedMoves']! as String);
-        expect(expected.first.san, 'e5');
-      },
-    );
+      // Orientation is untouched, and so are the decisions.
+      final chRows = await db.query(kTableSrsChapter, where: 'id = ?', whereArgs: [chapterId]);
+      expect(chRows.first['orientation'], 'black');
+      final decRows = await db.query(
+        kTableSrsDecision,
+        where: 'chapterId = ?',
+        whereArgs: [chapterId],
+      );
+      expect(decRows.length, 1);
+      expect(decRows.first['id'], 'dec-old-black-nf6');
+    });
 
     test('repairs misclassified Black study chapters starting at move 1', () async {
       const studyId = 'study-black-italian';
