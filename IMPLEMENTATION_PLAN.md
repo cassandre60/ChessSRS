@@ -127,6 +127,43 @@ No code for a fix exists: the prefix rehearsal is not redundant, and its removal
 sidelines unreachable (three pinned fullLine continuity tests prove this; the attempt was made and
 reverted).
 
+### Delivered 2026-11-06 — full-line guided targets no longer vanish (#542)
+
+- **Owner-reported defect** (issue #542): with `byLine`/`fullLine`, a correct answer
+  at a line start whose guide route differs from the user's chosen valid move
+  (both transposition-chapter line starts accept two repertoire moves, e.g.
+  Nf6 *or* d5) made the session re-show the identical line start and then
+  **silently consume the queued target** — popped for the guided pass at
+  `review_session.dart` `_advanceToNextDue` and never re-inserted. Reproduced
+  from the 2026-11-06 21:17–21:19 session logs: three admitted fresh targets
+  (`1b638209`, `cc8ff2cf`, and A15's `fb7e5a71` route) dropped with no prompt
+  and no log; the HUD sat at "0 due · 1 done". Root cause isolated via DB + an
+  embedded `app_log` walk; the orientation-repair migration (INV-013) is not
+  involved (FSRS grading kept proper rows throughout).
+- **Fix** (`fix/review-guided-target-loss`): the guided pass records its popped
+  target as pending delivery (`_pendingGuidedTarget`); the walk prompt, the
+  in-line lapse continuation (`_advanceWithinLine`), the walk fall-through,
+  `skip()` and `continueAfterIncorrect` settle it — delivery clears the
+  promise, anything else returns the target to the back of the queue for one
+  honest retry per canonical per session (`_guidedRestored`), then a logged
+  hold-back. `restoreCheckpoint` drops a stale promise. The pinned three-pass
+  dance, INV-068 hold-backs and the prefix rehearsal stay unchanged.
+- **Evidence (G09 fail-to-pass)**: regression test "a guided walk that misses
+  its target returns it to the queue for a later pass"
+  (`test/review/review_session_test.dart`) fails on origin/main with
+  `Expected: 'dec-f-ls' / Actual: <null>` and passes with the fix; full file
+  53/53 green (`fvm flutter test test/review/review_session_test.dart
+  --concurrency=1`); `dart analyze` on `lib/src/domain/review` + `test/review`
+  clean. Why existing tests missed it: the guided-walk fixture pins a
+  single-valid-move line start (divergence unmodelled), INV-068 tests pin the
+  hold-back break in isolation, and nothing asserted the session-level
+  liveness property "admitted targets are prompted or logged-held-back".
+- **Deliberately not in scope**: no settings change (the owner declined the
+  fullLine remedy on 2026-11-06; prefix rehearsal stays). Follow-ups for
+  separate decisions: guide-route hint in the UI, stale move-highlight on
+  re-prompted line starts, and the SPEC invariant addition via the protected
+  lane (tracked in #542).
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`

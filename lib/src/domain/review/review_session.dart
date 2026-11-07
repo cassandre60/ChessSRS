@@ -511,6 +511,16 @@ class ReviewSession {
   /// Branch choices follow it; empty means PGN tree order.
   List<String> _guidedNodeIds = const [];
 
+  /// The admitted target a guided pass is currently walking toward. The
+  /// guided pop consumed it from the queue, so the walk owes it delivery; if
+  /// the walk ends without prompting it, [_abandonGuidedTarget] puts it back.
+  RepertoireDecision? _pendingGuidedTarget;
+
+  /// Canonicals already returned to the queue once after a missed guided walk.
+  /// Each admitted target earns one honest retry per session; a second miss is
+  /// a logged hold-back, not an unbounded same-position loop.
+  final Set<String> _guidedRestored = {};
+
   /// Canonical ids queued as never-presented introductions (INV-068).
   ///
   /// Snapshot at queue-build time and never mutated afterwards, so it needs no
@@ -662,6 +672,9 @@ class ReviewSession {
       ..clear()
       ..addAll(checkpoint.pendingRetestIds);
     _currentPrompt = checkpoint.currentPrompt;
+    // The restored timeline rewound every reference the pending target had,
+    // including its own queue membership: a stale promise must not survive it.
+    _pendingGuidedTarget = null;
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
   }
 
@@ -991,6 +1004,9 @@ class ReviewSession {
           // Next decision along this branch.
           _dequeueDecision(nextDecision);
           _currentPrompt = _buildPrompt(decision: nextDecision, node: opponentChild);
+          _settlePendingGuidedTarget(
+            delivered: nextDecision.canonicalId == _pendingGuidedTarget?.canonicalId,
+          );
           final trail = autoPlayed
               .map((m) => '${m.move.san ?? m.move.uci}${m.isUserMove ? '*' : ''}')
               .join(' ');
@@ -1074,7 +1090,10 @@ class ReviewSession {
       }
     }
 
-    // Reached the end of the current line; advance to the next due decision in queue
+    // Reached the end of the current line; advance to the next due decision in
+    // queue. A guided pass's target the walk never prompted ("delivered")
+    // rejoins the queue here first.
+    _settlePendingGuidedTarget(delivered: false);
     _advanceToNextDue();
 
     return ReviewStepResult(
@@ -1095,6 +1114,7 @@ class ReviewSession {
   /// already requeued), so a lapse never teleports into another line.
   void continueAfterIncorrect() {
     if (continuity == ReviewContinuity.fullLine && _advanceWithinLine()) return;
+    _settlePendingGuidedTarget(delivered: false);
     _advanceToNextDue();
   }
 
@@ -1114,6 +1134,9 @@ class ReviewSession {
     if (_isHeldBackFresh(nextDecision)) return false;
     _dequeueDecision(nextDecision);
     _currentPrompt = _buildPrompt(decision: nextDecision, node: nextNode);
+    _settlePendingGuidedTarget(
+      delivered: nextDecision.canonicalId == _pendingGuidedTarget?.canonicalId,
+    );
     _logger.info(
       'Lapse continue at ${nextDecision.canonicalId} (${prompt.decision.canonicalId} requeued)',
     );
@@ -1125,6 +1148,37 @@ class ReviewSession {
     _dueQueue.removeWhere((d) => d.id == decision.id || d.canonicalId == decision.canonicalId);
     _unbufferedQueue.removeWhere(
       (d) => d.id == decision.id || d.canonicalId == decision.canonicalId,
+    );
+  }
+
+  /// Settles the guided pass's pending target after a step produced a prompt.
+  ///
+  /// Delivery (the walk or an in-line continuation reached the target itself)
+  /// clears the promise; anything else puts the target back at the end of the
+  /// queue. The target was admitted for introduction this session, so a correct
+  /// answer that diverges from the guide route must not consume it. One honest
+  /// retry per canonical per session, then a logged hold-back — the next
+  /// session's admission pass re-admits the position either way.
+  void _settlePendingGuidedTarget({required bool delivered}) {
+    final pending = _pendingGuidedTarget;
+    if (pending == null) return;
+    _pendingGuidedTarget = null;
+    if (delivered || _completedDecisionIds.contains(pending.canonicalId)) return;
+    if (!_guidedRestored.add(pending.canonicalId)) {
+      _logger.info(
+        'Queued ${pending.canonicalId} missed its guided walk again; introduction '
+        'held back for a later session',
+      );
+      return;
+    }
+    if (_unbufferedQueue.isNotEmpty) {
+      _unbufferedQueue.add(pending);
+    } else {
+      _dueQueue.add(pending);
+    }
+    _logger.info(
+      'Queued ${pending.canonicalId} missed its guided walk; restored to the back '
+      'of the queue for a later pass',
     );
   }
 
@@ -1140,6 +1194,9 @@ class ReviewSession {
     } else {
       _dueQueue.add(skippedDecision);
     }
+    // The skipped prompt may have been a guided pass's re-opened line start;
+    // its target must not be lost just because the user skipped the prefix.
+    _settlePendingGuidedTarget(delivered: false);
     _advanceToNextDue();
     return _currentPrompt;
   }
@@ -1189,8 +1246,15 @@ class ReviewSession {
       final start = _lineStartFor(nextDecision);
       // INV-068: don't open a held-back fresh ancestor (practice is exempt).
       if (start != null && !_isHeldBackFresh(start.decision)) {
-        if (!guided) _lineStartAttempted.add(nextDecision.canonicalId);
-        if (!guided) _dueQueue.insert(0, nextDecision);
+        if (!guided) {
+          _lineStartAttempted.add(nextDecision.canonicalId);
+          _dueQueue.insert(0, nextDecision);
+        } else {
+          // The dedicated walk consumed this target on its pop. If the user's
+          // valid answer diverges from the guide route, the walk stops short —
+          // then the target must return to the queue, not vanish.
+          _pendingGuidedTarget = nextDecision;
+        }
         _dequeueDecision(start.decision);
         _guidedNodeIds = guided ? start.path : const [];
         _currentPrompt = _buildPrompt(decision: start.decision, node: start.node);
