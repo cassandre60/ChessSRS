@@ -336,6 +336,30 @@ class ReviewScreenState {
       maxDailyReviews: maxDailyReviews ?? this.maxDailyReviews,
     );
   }
+
+  /// Drops the answer UI of the prompt the state belongs to: no banner, no
+  /// arrow, no comment, no pending Continue, no unacknowledged lapse, and no
+  /// last-move highlight.
+  ///
+  /// A prompt that arrives while one of those still stands would inherit a
+  /// verdict or a revealed comment for a line it no longer shows. Every path
+  /// that replaces the prompt out from under the learner therefore produces
+  /// the same blank answer UI first: requeuing through study toggling or
+  /// deletion, lapse acknowledgement, skip, and completing an advancement all
+  /// apply this, so the field list lives here once instead of in per-site
+  /// blocks. A fresh session load ([ReviewController._loadState]) never carries
+  /// answer UI in the first place, so it has no list to step on.
+  ReviewScreenState withoutAnswerUi() {
+    return copyWith(
+      feedback: ReviewFeedback.none,
+      clearExpectedMove: true,
+      isLapseAcknowledged: true,
+      isAwaitingAdvance: false,
+      clearLastMove: true,
+      clearRevealedComment: true,
+      clearLastStepResult: true,
+    );
+  }
 }
 
 /// Provider for [ReviewController].
@@ -992,18 +1016,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       boardOrientation: newOrientation,
     );
     if (needsSessionRefresh) {
-      // The prompt is fresh, so no answer UI from the old line may survive on it: no banner,
-      // no arrow, no comment, no pending Continue — the same reset acknowledging a lapse or
-      // skipping performs.
-      published = published.copyWith(
-        feedback: ReviewFeedback.none,
-        clearExpectedMove: true,
-        isLapseAcknowledged: true,
-        isAwaitingAdvance: false,
-        clearLastMove: true,
-        clearRevealedComment: true,
-        clearLastStepResult: true,
-      );
+      // The prompt is fresh, so no answer UI from the old line may survive on it.
+      published = published.withoutAnswerUi();
     }
     state = AsyncData(published);
   }
@@ -1059,7 +1073,7 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
       final prompt = session.currentPrompt;
       state = AsyncData(
-        currentState.copyWith(
+        currentState.withoutAnswerUi().copyWith(
           studies: updatedStudies,
           totalDueCount: summary.totalDueCount,
           studyDueCounts: summary.studyDueCounts,
@@ -1076,13 +1090,6 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
           clearPrompt: prompt == null,
           boardPosition: prompt != null ? _parseFen(prompt.fen) : null,
           boardOrientation: prompt?.sideToMove ?? Side.white,
-          feedback: ReviewFeedback.none,
-          clearExpectedMove: true,
-          isLapseAcknowledged: true,
-          isAwaitingAdvance: false,
-          clearLastMove: true,
-          clearRevealedComment: true,
-          clearLastStepResult: true,
         ),
       );
     }
@@ -1505,8 +1512,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       }
     }
 
+    final liveState = state.value!;
+    final liveLastMove = liveState.lastMove;
     state = AsyncData(
-      state.value!.copyWith(
+      liveState.withoutAnswerUi().copyWith(
         dailyReviewedCount: updatedDailyCount,
         totalDueCount: newTotalDue,
         totalFreshCount: newTotalFresh,
@@ -1522,19 +1531,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         clearPrompt: nextPrompt == null,
         boardPosition: nextPosition,
         boardOrientation: nextOrientation,
-        feedback: ReviewFeedback.none,
-        clearExpectedMove: true,
-        isLapseAcknowledged: true,
-        isAwaitingAdvance: false,
         pendingUnlock: pendingUnlock,
         clearPendingUnlock: pendingUnlock == null,
-        lastMove: shouldAnimateBranchPreMove
-            ? null
-            : (opponentMoves.isNotEmpty ? state.value?.lastMove : null),
+        lastMove: shouldAnimateBranchPreMove ? null : liveLastMove,
         clearLastMove: shouldAnimateBranchPreMove,
-        revealedComment: null,
-        clearRevealedComment: true,
-        clearLastStepResult: true,
       ),
     );
 
@@ -1767,18 +1767,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     state = AsyncData(
-      currentState.copyWith(
+      currentState.withoutAnswerUi().copyWith(
         currentPrompt: nextPrompt,
         clearPrompt: nextPrompt == null,
         boardPosition: nextPosition,
         boardOrientation: nextOrientation,
-        feedback: ReviewFeedback.none,
-        clearExpectedMove: true,
-        isLapseAcknowledged: true,
-        isAwaitingAdvance: false,
-        clearLastMove: true,
-        clearRevealedComment: true,
-        clearLastStepResult: true,
       ),
     );
 
@@ -1810,18 +1803,11 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     }
 
     state = AsyncData(
-      currentState.copyWith(
+      currentState.withoutAnswerUi().copyWith(
         currentPrompt: nextPrompt,
         clearPrompt: nextPrompt == null,
         boardPosition: nextPosition,
         boardOrientation: nextOrientation,
-        feedback: ReviewFeedback.none,
-        clearExpectedMove: true,
-        isLapseAcknowledged: true,
-        isAwaitingAdvance: false,
-        clearLastMove: true,
-        clearRevealedComment: true,
-        clearLastStepResult: true,
       ),
     );
 
