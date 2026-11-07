@@ -1,6 +1,7 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
@@ -9,11 +10,10 @@ import 'package:chess_srs/src/model/common/speed.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
 import 'package:chess_srs/src/model/game/game_filter.dart';
-import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/game/game_history.dart';
 import 'package:chess_srs/src/model/game/game_repository.dart';
-import 'package:chess_srs/src/model/game/game_storage.dart';
 import 'package:chess_srs/src/model/game/game_status.dart';
+import 'package:chess_srs/src/model/game/game_storage.dart';
 import 'package:chess_srs/src/model/game/player.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -169,13 +169,13 @@ void main() {
       final container = await makeContainer(
         authUser: _alice,
         overrides: {
-          accountProvider: accountProvider.overrideWith((ref) async => accountUser),
-          gameStorageProvider: gameStorageProvider.overrideWith((ref) async => storage),
+          accountProvider: accountProvider.overrideWith((ref) => accountUser),
+          gameStorageProvider: gameStorageProvider.overrideWith((ref) => storage),
         },
       );
       addTearDown(container.dispose);
 
-      final sub = container.listen(userNumberOfGamesProvider(null), (_, __) {});
+      final sub = container.listen(userNumberOfGamesProvider(null), (_, _) {});
       addTearDown(sub.close);
 
       final count = await container.read(userNumberOfGamesProvider(null).future);
