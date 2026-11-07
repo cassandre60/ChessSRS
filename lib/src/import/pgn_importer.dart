@@ -488,8 +488,14 @@ Future<ImportResult> importPgnAsync(
 /// for imports (INV-013); migrations use this instead.
 Side? explicitChapterOrientation(PgnHeaders headers) {
   final orientationTag = headers['Orientation']?.trim().toLowerCase();
-  if (orientationTag == 'black') return Side.black;
-  if (orientationTag == 'white') return Side.white;
+  if (orientationTag == 'black') {
+    _logger.fine('Orientation resolved via explicit header: black');
+    return Side.black;
+  }
+  if (orientationTag == 'white') {
+    _logger.fine('Orientation resolved via explicit header: white');
+    return Side.white;
+  }
 
   final titleCandidates = [
     headers['ChapterName'],
@@ -500,8 +506,14 @@ Side? explicitChapterOrientation(PgnHeaders headers) {
   ];
   for (final candidate in titleCandidates) {
     if (candidate == null || candidate.trim().isEmpty) continue;
-    if (_blackOrientationKeywords.hasMatch(candidate)) return Side.black;
-    if (_whiteOrientationKeywords.hasMatch(candidate)) return Side.white;
+    if (_blackOrientationKeywords.hasMatch(candidate)) {
+      _logger.fine('Orientation resolved via keyword in "$candidate": black');
+      return Side.black;
+    }
+    if (_whiteOrientationKeywords.hasMatch(candidate)) {
+      _logger.fine('Orientation resolved via keyword in "$candidate": white');
+      return Side.white;
+    }
   }
   return null;
 }
@@ -536,12 +548,9 @@ Side resolveChapterOrientation(
 
   // 2. Explicit Orientation tag and 3. title-keyword heuristics. Shared with
   // the v23 repair migration, which uses the same matcher without the
-  // default-to-White fallback.
+  // default-to-White fallback. `explicitChapterOrientation` logs the match.
   final explicit = explicitChapterOrientation(headers);
-  if (explicit != null) {
-    _logger.fine('Orientation resolved explicitly: ${explicit.name}');
-    return explicit;
-  }
+  if (explicit != null) return explicit;
 
   // 4. Player tags heuristic
   final white = headers['White']?.trim();
