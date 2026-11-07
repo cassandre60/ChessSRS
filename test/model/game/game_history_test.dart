@@ -9,8 +9,10 @@ import 'package:chess_srs/src/model/common/speed.dart';
 import 'package:chess_srs/src/model/game/exported_game.dart';
 import 'package:chess_srs/src/model/game/game.dart';
 import 'package:chess_srs/src/model/game/game_filter.dart';
+import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/game/game_history.dart';
 import 'package:chess_srs/src/model/game/game_repository.dart';
+import 'package:chess_srs/src/model/game/game_storage.dart';
 import 'package:chess_srs/src/model/game/game_status.dart';
 import 'package:chess_srs/src/model/game/player.dart';
 import 'package:chess_srs/src/model/user/user.dart';
@@ -24,6 +26,8 @@ import 'package:mocktail/mocktail.dart';
 import '../../test_container.dart';
 
 class MockGameRepository extends Mock implements GameRepository {}
+
+class MockGameStorage extends Mock implements GameStorage {}
 
 /// An auth controller a test can sign in and out of, so a rebuild can be provoked the way
 /// signing out of one account and into another does in the app.
@@ -147,6 +151,37 @@ void main() {
       expect(container.read(provider).requireValue.gameList.map((e) => e.game.id), [
         const GameId('cccccc33'),
       ], reason: "bob's history must be his games alone, not alice's followed by his");
+    });
+  });
+
+  group('UserNumberOfGamesProvider', () {
+    test('uses the account count for a logged-in user when online and the server is up', () async {
+      const accountUser = User(
+        id: UserId('alice'),
+        username: 'alice',
+        perfs: IMap.empty(),
+        count: UserGameCount(all: 42, bookmark: 0),
+      );
+
+      final storage = MockGameStorage();
+      when(() => storage.count(userId: any(named: 'userId'))).thenAnswer((_) async => 7);
+
+      final container = await makeContainer(
+        authUser: _alice,
+        overrides: {
+          accountProvider: accountProvider.overrideWith((ref) async => accountUser),
+          gameStorageProvider: gameStorageProvider.overrideWith((ref) async => storage),
+        },
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(userNumberOfGamesProvider(null), (_, __) {});
+      addTearDown(sub.close);
+
+      final count = await container.read(userNumberOfGamesProvider(null).future);
+      expect(count, 42);
+
+      verifyNever(() => storage.count(userId: any(named: 'userId')));
     });
   });
 }
