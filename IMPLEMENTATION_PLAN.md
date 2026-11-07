@@ -979,6 +979,33 @@ Owner-reported: `flutter run` printed ~86 "newer available" lines and asked for
    and the `flutter: 3.47.7` environment floor are unchanged on purpose
    (pubspec comments; `engine_refactor.md` §13).
 
+## Review-state machine consolidation 2026-11-07 — answer-UI reset centralized
+
+Implicit-state-machines survey over the controllers (findings summarized in the
+two filed issues below). The sharpest drift risk was in `ReviewController`.
+
+1. **#549 — `refactor/review-clear-answer-ui`.** The seven-field answer-UI
+   reset (`feedback`/arrow/lapse banner/awaiting-advance/last move/comment/
+   step result) was hand-rewritten at five prompt-replacement sites
+   (toggle-study requeue, study delete, `acknowledgeLapse`, `skip`,
+   `_executeAdvancement`); it now lives once in
+   `ReviewScreenState.withoutAnswerUi()`, with the advancement's conditional
+   `lastMove` keep captured before the reset. Refactor class: no test files
+   modified, behavior-equivalent composition verified field-by-field
+   against the five pre-refactor blocks. Evidence: `dart format` clean,
+   targeted analyze clean, post-commit `./scripts/gates.sh t1` green (notably
+   G08 "no test-weakening patterns found", G07 "no protected paths touched",
+   G05 45/45), `test/review/review_controller_test.dart` 100/100
+   single-worker. Not runtime-validated (no app walkthrough — UI-identical
+   refactor; CI's full suite is the accept path).
+2. **#550 (issue)** — the six hand-rolled generation fences
+   (`_generation`/`_onlineStatusRevision`) recorded with their divergent
+   idioms; shared-abstraction proposal, owner decision requested, won't-fix
+   acknowledged as defensible.
+3. **#551 (issue)** — offline game's parallel busy booleans recorded with the
+   legal-combination/scope questions that must be answered before modulating
+   that state.
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
