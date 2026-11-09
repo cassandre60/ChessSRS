@@ -12,6 +12,7 @@ import 'package:chess_srs/src/model/game/game_repository.dart';
 import 'package:chess_srs/src/model/game/game_socket_events.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/socket.dart';
+import 'package:chess_srs/src/utils/request_generation.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,7 +70,7 @@ class ServerAnalysisService {
   /// request re-checks it before touching shared state. Starting a new request — or cancelling the
   /// current one — moves it on, so a continuation that was already in flight when the world moved
   /// on can tell that it is stale and drop out instead of overwriting the newer request.
-  int _requestGeneration = 0;
+  final RequestGeneration _requestGeneration = RequestGeneration();
 
   /// Request server analysis for a game.
   ///
@@ -85,8 +86,8 @@ class ServerAnalysisService {
     }
 
     _cancelAnalysis();
-    final generation = _requestGeneration;
-    bool isCurrent() => generation == _requestGeneration;
+    final generation = _requestGeneration.claim();
+    bool isCurrent() => _requestGeneration.isCurrent(generation);
 
     final uri = Uri(
       path: switch (source) {
@@ -191,7 +192,7 @@ class ServerAnalysisService {
   void _cancelAnalysis() {
     // Retire the current request first, so any continuation still in flight for it becomes stale
     // and bails rather than writing into the state this is about to clear.
-    _requestGeneration++;
+    _requestGeneration.claim();
     _socketSubscription?.cancel();
     _socketSubscription = null;
     _currentAnalysis.value = null;
