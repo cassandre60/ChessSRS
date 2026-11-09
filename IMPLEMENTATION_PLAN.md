@@ -164,6 +164,51 @@ reverted).
   re-prompted line starts, and the SPEC invariant addition via the protected
   lane (tracked in #542).
 
+### Delivered 2026-11-09 — each line start asked once; missed targets delivered as a plain board jump (#542 follow-up)
+
+- **Owner-reported defect** (issue #542, second half): with the 2026-11-06
+  fix in place on the owner's library, real sessions still re-showed the
+  identical line start. The 2026-11-09 trace showed three per-target
+  rehearsal re-asks in a ~12-board session (e5 at 16:01:49→16:18:23,
+  e5 16:18:37→16:19:10, c4 16:19:24) plus a linear residue of the same root
+  design: per-target walk markers can never express "this board was already
+  answered once".
+- **Owner-approved behavior (2026-11-09)**: a line start already answered
+  anywhere in the session is never asked again. The pop path records every
+  ask in `_askedPromptDecisionIds` (set in `_buildPrompt`, any ask counts) and,
+  for a target whose start is recorded, prompts the target directly as a
+  **plain board jump** — no route is auto-played for the learner. The
+  owner rejected the interim auto-played demonstration trail ("it is now
+  playing my moves too"); the trail field, controller replay loop and
+  `_trailForPath` helper never enter this branch — the jump delivers with the
+  card's own position and its spec'd context (chapter title + notation line).
+- **Dedicated-walk machinery removed, not repaired** (`_guidedNodeIds`,
+  `_pendingGuidedTarget`, `_settlePendingGuidedTarget`, `_guidedChild`,
+  `_guidedRestored`): every branch of the earlier design — rehearsal
+  re-ask, guided divergence re-walk, honest-retry restore — could re-ask an
+  answered board or leave the machine playing the user's moves; the
+  once-per-session rule makes the same outcome (no silent consumption of an
+  admitted target) with one mechanism. Walks remain tree-order, never steered
+  (INV-022's due-aware steering untouched in due-only mode).
+- **Lapses**: `continueAfterIncorrect` in full-line mode re-delivers the
+  failed card directly (the answered prefix is never re-walked, so the SPEC
+  INV-025 practice-rehearsal exception has no remaining live instance — the
+  no-double-grade property is now structural). A corrected false start still
+  writes no event (review-3 C2 / D015 unchanged).
+- **Evidence**: `fullLine never re-asks a line start the session already
+  answered` (new, `test/review/review_continuity_test.dart`) and the
+  rewritten lapse/geometry/missed-sideline tests fail on the pre-follow-up
+  engine (bbb20889e) — re-asks rehearse the start instead of delivering —
+  and pass here; the whole `test/review` folder runs 304/304 green with
+  `--concurrency=1`; `dart analyze lib/src/domain/review lib/src/review
+  test/review` clean. Owner run on the live library (2026-11-09 21:01–21:03):
+  15 direct deliveries logged ("Delivered queued ... directly; its line
+  start was asked earlier this session"), no repeated line start, due count
+  236→231, and no auto-played user moves.
+- **Docs**: D019 amended (supersedes the pending-delivery wording);
+  `docs/review.md` full-line section describes direct delivery and the
+  once-per-session rule.
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
