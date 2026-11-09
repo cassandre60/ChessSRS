@@ -492,7 +492,7 @@ Future<void> _seedSharedSideInstall(Database db) async {
 Future<void> _expectCurrentSchema(Database db) async {
   expect(
     (await db.rawQuery('PRAGMA user_version')).single['user_version'],
-    22,
+    23,
     reason: 'the upgrade must persist the new schema version',
   );
 
