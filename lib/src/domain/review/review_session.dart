@@ -696,14 +696,41 @@ class ReviewSession {
 
     if (expectedMatch != null) {
       _completedDecisionIds.add(decision.canonicalId);
+
+      // If the user played a move via transposition (e.g. played 2. e5 when the
+      // prompt expected 2. exd5), mark the decision corresponding to the move
+      // actually played as completed and dequeue it so it is not asked again.
+      if (transposedStart != null) {
+        final playedDecisions = _decisionsByFenKey[prompt.fenKey]?.where(
+          (d) => d.expectedMoves.any((m) => m.matches(expectedMatch)),
+        );
+        if (playedDecisions != null) {
+          for (final d in playedDecisions) {
+            _completedDecisionIds.add(d.canonicalId);
+            _dequeueDecision(d);
+          }
+        }
+      }
+
+      // The decision the user actually played: if the move was a transposition
+      // at this position, attribute the review to the decision whose expected move
+      // matches what the user played.
+      final activeDecision =
+          (transposedStart != null
+              ? _decisionsByFenKey[prompt.fenKey]
+                    ?.where((d) => d.expectedMoves.any((m) => m.matches(expectedMatch)))
+                    .firstOrNull
+              : null) ??
+          decision;
+
       // -----------------------------------------------------------------------
       // CORRECT MOVE
       // -----------------------------------------------------------------------
       // Decision D015: a corrected false-start is graded once, as the lapse it already was. Grading
       // the re-test as a success too would tick repetitionCount up and push the due date out.
       // The re-test landing also clears the lapse's pending marker (review-3 C2).
-      final isCorrectedFalseStart = _lapsedThisSession.contains(decision.canonicalId);
-      if (isCorrectedFalseStart) _pendingRetest.remove(decision.canonicalId);
+      final isCorrectedFalseStart = _lapsedThisSession.contains(activeDecision.canonicalId);
+      if (isCorrectedFalseStart) _pendingRetest.remove(activeDecision.canonicalId);
 
       ReviewState nextState;
       ReviewEvent? event;
@@ -713,10 +740,10 @@ class ReviewSession {
         event = null;
       } else {
         final graphNode = GraphNode(
-          decisionId: decision.canonicalId,
+          decisionId: activeDecision.canonicalId,
           fen4: prompt.fenKey,
           expectedMoveUci: expectedMatch.uci,
-          hasCanonicalIdentity: decision.canonicalStateId != null,
+          hasCanonicalIdentity: activeDecision.canonicalStateId != null,
         );
         final graphResult = _coordinator.recordActiveReview(
           node: graphNode,
@@ -724,11 +751,15 @@ class ReviewSession {
           now: now,
         );
         nextState = graphResult.primaryState;
-        _reviewStates[decision.canonicalId] = nextState;
-        _reviewStates[decision.id] = nextState;
+        _reviewStates[activeDecision.canonicalId] = nextState;
+        _reviewStates[activeDecision.id] = nextState;
+        if (activeDecision.id != decision.id) {
+          _reviewStates[decision.canonicalId] = nextState;
+          _reviewStates[decision.id] = nextState;
+        }
 
         event = ReviewEvent(
-          decisionId: decision.canonicalId,
+          decisionId: activeDecision.canonicalId,
           when: now,
           result: ReviewResult.correct,
           oldState: prevState,
@@ -737,7 +768,7 @@ class ReviewSession {
       }
 
       _logger.info(
-        'Move correct: ${expectedMatch.san ?? expectedMatch.uci} for decision ${decision.canonicalId} '
+        'Move correct: ${expectedMatch.san ?? expectedMatch.uci} for decision ${activeDecision.canonicalId} '
         '${transposedStart != null ? '(transposed line) ' : ''}'
         '(reps: ${nextState.repetitionCount}, stability: ${nextState.stability.toStringAsFixed(2)})',
       );
