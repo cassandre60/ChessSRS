@@ -35,11 +35,11 @@ void main() {
   });
 
   test('an older build refuses a newer database, archives it, and leaves it untouched', () async {
-    // A database a newer build wrote: schema v23 with one repertoire row in it.
+    // A database a newer build wrote: schema v24 with one repertoire row in it.
     final newer = await databaseFactoryFfi.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 23,
+        version: 24,
         onCreate: (db, version) async {
           await db.execute('CREATE TABLE srs_study (id TEXT PRIMARY KEY, title TEXT NOT NULL)');
           await db.insert('srs_study', {'id': 'st-1', 'title': 'Owner repertoire'});
@@ -52,12 +52,12 @@ void main() {
     try {
       opened = await openAppDatabase(databaseFactoryFfi, dbPath);
       fail(
-        'opening a v23 database from a v22 build must fail rather than '
+        'opening a v24 database from a v23 build must fail rather than '
         'recreate it empty (the pre-fix code deleted the file)',
       );
     } on DatabaseNewerVersionException catch (e) {
-      expect(e.oldVersion, 23);
-      expect(e.newVersion, 22, reason: 'the repo schema version that exists today');
+      expect(e.oldVersion, 24);
+      expect(e.newVersion, 23, reason: 'the repo schema version that exists today');
       expect(
         e.toString(),
         contains('Nothing was deleted'),
@@ -81,12 +81,12 @@ void main() {
     await snapshot.close();
 
     // The live file itself survives the refused open, byte for byte in
-    // shape: still v23, still carrying the row.
+    // shape: still v24, still carrying the row.
     final live = await databaseFactoryFfi.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(readOnly: true),
     );
-    expect((await live.rawQuery('PRAGMA user_version')).single['user_version'], 23);
+    expect((await live.rawQuery('PRAGMA user_version')).single['user_version'], 24);
     final liveRows = await live.rawQuery('SELECT count(*) FROM srs_study');
     expect(liveRows.single['count(*)'], 1);
     await live.close();
@@ -97,7 +97,7 @@ void main() {
         .openDatabase(
           dbPath,
           options: OpenDatabaseOptions(
-            version: 23,
+            version: 24,
             onCreate: (db, version) async {
               await db.execute('CREATE TABLE srs_study (id TEXT PRIMARY KEY, title TEXT NOT NULL)');
               await db.insert('srs_study', {'id': 'st-1', 'title': 'Owner repertoire'});

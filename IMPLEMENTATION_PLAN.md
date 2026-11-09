@@ -17,6 +17,43 @@ today's inventory or a fresh runtime pass.
 - Performance findings: docs/performance-handoff.md and its measurement brief;
   older noisy medians below are not optimization proof.
 
+### Delivered 2026-11-08 — the v23 repair was deleting review memory, and the owner's library was restored
+
+The headline bug behind "the same line over and over", found on the owner's real
+data and fixed end to end.
+
+- **What was wrong.** The v23 orientation repair (merged in #546) ran a cleanup
+  that deleted every `position_knowledge_state` row with no decision whose
+  `canonicalStateId` matched. That ignores the `canonicalStateId ?? id`
+  identity: a legacy decision with a NULL `canonicalStateId` keeps its review
+  memory keyed by its **decision id**, so the cleanup deleted it. Measured on
+  the owner's pre-v23 backup: the old rule deletes **303 of 412** knowledge
+  rows; the corrected rule deletes 0.
+- **The damage was already live.** The owner's library had been upgraded to v23
+  by the orientation branch build: knowledge rows **412 → 117**, with all 303
+  victim keys still present as decision ids. Positions whose memory was deleted
+  reset to due and were re-served — the repetition complained about since the
+  first message, now with a concrete mechanism.
+- **Fix landed** (#547, merged `972f27059`): the cleanup uses the same identity
+  as `RepertoireDecision.canonicalId`. New test
+  `test/persistence/v23_repair_preserves_memory_test.dart` upgrades a v22
+  database with a legacy decision and a flipped chapter and fails on the
+  pre-fix delete. Green: `test/db` 9, `migration_fixtures` 8,
+  `chapter_orientation_repair` 3, `node_index_migration` 2,
+  `fen_key_backfill` 6 + crash 3, all `--concurrency=1`.
+- **Owner's library restored** from their own pre-v23 snapshot
+  (`chess_srs.db.bak`, schema 22, 412 memory rows). The restore is additive and
+  keys on decision ids that still exist: knowledge rows **117 → 408**,
+  `PRAGMA integrity_check` ok, `user_version` 23, WAL checkpointed. Pre-recovery
+  copies kept at `/tmp/opencode/recover/` (both the damaged live DB and the
+  full-memory backup). Verified the app's own `openAppDatabase` opens the
+  restored library and the real-library harness runs green on it.
+- **Schema 23 is now on `main`** (#546 conservative repair + #547 memory fix),
+  so `~/Desktop/Github/ChessSRS` opens the owner's library directly.
+- **Still owner-only:** the on-device checklist
+  (`docs/manual-test-log.md`, "Review rotation — 2026-11-06") and the rotation
+  remedy decision.
+
 ### Delivered 2026-11-05 — downgrade no longer deletes the library; session start measured and cut
 
 Local commits on `fix/downgrade-archive` (not yet pushed). Both changes were
@@ -978,6 +1015,33 @@ Owner-reported: `flutter run` printed ~86 "newer available" lines and asked for
    separate per-package PRs. The git-pinned engine refs (`multistockfish`, `lc0`)
    and the `flutter: 3.47.7` environment floor are unchanged on purpose
    (pubspec comments; `engine_refactor.md` §13).
+
+## Review-state machine consolidation 2026-11-07 — answer-UI reset centralized
+
+Implicit-state-machines survey over the controllers (findings summarized in the
+two filed issues below). The sharpest drift risk was in `ReviewController`.
+
+1. **#549 — `refactor/review-clear-answer-ui`.** The seven-field answer-UI
+   reset (`feedback`/arrow/lapse banner/awaiting-advance/last move/comment/
+   step result) was hand-rewritten at five prompt-replacement sites
+   (toggle-study requeue, study delete, `acknowledgeLapse`, `skip`,
+   `_executeAdvancement`); it now lives once in
+   `ReviewScreenState.withoutAnswerUi()`, with the advancement's conditional
+   `lastMove` keep captured before the reset. Refactor class: no test files
+   modified, behavior-equivalent composition verified field-by-field
+   against the five pre-refactor blocks. Evidence: `dart format` clean,
+   targeted analyze clean, post-commit `./scripts/gates.sh t1` green (notably
+   G08 "no test-weakening patterns found", G07 "no protected paths touched",
+   G05 45/45), `test/review/review_controller_test.dart` 100/100
+   single-worker. Not runtime-validated (no app walkthrough — UI-identical
+   refactor; CI's full suite is the accept path).
+2. **#550 (issue)** — the six hand-rolled generation fences
+   (`_generation`/`_onlineStatusRevision`) recorded with their divergent
+   idioms; shared-abstraction proposal, owner decision requested, won't-fix
+   acknowledged as defensible.
+3. **#551 (issue)** — offline game's parallel busy booleans recorded with the
+   legal-combination/scope questions that must be answered before modulating
+   that state.
 
 ## Recording rule
 
