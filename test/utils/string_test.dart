@@ -49,10 +49,10 @@ void main() {
       expect('école'.capitalize(), 'École');
     });
 
-    test('empty string throws', () {
-      // Suspected bug: this[0] on an empty string is a RangeError rather than
-      // returning ''. Nothing in lib/ calls capitalize today, so it is latent.
-      expect(() => ''.capitalize(), throwsRangeError);
+    test('empty string stays empty', () {
+      // capitalize has no first character to upper-case on an empty string, so
+      // it returns the input unchanged rather than letting `this[0]` throw.
+      expect(''.capitalize(), '');
     });
   });
 
