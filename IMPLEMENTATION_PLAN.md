@@ -1049,7 +1049,7 @@ Follow-up execution of issue #550 per owner approval ("do the good no-risk
 ones"), scoped to what the issue itself proposed as safe: the two plainest
 fence adopters. Refactor change class.
 
-1. **#XXX — `refactor/shared-request-generation`.** New
+1. **`refactor/shared-request-generation`.** New
    `lib/src/utils/request_generation.dart` (`claim`/`isCurrent` over a
    monotonic counter) adopted by `ServerAnalysisService` (its capture +
    `isCurrent()` closure claims through the type) and
