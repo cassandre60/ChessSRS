@@ -456,10 +456,17 @@ Future<Database> _openAppDatabase(DatabaseFactory dbFactory, String path) {
             '${repaired.unchanged} unchanged',
           );
           if (repaired.repaired > 0) {
+            // Only rows orphaned by re-derivation may go. A legacy decision
+            // with a NULL canonicalStateId keeps its knowledge keyed by the
+            // decision id (`canonicalStateId ?? id`), so the identity must be
+            // the same expression here or the cleanup wipes live review memory.
             await db.delete(
               kTablePositionKnowledgeState,
               where:
-                  'NOT EXISTS (SELECT 1 FROM $kTableSrsDecision d WHERE d.canonicalStateId = $kTablePositionKnowledgeState.canonicalId)',
+                  'NOT EXISTS (SELECT 1 FROM $kTableSrsDecision d '
+                  'WHERE (CASE WHEN d.canonicalStateId IS NULL '
+                  'OR length(d.canonicalStateId) = 0 THEN d.id '
+                  'ELSE d.canonicalStateId END) = $kTablePositionKnowledgeState.canonicalId)',
             );
             await sweepOrphanedReviewStates(db);
           }
