@@ -180,6 +180,12 @@ owner agrees, perform the label/action and record whose consent it was.
 One shared account cannot distinguish human from agent approval; that accepted
 limitation is documented in open-questions Q5. Merging belongs to the merge agent.
 
+Every question put to the owner — including a request to merge commits or a PR —
+leads with a TLDR: the problem, each option (what it changes, its cost, what
+declining means) and the agent's recommendation, plus a one-line plain-language
+summary of each commit or PR offered for merge with the evidence that makes it
+safe. No bare questions.
+
 ## 11. Releases
 
 After a merged green batch, state one decision: release user-visible changes;

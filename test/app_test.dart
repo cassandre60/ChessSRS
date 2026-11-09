@@ -313,23 +313,23 @@ void main() {
         },
       );
 
-      expect(container.exists(reviewControllerProvider), isTrue);
+      expect(container.read(reviewControllerProvider.exists), isTrue);
     });
 
     testWidgets('the stored session is validated at startup', (tester) async {
       final container = await mountApp(tester);
 
-      expect(container.exists(startupTokenCheckProvider), isTrue);
+      expect(container.read(startupTokenCheckProvider.exists), isTrue);
     });
 
     testWidgets('the app starts its services at boot', (tester) async {
       final container = await mountApp(tester);
 
-      expect(container.exists(appLogServiceProvider), isTrue);
-      expect(container.exists(accountServiceProvider), isTrue);
-      expect(container.exists(quickActionServiceProvider), isTrue);
-      expect(container.exists(appLinksServiceProvider), isTrue);
-      expect(container.exists(sharedPgnServiceProvider), isTrue);
+      expect(container.read(appLogServiceProvider.exists), isTrue);
+      expect(container.read(accountServiceProvider.exists), isTrue);
+      expect(container.read(quickActionServiceProvider.exists), isTrue);
+      expect(container.read(appLinksServiceProvider.exists), isTrue);
+      expect(container.read(sharedPgnServiceProvider.exists), isTrue);
     });
   });
 

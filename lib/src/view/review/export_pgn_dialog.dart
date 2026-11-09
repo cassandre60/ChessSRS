@@ -51,8 +51,6 @@ class ExportPgnDialog extends StatelessWidget {
         dialogTitle: 'Save PGN File',
         fileName: fileName,
         bytes: bytes,
-        type: FileType.custom,
-        allowedExtensions: ['pgn'],
       );
 
       if (result != null && context.mounted) {
