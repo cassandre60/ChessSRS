@@ -56,6 +56,16 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   );
 });
 
+/// Number of lines the dynamic repertoire has unlocked.
+///
+/// Dynamic mode schedules a fresh position only once it is learned or
+/// unlocked, so this count is the honest answer to "why is the library not
+/// growing": zero means no new position can be introduced at all.
+final unlockedDecisionCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final repo = await ref.watch(srsStudyRepositoryProvider.future);
+  return (await repo.getUnlockedDecisionIds()).length;
+});
+
 /// Application service orchestrating review sessions, local persistence,
 /// and SRS updates.
 class DueCountsSummary {
@@ -777,7 +787,14 @@ class ReviewService {
 
     // Flat FEN→node index: a transposition lookup then decodes only the chapter
     // that holds the target, instead of every chapter tree (INV-050).
-    final nodeIndex = await repository.getNodeIndex(targetChapters.map((c) => c.id).toList());
+    //
+    // It serves transposition acceptance alone (INV-065), and every lookup
+    // returns early when transposeScope is off — so with transposition disabled
+    // the load would map every node of the scope for nothing (71k rows on the
+    // owner's library, ~0.4 s of session start). Skip it there.
+    final nodeIndex = transposeScope == TransposeScope.off
+        ? const <String, List<NodePosition>>{}
+        : await repository.getNodeIndex(targetChapters.map((c) => c.id).toList());
 
     final session = engine.createSession(
       studies: targetStudies,

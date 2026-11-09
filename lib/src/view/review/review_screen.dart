@@ -349,6 +349,7 @@ class _NothingDueView extends ConsumerWidget {
     final c = context.srs;
     final mediaQuery = MediaQuery.of(context);
     final progress = state.activeScopeProgress;
+    final session = state.session;
     // The three INV-068 states, read straight off the progress record so they
     // partition the scope instead of being re-derived from `learned`, which put
     // every due-but-unlearned position in two segments at once.
@@ -413,6 +414,10 @@ class _NothingDueView extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (session != null &&
+                            session.dynamicRepertoireMode &&
+                            session.unlockedDecisionIds.isEmpty)
+                          const _FreezeBannerHost(),
                         Text(
                           displayTitle,
                           style: TextStyle(
@@ -995,6 +1000,18 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
       );
     }
 
+    // Dynamic mode with nothing unlocked cannot introduce a single new
+    // position: only already-learned lines are scheduled. Say so instead of
+    // letting the library look broken ("it serves the same line every day").
+    final session = state.session;
+    if (session != null && session.dynamicRepertoireMode && session.unlockedDecisionIds.isEmpty) {
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [const _FreezeBannerHost(), if (content is! SizedBox) content],
+      );
+    }
+
     if (showDiagnostics) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1286,6 +1303,57 @@ class _UnlockBranchBanner extends ConsumerWidget {
               icon: const Icon(Icons.close, size: 18),
               onPressed: () => ref.read(reviewControllerProvider.notifier).dismissUnlockPrompt(),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FreezeBannerHost extends ConsumerWidget {
+  const _FreezeBannerHost();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return DynamicFreezeBanner(
+      onTurnOff: () => ref.read(studyPreferencesProvider.notifier).toggleDynamicRepertoireMode(),
+    );
+  }
+}
+
+/// Why the review queue stopped growing when dynamic mode has nothing unlocked.
+///
+/// Public and callback-driven so the copy and the action can be tested without
+/// mounting the whole review screen (which needs a live session and database).
+class DynamicFreezeBanner extends StatelessWidget {
+  const DynamicFreezeBanner({super.key, required this.onTurnOff});
+
+  final VoidCallback onTurnOff;
+
+  @override
+  Widget build(BuildContext context) {
+    final srsColors = SrsTheme.maybeOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: srsColors?.surface ?? Colors.black12,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: srsColors?.hairline ?? Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Dynamic mode is on and no lines are unlocked, so only positions '
+                'you have already learned are scheduled. Turn it off to introduce '
+                'the rest of this library.',
+                style: TextStyle(color: srsColors?.ink, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(onPressed: onTurnOff, child: const Text('Turn off')),
           ],
         ),
       ),

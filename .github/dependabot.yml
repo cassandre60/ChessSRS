@@ -1,0 +1,30 @@
+# Weekly dependency-update PRs, opened by GitHub's Dependabot service.
+# Each PR is reviewed by the owner: CI gates run on it, and because
+# pubspec.yaml is a protected path (G07), nothing lands without the
+# gate-approved label. Grouping keeps minor/patch noise to one PR per
+# ecosystem per week; major bumps arrive as separate reviewable PRs.
+version: 2
+updates:
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      in-range-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/scripts"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      in-range-updates:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"

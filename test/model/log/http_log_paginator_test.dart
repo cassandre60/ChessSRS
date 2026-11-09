@@ -158,4 +158,15 @@ void main() {
       expect(state.isDeleteButtonVisible, isFalse);
     });
   });
+  group('HttpLogState.isLoading', () {
+    test('is true when the last page is loading', () {
+      final state = HttpLogState(data: IList(const [AsyncLoading<HttpLog>()]));
+      expect(state.isLoading, isTrue);
+    });
+
+    test('is false when the last page is data', () {
+      final state = HttpLogState(data: IList([AsyncData<HttpLog>(_page(const <String>[]))]));
+      expect(state.isLoading, isFalse);
+    });
+  });
 }

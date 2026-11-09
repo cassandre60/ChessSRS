@@ -38,7 +38,8 @@ void main() {
     test('detects an uppercase URL scheme', () {
       final result = linkify('visit HTTPS://EXAMPLE.COM now');
       final url = result.firstWhere((e) => e is UrlElement) as UrlElement;
-      expect(url.url.toUpperCase(), contains('EXAMPLE.COM'));
+      // Scheme case is preserved (regex handling is case-insensitive).
+      expect(url.url, 'HTTPS://EXAMPLE.COM');
     });
 
     test('humanizes URL display text', () {
