@@ -160,7 +160,7 @@ void main() {
   });
   group('HttpLogState.isLoading', () {
     test('is true when the last page is loading', () {
-      final state = HttpLogState(data: IList([const AsyncLoading<HttpLog>()]));
+      final state = HttpLogState(data: IList(const [AsyncLoading<HttpLog>()]));
       expect(state.isLoading, isTrue);
     });
 
