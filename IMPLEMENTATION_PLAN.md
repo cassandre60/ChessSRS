@@ -1161,6 +1161,25 @@ computer slice), noted because the new test ships without a cited stable ID.
    `scripts/gates/fail_to_pass_check.sh` (G09) reports fail-to-pass verified.
    Not runtime-validated (no device exercise of the offline computer screen).
 
+## Request-fence adoption 2026-11-09 — shared `RequestGeneration` at the two plain sites
+
+Follow-up execution of issue #550 per owner approval ("do the good no-risk
+ones"), scoped to what the issue itself proposed as safe: the two plainest
+fence adopters. Refactor change class.
+
+1. **`refactor/shared-request-generation`.** New
+   `lib/src/utils/request_generation.dart` (`claim`/`isCurrent` over a
+   monotonic counter) adopted by `ServerAnalysisService` (its capture +
+   `isCurrent()` closure claims through the type) and
+   `ConnectivityChangesNotifier` (`_claimRevision`/`_isCurrent` keep names;
+   the `ref.mounted` guard stays local). The four controllers whose protocol
+   exceeds a counter (review publish protocol, evaluator ownership pair,
+   auth dedup map, offline game) remain bespoke, exactly as the issue laid
+   out. Evidence: targeted analyze clean; affected test files
+   `test/model/analysis/server_analysis_service_test.dart` 16/16 and
+   `test/network/connectivity_test.dart` 17/17, single-worker; post-commit
+   `./scripts/gates.sh t1` before push. Not runtime-validated.
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any

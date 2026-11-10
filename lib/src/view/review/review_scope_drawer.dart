@@ -255,26 +255,56 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                     // repeats the square's fill, and the summary says how much
                     // material and work the colour holds.
                     Padding(
-                      padding: EdgeInsets.fromLTRB(20, isWide ? 18 : 2, 20, 0),
-                      child: Row(
-                        children: [
-                          _ColourSwatch(side: side),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              ReviewScopeDrawer.sideLabel(side, context.l10n),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: SrsText.scopeName(c.ink),
+                      padding: EdgeInsets.fromLTRB(12, isWide ? 14 : 2, 12, 0),
+                      child: SrsPressable(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          ref.read(reviewControllerProvider.notifier).selectSide(side);
+                        },
+                        semanticLabel:
+                            'All ${ReviewScopeDrawer.sideLabel(side, context.l10n)}, '
+                            '${reviewState.sideProgress[side]?.dueDecisions ?? 0} due',
+                        radius: 8,
+                        builder: (context, hovered, pressed) {
+                          final isGeneralSelected =
+                              activeScope.studyId == null &&
+                              activeScope.chapterId == null &&
+                              activeScope.openingFamily == null &&
+                              (activeScope.side == null || activeScope.side == side);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isGeneralSelected
+                                  ? (c.isDark ? const Color(0xFF1E2530) : const Color(0xFFF0F3F7))
+                                  : (hovered ? c.hairlineSoft : const Color(0x00000000)),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '${reviewState.sideProgress[side]?.dueDecisions ?? 0} '
-                            '${context.l10n.mobileReviewDueWord}',
-                            style: SrsText.due(c.ink2),
-                          ),
-                        ],
+                            child: Row(
+                              children: [
+                                _ColourSwatch(side: side),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    ReviewScopeDrawer.sideLabel(side, context.l10n),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: SrsText.scopeName(c.ink),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '${reviewState.sideProgress[side]?.dueDecisions ?? 0} '
+                                  '${context.l10n.mobileReviewDueWord}',
+                                  style: SrsText.due(c.ink2),
+                                ),
+                                if (isGeneralSelected) ...[
+                                  const SizedBox(width: 6),
+                                  Icon(Symbols.check_rounded, size: 18, color: c.accent),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ),
                     Padding(
@@ -611,6 +641,15 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
           ref
               .read(reviewControllerProvider.notifier)
               .startPracticeMode(scope: ReviewScope.study(study.id, side: side));
+        },
+        onUnlockStudy: () {
+          Navigator.of(dialogContext).pop();
+          ref.read(reviewControllerProvider.notifier).unlockStudy(study.id);
+          showSnackBar(
+            context,
+            'Added all lines from ${study.title} to daily training',
+            type: SnackBarType.success,
+          );
         },
         onCreateOpposite: () {
           Navigator.of(dialogContext).pop();
@@ -963,6 +1002,7 @@ class StudyActionsSheet extends StatelessWidget {
     required this.onRename,
     required this.onDelete,
     required this.onCreateOpposite,
+    this.onUnlockStudy,
     this.anchor,
   });
 
@@ -982,6 +1022,7 @@ class StudyActionsSheet extends StatelessWidget {
   final VoidCallback onExport;
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final VoidCallback? onUnlockStudy;
 
   /// Creates this same study's positions in the other colour, which is where
   /// most imports go wrong: a whole repertoire imported as White when the lines
@@ -1036,6 +1077,12 @@ class StudyActionsSheet extends StatelessWidget {
             subtitle: context.l10n.mobileReviewPracticeSubtitle,
             onPressed: onPractice,
           ),
+          if (onUnlockStudy != null)
+            SrsSheetRow(
+              label: 'Unlock study for training',
+              subtitle: 'Add all lines in this study to daily review queue',
+              onPressed: onUnlockStudy,
+            ),
         ]),
         Container(height: 1, color: c.hairline),
         group([

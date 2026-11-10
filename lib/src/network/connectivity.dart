@@ -4,6 +4,7 @@ import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/network/server_status.dart';
 import 'package:chess_srs/src/utils/rate_limit.dart';
+import 'package:chess_srs/src/utils/request_generation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,7 +102,7 @@ class ConnectivityChangesNotifier extends AsyncNotifier<ConnectivityStatus> {
   final _connectivityChangesThrottler = Throttler(kConnectivityThrottleDelay, trailing: true);
 
   /// Claimed by every check that starts and every write that decides whether the device is online.
-  int _onlineStatusRevision = 0;
+  final RequestGeneration _onlineStatusRevision = RequestGeneration();
 
   Client get _defaultClient => ref.read(defaultClientProvider);
   Connectivity get _connectivity => ref.read(connectivityPluginProvider);
@@ -118,7 +119,7 @@ class ConnectivityChangesNotifier extends AsyncNotifier<ConnectivityStatus> {
   };
 
   /// Claims the newest revision, outdating everything that is already running.
-  int _claimRevision() => ++_onlineStatusRevision;
+  int _claimRevision() => _onlineStatusRevision.claim();
 
   /// Writes a status, and marks every check that is already running as outdated.
   void _setOnlineStatus(bool isOnline) {
@@ -129,10 +130,7 @@ class ConnectivityChangesNotifier extends AsyncNotifier<ConnectivityStatus> {
   /// Whether a check that started at [revision] may still commit its result.
   bool _isCurrent(int revision) {
     if (!ref.mounted) return false;
-    if (revision != _onlineStatusRevision) {
-      return false;
-    }
-    return true;
+    return _onlineStatusRevision.isCurrent(revision);
   }
 
   @override

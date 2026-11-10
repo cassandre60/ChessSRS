@@ -115,13 +115,12 @@ void main() {
         await tester.runAsync(() async {
           await container.read(reviewControllerProvider.notifier).reload();
         });
-        await pumpUntilFound(tester, find.text('Italian Game Repertoire'));
+        await pumpUntilFound(tester, find.text('White to play'));
 
         // Board is interactive and oriented to White
         expect(find.byType(Chessboard), findsOneWidget);
-        // The top bar shows the current scope name. After importing a White repertoire,
-        // the scope is the newly imported study.
-        expect(find.text('Italian Game Repertoire'), findsOneWidget);
+        // Under D020, study/chapter names are withheld in general review to eliminate spoilers.
+        expect(find.text('Italian Game Repertoire'), findsNothing);
         expect(find.text('Repertoire vs Opponent'), findsNothing);
         expect(find.text('White to play'), findsOneWidget);
 
