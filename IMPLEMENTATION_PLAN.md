@@ -246,6 +246,21 @@ reverted).
   `docs/review.md` full-line section describes direct delivery and the
   once-per-session rule.
 
+### Delivered 2026-11-10 — canonical state ID backfill and transposition dequeue (#563)
+
+- **Owner-reported defect**: Endless review loops on positions with multiple variations or duplicates (e.g. 1. e4 d5 prompted repeatedly, even across multiple Scandinavian imports and French studies).
+- **Root causes**:
+  1. 451 legacy decisions had `canonicalStateId IS NULL` in the owner's database, falling back to the decision ID (`d.id`). As a result, identical positions across duplicate imported studies were not deduplicated in multi-study review.
+  2. When an alternative valid move was played via transposition (`transposedStart != null`), the session graded the move correct but did not attribute or dequeue the played decision, leaving sibling candidates in the queue to be prompted again.
+- **Fix** (PR #563):
+  1. Implemented `backfillDecisionCanonicalStateIds` in `lib/src/persistence/canonical_state_id_backfill.dart` and wired it into `database.dart`'s `onOpen` hook. Decisions with NULL `canonicalStateId` are backfilled from their position, accepted moves, and chapter orientation.
+  2. In `ReviewSession.submitMove`, when an alternative move is played via transposition, credit the played decision and dequeue sibling decisions matching `expectedMatch` at `prompt.fenKey`.
+- **Evidence**:
+  - `test/persistence/canonical_state_id_backfill_test.dart` verifies NULL canonical IDs are backfilled and deduplicated.
+  - `test/review/alternative_moves_same_fen_test.dart` verifies alternative moves via transposition dequeue sibling candidates without repeated prompts.
+  - Snapshot test of owner's live database: 451 NULL decisions collapsed to 0; 8 Scandinavian duplicate decisions at `1. e4 d5` collapsed to 2 distinct canonical items (`2. exd5` and `2. e5`).
+  - All review test suites green (`review_session_test.dart`, `review_engine_test.dart`, `review_transposition_test.dart`, `review_continuity_test.dart`).
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
