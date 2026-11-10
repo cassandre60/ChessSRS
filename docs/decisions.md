@@ -237,3 +237,43 @@ Consequences:
 
 Revisit when: the fast lane's scope is widened, or a queued entry is seen judging
 something other than its batch.
+
+## D019 — Full-line review asks each line start once and delivers missed targets directly
+
+Decision: In full-line review continuity the session asks each line start at
+most once. A queued target whose shared line start is already answered this
+session is delivered directly at its own position as a plain board jump — the
+machine plays no route moves for the learner; only walked lines auto-play
+opponent replies. The same rule covers a lapse: the failed card is re-delivered
+directly instead of re-asking the answered prefix, and the prefix keeps its
+single grade (D015 grading stands). No dedicated guide walk exists: walks stand
+in tree order (mainline first, never steered), so a correct answer can never
+silently consume an admitted introduction.
+
+Date: 2026-11-06, amended 2026-11-09 (owner-approved; supersedes the interim
+"pending delivery with one honest retry" wording of the first fix commit — the
+dedicated-walk machinery is removed rather than repaired, because both
+branches of the earlier design still re-asked an already-answered board, which
+the owner rejected when demonstrated on their library).
+Reason: Transposition chapters legitimately record several valid moves at a
+line start; an invisible guide route picking one of them made an
+otherwise-correct answer re-show the identical board and (first commit's
+baseline) silently consume an admitted introduction (owner session
+2026-11-06 lost three of the day's 81 introductions this way, issue #542).
+The amended rule was validated on the owner's live library (2026-11-09:
+15 direct deliveries, every line start asked once, no machine-played user
+moves — the auto-played demonstration trail was rejected by the owner and
+removed).
+Link: issue #542, PR of the same batch.
+
+## D020 — Line adoption as an overlay on reference content
+
+Decision: User repertoire line adoption operates as a mutable overlay over immutable reference content.
+1. When unreviewed book branches are played on the board (in practice/explore mode or during review), the branch is automatically adopted and unlocked into the daily training schedule without blocking confirmation modals.
+2. Forgiving alternative move grading: playing an alternative in-scope repertoire move during review accepts the move and adopts the line alongside existing weapons without recording an incorrect lapse.
+3. New-card daily introduction limit defaults to 10 positions/day (configurable in SRS settings).
+4. Whole-study activation: users can unlock or lock an entire study into their daily training schedule in a single action from the study actions sheet.
+
+Date: 2026-11-05
+Reason: Eliminates empty 0-due dead ends on newly imported studies, removes modal confirmation fatigue, and decouples immutable reference PGN studies from the player's personal active choices.
+Link: docs/tasks/FEAT-REP-43-dynamic-repertoire-branch-selection.md
