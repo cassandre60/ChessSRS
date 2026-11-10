@@ -134,20 +134,21 @@ void main() {
               where: 'id = ?',
               whereArgs: ['occ-1'],
             );
-            if (version < 10) {
-              // The canonical column and table arrived at v10. A pre-v10
-              // install has no identity to migrate, and none is invented for
-              // it: the legacy row remains the only record of its history.
-              expect(decision['canonicalStateId'], isNull);
-              expect(await db.query(kTablePositionKnowledgeState), isEmpty);
-              return;
-            }
-
             // v10 pointed the decision and its knowledge row at the
             // first-child key; the rekey rewrites both onto the side-scoped
             // complete-contract key, honouring the chapter's orientation.
+            // For pre-v10 databases, the open-time top-up computes the canonical
+            // key from the decision's moves and chapter orientation.
             final expectedKey = _sideScopedKey(version < 11 ? Side.white : Side.black);
             expect(decision['canonicalStateId'], expectedKey);
+
+            if (version < 10) {
+              // The canonical knowledge table arrived at v10. A pre-v10
+              // install has no knowledge state row, while the decision's
+              // canonicalStateId is derived so duplicates share memory.
+              expect(await db.query(kTablePositionKnowledgeState), isEmpty);
+              return;
+            }
 
             final states = await db.query(kTablePositionKnowledgeState);
             expect(states, hasLength(1));
