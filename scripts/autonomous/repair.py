@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import EXIT_OK, Fatal, UsageError, eprint  # noqa: E402
+from common import EXIT_OK, Fatal, UsageError, eprint, git  # noqa: E402
 
 SCHEMA = "stream-e/1"
 SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -66,9 +66,7 @@ changes were made to this repository.)
 
 
 def git_out(base_cwd: Path, *args: str) -> str:
-    proc = subprocess.run(
-        ["git", *args], cwd=str(base_cwd), capture_output=True, text=True
-    )
+    proc = git(args, cwd=base_cwd)
     if proc.returncode != 0:
         raise Fatal(f"git {' '.join(args)}: {(proc.stderr or proc.stdout).strip()}")
     return proc.stdout.strip()
@@ -99,8 +97,9 @@ def parse_report(path: Path) -> Dict[str, Any]:
     for line in text.splitlines():
         match = SECTION_RE.match(line)
         if match:
-            current = match.group(1).lower().strip()
-            sections.setdefault(current, [])
+            sec = match.group(1).lower().strip()
+            current = sec
+            sections.setdefault(sec, [])
             continue
         if current is not None:
             sections[current].append(line)
@@ -343,7 +342,8 @@ def cmd_verify_green(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[1])
+    desc = __doc__.split("\n\n")[1] if __doc__ and "\n\n" in __doc__ else (__doc__ or "")
+    parser = argparse.ArgumentParser(description=desc)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     intake = sub.add_parser("intake", help="mine bug reports into candidates / bounces")

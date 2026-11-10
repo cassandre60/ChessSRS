@@ -42,6 +42,37 @@ const _mockReleasesJson = '''
 ]
 ''';
 
+const _mockMultiReleasesJson = '''
+[
+  {
+    "tag_name": "v2.0.0",
+    "html_url": "https://github.com/cassandre60/ChessSRS/releases/tag/v2.0.0",
+    "name": "v2.0.0",
+    "body": "Latest release",
+    "assets": [
+      {
+        "name": "chesssrs-v2.0.0-android.apk",
+        "browser_download_url": "https://github.com/cassandre60/ChessSRS/releases/download/v2.0.0/chesssrs-v2.0.0-android.apk",
+        "size": 10485760
+      }
+    ]
+  },
+  {
+    "tag_name": "v1.0.0",
+    "html_url": "https://github.com/cassandre60/ChessSRS/releases/tag/v1.0.0",
+    "name": "v1.0.0",
+    "body": "Older release",
+    "assets": [
+      {
+        "name": "chesssrs-v1.0.0-android.apk",
+        "browser_download_url": "https://github.com/cassandre60/ChessSRS/releases/download/v1.0.0/chesssrs-v1.0.0-android.apk",
+        "size": 10485760
+      }
+    ]
+  }
+]
+''';
+
 ProviderContainer makeUpdateContainer({
   required String currentVersion,
   required http.Client client,
@@ -108,6 +139,30 @@ void main() {
         ),
       );
       expect(state.releaseInfo!.apkSize, equals(10485760));
+    });
+
+    test('selects the newest release when multiple are returned', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path.contains('/releases')) {
+          return http.Response(
+            _mockMultiReleasesJson,
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final container = makeUpdateContainer(currentVersion: '1.7.0', client: mockClient);
+      addTearDown(container.dispose);
+
+      final notifier = container.read(appUpdateProvider.notifier);
+      await notifier.checkForUpdate(force: true);
+
+      final state = container.read(appUpdateProvider);
+      expect(state.status, equals(UpdateStatus.available));
+      expect(state.releaseInfo, isNotNull);
+      expect(state.releaseInfo!.tagName, equals('v2.0.0'));
     });
 
     test('marks upToDate when versions match', () async {
