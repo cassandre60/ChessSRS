@@ -15,6 +15,23 @@ void main() {
       expect(resolveChapterOrientation({'Orientation': 'White'}), Side.white);
     });
 
+    test('an empty title header does not count as a title (L590 pin)', () {
+      expect(
+        resolveChapterOrientation({
+          'Event': '',
+          'FEN': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1',
+        }, startTurn: Side.black),
+        Side.black,
+      );
+      expect(
+        resolveChapterOrientation({
+          'Event': '   ',
+          'FEN': 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1',
+        }, startTurn: Side.black),
+        Side.black,
+      );
+    });
+
     test('detects Black from Event or ChapterName keywords', () {
       expect(resolveChapterOrientation({'Event': 'Sicilian Defense for Black'}), Side.black);
       expect(resolveChapterOrientation({'ChapterName': "King's Indian [Black]"}), Side.black);

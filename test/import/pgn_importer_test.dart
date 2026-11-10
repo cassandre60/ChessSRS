@@ -985,6 +985,12 @@ void main() {
       );
     });
 
+    test('ImportResult.isEmpty reflects an empty chapter list (L164 pin)', () {
+      final result = importPgn('');
+      expect(result.chapters, isEmpty);
+      expect(result.isEmpty, isTrue);
+    });
+
     test('reports an error for a header with no moves', () {
       final result = importPgn('[Event "Test"]\n[White "A"]\n[Black "B"]\n');
 
@@ -993,6 +999,25 @@ void main() {
         isNotEmpty,
         reason: 'a chapter with no moves trains nothing and must not read as imported',
       );
+    });
+
+    test('an import with an empty and a bad chapter reports only the bad chapter (L415 pin)', () {
+      // When nothing trains, the per-chapter empty-chapter branch must not fire
+      // (it is gated on decisions.isNotEmpty); otherwise the empty chapter gets
+      // a spurious "imported empty" error alongside the real failure.
+      const pgn = '''
+[Event "Empty Game"]
+
+[Event "Bad FEN"]
+[FEN "not-a-valid-fen"]
+[SetUp "1"]
+
+1. e4 *
+''';
+      final result = importPgn(pgn);
+
+      expect(result.errors, hasLength(1));
+      expect(result.errors.single.chapterTitle, 'Bad FEN');
     });
 
     test('reports an error for text that is not PGN at all', () {
