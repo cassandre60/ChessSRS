@@ -2263,4 +2263,20 @@ void main() {
       );
     });
   });
+
+group('mutation L616: isComplete AND->OR pin', () {
+    // Mutant: change the second && to ||. With an active prompt and an
+    // empty unbuffered queue the mutant reports complete while the source
+    // does not.
+  test('session with an active prompt is not complete', () {
+    final session = _session(
+      studies: [_studyOf()],
+      chapters: [_chapterOf(_lRoot)],
+      decisions: [_dec1(), _dec2()],
+      reviewStates: {'dec-1': _dueState('dec-1', overdue: const Duration(hours: 2))},
+    );
+    expect(session.currentPrompt, isNotNull);
+    expect(session.isComplete, isFalse);
+  });
+});
 }
