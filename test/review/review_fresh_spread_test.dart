@@ -179,6 +179,46 @@ void main() {
       expect(session.initialQueueCount, 6);
       expect(session.initialDueCount, 0);
     });
+
+    test('a two-position fresh backlog keeps its input order (guard boundary)', () {
+      // spreadFreshIntroductions hands a backlog of at most two positions back
+      // unchanged: with a pair every group contributes exactly once either way,
+      // so the `fresh.length <= 2` guard returns the database order even when
+      // the two positions come from studies with different presentation
+      // counts. Pins that guard boundary — removing it (or narrowing it to
+      // `< 2`) would re-rank the pair least-presented-first instead.
+      final library = buildLibrary(
+        shape: {'a': (chapters: 1, perChapter: 2), 'b': (chapters: 1, perChapter: 1)},
+      );
+      final a1 = library.decisions[0]; // reviewed below — study 'a' has been presented
+      final a2 = library.decisions[1]; // fresh
+      final b1 = library.decisions[2]; // fresh
+
+      final states = <String, ReviewState>{
+        a1.canonicalId: ReviewState(
+          decisionId: a1.canonicalId,
+          firstReviewedAt: baseTime,
+          nextDueAt: baseTime.add(const Duration(days: 1)),
+          repetitionCount: 1,
+        ),
+      };
+
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: library.studies,
+        chapters: library.chapters,
+        decisions: library.decisions,
+        reviewStates: states,
+        freshIntroductionOrder: orderFor(library, states: states),
+        remainingNewQuota: 2,
+      );
+      final served = answerAll(session);
+
+      expect(served, hasLength(2));
+      expect(served.map((d) => d.id).toList(), [
+        a2.id,
+        b1.id,
+      ], reason: 'the two-item guard preserves input order instead of re-ranking the pair');
+    });
   });
 
   group('canonical-key counting (mutation pin)', () {
