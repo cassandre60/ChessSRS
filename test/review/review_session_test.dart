@@ -1060,40 +1060,52 @@ void main() {
       expect(session.currentPrompt?.decision.id, 'dec-x');
     });
 
-    test('a full-line re-answer of a completed prefix is rehearsed, not re-graded', () {
-      // mutant L539: continuity == ReviewContinuity.fullLine -> != / ||
-      // mutant L540: mode == ReviewMode.srs -> != / ||
-      final session = _session(
-        studies: [_studyOf()],
-        chapters: [_chapterOf(_lRoot)],
-        decisions: [_dec1(), _dec2()],
-        reviewStates: {
-          'dec-1': _dueState('dec-1'),
-          'dec-2': _dueState('dec-2', overdue: const Duration(hours: 1)),
-        },
-        continuity: ReviewContinuity.fullLine,
-      );
-      expect(session.currentPrompt?.decision.id, 'dec-1');
+    test(
+      'a full-line lapse re-delivers the failed card directly, never re-asking the line start',
+      () {
+        // mutant L539: continuity == ReviewContinuity.fullLine -> != / ||
+        // mutant L540: mode == ReviewMode.srs -> != / ||
+        // Formerly the lapse re-walked the answered prefix with practice
+        // grading; under the once-per-line-start rule the re-ask of the
+        // prefix is gone entirely, so the no-double-grade property (SPEC
+        // INV-025) holds structurally: the failed card is re-delivered as a
+        // plain board jump.
+        final session = _session(
+          studies: [_studyOf()],
+          chapters: [_chapterOf(_lRoot)],
+          decisions: [_dec1(), _dec2()],
+          reviewStates: {
+            'dec-1': _dueState('dec-1'),
+            'dec-2': _dueState('dec-2', overdue: const Duration(hours: 1)),
+          },
+          continuity: ReviewContinuity.fullLine,
+        );
+        expect(session.currentPrompt?.decision.id, 'dec-1');
 
-      final first = session.submitMove(from: 'e2', to: 'e4');
-      expect(first.nextPrompt?.decision.id, 'dec-2');
-      final gradedReps = session.reviewStates['dec-1']!.repetitionCount;
-      expect(gradedReps, 4);
+        final first = session.submitMove(from: 'e2', to: 'e4');
+        expect(first.nextPrompt?.decision.id, 'dec-2');
+        final gradedReps = session.reviewStates['dec-1']!.repetitionCount;
+        expect(gradedReps, 4);
 
-      // dec-2 lapses; its line-start re-pop walks the ancestry back to the
-      // already-completed prefix (dec-1) and re-prompts it.
-      final lapse = session.submitMove(from: 'c2', to: 'c4');
-      expect(lapse.isCorrect, isFalse);
-      session.continueAfterIncorrect();
-      expect(session.currentPrompt?.decision.id, 'dec-1');
+        // Lapse: c4 is not the expected Nf3. Continuing must not re-ask the
+        // already-answered line start; the failed card is delivered directly
+        // as a plain board jump back to its own position.
+        final lapse = session.submitMove(from: 'c2', to: 'c4');
+        expect(lapse.isCorrect, isFalse);
+        session.continueAfterIncorrect();
+        expect(session.currentPrompt?.decision.id, 'dec-2');
+        expect(session.currentPrompt?.fen, _fenE5);
 
-      final replay = session.submitMove(from: 'e2', to: 'e4');
-      expect(replay.isCorrect, isTrue);
-      // Rehearsed: the prefix is re-walked with practice grading. No SRS event
-      // fires and the state written by the first answer stands untouched.
-      expect(replay.event, isNull);
-      expect(session.reviewStates['dec-1']!.repetitionCount, gradedReps);
-    });
+        // The retake answers the lapse (review-3 C2) but writes no success
+        // event: D015 grades the card once, as the lapse it already was. The
+        // answered prefix keeps its single grade — never re-asked.
+        final retake = session.submitMove(from: 'g1', to: 'f3');
+        expect(retake.isCorrect, isTrue);
+        expect(retake.event, isNull);
+        expect(session.reviewStates['dec-1']!.repetitionCount, gradedReps);
+        expect(session.isComplete, isTrue);
+      },
+    );
   });
 
   group('ReviewSession full-line starts', () {
@@ -1957,7 +1969,7 @@ void main() {
     });
   });
 
-  group('ReviewSession dynamic lock and dedicated walk geometry', () {
+  group('ReviewSession dynamic lock and missed-target geometry', () {
     test('a never-learned branch ends the dynamic walk instead of being entered', () {
       // mutant L790: decState.repetitionCount > 0 -> >= 0
       // The branch below the reply holds a state row that was never learned:
@@ -2029,11 +2041,11 @@ void main() {
       expect(result.nextPrompt, isNull);
     });
 
-    test('the dedicated walk follows its guide into the side branch and re-prompts the target', () {
-      // mutant L1057: _guidedNodeIds.isEmpty -> .isNotEmpty
-      // mutant L1060: if (index < 0) -> if (index <= 0)
-      // mutant L1061: _guidedNodeIds.sublist(index + 1) -> sublist(index + 2)
-      // SPEC INV-022.
+    test('the missed guided target is delivered directly at its own position', () {
+      // Former dedicated-walk mutants (L1057-L1061) died with the guide
+      // machinery. The remaining defect class is a delivery that re-asks
+      // the line start or lands the card on the wrong board; this test pins
+      // the direct board jump below. SPEC INV-022.
       const sideDecoy = RepertoireNode(
         id: 'node-g-alt',
         fen: _fenC5Nf3,
@@ -2106,7 +2118,7 @@ void main() {
                   ),
                 ],
               ),
-              // The side branch the dedicated walk's guide points at.
+              // The side branch the guide route would have pointed at.
               sideBranch,
             ],
           ),
@@ -2137,24 +2149,157 @@ void main() {
       );
       expect(session.currentPrompt?.decision.id, 'dec-g1');
 
-      // First pass: tree order takes the mainline and misses the side branch.
+      // The line start opens the walk in tree order (its own review — it is
+      // the more overdue card); the walk takes the mainline and, at the
+      // mainline leaf, delivers the queued deep target directly as a plain
+      // board jump — the identical line start is never asked a second time
+      // and the machine plays none of the learner's route moves.
       final first = session.submitMove(from: 'e2', to: 'e4');
       expect(first.isCorrect, isTrue);
       expect(first.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6']);
-      expect(first.nextPrompt?.decision.id, 'dec-g1');
+      expect(first.nextPrompt?.decision.id, 'dec-g2');
+      expect(first.nextPrompt?.fen, _fenC5D4D5);
 
-      // Second pass: the session re-opens the line start to try the target again.
-      final second = session.submitMove(from: 'e2', to: 'e4');
+      // The delivered target grades normally: play Nf3 at the d5 position.
+      final second = session.submitMove(from: 'g1', to: 'f3');
       expect(second.isCorrect, isTrue);
-      expect(second.autoPlayedMoves.map((m) => m.move.san), ['e5', 'Nf3', 'Nc6']);
-      expect(second.nextPrompt?.decision.id, 'dec-g1');
+      expect(second.nextPrompt, isNull);
+      expect(second.sessionComplete, isTrue);
+    });
 
-      // Third pass: the guide is armed, so the walk follows the side branch
-      // and re-prompts the target that tree order would keep starving.
-      final third = session.submitMove(from: 'e2', to: 'e4');
-      expect(third.isCorrect, isTrue);
-      expect(third.autoPlayedMoves.map((m) => m.move.san), ['c5', 'd4', 'd5']);
-      expect(third.nextPrompt?.decision.id, 'dec-g2');
+    test('a missed guided target is delivered directly instead of being consumed', () {
+      // A transposition-shaped line start: two valid user moves, and the
+      // guide's walk takes the branch the user did not play. The user's
+      // divergence is a correct repertoire answer, so the missed target must
+      // be prompted directly as a plain board jump — never re-asking the
+      // line start, never silently consumed (it was admitted for
+      // introduction).
+      //
+      // Line (ch-1): user owns both e4 and d4 at the line start.
+      // - e4 branch: reply c5, then the queued target expects e5 (admitted).
+      // - d4 branch: reply d5 whose decision below is fresh but NOT admitted
+      //   (the allowance cut falls before it), so the walk stops there.
+      // Line (ch-2): a fresh target asked directly at its own line start.
+      const root = RepertoireNode(
+        id: 'node-f-root',
+        fen: _fenStart,
+        fenKey: _fenKeyStart,
+        children: [
+          RepertoireNode(
+            id: 'node-f-e4',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mE4,
+            children: [
+              RepertoireNode(
+                id: 'node-f-c5',
+                fen: _fenC5,
+                fenKey: _fenKeyC5,
+                incomingMove: _mC5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-f-e5',
+                    fen: _fenE5,
+                    fenKey: _fenKeyE5,
+                    incomingMove: _mE5,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          RepertoireNode(
+            id: 'node-f-d4',
+            fen: _fenStart,
+            fenKey: _fenKeyStart,
+            incomingMove: _mD4,
+            children: [
+              RepertoireNode(
+                id: 'node-f-d4-opp',
+                fen: _fenD5AfterD4,
+                fenKey: _fenKeyD5AfterD4,
+                incomingMove: _mD5,
+                children: [
+                  RepertoireNode(
+                    id: 'node-f-d4-leaf',
+                    fen: _fenStart,
+                    fenKey: _fenKeyStart,
+                    incomingMove: _mNc6,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      const otherRoot = RepertoireNode(
+        id: 'node-f-other-root',
+        fen: _fenStart,
+        fenKey: _fenKeyE5,
+        children: [
+          RepertoireNode(
+            id: 'node-f-other-reply',
+            fen: _fenE4,
+            fenKey: _fenKeyE4,
+            incomingMove: _mD4,
+          ),
+        ],
+      );
+      final session = _session(
+        studies: [_studyOf()],
+        chapters: [
+          _chapterOf(root),
+          _chapterOf(otherRoot, chapterId: 'ch-2', sourceOrder: 1),
+        ],
+        decisions: [
+          // Admission order = list order; the allowance admits the first two.
+          _decision(
+            id: 'dec-f-t1',
+            nodeId: 'node-f-c5',
+            expectedMoves: const [_mE5],
+            canonicalStateId: 'can-f-t1',
+          ),
+          _decision(
+            id: 'dec-f-t2',
+            nodeId: 'node-f-other-root',
+            expectedMoves: const [_mD4],
+            canonicalStateId: 'can-f-t2',
+            chapterId: 'ch-2',
+          ),
+          // Fresh but beyond the allowance: the walk below the user's d4 stops here.
+          _decision(
+            id: 'dec-f-hb',
+            nodeId: 'node-f-d4-opp',
+            expectedMoves: const [_mNc6],
+            canonicalStateId: 'can-f-hb',
+          ),
+          _decision(
+            id: 'dec-f-ls',
+            nodeId: 'node-f-root',
+            expectedMoves: const [_mE4, _mD4],
+            canonicalStateId: 'can-f-ls',
+          ),
+        ],
+        // The line start is learned but not due: reachable only as a walk start.
+        reviewStates: {'can-f-ls': _scheduledState('can-f-ls')},
+        remainingNewQuota: 2,
+        order: ReviewOrder.byLine,
+        continuity: ReviewContinuity.fullLine,
+      );
+      expect(session.currentPrompt?.decision.id, 'dec-f-ls');
+
+      // First pass: the user answers d4 (valid, off the guide route). The
+      // walk stops at the un-admitted fresh decision; the session then
+      // delivers the target directly instead of re-asking the line start.
+      final first = session.submitMove(from: 'd2', to: 'd4');
+      expect(first.isCorrect, isTrue);
+      expect(first.nextPrompt?.decision.id, 'dec-f-t1');
+      expect(first.nextPrompt?.fen, _fenC5);
+
+      // The delivered target grades normally, and the session continues
+      // through the remaining queue rather than stalling.
+      final second = session.submitMove(from: 'e7', to: 'e5');
+      expect(second.isCorrect, isTrue);
+      expect(second.nextPrompt?.decision.id, 'dec-f-t2');
     });
   });
 
