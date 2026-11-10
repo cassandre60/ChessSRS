@@ -39,9 +39,11 @@ from common import (
     git,
     git_common_dir,
     load_config,
+    load_worktree_registry,
     main_repo_root,
     repo_root,
     run,
+    worktree_registry_path,
     write_json_atomic,
 )
 
@@ -57,22 +59,8 @@ def _slug(value: str) -> str:
     return value
 
 
-def _registry_path(root: Path) -> Path:
-    return git_common_dir(root) / "autonomous-worktrees.json"
-
-
-def _load_registry(root: Path) -> List[Dict[str, Any]]:
-    path = _registry_path(root)
-    if not path.exists():
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (json.JSONDecodeError, OSError) as exc:
-        raise Fatal(f"cannot read worktree registry {path}: {exc}")
-    if not isinstance(data, list):
-        raise Fatal(f"worktree registry is not a JSON list: {path}")
-    return [item for item in data if isinstance(item, dict)]
+_registry_path = worktree_registry_path
+_load_registry = load_worktree_registry
 
 
 def _save_registry(root: Path, entries: List[Dict[str, Any]]) -> None:
@@ -341,7 +329,7 @@ def cmd_verify_gate(args: argparse.Namespace) -> int:
                 "[warn] no evidence artifact (.autonomous/evidence.json); "
                 "generate one with evidence.py before claiming the contract"
             )
-        elif problems:
+        elif problems or data is None:
             # A present-but-invalid artifact always fails: stale evidence is
             # worse than none, because it looks like proof.
             raise Fatal("evidence artifact invalid:\n  " + "\n  ".join(problems))

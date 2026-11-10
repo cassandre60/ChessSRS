@@ -174,17 +174,21 @@ def run(
 
 def git(
     args: Sequence[str],
-    cwd: Optional[os.PathLike] = None,
+    cwd: Optional[os.PathLike | str] = None,
     check: bool = False,
     timeout: Optional[float] = None,
     quiet: bool = True,
 ) -> subprocess.CompletedProcess:
     return run(
-        ["git"] + [str(a) for a in args], cwd=cwd, check=check, timeout=timeout, quiet=quiet
+        ["git"] + [str(a) for a in args],
+        cwd=Path(cwd) if isinstance(cwd, str) else cwd,
+        check=check,
+        timeout=timeout,
+        quiet=quiet,
     )
 
 
-def repo_root(start: Optional[os.PathLike] = None) -> Path:
+def repo_root(start: Optional[os.PathLike | str] = None) -> Path:
     proc = git(["rev-parse", "--show-toplevel"], cwd=start or Path.cwd())
     if proc.returncode != 0:
         raise EnvError(
@@ -229,6 +233,27 @@ def load_worktree_registry(root: Path) -> List[Dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
+def load_run_records(
+    records_dir: Path, pattern: str = "rr-*.json", warn: bool = False
+) -> List[Dict[str, Any]]:
+    """Load valid JSON object run records from ``records_dir`` in filename order."""
+    if not records_dir.is_dir():
+        return []
+    records: List[Dict[str, Any]] = []
+    for path in sorted(records_dir.glob(pattern)):
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            if warn:
+                eprint(f"[!] skipping unreadable run record {path.name}: {exc}")
+            continue
+        if isinstance(data, dict):
+            records.append(data)
+    return records
+
+
 def _deep_merge(defaults: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(defaults)
     for key, value in override.items():
@@ -239,7 +264,7 @@ def _deep_merge(defaults: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
     return result
 
 
-def config_path(root: Path, explicit: Optional[str] = None) -> Path:
+def config_path(root: Path, explicit: Optional[os.PathLike | str] = None) -> Path:
     """Where this repo's autonomous config lives.
 
     Lookup order: the --config flag, then the AUTONOMOUS_CONFIG env var, then
@@ -261,7 +286,7 @@ def config_path(root: Path, explicit: Optional[str] = None) -> Path:
     return root / "scripts" / "autonomous" / "config.json"
 
 
-def load_config(root: Path, explicit: Optional[str] = None) -> Dict[str, Any]:
+def load_config(root: Path, explicit: Optional[os.PathLike | str] = None) -> Dict[str, Any]:
     path = config_path(root, explicit)
     if not path.exists():
         if explicit:
@@ -628,11 +653,15 @@ def read_json(path: Path) -> Any:
 
 def write_json_atomic(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2)
-        handle.write("\n")
-    os.replace(tmp, path)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def format_exit(exc: BaseException) -> int:
