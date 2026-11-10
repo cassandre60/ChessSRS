@@ -245,16 +245,16 @@ void main() {
       expect(decoded.first.san, isNull);
     });
 
-    test('decodeExpectedMoves does not fast-path misparse a JSON array that only looks like a single move', () {
-      // The fast path is an optimization gated on every field marker being
-      // present. Dropping any gate must fall back to the general parser (and
-      // therefore to a TypeError here) rather than slicing garbage.
-      const malformed = '[{"from":"e2","padding":"ABCDEFGHIJKLMNOP"}]';
-      expect(
-        () => decodeExpectedMoves(malformed),
-        throwsA(isA<TypeError>()),
-      );
-    });
+    test(
+      'decodeExpectedMoves does not fast-path misparse a JSON array that only looks like a single move',
+      () {
+        // The fast path is an optimization gated on every field marker being
+        // present. Dropping any gate must fall back to the general parser (and
+        // therefore to a TypeError here) rather than slicing garbage.
+        const malformed = '[{"from":"e2","padding":"ABCDEFGHIJKLMNOP"}]';
+        expect(() => decodeExpectedMoves(malformed), throwsA(isA<TypeError>()));
+      },
+    );
 
     test('decodeExpectedMoves validates expected format and does not misparse non-move JSON', () {
       expect(
