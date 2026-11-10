@@ -41,15 +41,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import eprint, load_config, repo_root  # noqa: E402
+from common import eprint, git, load_config, repo_root  # noqa: E402
 
 SCHEMA = "ratchet/1"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["git", *args], cwd=str(root), capture_output=True, text=True, check=False
-    )
+    return git(args, cwd=root)
 
 
 def _worktree_of(root: Path, ref: str, parent: Path) -> Optional[Path]:
@@ -133,7 +131,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         eprint(f"[!] no ratchet named {args.ratchet!r} in .autonomous/config.json")
         return 2
     base_value, head_value, err = _measure_pair(root, cfg, ratchet)
-    if err:
+    if err or base_value is None or head_value is None:
         eprint(f"[!] {err}")
         return 2
     payload = {
@@ -204,8 +202,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             if apply_wt is None:
                 eprint("[!] cannot create worktree of HEAD")
                 return 2
-            applied = _git(apply_wt.parent.parent, "apply", "--whitespace=nowarn", str(holder)) \
-                if False else subprocess.run(
+            applied = subprocess.run(
                 ["git", "apply", "--whitespace=nowarn", str(holder)],
                 cwd=str(apply_wt), capture_output=True, text=True, check=False,
             )
@@ -262,7 +259,7 @@ def cmd_scaffold_issue(args: argparse.Namespace) -> int:
         eprint(f"[!] no ratchet named {args.ratchet!r} in .autonomous/config.json")
         return 2
     base_value, head_value, err = _measure_pair(root, cfg, ratchet)
-    if err:
+    if err or base_value is None or head_value is None:
         eprint(f"[!] {err}")
         return 2
     direction = ratchet.get("direction") or "minimize"
@@ -283,7 +280,7 @@ def cmd_scaffold_issue(args: argparse.Namespace) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     def add_name(p):

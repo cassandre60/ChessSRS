@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import EXIT_OK, Fatal, eprint, load_config  # noqa: E402
+from common import EXIT_OK, Fatal, eprint, load_config, load_run_records  # noqa: E402
 
 SCHEMA = "stream-l/1"
 STOP_FILE = "STOP-STREAM-L"
@@ -377,11 +377,7 @@ def records_to_history_rows(records_dir: Path) -> List[Dict[str, Any]]:
     record cannot know are 0, never invented.
     """
     rows: List[Dict[str, Any]] = []
-    for path in sorted(records_dir.glob("rr-*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for record in load_run_records(records_dir, pattern="rr-*.json"):
         verdict = str(record.get("verdict") or "").strip().lower()
         if verdict in ("merged", "accepted"):
             outcome = "accepted"
@@ -473,7 +469,8 @@ def cmd_lessons(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[1])
+    desc = __doc__.split("\n\n")[1] if __doc__ and "\n\n" in __doc__ else (__doc__ or "")
+    parser = argparse.ArgumentParser(description=desc)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     replay_p = sub.add_parser("replay", help="replay an L3 proposal against recorded fleet history")

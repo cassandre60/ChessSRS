@@ -50,7 +50,8 @@ RUNNABLE_MARK = re.compile(r"(?:#|//)\s*runnab?le\b", re.IGNORECASE)
 FROM_IMPORT = re.compile(r"^\s*from\s+([\w\.]+)\s+import\s+(.+)$")
 IMPORT_STMT = re.compile(r"^\s*import\s+([\w\.]+)")
 MD_LINK = re.compile(r"\]\(([^)#\s]+)(?:#[\w-]+)?\)")
-SPEC_ID = re.compile(r"\b([A-Z]{1,4}\d{2,3})\b")
+SPEC_ID = re.compile(r"\b([A-Z]{1,4}\d{2,3})\b(?!`?-style)")
+NOQA_COMMENT = re.compile(r"#\s*noqa\b.*$", re.IGNORECASE)
 
 DEFAULT_DOC_PATHS = ["README.md", "AGENTS.md", "CHANGELOG*.md", "docs"]
 DEFAULT_SOURCE_DIRS = ["src", "lib", "scripts"]
@@ -122,12 +123,40 @@ def _rel_label(path: Path, base: Path) -> str:
         return str(path)
 
 
+_FALLBACK_STDLIB = frozenset(
+    list(sys.builtin_module_names)
+    + [
+        "abc", "argparse", "ast", "asyncio", "base64", "collections",
+        "concurrent", "contextlib", "copy", "csv", "ctypes", " dataclasses",
+        "dataclasses", "datetime", "decimal", "difflib", "email", "enum",
+        "errno", "fcntl", "fnmatch", "fractions", "functools", "gc",
+        "getpass", "gettext", "glob", "gzip", "hashlib", "heapq", "hmac",
+        "html", "http", "importlib", "inspect", "io", "ipaddress",
+        "itertools", "json", "keyword", "linecache", "locale", "logging",
+        "lzma", "math", "mimetypes", "multiprocessing", "numbers",
+        "operator", "os", "pathlib", "pickle", "pkgutil", "platform",
+        "plistlib", "pprint", "profile", "pstats", "pty", "pwd", "queue",
+        "quopri", "random", "re", "readline", "reprlib", "resource",
+        "runpy", "sched", "secrets", "select", "selectors", "shelve",
+        "shlex", "shutil", "signal", "site", "smtplib", "socket",
+        "socketserver", "sqlite3", "ssl", "stat", "statistics", "string",
+        "stringprep", "struct", "subprocess", "sys", "sysconfig", "syslog",
+        "tarfile", "tempfile", "termios", "textwrap", "threading", "time",
+        "timeit", "tkinter", "token", "tokenize", "trace", "traceback",
+        "tracemalloc", "tty", "turtle", "types", "typing", "unicodedata",
+        "unittest", "urllib", "uuid", "venv", "warnings", "wave", "weakref",
+        "webbrowser", "wsgiref", "xml", "xmlrpc", "zipapp", "zipfile",
+        "zipimport", "zlib",
+    ]
+)
+
+
 def scan_symbol_drift(
     doc: Path, base: Path, blocks: List[Dict[str, Any]], source_roots: List[Path]
 ) -> List[Dict[str, Any]]:
     findings: List[Dict[str, Any]] = []
     rel_doc = _rel_label(doc, base)
-    stdlib = sys.stdlib_module_names
+    stdlib = getattr(sys, "stdlib_module_names", _FALLBACK_STDLIB)
     for block in blocks:
         if block["lang"] not in ("python", "py"):
             continue
@@ -188,7 +217,7 @@ def scan_runnable(
             continue
         try:
             proc = subprocess.run(
-                ["python3", "-c", block["code"]],
+                [sys.executable, "-c", block["code"]],
                 cwd=str(Path.cwd()),
                 capture_output=True,
                 text=True,
@@ -242,6 +271,8 @@ def scan_links(doc: Path, base: Path) -> List[Dict[str, Any]]:
 def scan_spec_trace(spec: Path, tests_root: Optional[Path], base: Path) -> List[Dict[str, Any]]:
     spec_text = spec.read_text(encoding="utf-8", errors="replace")
     defined = set(SPEC_ID.findall(spec_text))
+    if not defined:
+        return []
     cited: Dict[str, str] = {}
     if tests_root is not None and tests_root.is_dir():
         for test_file in sorted(tests_root.rglob("*.py")):
@@ -250,7 +281,8 @@ def scan_spec_trace(spec: Path, tests_root: Optional[Path], base: Path) -> List[
             for lineno, line in enumerate(
                 test_file.read_text(encoding="utf-8", errors="replace").splitlines(), start=1
             ):
-                for match in SPEC_ID.findall(line):
+                cleaned_line = NOQA_COMMENT.sub("", line)
+                for match in SPEC_ID.findall(cleaned_line):
                     cited.setdefault(match, f"{_rel_label(test_file, base)}:{lineno}")
     findings: List[Dict[str, Any]] = []
     for spec_id in sorted(defined - set(cited)):
@@ -296,7 +328,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     for pattern in args.paths or DEFAULT_DOC_PATHS:
         path = base / pattern
         if path.is_dir():
-            docs.extend(sorted(path.glob("**/*.md")))
+            for md in sorted(path.glob("**/*.md")):
+                rel_parts = md.relative_to(path).parts
+                if ".autonomous" in rel_parts or "fixtures" in rel_parts:
+                    continue
+                docs.append(md)
         elif path.is_file():
             docs.append(path)
     source_roots: List[Path] = []
@@ -362,7 +398,8 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[1])
+    desc = __doc__.split("\n\n")[1] if __doc__ and "\n\n" in __doc__ else (__doc__ or "")
+    parser = argparse.ArgumentParser(description=desc)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     check = sub.add_parser("check", help="scan docs for drifted symbols, dead links, spec-id trace breaks")
