@@ -164,6 +164,88 @@ No code for a fix exists: the prefix rehearsal is not redundant, and its removal
 sidelines unreachable (three pinned fullLine continuity tests prove this; the attempt was made and
 reverted).
 
+### Delivered 2026-11-06 — full-line guided targets no longer vanish (#542)
+
+- **Owner-reported defect** (issue #542): with `byLine`/`fullLine`, a correct answer
+  at a line start whose guide route differs from the user's chosen valid move
+  (both transposition-chapter line starts accept two repertoire moves, e.g.
+  Nf6 *or* d5) made the session re-show the identical line start and then
+  **silently consume the queued target** — popped for the guided pass at
+  `review_session.dart` `_advanceToNextDue` and never re-inserted. Reproduced
+  from the 2026-11-06 21:17–21:19 session logs: three admitted fresh targets
+  (`1b638209`, `cc8ff2cf`, and A15's `fb7e5a71` route) dropped with no prompt
+  and no log; the HUD sat at "0 due · 1 done". Root cause isolated via DB + an
+  embedded `app_log` walk; the orientation-repair migration (INV-013) is not
+  involved (FSRS grading kept proper rows throughout).
+- **Fix** (`fix/review-guided-target-loss`): the guided pass records its popped
+  target as pending delivery (`_pendingGuidedTarget`); the walk prompt, the
+  in-line lapse continuation (`_advanceWithinLine`), the walk fall-through,
+  `skip()` and `continueAfterIncorrect` settle it — delivery clears the
+  promise, anything else returns the target to the back of the queue for one
+  honest retry per canonical per session (`_guidedRestored`), then a logged
+  hold-back. `restoreCheckpoint` drops a stale promise. The pinned three-pass
+  dance, INV-068 hold-backs and the prefix rehearsal stay unchanged.
+- **Evidence (G09 fail-to-pass)**: regression test "a guided walk that misses
+  its target returns it to the queue for a later pass"
+  (`test/review/review_session_test.dart`) fails on origin/main with
+  `Expected: 'dec-f-ls' / Actual: <null>` and passes with the fix; full file
+  53/53 green (`fvm flutter test test/review/review_session_test.dart
+  --concurrency=1`); `dart analyze` on `lib/src/domain/review` + `test/review`
+  clean. Why existing tests missed it: the guided-walk fixture pins a
+  single-valid-move line start (divergence unmodelled), INV-068 tests pin the
+  hold-back break in isolation, and nothing asserted the session-level
+  liveness property "admitted targets are prompted or logged-held-back".
+- **Deliberately not in scope**: no settings change (the owner declined the
+  fullLine remedy on 2026-11-06; prefix rehearsal stays). Follow-ups for
+  separate decisions: guide-route hint in the UI, stale move-highlight on
+  re-prompted line starts, and the SPEC invariant addition via the protected
+  lane (tracked in #542).
+
+### Delivered 2026-11-09 — each line start asked once; missed targets delivered as a plain board jump (#542 follow-up)
+
+- **Owner-reported defect** (issue #542, second half): with the 2026-11-06
+  fix in place on the owner's library, real sessions still re-showed the
+  identical line start. The 2026-11-09 trace showed three per-target
+  rehearsal re-asks in a ~12-board session (e5 at 16:01:49→16:18:23,
+  e5 16:18:37→16:19:10, c4 16:19:24) plus a linear residue of the same root
+  design: per-target walk markers can never express "this board was already
+  answered once".
+- **Owner-approved behavior (2026-11-09)**: a line start already answered
+  anywhere in the session is never asked again. The pop path records every
+  ask in `_askedPromptDecisionIds` (set in `_buildPrompt`, any ask counts) and,
+  for a target whose start is recorded, prompts the target directly as a
+  **plain board jump** — no route is auto-played for the learner. The
+  owner rejected the interim auto-played demonstration trail ("it is now
+  playing my moves too"); the trail field, controller replay loop and
+  `_trailForPath` helper never enter this branch — the jump delivers with the
+  card's own position and its spec'd context (chapter title + notation line).
+- **Dedicated-walk machinery removed, not repaired** (`_guidedNodeIds`,
+  `_pendingGuidedTarget`, `_settlePendingGuidedTarget`, `_guidedChild`,
+  `_guidedRestored`): every branch of the earlier design — rehearsal
+  re-ask, guided divergence re-walk, honest-retry restore — could re-ask an
+  answered board or leave the machine playing the user's moves; the
+  once-per-session rule makes the same outcome (no silent consumption of an
+  admitted target) with one mechanism. Walks remain tree-order, never steered
+  (INV-022's due-aware steering untouched in due-only mode).
+- **Lapses**: `continueAfterIncorrect` in full-line mode re-delivers the
+  failed card directly (the answered prefix is never re-walked, so the SPEC
+  INV-025 practice-rehearsal exception has no remaining live instance — the
+  no-double-grade property is now structural). A corrected false start still
+  writes no event (review-3 C2 / D015 unchanged).
+- **Evidence**: `fullLine never re-asks a line start the session already
+  answered` (new, `test/review/review_continuity_test.dart`) and the
+  rewritten lapse/geometry/missed-sideline tests fail on the pre-follow-up
+  engine (bbb20889e) — re-asks rehearse the start instead of delivering —
+  and pass here; the whole `test/review` folder runs 304/304 green with
+  `--concurrency=1`; `dart analyze lib/src/domain/review lib/src/review
+  test/review` clean. Owner run on the live library (2026-11-09 21:01–21:03):
+  15 direct deliveries logged ("Delivered queued ... directly; its line
+  start was asked earlier this session"), no repeated line start, due count
+  236→231, and no auto-played user moves.
+- **Docs**: D019 amended (supersedes the pending-delivery wording);
+  `docs/review.md` full-line section describes direct delivery and the
+  once-per-session rule.
+
 ### Delivered 2026-11-05 — #508, the R2-F4 migration literal, and the overhaul re-verified
 
 - **R2-F4 closed** (#508, merged): the v11 migration's `DEFAULT "white"`
@@ -1042,6 +1124,46 @@ two filed issues below). The sharpest drift risk was in `ReviewController`.
 3. **#551 (issue)** — offline game's parallel busy booleans recorded with the
    legal-combination/scope questions that must be answered before modulating
    that state.
+
+## Takeback hint-load release 2026-11-09 — offline computer controller
+
+Execution of issue #551's proposal 1 per owner approval ("do the good no-risk
+ones"). Bugfix change class; no SPEC INV covers this area (offline-computer
+busy flags are not an invariant subject; nearest owner docs: MVP offline
+computer slice), noted because the new test ships without a cited stable ID.
+
+1. **`fix/offline-takeback-hint-load`.** `OfflineComputerGameController.takeback`
+   (~line 872) now clears `isLoadingHint` in its state copy alongside
+   `isEngineThinking`/`isEvaluatingMove`, closing the window where a hint
+   warm-up started for a position takeback abandons strands the hint button
+   (its `hint()` gate refuses while the flag is set) even when the position
+   landed on already has a usable stored analysis. New regression test
+   `test/model/offline_computer/offline_computer_game_controller_takeback_test.dart`
+   loads a game at 1.e4 e5 whose takeback target carries a deep fixture eval,
+   so the fresh hint cycle after the takeback takes the no-loading fast path
+   and the flag must read unset. Evidence: fail on origin/main with exactly
+   `Expected: false / Actual: <true>`, pass on the change —
+   `scripts/gates/fail_to_pass_check.sh` (G09) reports fail-to-pass verified.
+   Not runtime-validated (no device exercise of the offline computer screen).
+
+## Request-fence adoption 2026-11-09 — shared `RequestGeneration` at the two plain sites
+
+Follow-up execution of issue #550 per owner approval ("do the good no-risk
+ones"), scoped to what the issue itself proposed as safe: the two plainest
+fence adopters. Refactor change class.
+
+1. **`refactor/shared-request-generation`.** New
+   `lib/src/utils/request_generation.dart` (`claim`/`isCurrent` over a
+   monotonic counter) adopted by `ServerAnalysisService` (its capture +
+   `isCurrent()` closure claims through the type) and
+   `ConnectivityChangesNotifier` (`_claimRevision`/`_isCurrent` keep names;
+   the `ref.mounted` guard stays local). The four controllers whose protocol
+   exceeds a counter (review publish protocol, evaluator ownership pair,
+   auth dedup map, offline game) remain bespoke, exactly as the issue laid
+   out. Evidence: targeted analyze clean; affected test files
+   `test/model/analysis/server_analysis_service_test.dart` 16/16 and
+   `test/network/connectivity_test.dart` 17/17, single-worker; post-commit
+   `./scripts/gates.sh t1` before push. Not runtime-validated.
 
 ## Recording rule
 

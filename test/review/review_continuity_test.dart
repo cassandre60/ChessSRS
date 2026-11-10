@@ -367,10 +367,10 @@ void main() {
       // Nothing dropped: the failed card waits for its re-test.
       expect(session.remainingDueCount, 4);
     });
-    // SPEC INV-022. A sideline missed by the first walk gets a dedicated
-    // walk down its own ancestry from its line start — never a mid-line
-    // drop into another variation.
-    test('fullLine gives a missed sideline its own dedicated walk', () {
+    // SPEC INV-022. A sideline missed by the first walk is delivered
+    // directly at its own position — never a mid-line drop into another
+    // variation, never a re-ask of the answered line start.
+    test('fullLine delivers a missed sideline directly as a plain board jump', () {
       const root = RepertoireNode(
         id: 'root',
         fen: 'start',
@@ -534,16 +534,22 @@ void main() {
       // Opens at the line start; the user takes the mainline e4.
       expect(session.currentPrompt?.decision.id, 'dec-r');
       expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-e');
-      expect(session.submitMove(from: 'g1', to: 'f3').nextPrompt, isNotNull);
-      // Mainline ends at the e5 leaf having missed C: dedicated walk
-      // re-opens at the true start (practice prefix), then the user takes
-      // the d4 sideline and the guide follows C's ancestry to it.
-      expect(session.currentPrompt?.decision.id, 'dec-r');
-      expect(session.submitMove(from: 'd2', to: 'd4').nextPrompt?.decision.id, 'dec-m');
-      expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt?.decision.id, 'dec-n');
-      expect(session.submitMove(from: 'd1', to: 'e2').nextPrompt?.decision.id, 'dec-c');
+      final repsBefore = session.reviewStates['dec-r']!.repetitionCount;
+      // Mainline ends at the e5 leaf having missed C: no re-opened walk —
+      // the session prompts C directly as a plain board jump to C's own
+      // position, without steering the user's branch.
+      final stalled = session.submitMove(from: 'g1', to: 'f3');
+      expect(stalled.isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-c');
+      expect(session.currentPrompt?.fen, 'after-Be7');
+      // C grades normally at its delivered position, and only R was graded
+      // on the walked prefix; future-due M and N stay untouched for a
+      // later session.
       expect(session.submitMove(from: 'f1', to: 'd3').nextPrompt, isNull);
       expect(session.isComplete, isTrue);
+      expect(session.reviewStates['dec-r']!.repetitionCount, repsBefore);
+      expect(session.reviewStates['dec-m']!.repetitionCount, 2);
+      expect(session.reviewStates['dec-n']!.repetitionCount, 2);
     });
     // SPEC INV-022, INV-031. Quota ends a full-line walk instead of
     // auto-playing the user's own moves past it: no auto-played move is
@@ -566,10 +572,11 @@ void main() {
       expect(session.completedCount, 1);
       expect(session.isComplete, isTrue);
     });
-    // SPEC INV-022, INV-025. A later walk re-answers its already-answered
-    // prefix with practice grading: no second SRS write, no event, no quota
-    // cost — then grades the new card normally.
-    test('fullLine rehearses answered prefixes without double-grading', () {
+    // SPEC INV-022, INV-025. A full-line walk never re-crosses an
+    // already-answered prefix: a diverged-but-correct walk delivers the
+    // bypassed card directly (no second ask of the line start), so the
+    // prefix cannot be double-graded; the new card grades normally.
+    test('fullLine delivers a bypassed card directly after a diverged correct walk', () {
       const root = RepertoireNode(
         id: 'root',
         fen: 'start',
@@ -687,21 +694,19 @@ void main() {
       expect(session.currentPrompt?.decision.id, 'dec-r');
       // Walk the d4 sideline (user's choice): M is prompted, never due.
       expect(session.submitMove(from: 'd2', to: 'd4').nextPrompt?.decision.id, 'dec-m');
-      expect(session.submitMove(from: 'c2', to: 'c3').nextPrompt, isNotNull);
-      // The sideline ends at the c3 leaf; the bypassed mainline card E is
-      // still queued, so its walk opens at the true start: already-answered
-      // R rehearses instead of re-grading.
-      expect(session.currentPrompt?.decision.id, 'dec-r');
       final repsBefore = session.reviewStates['dec-r']!.repetitionCount;
-      final rehearsal = session.submitMove(from: 'e2', to: 'e4');
-      expect(rehearsal.isCorrect, isTrue);
-      expect(rehearsal.event, isNull);
-      expect(session.reviewStates['dec-r']!.repetitionCount, repsBefore);
-      expect(rehearsal.nextPrompt?.decision.id, 'dec-e');
-      // And the new card grades normally.
+      // The sideline ends at the c3 leaf; the bypassed mainline card E is
+      // delivered directly as a plain board jump to its own position — no
+      // second ask of the already-answered R.
+      final delivered = session.submitMove(from: 'c2', to: 'c3');
+      expect(delivered.isCorrect, isTrue);
+      expect(delivered.nextPrompt?.decision.id, 'dec-e');
+      expect(delivered.nextPrompt?.fen, 'after-e5');
+      // And the new card grades normally, while R is not double-graded.
       final graded = session.submitMove(from: 'g1', to: 'f3');
       expect(graded.isCorrect, isTrue);
       expect(graded.event, isNotNull);
+      expect(session.reviewStates['dec-r']!.repetitionCount, repsBefore);
       expect(session.isComplete, isTrue);
     });
     // first unanswered move: with only C due, review starts at A and walks
@@ -855,20 +860,154 @@ void main() {
       expect(result.autoPlayedMoves.single.move.san, 'e5');
       expect(result.nextPrompt?.decision.id, 'dec-e5');
 
-      // The mainline ends at the e5 leaf having missed C: the dedicated
-      // walk re-opens at the true start (practice prefix for answered R),
-      // then follows C's ancestry down the sideline.
+      // The mainline ends at the e5 leaf having missed C: no re-opened
+      // rehearsal ask — the session prompts C directly as a plain board
+      // jump to the bypassed sideline, and the answered line start is not
+      // double-graded.
+      final repsBefore = session.reviewStates['dec-1']!.repetitionCount;
       final afterE5 = session.submitMove(from: 'g1', to: 'f3');
       expect(afterE5.isCorrect, isTrue);
-      expect(session.currentPrompt?.decision.id, 'dec-1');
-      final repsBefore = session.reviewStates['dec-1']!.repetitionCount;
-      final rehearsal = session.submitMove(from: 'e2', to: 'e4');
-      expect(rehearsal.isCorrect, isTrue);
-      expect(rehearsal.event, isNull);
-      expect(session.reviewStates['dec-1']!.repetitionCount, repsBefore);
-      expect(rehearsal.nextPrompt?.decision.id, 'dec-c5');
+      expect(session.currentPrompt?.decision.id, 'dec-c5');
+      expect(
+        session.currentPrompt?.fen,
+        'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+      );
       expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
       expect(session.isComplete, isTrue);
+      expect(session.reviewStates['dec-1']!.repetitionCount, repsBefore);
+    });
+
+    // SPEC INV-022. The line start is asked at most once per session: when
+    // it was already answered (here as its own due review), a later queued
+    // card under the same start is delivered directly as a plain board jump
+    // — not by re-asking the identical board.
+    test('fullLine never re-asks a line start the session already answered', () {
+      const root = RepertoireNode(
+        id: 'root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+        children: [
+          RepertoireNode(
+            id: 'node-e4',
+            fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+            fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+            incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+            children: [
+              RepertoireNode(
+                id: 'node-e5',
+                fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3-e5',
+                    fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+              RepertoireNode(
+                id: 'node-c5',
+                fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+                fenKey: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                incomingMove: RepertoireMove(from: 'c7', to: 'c5', san: 'c5'),
+                children: [
+                  RepertoireNode(
+                    id: 'node-nf3-c5',
+                    fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+                    fenKey: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq -',
+                    incomingMove: RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final study = Study(
+        id: 'study-reopen',
+        title: 'Reopen',
+        createdAt: baseTime,
+        updatedAt: baseTime,
+      );
+      final chapter = Chapter(
+        id: 'ch-1',
+        studyId: study.id,
+        sourceOrder: 0,
+        title: 'Main',
+        startingFen: root.fen,
+        root: root,
+      );
+      const dec1 = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 'study-reopen',
+        chapterId: 'ch-1',
+        nodeId: 'root',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+      const decE5 = RepertoireDecision(
+        id: 'dec-e5',
+        studyId: 'study-reopen',
+        chapterId: 'ch-1',
+        nodeId: 'node-e5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+      const decC5 = RepertoireDecision(
+        id: 'dec-c5',
+        studyId: 'study-reopen',
+        chapterId: 'ch-1',
+        nodeId: 'node-c5',
+        expectedMoves: [RepertoireMove(from: 'g1', to: 'f3', san: 'Nf3')],
+      );
+
+      // All three are due; the line start is the most overdue, so it pops
+      // first as its own review.
+      final states = {
+        'dec-1': ReviewState(
+          decisionId: 'dec-1',
+          nextDueAt: baseTime.subtract(const Duration(hours: 3)),
+          repetitionCount: 1,
+        ),
+        'dec-e5': ReviewState(
+          decisionId: 'dec-e5',
+          nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+          repetitionCount: 1,
+        ),
+        'dec-c5': ReviewState(
+          decisionId: 'dec-c5',
+          nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+          repetitionCount: 1,
+        ),
+      };
+      final session = ReviewEngine(clock: clock).createSession(
+        studies: [study],
+        chapters: [chapter],
+        decisions: const [dec1, decE5, decC5],
+        reviewStates: states,
+        order: ReviewOrder.dueDate,
+        continuity: ReviewContinuity.fullLine,
+      );
+
+      expect(session.currentPrompt?.decision.id, 'dec-1');
+      final afterOwnReview = session.submitMove(from: 'e2', to: 'e4');
+      expect(afterOwnReview.isCorrect, isTrue);
+      final repsAfterOwnReview = session.reviewStates['dec-1']!.repetitionCount;
+      expect(afterOwnReview.nextPrompt?.decision.id, 'dec-e5');
+
+      // The mainline ends at the e5 leaf; the sideline card pops with the
+      // same line start — asked earlier this session, so no second ask of
+      // dec-1: the card appears as a plain board jump at its own position.
+      final afterE5 = session.submitMove(from: 'g1', to: 'f3');
+      expect(afterE5.isCorrect, isTrue);
+      expect(session.currentPrompt?.decision.id, 'dec-c5');
+      expect(
+        session.currentPrompt?.fen,
+        'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
+      );
+      expect(session.submitMove(from: 'g1', to: 'f3').isCorrect, isTrue);
+      expect(session.isComplete, isTrue);
+      expect(session.reviewStates['dec-1']!.repetitionCount, repsAfterOwnReview);
     });
 
     // SPEC INV-022. A settings flip mid-review steers the very next

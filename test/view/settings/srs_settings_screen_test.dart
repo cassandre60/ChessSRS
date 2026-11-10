@@ -719,7 +719,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final toggles = find.byType(SrsSwitch);
-      expect(toggles, findsNWidgets(13));
+      expect(toggles, findsNWidgets(14));
       for (final element in toggles.evaluate()) {
         final semanticLabel = (element.widget as SrsSwitch).semanticLabel;
         expect(

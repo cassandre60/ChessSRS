@@ -174,6 +174,10 @@ class StudyPreferencesNotifier extends Notifier<StudyPrefs> with PreferencesStor
     }
     return save(state.copyWith(dynamicRepertoireOpeningIds: current));
   }
+
+  Future<void> toggleCompactReviewHud() {
+    return save(state.copyWith(compactReviewHud: !state.compactReviewHud));
+  }
 }
 
 @Freezed(fromJson: true, toJson: true)
@@ -208,7 +212,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     // position is due only once it has been presented, so without a cap this
     // setting is the only thing between a bulk import and its entire backlog
     // landing on the user at once. 0 means no cap.
-    @JsonKey(defaultValue: 20) required int maxNewPerDay,
+    @JsonKey(defaultValue: 10) required int maxNewPerDay,
     // Scope-drawer group ids ('everywhere', 'openings', 'studies') the user
     // collapsed. Empty (default) means every group is expanded.
     @JsonKey(defaultValue: <String>{}) required Set<String> collapsedScopeGroups,
@@ -230,6 +234,8 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     @JsonKey(defaultValue: false) required bool dynamicRepertoireMode,
     @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireStudyIds,
     @JsonKey(defaultValue: <String>{}) required Set<String> dynamicRepertoireOpeningIds,
+    // Compact review HUD: hides verbose progress readouts and study context labels.
+    @JsonKey(defaultValue: false) required bool compactReviewHud,
   }) = _StudyPrefs;
 
   static const defaults = StudyPrefs(
@@ -250,7 +256,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     schedulerEase: 2.5,
     schedulerScaling: 1.5,
     maxDailyReviews: 100,
-    maxNewPerDay: 20,
+    maxNewPerDay: 10,
     collapsedScopeGroups: {},
     collapsibleScopeGroups: true,
     reviewOrder: ReviewOrder.byLine,
@@ -259,6 +265,7 @@ sealed class StudyPrefs with _$StudyPrefs implements Serializable, CommonAnalysi
     dynamicRepertoireMode: false,
     dynamicRepertoireStudyIds: {},
     dynamicRepertoireOpeningIds: {},
+    compactReviewHud: false,
   );
 
   bool isDynamicRepertoireEnabled({String? studyId, String? openingFamily}) {

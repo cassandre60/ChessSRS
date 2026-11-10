@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/persistence/canonical_rekey_migration.dart';
+import 'package:chess_srs/src/persistence/canonical_state_id_backfill.dart';
 import 'package:chess_srs/src/persistence/chapter_orientation_repair_migration.dart';
 import 'package:chess_srs/src/persistence/fen_key_backfill_migration.dart';
 import 'package:chess_srs/src/persistence/node_index.dart';
@@ -144,6 +145,17 @@ Future<Database> _openAppDatabase(DatabaseFactory dbFactory, String path) {
       },
       onOpen: (db) async {
         await _ensureLateSrsColumns(db);
+        // Top-up, not a versioned migration: a database that predates the
+        // canonical-id backfill keeps NULL ids, which makes every duplicate
+        // occurrence of one question its own memory item and queues it again.
+        // Idempotent — after the first run the scan finds no NULL rows.
+        final canonicalFill = await backfillDecisionCanonicalStateIds(db);
+        if (canonicalFill.filled > 0) {
+          _logger.info(
+            'Canonical state id backfill: ${canonicalFill.filled} decisions filled, '
+            '${canonicalFill.skipped} skipped',
+          );
+        }
         await db.transaction((txn) async {
           await Future.wait([
             _deleteOldEntries(txn, 'puzzle', puzzleTTL),
