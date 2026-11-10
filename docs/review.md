@@ -62,25 +62,29 @@ review walks repertoire lines:
   last — even when steps are not yet due. A queued mid-line card opens at
   its line's start; branches always follow tree order (mainline first, never
   steered toward due cards), so review only ever asks lines in the order the
-  repertoire lists them. A sideline missed by the first walk gets a
-  dedicated walk down its own ancestry — never a mid-line drop into another
-  variation; acknowledging a lapse continues down the same line while the
-  failed card waits for its re-test. Your own moves are only ever played by
-  you: when the daily quota is met mid-line, the session ends there instead
-  of auto-playing your remaining moves. Slower (extra prompts count toward
-  the daily limit), but review never teleports mid-line; best while learning
-  new material.
+  repertoire lists them. Each line start is asked at most once per session:
+  a sideline missed by the first walk is delivered directly at its own
+  position as a plain board jump — never a re-ask of the identical line
+  start, never a silent consumption; the machine never plays the learner's
+  route moves, and walked lines auto-play only opponent replies as before.
+  Acknowledging a lapse re-delivers the failed card directly (same
+  once-per-rule: the answered prefix is never re-asked) and continues down
+  the line while the failed card waits for its re-test. Your own moves are
+  only ever played by you: when the daily quota is met mid-line, the session
+  ends there instead of auto-playing your remaining moves. Slower (extra
+  prompts count toward the daily limit), but review never teleports into an
+  unrelated mid-line position; best while learning new material.
 
 ### Why a sideline can wait while its line repeats (owner report 2026-10-16)
 
 Branches are never steered: at every position with several repertoire
-replies, the move you play picks the line — including on dedicated walks.
-So a due sideline whose branch you never take keeps opening its line at the
-start, and you keep replaying the mainline prefix out of habit while it
-waits. Those repeats are rehearsals, not reviews: they are never graded (no
-interval, repetition, or lapse changes), log no events, and cost no quota
-(each position counts once). To meet the sideline, take its move at the
-junction once — the walk then follows it to the end.
+replies, the move you play picks the line. So a due sideline whose branch
+you never take keeps opening its line at the start, and you keep replaying
+the mainline prefix out of habit while it waits (owner report 2026-11-06:
+the same position asked twice in one session — issue #542). The once-per-
+session rule answers it: the line start is rehearsed once; when the missed
+sideline comes up later in the same session it is delivered directly with
+no second ask of the identical board and no auto-played demonstration.
 
 ## Opponent Variation Selection (Due-Aware & Anti-Repetition)
 
