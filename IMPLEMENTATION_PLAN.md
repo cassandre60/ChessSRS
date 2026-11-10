@@ -1043,6 +1043,27 @@ two filed issues below). The sharpest drift risk was in `ReviewController`.
    legal-combination/scope questions that must be answered before modulating
    that state.
 
+## Takeback hint-load release 2026-11-09 — offline computer controller
+
+Execution of issue #551's proposal 1 per owner approval ("do the good no-risk
+ones"). Bugfix change class; no SPEC INV covers this area (offline-computer
+busy flags are not an invariant subject; nearest owner docs: MVP offline
+computer slice), noted because the new test ships without a cited stable ID.
+
+1. **`fix/offline-takeback-hint-load`.** `OfflineComputerGameController.takeback`
+   (~line 872) now clears `isLoadingHint` in its state copy alongside
+   `isEngineThinking`/`isEvaluatingMove`, closing the window where a hint
+   warm-up started for a position takeback abandons strands the hint button
+   (its `hint()` gate refuses while the flag is set) even when the position
+   landed on already has a usable stored analysis. New regression test
+   `test/model/offline_computer/offline_computer_game_controller_takeback_test.dart`
+   loads a game at 1.e4 e5 whose takeback target carries a deep fixture eval,
+   so the fresh hint cycle after the takeback takes the no-loading fast path
+   and the flag must read unset. Evidence: fail on origin/main with exactly
+   `Expected: false / Actual: <true>`, pass on the change —
+   `scripts/gates/fail_to_pass_check.sh` (G09) reports fail-to-pass verified.
+   Not runtime-validated (no device exercise of the offline computer screen).
+
 ## Request-fence adoption 2026-11-09 — shared `RequestGeneration` at the two plain sites
 
 Follow-up execution of issue #550 per owner approval ("do the good no-risk

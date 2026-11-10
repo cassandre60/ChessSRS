@@ -874,6 +874,7 @@ class OfflineComputerGameController extends Notifier<OfflineComputerGameState> {
       stepCursor: finalSteps.length - 1,
       isEngineThinking: false,
       isEvaluatingMove: false,
+      isLoadingHint: false,
       hintMove: null,
       showingSuggestedMove: null,
     );
