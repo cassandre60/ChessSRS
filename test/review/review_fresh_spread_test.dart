@@ -221,6 +221,63 @@ void main() {
     });
   });
 
+  group('canonical-key counting (mutation pin)', () {
+    test('counts a reviewed decision under its canonical key even when its row id differs', () {
+      // A decision whose canonicalStateId differs from its row id is counted as
+      // presented only when the review state is keyed by the canonical id (the
+      // production scheme). The mutant (&& -> ||) skips it because the row id
+      // has no state, understating the study's presented count.
+      const reviewedShared = RepertoireDecision(
+        id: 'row-under-id-key',
+        studyId: 'a',
+        chapterId: 'ch-a',
+        nodeId: 'n-reviewed',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+        canonicalStateId: 'shared-canonical',
+      );
+      const freshA1 = RepertoireDecision(
+        id: 'fresh-a-1',
+        studyId: 'a',
+        chapterId: 'ch-a',
+        nodeId: 'n-a-1',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+      const freshA2 = RepertoireDecision(
+        id: 'fresh-a-2',
+        studyId: 'a',
+        chapterId: 'ch-a',
+        nodeId: 'n-a-2',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+      const freshB = RepertoireDecision(
+        id: 'fresh-b',
+        studyId: 'b',
+        chapterId: 'ch-b',
+        nodeId: 'n-b',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+      );
+
+      final order = freshIntroductionOrderFor(
+        decisions: [reviewedShared, freshA1, freshA2, freshB],
+        reviewStates: {
+          'shared-canonical': ReviewState(
+            decisionId: 'shared-canonical',
+            firstReviewedAt: baseTime,
+            nextDueAt: baseTime,
+            repetitionCount: 1,
+          ),
+        },
+      );
+
+      final ordered = order([freshA1, freshA2, freshB]);
+      expect(
+        ordered.first.studyId,
+        'b',
+        reason: 'study a already has a presented shared-canonical position, so study b leads',
+      );
+    });
+  });
+
   group('by-line ordering (INV-066)', () {
     test('does not decode chapters outside the queue', () {
       // Twenty chapters, one fresh decision each, allowance one: only a single
