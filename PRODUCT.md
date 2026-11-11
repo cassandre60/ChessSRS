@@ -13,6 +13,9 @@ The core premise:
 
 The application is not a general tactics trainer, an engine analysis cockpit, or a social network. Its purpose is to turn a player's curated repertoire material into **instant, reliable, retrievable memory**.
 
+**High-Level Principle — The Board (FEN) Is the Only Truth in Review:**
+> During review, the learner interacts solely with the board position (4-field FEN) in front of them — never with underlying PGN structure, move orders, or study/chapter boundaries. If a move exists for that exact FEN anywhere in the active review scope, it must be accepted, and answering a board position once satisfies that position across all in-scope occurrences for the session.
+
 ---
 
 ## 2. Target Users
@@ -70,6 +73,7 @@ The application is not a general tactics trainer, an engine analysis cockpit, or
    - Extract move comments and NAGs without corrupting tree structure.
 
 2. **Repertoire Training Model**:
+   - **Board-only truth**: In review, only the 4-field FEN on the board matters. A learner never needs to worry about PGNs, move orders, or which study/chapter is active under the hood; every repertoire move recorded for that FEN anywhere in the active scope is accepted.
    - Training evaluates whether the player remembered **their repertoire**, not whether the move is engine-optimal.
    - Opponent mistakes and prepared punishments are first-class repertoire content.
    - Player decision points are derived for the user's perspective.
