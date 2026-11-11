@@ -259,7 +259,13 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                       child: SrsPressable(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          ref.read(reviewControllerProvider.notifier).selectSide(side);
+                          ref
+                              .read(reviewControllerProvider.notifier)
+                              .changeScope(
+                                side == Side.white
+                                    ? const ReviewScope.white()
+                                    : const ReviewScope.black(),
+                              );
                         },
                         semanticLabel:
                             'All ${ReviewScopeDrawer.sideLabel(side, context.l10n)}, '
@@ -285,7 +291,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    ReviewScopeDrawer.sideLabel(side, context.l10n),
+                                    'All ${ReviewScopeDrawer.sideLabel(side, context.l10n)} Repertoires',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: SrsText.scopeName(c.ink),
@@ -407,6 +413,46 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                           : ListView(
                               padding: const EdgeInsets.symmetric(vertical: 4.0),
                               children: [
+                                // All Repertoires (General Review)
+                                if (query.isEmpty ||
+                                    'all repertoires'.contains(query.toLowerCase()) ||
+                                    'general review'.contains(query.toLowerCase())) ...[
+                                  Builder(
+                                    builder: (context) {
+                                      final isGeneralSelected =
+                                          activeScope.studyId == null &&
+                                          activeScope.chapterId == null &&
+                                          activeScope.openingFamily == null &&
+                                          (activeScope.side == null || activeScope.side == side);
+                                      final totalDue =
+                                          reviewState.sideProgress[side]?.dueDecisions ?? 0;
+                                      return Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _GeneralReviewRow(
+                                            side: side,
+                                            dueCount: totalDue,
+                                            isSelected: isGeneralSelected,
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              ref
+                                                  .read(reviewControllerProvider.notifier)
+                                                  .changeScope(
+                                                    side == Side.white
+                                                        ? const ReviewScope.white()
+                                                        : const ReviewScope.black(),
+                                                  );
+                                            },
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(height: 1, color: c.hairlineSoft),
+                                          const SizedBox(height: 4),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ],
+
                                 // Group: Openings
                                 if (filteredOpeningHubs.isNotEmpty) ...[
                                   _buildGroupHeader(
@@ -798,6 +844,80 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
 /// revealed on hover, because hover does not exist on the touch screens this app mostly runs on
 /// and a control that appears only under a pointer the device does not have is a control that is
 /// missing for most of the people using it.
+class _GeneralReviewRow extends StatelessWidget {
+  const _GeneralReviewRow({
+    required this.side,
+    required this.isSelected,
+    required this.dueCount,
+    required this.onPressed,
+  });
+
+  final Side side;
+  final bool isSelected;
+  final int dueCount;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.srs;
+    final sideName = side == Side.white ? context.l10n.white : context.l10n.black;
+    return SrsPressable(
+      onPressed: onPressed,
+      semanticLabel: 'All $sideName Repertoires, $dueCount due',
+      semanticsSelected: isSelected,
+      radius: 8,
+      builder: (context, hovered, pressed) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: isSelected
+                ? c.accentSoft
+                : hovered
+                ? c.hairlineSoft
+                : const Color(0x00000000),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            child: Row(
+              children: [
+                _ColourSwatch(side: side),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'All $sideName Repertoires',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: SrsText.rowName(isSelected ? c.ink2 : c.ink),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'General review · all active studies',
+                        style: SrsText.rowSub(isSelected ? c.ink2 : c.ink3),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '$dueCount ${context.l10n.mobileReviewDueWord}',
+                  style: SrsText.due(isSelected ? c.ink2 : c.ink3),
+                ),
+                if (isSelected) ...[
+                  const SizedBox(width: 8),
+                  Icon(Symbols.check_rounded, size: 18, color: c.accent),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ScopeRow extends StatelessWidget {
   const _ScopeRow({
     required this.name,

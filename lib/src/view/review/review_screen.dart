@@ -907,10 +907,21 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
                 state.scope.studyId == null &&
                 state.scope.chapterId == null &&
                 state.scope.openingFamily == null;
-            final hideContextLabel = isGeneralScope || compactReviewHud;
-            final contextLabel = hideContextLabel
-                ? ''
-                : (prompt.chapterTitle ?? prompt.studyTitle ?? '');
+            final String contextLabel;
+            if (compactReviewHud) {
+              contextLabel = '';
+            } else if (isGeneralScope) {
+              contextLabel = 'All Repertoires';
+            } else if (state.scope.openingFamily != null) {
+              contextLabel = 'Opening · ${state.scope.openingFamily}';
+            } else if (state.scope.studyId != null) {
+              final currentStudy = state.studies
+                  .where((s) => s.id == state.scope.studyId)
+                  .firstOrNull;
+              contextLabel = 'Study · ${currentStudy?.title ?? prompt.studyTitle ?? ''}';
+            } else {
+              contextLabel = prompt.chapterTitle ?? prompt.studyTitle ?? '';
+            }
             return SrsReviewSide(
               wide: wide,
               lineFontSize: wide ? 28.0 : 24.0,
@@ -1015,18 +1026,6 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
           _UnlockBranchBanner(pending: state.pendingUnlock!),
           if (content is! SizedBox) content,
         ],
-      );
-    }
-
-    // Dynamic mode with nothing unlocked cannot introduce a single new
-    // position: only already-learned lines are scheduled. Say so instead of
-    // letting the library look broken ("it serves the same line every day").
-    final session = state.session;
-    if (session != null && session.dynamicRepertoireMode && session.unlockedDecisionIds.isEmpty) {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [const _FreezeBannerHost(), if (content is! SizedBox) content],
       );
     }
 
@@ -1461,7 +1460,11 @@ class _OpenInAnalysisButton extends StatelessWidget {
         label: context.l10n.mobileReviewOpenInAnalysis,
         onPressed: () => Navigator.of(context, rootNavigator: true).push(
           AnalysisScreen.buildRoute(
-            analysisOptionsForReviewPosition(fen: fen, orientation: state.boardOrientation),
+            analysisOptionsForReviewPosition(
+              fen: fen,
+              orientation: state.boardOrientation,
+              moveHistory: state.currentPrompt?.moveHistory ?? const [],
+            ),
           ),
         ),
       ),
