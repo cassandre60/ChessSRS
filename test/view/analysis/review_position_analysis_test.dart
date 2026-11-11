@@ -3,6 +3,7 @@
 
 import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/node.dart';
+import 'package:chess_srs/src/model/common/uci.dart';
 import 'package:chess_srs/src/view/analysis/analysis_options.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,4 +52,51 @@ void main() {
     final pgnOption = options as Pgn;
     expect(pgnOption.pgn, contains(fen));
   });
+
+  test(
+    'analysisOptionsForReviewPosition preserves custom startingFen and continuation moves (e.g. Scandinavian)',
+    () {
+      const startingFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      const promptFen = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+
+      final options = analysisOptionsForReviewPosition(
+        fen: promptFen,
+        startingFen: startingFen,
+        orientation: Side.white,
+        moveHistory: const ['d5'],
+        continuationMoves: const ['exd5', 'Qxd5', 'Nc3', 'Qa5'],
+      );
+
+      expect(options, isA<Pgn>());
+      final pgnOption = options as Pgn;
+      expect(pgnOption.initialMoveCursor, 1);
+      expect(pgnOption.pgn, contains('[FEN "$startingFen"]'));
+      expect(pgnOption.pgn, contains('1... d5 2. exd5 Qxd5 3. Nc3 Qa5'));
+
+      final game = PgnGame.parsePgn(pgnOption.pgn);
+      var cursorPath = UciPath.empty;
+      final root = Root.fromPgnGame(
+        game,
+        onVisitNode: (root, branch, isMainline) {
+          if (isMainline &&
+              pgnOption.initialMoveCursor != null &&
+              branch.position.ply <= root.position.ply + pgnOption.initialMoveCursor!) {
+            cursorPath = cursorPath + branch.id;
+          }
+        },
+      );
+
+      // The move tree has all 5 moves (not blank!)
+      expect(root.children, isNotEmpty);
+      expect(root.children.first.sanMove.san, 'd5');
+
+      // And the initial cursor lands on the exact drilled prompt position (1. e4 d5)
+      final nodeAtCursor = root.nodeAt(cursorPath);
+      expect(
+        nodeAtCursor.position.fen,
+        startsWith('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -'),
+      );
+      expect(nodeAtCursor.children.first.sanMove.san, 'exd5');
+    },
+  );
 }

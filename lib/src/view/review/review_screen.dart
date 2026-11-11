@@ -1450,10 +1450,36 @@ class _OpenInAnalysisButton extends StatelessWidget {
 
   final ReviewScreenState state;
 
+  static List<String> _continuationMoves(ReviewScreenState state) {
+    final prompt = state.currentPrompt;
+    if (prompt == null) return const [];
+    final expected = state.expectedMove ?? prompt.expectedMoves.firstOrNull;
+    final node = prompt.currentNode;
+    if (node != null && node.children.isNotEmpty) {
+      final out = <String>[];
+      RepertoireNode? child =
+          (expected != null ? node.childForMove(expected) : null) ?? node.children.first;
+      while (child != null) {
+        final m = child.incomingMove;
+        if (m != null) {
+          out.add(m.san ?? m.uci);
+        }
+        child = child.children.firstOrNull;
+      }
+      if (out.isNotEmpty) return out;
+    }
+    if (expected != null) {
+      return [expected.san ?? expected.uci];
+    }
+    return const [];
+  }
+
   @override
   Widget build(BuildContext context) {
     final fen = state.boardPosition?.fen;
     if (fen == null) return const SizedBox.shrink();
+    final prompt = state.currentPrompt;
+    final chapter = prompt != null ? state.session?.getChapter(prompt.chapterId) : null;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: SrsTextButton(
@@ -1462,8 +1488,10 @@ class _OpenInAnalysisButton extends StatelessWidget {
           AnalysisScreen.buildRoute(
             analysisOptionsForReviewPosition(
               fen: fen,
+              startingFen: chapter?.startingFen,
               orientation: state.boardOrientation,
-              moveHistory: state.currentPrompt?.moveHistory ?? const [],
+              moveHistory: prompt?.moveHistory ?? const [],
+              continuationMoves: _continuationMoves(state),
             ),
           ),
         ),
