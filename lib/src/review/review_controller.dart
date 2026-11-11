@@ -1519,9 +1519,10 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       if (prompt != null) {
         final d = prompt.decision;
         final dState = session.reviewStates[d.canonicalId] ?? session.reviewStates[d.id];
-        final isLearned = dState != null && dState.repetitionCount > 0;
+        final hasReviewHistory =
+            dState != null && (dState.repetitionCount > 0 || dState.lapseCount > 0);
         final isUnlocked =
-            isLearned ||
+            hasReviewHistory ||
             session.unlockedDecisionIds.contains(d.id) ||
             session.unlockedDecisionIds.contains(d.canonicalId);
         if (!isUnlocked) {
@@ -1655,6 +1656,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         // Reguess attempt after previous lapse
         final result = await _service.retryMove(from: from, to: to, promotion: promotion);
         if (!ref.mounted || generation != _generation) return result;
+        if (result.adoptedDecisionIds.isNotEmpty) {
+          ref.invalidate(unlockedDecisionCountProvider);
+        }
         if (result.isCorrect) {
           await _handleCorrectAdvancement(
             currentState: currentState,
@@ -1688,6 +1692,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       // Initial move attempt on this prompt
       final result = await _service.submitMove(from: from, to: to, promotion: promotion);
       if (!ref.mounted || generation != _generation) return result;
+      if (result.adoptedDecisionIds.isNotEmpty) {
+        ref.invalidate(unlockedDecisionCountProvider);
+      }
 
       if (result.isCorrect) {
         await _handleCorrectAdvancement(

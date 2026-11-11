@@ -20,6 +20,7 @@ class ReviewStepResult {
     this.nextPrompt,
     this.sessionComplete = false,
     this.sideEffectStates = const [],
+    this.adoptedDecisionIds = const [],
   });
 
   final bool isCorrect;
@@ -34,6 +35,9 @@ class ReviewStepResult {
   /// Secondary states updated as graph side-effects (lapse contagion, confusable
   /// sibling coupling, or auto-traversal credit).
   final List<ReviewState> sideEffectStates;
+
+  /// Decision ids newly adopted into dynamic repertoire SRS by playing a branch.
+  final List<String> adoptedDecisionIds;
 
   @override
   String toString() =>
