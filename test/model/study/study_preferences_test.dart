@@ -33,7 +33,6 @@ void main() {
     });
   });
 
-
   group('StudyPrefs defaults (mutation pins)', () {
     test('defaults carry the documented boolean values', () {
       final d = StudyPrefs.defaults;
@@ -58,5 +57,4 @@ void main() {
       expect(prefs.isDynamicRepertoireEnabled(), isTrue);
     });
   });
-
 }
