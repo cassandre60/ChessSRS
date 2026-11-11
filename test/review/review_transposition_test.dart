@@ -687,6 +687,7 @@ void main() {
           },
           scope: const ReviewScope.white(),
           transposeScope: TransposeScope.inScope,
+          nodeIndex: const {'other': []},
         );
 
         expect(session.currentPrompt?.decision.id, decH4.id);
