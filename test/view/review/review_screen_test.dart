@@ -2855,6 +2855,58 @@ void main() {
         expect(find.textContaining('retained'), findsNothing);
       },
     );
+
+    testWidgets('scope clarity and return to general review from drawer', (tester) async {
+      const pgn = '''
+[Event "French Defense"]
+[ChapterName "Advance Variation"]
+1. e4 e6 2. d4 d5 3. e5 *
+''';
+      final importResult = importPgn(
+        pgn,
+        studyTitle: 'French Defense Study',
+        repertoireSide: Side.white,
+      );
+      await tester.runAsync(() async {
+        await repo.saveImportResult(importResult);
+      });
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: const ReviewScreen(),
+        overrides: {
+          srsStudyRepositoryProvider: srsStudyRepositoryProvider.overrideWith((ref) => repo),
+          clockProvider: clockProvider.overrideWithValue(clock),
+          reviewServiceProvider: reviewServiceProvider.overrideWith(
+            (ref) => ReviewService(repository: repo, clock: clock),
+          ),
+        },
+      );
+
+      await tester.pumpWidget(app);
+      await pumpUntilFound(tester, find.byType(Chessboard));
+
+      // 1. General review clearly indicates scope
+      expect(find.text('All Repertoires'), findsOneWidget);
+
+      // 2. Open drawer and switch to study scope
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpUntilFound(tester, find.text('French Defense Study'));
+      await tester.tap(find.text('French Defense Study'));
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
+
+      // Now reviewing specific study: shows study title
+      expect(find.textContaining('French Defense Study'), findsOneWidget);
+
+      // 3. Open drawer again and return to General Review
+      await tester.tap(find.byTooltip('White repertoire'));
+      await pumpUntilFound(tester, find.text('All White Repertoires'));
+      await tester.tap(find.text('All White Repertoires'));
+      await pumpAsyncUntil(tester, () => !tester.any(find.byType(ReviewScopeDrawer)));
+
+      // Back in general review!
+      expect(find.text('All Repertoires'), findsOneWidget);
+    });
   });
 }
 
