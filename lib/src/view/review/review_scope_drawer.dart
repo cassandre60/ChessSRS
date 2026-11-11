@@ -291,7 +291,7 @@ class _ReviewScopeDrawerState extends ConsumerState<ReviewScopeDrawer> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'All ${ReviewScopeDrawer.sideLabel(side, context.l10n)} Repertoires',
+                                    ReviewScopeDrawer.sideLabel(side, context.l10n),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: SrsText.scopeName(c.ink),
