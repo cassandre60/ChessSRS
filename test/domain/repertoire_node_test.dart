@@ -105,14 +105,14 @@ void main() {
 
     test('copyWith replaces provided fields while preserving identity and defaults', () {
       const originalMove = RepertoireMove(from: 'e2', to: 'e4');
-      final original = RepertoireNode(
+      const original = RepertoireNode(
         id: 'node-1',
         fen: e4Fen,
         fenKey: e4Key,
         incomingMove: originalMove,
         comment: 'old',
-        nags: const [1],
-        children: const [],
+        nags: [1],
+        children: [],
       );
       const replacementMove = RepertoireMove(from: 'd2', to: 'd4');
       final child = RepertoireNode.child(fen: d4Fen, fenKey: d4Key, incomingMove: replacementMove);
