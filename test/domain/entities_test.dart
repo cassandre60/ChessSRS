@@ -248,6 +248,62 @@ void main() {
       expect(d.accepts(const RepertoireMove(from: 'c2', to: 'c4')), isFalse);
     });
 
+    test('accepts() uses move matching semantics (castling equivalence)', () {
+      final d = RepertoireDecision.create(
+        studyId: 's1',
+        chapterId: 'c1',
+        nodeId: 'n1',
+        expectedMoves: const [RepertoireMove(from: 'e1', to: 'g1', san: 'O-O')],
+      );
+      expect(d.accepts(const RepertoireMove(from: 'e1', to: 'h1')), isTrue);
+    });
+
+    test('canonicalId falls back to id when canonicalStateId is null', () {
+      const d = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 's1',
+        chapterId: 'c1',
+        nodeId: 'n1',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4')],
+      );
+      expect(d.canonicalId, equals('dec-1'));
+    });
+
+    test('canonicalId returns canonicalStateId when set', () {
+      const d = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 's1',
+        chapterId: 'c1',
+        nodeId: 'n1',
+        canonicalStateId: 'canon-1',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4')],
+      );
+      expect(d.canonicalId, equals('canon-1'));
+    });
+
+    test('equality and hashCode ignore fenKey and expectedMoves', () {
+      const a = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 's1',
+        chapterId: 'c1',
+        nodeId: 'n1',
+        canonicalStateId: 'canon-1',
+        fenKey: 'fen-a',
+        expectedMoves: [RepertoireMove(from: 'e2', to: 'e4')],
+      );
+      const b = RepertoireDecision(
+        id: 'dec-1',
+        studyId: 's1',
+        chapterId: 'c1',
+        nodeId: 'n1',
+        canonicalStateId: 'canon-1',
+        fenKey: 'fen-b',
+        expectedMoves: [RepertoireMove(from: 'd2', to: 'd4')],
+      );
+      expect(a, equals(b));
+      expect(a.hashCode, equals(b.hashCode));
+    });
+
     test('expectedMoves list is unmodifiable', () {
       final d = RepertoireDecision.create(
         studyId: 's1',
