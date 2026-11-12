@@ -1,9 +1,11 @@
+import 'package:chess_srs/src/model/analysis/opening_service.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/speed.dart';
 import 'package:chess_srs/src/model/explorer/opening_explorer.dart';
 import 'package:chess_srs/src/model/explorer/opening_explorer_repository.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 
@@ -253,6 +255,133 @@ void main() {
 
       final result = await repo.getOpenDatabase('fen');
       expect(result.moves.length, 1);
+      expect(result.moves.first.san, 'e4');
+      expect(result.moves.first.uci, 'e2e4');
+      expect(result.moves.first.performance, 10);
+      expect(result.white + result.draws + result.black, 1000);
+      expect(result.opening, isNull);
+    });
+
+    test('returns empty entry for non-standard variants without calling chessdb', () async {
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn') {
+          fail('chessdb should not be queried for non-standard variants');
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      final result = await repo.getOpenDatabase('fen', variant: Variant.crazyhouse);
+
+      expect(result.moves, isEmpty);
+      expect(result.white, 0);
+      expect(result.draws, 0);
+      expect(result.black, 0);
+    });
+
+    test('falls back to empty entry when chessdb response is not usable', () async {
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn') {
+          return mockResponse('{"status":"no_bestmove"}', 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      final result = await repo.getOpenDatabase('fen');
+
+      expect(result.moves, isEmpty);
+    });
+
+    test('falls back to empty entry when chessdb request fails', () async {
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn') {
+          return mockResponse('boom', 500);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      final result = await repo.getOpenDatabase('fen');
+
+      expect(result.moves, isEmpty);
+    });
+
+    test('enriches entry with opening from openingService', () async {
+      const response =
+          '{"status":"ok","moves":[{"uci":"e2e4","san":"e4","winrate":"50.0","score":10}]}';
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn') {
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final refProvider = Provider((ref) => ref);
+      final repo = OpeningExplorerRepository(
+        mockClient,
+        openingService: _FakeOpeningService(
+          container.read(refProvider),
+          const FullOpening(
+            eco: 'B00',
+            name: "King's Pawn Game",
+            fen: 'fen',
+            pgnMoves: '1. e4',
+            uciMoves: 'e2e4',
+          ),
+        ),
+      );
+
+      final result = await repo.getOpenDatabase('fen');
+
+      expect(result.opening, isNotNull);
+      expect(result.opening!.eco, 'B00');
+      expect(result.opening!.name, "King's Pawn Game");
+      expect(result.moves.length, 1);
+    });
+
+    test('ignores openingService failures', () async {
+      final mockClient = MockClient((request) {
+        if (request.url.host == 'www.chessdb.cn') {
+          return mockResponse('', 500);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final refProvider = Provider((ref) => ref);
+      final repo = OpeningExplorerRepository(
+        mockClient,
+        openingService: _ThrowingOpeningService(container.read(refProvider)),
+      );
+
+      final result = await repo.getOpenDatabase('fen');
+
+      expect(result.moves, isEmpty);
+      expect(result.opening, isNull);
     });
   });
+}
+
+class _FakeOpeningService extends OpeningService {
+  _FakeOpeningService(super.ref, this.result);
+
+  final FullOpening? result;
+
+  @override
+  Future<FullOpening?> fetchFromFen(String fen) async => result;
+}
+
+class _ThrowingOpeningService extends OpeningService {
+  _ThrowingOpeningService(super.ref);
+
+  @override
+  Future<FullOpening?> fetchFromFen(String fen) async => throw Exception('boom');
 }
