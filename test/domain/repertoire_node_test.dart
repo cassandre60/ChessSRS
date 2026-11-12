@@ -55,56 +55,35 @@ void main() {
   });
 
   group('immutability and tree operations', () {
-    test(
-      'addChild appends children in order without mutating the original',
-      () {
-        final root = RepertoireNode.root(fen: startFen, fenKey: startKey);
-        const e4 = RepertoireMove(from: 'e2', to: 'e4', san: 'e4');
-        const d4 = RepertoireMove(from: 'd2', to: 'd4', san: 'd4');
-        final e4Child = RepertoireNode.child(
-          fen: e4Fen,
-          fenKey: e4Key,
-          incomingMove: e4,
-        );
-        final d4Child = RepertoireNode.child(
-          fen: d4Fen,
-          fenKey: d4Key,
-          incomingMove: d4,
-        );
+    test('addChild appends children in order without mutating the original', () {
+      final root = RepertoireNode.root(fen: startFen, fenKey: startKey);
+      const e4 = RepertoireMove(from: 'e2', to: 'e4', san: 'e4');
+      const d4 = RepertoireMove(from: 'd2', to: 'd4', san: 'd4');
+      final e4Child = RepertoireNode.child(fen: e4Fen, fenKey: e4Key, incomingMove: e4);
+      final d4Child = RepertoireNode.child(fen: d4Fen, fenKey: d4Key, incomingMove: d4);
 
-        final withOne = root.addChild(e4Child);
-        final withTwo = withOne.addChild(d4Child);
+      final withOne = root.addChild(e4Child);
+      final withTwo = withOne.addChild(d4Child);
 
-        expect(root.children, isEmpty);
-        expect(withOne.children, [e4Child]);
-        expect(withTwo.children, [e4Child, d4Child]);
-        expect(withTwo.isLeaf, isFalse);
-        expect(withTwo.childMoves, [e4, d4]);
-        expect(withTwo.id, root.id);
-        expect(withTwo.fen, root.fen);
-        expect(withTwo.fenKey, root.fenKey);
-      },
-    );
+      expect(root.children, isEmpty);
+      expect(withOne.children, [e4Child]);
+      expect(withTwo.children, [e4Child, d4Child]);
+      expect(withTwo.isLeaf, isFalse);
+      expect(withTwo.childMoves, [e4, d4]);
+      expect(withTwo.id, root.id);
+      expect(withTwo.fen, root.fen);
+      expect(withTwo.fenKey, root.fenKey);
+    });
 
     test('childForMove finds matching child by move semantics and returns null when absent', () {
       final root = RepertoireNode.root(fen: startFen, fenKey: startKey);
       const e4 = RepertoireMove(from: 'e2', to: 'e4', san: 'e4');
-      final e4Child = RepertoireNode.child(
-        fen: e4Fen,
-        fenKey: e4Key,
-        incomingMove: e4,
-      );
+      final e4Child = RepertoireNode.child(fen: e4Fen, fenKey: e4Key, incomingMove: e4);
       final updated = root.addChild(e4Child);
 
       // Same squares, different SAN/case should still match via RepertoireMove.matches.
-      expect(
-        updated.childForMove(const RepertoireMove(from: 'E2', to: 'E4')),
-        same(e4Child),
-      );
-      expect(
-        updated.childForMove(const RepertoireMove(from: 'd2', to: 'd4')),
-        isNull,
-      );
+      expect(updated.childForMove(const RepertoireMove(from: 'E2', to: 'E4')), same(e4Child));
+      expect(updated.childForMove(const RepertoireMove(from: 'd2', to: 'd4')), isNull);
     });
 
     test('childMoves returns incoming moves in child order', () {
@@ -136,11 +115,7 @@ void main() {
         children: const [],
       );
       const replacementMove = RepertoireMove(from: 'd2', to: 'd4');
-      final child = RepertoireNode.child(
-        fen: d4Fen,
-        fenKey: d4Key,
-        incomingMove: replacementMove,
-      );
+      final child = RepertoireNode.child(fen: d4Fen, fenKey: d4Key, incomingMove: replacementMove);
 
       final copied = original.copyWith(
         children: [child],
@@ -169,16 +144,8 @@ void main() {
     test('nodes are equal by id and fenKey and hash consistently', () {
       const a = RepertoireNode(id: 'same', fen: 'fen-a', fenKey: 'key');
       const b = RepertoireNode(id: 'same', fen: 'fen-b', fenKey: 'key');
-      const differentId = RepertoireNode(
-        id: 'other',
-        fen: 'fen-a',
-        fenKey: 'key',
-      );
-      const differentKey = RepertoireNode(
-        id: 'same',
-        fen: 'fen-a',
-        fenKey: 'other-key',
-      );
+      const differentId = RepertoireNode(id: 'other', fen: 'fen-a', fenKey: 'key');
+      const differentKey = RepertoireNode(id: 'same', fen: 'fen-a', fenKey: 'other-key');
 
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
