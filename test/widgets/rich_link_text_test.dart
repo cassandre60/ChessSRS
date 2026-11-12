@@ -137,6 +137,13 @@ void main() {
       expect(result.firstWhere((e) => e is UrlElement), isA<UrlElement>());
     });
 
+    test('detects URL on a new line after plain text', () {
+      final result = linkify('hello\nhttps://example.com/path');
+      final urls = result.whereType<UrlElement>().toList();
+      expect(urls, hasLength(1));
+      expect(urls.single.url, 'https://example.com/path');
+    });
+
     test('text with no links returns single TextElement', () {
       final result = linkify('plain text without any links');
       expect(result, hasLength(1));
