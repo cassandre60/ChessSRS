@@ -219,10 +219,13 @@ class ReviewSession {
       }
     }
 
-    // Index the queued chapters' tree-free decision maps.
+    // Index the queued chapters' tree-free decision maps, plus any chapter
+    // whose decisions already carry their v21 fenKey (tree-free, O(decisions)).
     final neededChapterIds = _unbufferedQueue.map((d) => d.chapterId).toSet();
     for (final chapter in chapters) {
-      if (neededChapterIds.contains(chapter.id)) {
+      final chDecisions = _decisionsByChapter[chapter.id];
+      if (neededChapterIds.contains(chapter.id) ||
+          (chDecisions != null && chDecisions.every((d) => d.fenKey != null))) {
         _indexChapterDecisions(chapter);
       }
     }
@@ -458,6 +461,19 @@ class ReviewSession {
     if (chapter != null) _indexChapterNodes(chapter);
   }
 
+  /// Indexes decision maps only for chapters whose decisions carry their v21
+  /// `fenKey` (100% tree-free, O(decisions)). Never decodes chapter trees.
+  void _ensureTreeFreeDecisionMapsIndexed() {
+    if (_decisionIndexedChapterIds.length >= _chaptersList.length) return;
+    for (final c in _chaptersList) {
+      if (_decisionIndexedChapterIds.contains(c.id)) continue;
+      final chDecisions = _decisionsByChapter[c.id];
+      if (chDecisions != null && chDecisions.every((d) => d.fenKey != null)) {
+        _indexChapterDecisions(c);
+      }
+    }
+  }
+
   void _ensureAllChaptersIndexed() {
     if (_allChaptersIndexed) return;
     for (final c in _chaptersList) {
@@ -480,6 +496,7 @@ class ReviewSession {
     await Future<void>.delayed(Duration.zero);
     for (final c in _chaptersList) {
       if (_allChaptersIndexed) return;
+      _indexChapterDecisions(c);
       if (_nodeIndexedChapterIds.contains(c.id)) continue;
       _indexChapterNodes(c);
       await Future<void>.delayed(Duration.zero);
@@ -734,14 +751,26 @@ class ReviewSession {
       // If the user played a move via transposition (e.g. played 2. e5 when the
       // prompt expected 2. exd5), mark the decision corresponding to the move
       // actually played as completed and dequeue it so it is not asked again.
-      if (transposedStart != null) {
-        final playedDecisions = _decisionsByFenKey[prompt.fenKey]?.where(
-          (d) => d.expectedMoves.any((m) => m.matches(expectedMatch)),
-        );
-        if (playedDecisions != null) {
-          for (final d in playedDecisions) {
-            _completedDecisionIds.add(d.canonicalId);
-            _dequeueDecision(d);
+      // In multi-study review (scope.studyId == null && scope.chapterId == null),
+      // answering a board position (fenKey) once retires all queued cross-study
+      // decisions at that fenKey for the session (INV-020, INV-065).
+      final isMultiStudyScope =
+          scope.studyId == null && scope.chapterId == null && _studies.length > 1;
+      if (transposedStart != null || (isMultiStudyScope && transposeScope != TransposeScope.off)) {
+        _ensureTreeFreeDecisionMapsIndexed();
+        final sameFenDecisions = _decisionsByFenKey[prompt.fenKey];
+        if (sameFenDecisions != null) {
+          for (final d in sameFenDecisions) {
+            if (d.id == decision.id ||
+                d.canonicalId == decision.canonicalId ||
+                _pendingRetest.contains(d.canonicalId)) {
+              continue;
+            }
+            if ((transposedStart != null && d.expectedMoves.any((m) => m.matches(expectedMatch))) ||
+                (isMultiStudyScope && d.fenKey != null && d.studyId != decision.studyId)) {
+              _completedDecisionIds.add(d.canonicalId);
+              _dequeueDecision(d);
+            }
           }
         }
       }
@@ -941,6 +970,26 @@ class ReviewSession {
       // marker set by the lapse (review-3 C2).
       _completedDecisionIds.add(prompt.decision.canonicalId);
       _pendingRetest.remove(prompt.decision.canonicalId);
+      final isMultiStudyScope =
+          scope.studyId == null && scope.chapterId == null && _studies.length > 1;
+      if (transposedStart != null || (isMultiStudyScope && transposeScope != TransposeScope.off)) {
+        _ensureTreeFreeDecisionMapsIndexed();
+        final sameFenDecisions = _decisionsByFenKey[prompt.fenKey];
+        if (sameFenDecisions != null) {
+          for (final d in sameFenDecisions) {
+            if (d.id == prompt.decision.id ||
+                d.canonicalId == prompt.decision.canonicalId ||
+                _pendingRetest.contains(d.canonicalId)) {
+              continue;
+            }
+            if ((transposedStart != null && d.expectedMoves.any((m) => m.matches(expectedMatch))) ||
+                (isMultiStudyScope && d.fenKey != null && d.studyId != prompt.decision.studyId)) {
+              _completedDecisionIds.add(d.canonicalId);
+              _dequeueDecision(d);
+            }
+          }
+        }
+      }
       return _continueWithCorrectMove(
         prompt: prompt,
         expectedMatch: expectedMatch,
@@ -1256,7 +1305,9 @@ class ReviewSession {
       // position instead.
       final start = _lineStartFor(nextDecision);
       final startAlreadyAsked =
-          start != null && _askedPromptDecisionIds.contains(start.decision.id);
+          start != null &&
+          (_askedPromptDecisionIds.contains(start.decision.id) ||
+              _askedPromptDecisionIds.contains(start.decision.canonicalId));
       if (start != null && startAlreadyAsked) {
         // Direct delivery: a plain board jump — the target is prompted at
         // its own position with the machine touching nothing. Only the
@@ -1318,6 +1369,7 @@ class ReviewSession {
 
   ReviewPrompt _buildPrompt({required RepertoireDecision decision, RepertoireNode? node}) {
     _askedPromptDecisionIds.add(decision.id);
+    _askedPromptDecisionIds.add(decision.canonicalId);
     final chapter = _chapters[decision.chapterId];
     final study = _studies[decision.studyId];
 
@@ -1325,10 +1377,11 @@ class ReviewSession {
         node?.fen ??
         chapter?.startingFen ??
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    final fenKey = node?.fenKey ?? fen;
+    final fenKey = node?.fenKey ?? decision.fenKey ?? fen;
     final side = sideFromFen(fen);
     final parentNode = node != null ? _parentOfNode[node.id] : null;
     final moveHistory = _moveHistoryForNode(node?.id);
+    final expectedMoves = _mergedExpectedMoves(decision, fenKey);
 
     return ReviewPrompt(
       decision: decision,
@@ -1338,7 +1391,7 @@ class ReviewSession {
       fen: fen,
       fenKey: fenKey,
       sideToMove: side,
-      expectedMoves: decision.expectedMoves,
+      expectedMoves: expectedMoves,
       currentNode: node,
       comment: node?.comment,
       chapterTitle: chapter?.title,
@@ -1347,6 +1400,38 @@ class ReviewSession {
       incomingMove: node?.incomingMove,
       moveHistory: moveHistory,
     );
+  }
+
+  /// All repertoire moves recorded at [fenKey] across the active scope (with
+  /// [decision]'s own moves first), so a learner reviewing a board position
+  /// sees and can play every valid repertoire move for that FEN regardless of
+  /// which chapter or move order prompted it (INV-020, INV-065).
+  List<RepertoireMove> _mergedExpectedMoves(RepertoireDecision decision, String fenKey) {
+    if (transposeScope == TransposeScope.off) return decision.expectedMoves;
+    _ensureTreeFreeDecisionMapsIndexed();
+    final siblings = _decisionsByFenKey[fenKey];
+    if (siblings == null || siblings.length <= 1) return decision.expectedMoves;
+    final merged = <RepertoireMove>[...decision.expectedMoves];
+    for (final other in siblings) {
+      if (other.id == decision.id || other.fenKey == null) continue;
+      final chapter = _chapters[other.chapterId];
+      if (chapter == null ||
+          !scope.matches(
+            studyId: chapter.studyId,
+            chapterId: chapter.id,
+            openingFamily: chapter.opening,
+            side: chapter.orientation,
+          ) ||
+          (transposeScope == TransposeScope.withinStudy && other.studyId != decision.studyId)) {
+        continue;
+      }
+      for (final m in other.expectedMoves) {
+        if (!merged.any((existing) => existing.matches(m))) {
+          merged.add(m);
+        }
+      }
+    }
+    return merged;
   }
 
   List<String> _moveHistoryForNode(String? nodeId) {
@@ -1385,15 +1470,48 @@ class ReviewSession {
     }
   }
 
-  /// Resolves the played move: the expected match, else the transposed
-  /// line's incoming move when the scope covers it (else null).
+  /// Resolves the played move: the primary decision's expected match, any
+  /// in-scope decision's expected move at the same `fenKey`, else the
+  /// transposed line's incoming move when the scope covers it (else null).
   ({RepertoireMove expected, RepertoireNode? start})? _resolvePlayedMove(
     ReviewPrompt prompt,
     RepertoireMove movePlayed,
   ) {
-    final direct = prompt.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
-    if (direct != null) return (expected: direct, start: null);
+    final primaryDirect = prompt.decision.expectedMoves
+        .where((exp) => exp.matches(movePlayed))
+        .firstOrNull;
+    if (primaryDirect != null) return (expected: primaryDirect, start: null);
     if (transposeScope == TransposeScope.off) return null;
+
+    // Check all in-scope decisions at the exact same 4-field FEN (INV-020, INV-065).
+    _ensureTreeFreeDecisionMapsIndexed();
+    final sameFenDecisions = _decisionsByFenKey[prompt.fenKey];
+    if (sameFenDecisions != null) {
+      for (final d in sameFenDecisions) {
+        if (d.id == prompt.decision.id || d.fenKey == null) continue;
+        final chapter = _chapters[d.chapterId];
+        if (chapter == null ||
+            !scope.matches(
+              studyId: chapter.studyId,
+              chapterId: chapter.id,
+              openingFamily: chapter.opening,
+              side: chapter.orientation,
+            ) ||
+            (transposeScope == TransposeScope.withinStudy && d.studyId != prompt.studyId)) {
+          continue;
+        }
+        final match = d.expectedMoves.where((exp) => exp.matches(movePlayed)).firstOrNull;
+        if (match != null) {
+          _ensureChapterNodesIndexed(d.chapterId);
+          final dNode = _nodesById[d.nodeId];
+          final child = dNode?.childForMove(match);
+          if (child != null) {
+            return (expected: match, start: child);
+          }
+        }
+      }
+    }
+
     final target = _findTransposedNode(prompt, movePlayed);
     if (target == null) return null;
     final incoming = target.incomingMove;

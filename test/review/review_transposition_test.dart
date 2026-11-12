@@ -570,5 +570,135 @@ void main() {
       expect(result.event?.result, ReviewResult.correct);
       expect(result.nextPrompt?.nodeId, 'node-b-nf6');
     });
+
+    test(
+      'general review unifies expectedMoves across studies at the same fenKey and retires sibling decisions on answer (INV-065)',
+      () {
+        const frenchTabiaFen =
+            'r1b2rk1/pp1nb1pp/1qn1pp2/2ppP3/3P1P2/2P1BN2/PP1QN1PP/R3KB1R w KQ - 0 11';
+        final importH4 = importPgn(
+          '[Event "Sidelines"]\n[SetUp "1"]\n[FEN "$frenchTabiaFen"]\n\n11. h4 *\n',
+          studyTitle: 'French Sidelines',
+          repertoireSide: Side.white,
+        );
+        final importG3 = importPgn(
+          '[Event "Mainline"]\n[SetUp "1"]\n[FEN "$frenchTabiaFen"]\n\n11. g3 *\n',
+          studyTitle: 'French Bible',
+          repertoireSide: Side.white,
+        );
+
+        final decH4 = importH4.decisions.first;
+        final decG3 = importG3.decisions.first;
+        expect(decH4.canonicalId, isNot(decG3.canonicalId));
+        expect(decH4.fenKey, equals(decG3.fenKey));
+
+        final engine = ReviewEngine(clock: clock);
+        final session = engine.createSession(
+          studies: [importH4.study, importG3.study],
+          chapters: [...importH4.chapters, ...importG3.chapters],
+          decisions: [...importH4.decisions, ...importG3.decisions],
+          reviewStates: {
+            decH4.canonicalId: ReviewState(
+              decisionId: decH4.canonicalId,
+              nextDueAt: baseTime.subtract(const Duration(days: 2)),
+              repetitionCount: 2,
+            ),
+            decG3.canonicalId: ReviewState(
+              decisionId: decG3.canonicalId,
+              nextDueAt: baseTime.subtract(const Duration(days: 1)),
+              repetitionCount: 2,
+            ),
+          },
+          scope: const ReviewScope.white(),
+          transposeScope: TransposeScope.inScope,
+        );
+
+        // Prompted via Study 1 (decH4), but prompt.expectedMoves merges all
+        // repertoire moves at this FEN across the active scope (both h4 and g3).
+        expect(session.currentPrompt?.decision.id, decH4.id);
+        expect(
+          session.currentPrompt?.expectedMoves.map((m) => m.san).toSet(),
+          equals({'h4', 'g3'}),
+        );
+
+        // Playing h4 (a direct match on decH4) also retires decG3 at the exact
+        // same FEN so general review never asks the identical board twice.
+        final result = session.submitMove(from: 'h2', to: 'h4');
+        expect(result.isCorrect, isTrue);
+        expect(session.isComplete, isTrue);
+      },
+    );
+
+    test(
+      'playing a move from a non-due study at the same fenKey is accepted and continues down that study line (INV-065)',
+      () {
+        const frenchTabiaFen =
+            'r1b2rk1/pp1nb1pp/1qn1pp2/2ppP3/3P1P2/2P1BN2/PP1QN1PP/R3KB1R w KQ - 0 11';
+        final importH4 = importPgn(
+          '[Event "Sidelines"]\n[SetUp "1"]\n[FEN "$frenchTabiaFen"]\n\n11. h4 *\n',
+          studyTitle: 'French Sidelines',
+          repertoireSide: Side.white,
+        );
+        final importG3 = importPgn(
+          '[Event "Mainline"]\n[SetUp "1"]\n[FEN "$frenchTabiaFen"]\n\n11. g3 fxe5 12. dxe5 *\n',
+          studyTitle: 'French Bible',
+          repertoireSide: Side.white,
+        );
+
+        final decH4 = importH4.decisions.first;
+        final decG3 = importG3.decisions.first;
+        final decDxe5 = importG3.decisions.last;
+
+        // Provide >kSynchronousIndexingChapterBudget filler chapters so non-queued
+        // chapters would previously be skipped by synchronous indexing.
+        final fillerChapters = <Chapter>[
+          for (var i = 0; i < 40; i++)
+            Chapter(
+              id: 'filler-$i',
+              studyId: importH4.study.id,
+              sourceOrder: i + 10,
+              title: 'Filler $i',
+              createdAt: baseTime,
+            ),
+        ];
+
+        final engine = ReviewEngine(clock: clock);
+        final session = engine.createSession(
+          studies: [importH4.study, importG3.study],
+          chapters: [...importH4.chapters, ...fillerChapters, ...importG3.chapters],
+          decisions: [...importH4.decisions, ...importG3.decisions],
+          reviewStates: {
+            decH4.canonicalId: ReviewState(
+              decisionId: decH4.canonicalId,
+              nextDueAt: baseTime.subtract(const Duration(days: 2)),
+              repetitionCount: 2,
+            ),
+            // Study 2 (g3) is NOT due, so its chapter is not in neededChapterIds.
+            decG3.canonicalId: ReviewState(
+              decisionId: decG3.canonicalId,
+              nextDueAt: baseTime.add(const Duration(days: 30)),
+              repetitionCount: 5,
+            ),
+            decDxe5.canonicalId: ReviewState(
+              decisionId: decDxe5.canonicalId,
+              nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+              repetitionCount: 1,
+            ),
+          },
+          scope: const ReviewScope.white(),
+          transposeScope: TransposeScope.inScope,
+          nodeIndex: const {'other': []},
+        );
+
+        expect(session.currentPrompt?.decision.id, decH4.id);
+        // User plays g3 (from Study 2, which wasn't even due at this node).
+        final step = session.submitMove(from: 'g2', to: 'g3');
+        expect(step.isCorrect, isTrue);
+        expect(step.movePlayed.san, 'g3');
+        // Continues down Study 2's line: auto-plays 11... fxe5 and prompts 12. dxe5!
+        expect(step.autoPlayedMoves.map((m) => m.move.san), equals(['fxe5']));
+        expect(step.nextPrompt?.decision.id, decDxe5.id);
+      },
+    );
   });
 }

@@ -26,7 +26,12 @@ not a second definition: follow its normative home.
 
 ## 2. Domain & Chess Invariants
 
-1. Repertoire correctness: SPEC INV-020, including the configurable
+1. **Repertoire correctness & board-only truth**: during review, the 4-field
+   FEN on the board is the sole truth — never the underlying PGN structure,
+   move order, or study/chapter container that reached it. Every repertoire
+   move recorded for that FEN within the active scope is accepted, and
+   answering a FEN in general/multi-study review retires all queued occurrences
+   of that FEN for the session: SPEC INV-020, including the configurable
    transposition exception INV-065.
 2. Variation preservation: SPEC INV-010.
 3. Position identity and shared memory: SPEC INV-015/016/017/030;
