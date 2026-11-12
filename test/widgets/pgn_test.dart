@@ -1,7 +1,7 @@
+import 'package:chess_srs/src/styles/lichess_colors.dart';
 import 'package:chess_srs/src/widgets/pgn.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_srs/src/styles/lichess_colors.dart';
 
 void main() {
   group('moveAnnotationChar', () {
