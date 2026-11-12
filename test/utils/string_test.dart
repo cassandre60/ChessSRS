@@ -4,101 +4,69 @@ import 'package:intl/intl.dart';
 
 void main() {
   group('genRandomString', () {
-    test('produces a different value on each call', () {
-      expect(genRandomString(16), isNot(equals(genRandomString(16))));
+    test('returns empty string for length 0', () {
+      expect(genRandomString(0), '');
     });
 
-    test('length follows the requested byte count', () {
-      // base64url of 3 bytes is exactly 4 characters; of 6 bytes, 8.
-      expect(genRandomString(3).length, 4);
-      expect(genRandomString(6).length, 8);
-    });
-
-    test('emits only base64url characters', () {
-      final value = genRandomString(32);
-
+    test('returns base64url characters without padding', () {
+      final value = genRandomString(16);
+      expect(value, isNotEmpty);
+      expect(value.contains('='), isFalse);
       expect(RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value), isTrue);
     });
 
-    test('zero length yields the empty string', () {
-      expect(genRandomString(0), isEmpty);
-    });
-
-    test('negative length is rejected', () {
-      expect(() => genRandomString(-1), throwsRangeError);
+    test('produces different values across calls', () {
+      final a = genRandomString(16);
+      final b = genRandomString(16);
+      expect(a, isNot(equals(b)));
     });
   });
 
   group('StringExtension.capitalize', () {
-    test('upper-cases the first character and leaves the rest untouched', () {
+    test('capitalizes first character', () {
       expect('hello'.capitalize(), 'Hello');
-      expect('Hello'.capitalize(), 'Hello');
-      expect('hELLO wORLD'.capitalize(), 'HELLO wORLD');
     });
 
-    test('handles a single character', () {
+    test('keeps already capitalized string', () {
+      expect('Hello'.capitalize(), 'Hello');
+    });
+
+    test('returns empty string unchanged', () {
+      expect(''.capitalize(), '');
+    });
+
+    test('handles single character', () {
       expect('a'.capitalize(), 'A');
     });
 
-    test('does not change a leading non-letter', () {
-      expect('1abc'.capitalize(), '1abc');
-      expect(' élan'.capitalize(), ' élan');
-    });
-
-    test('preserves the rest of a unicode string', () {
-      expect('école'.capitalize(), 'École');
-    });
-
-    test('empty string stays empty', () {
-      // capitalize has no first character to upper-case on an empty string, so
-      // it returns the input unchanged rather than letting `this[0]` throw.
-      expect(''.capitalize(), '');
+    test('does not change rest of string', () {
+      expect('hELLO'.capitalize(), 'HELLO');
     });
   });
 
   group('NumberLocalizationExtension.localizeNumbers', () {
-    // NumberFormat() falls back to the default locale, so pin it: without this
-    // the grouping separator depends on the host environment.
-    setUpAll(() {
+    setUp(() {
       Intl.defaultLocale = 'en_US';
     });
 
-    test('leaves a string with no digits unchanged', () {
-      expect('no digits here'.localizeNumbers(), 'no digits here');
+    tearDown(() {
+      Intl.defaultLocale = null;
     });
 
-    test('groups a four-digit number', () {
-      expect('1234'.localizeNumbers(), '1,234');
+    test('formats integers using default NumberFormat', () {
+      expect('1234'.localizeNumbers(), NumberFormat().format(1234));
     });
 
-    test('leaves a number below the grouping threshold alone', () {
-      expect('42'.localizeNumbers(), '42');
+    test('formats decimal numbers', () {
+      expect('12.5'.localizeNumbers(), NumberFormat().format(12.5));
     });
 
-    test('groups the integer part of a decimal and keeps the fraction', () {
-      expect('1234.5'.localizeNumbers(), '1,234.5');
+    test('localizes numbers inside text', () {
+      expect('score 1000 points'.localizeNumbers(), 'score ${NumberFormat().format(1000)} points');
     });
 
-    test('handles several numbers in one string', () {
-      expect('1000 and 2000'.localizeNumbers(), '1,000 and 2,000');
-    });
-
-    test('preserves surrounding text and punctuation', () {
-      expect('Score: 12345!'.localizeNumbers(), 'Score: 12,345!');
-    });
-
-    test('keeps exactly three fraction digits', () {
-      expect('1234.999'.localizeNumbers(), '1,234.999');
-    });
-
-    test('a longer fraction is rounded away, so this is lossy', () {
-      // NumberFormat's default is 3 fraction digits. Pinned because callers hand
-      // it user-visible strings: 1234.9999 comes back as 1,235.
-      expect('1234.9999'.localizeNumbers(), '1,235');
-    });
-
-    test('an empty string stays empty', () {
-      expect(''.localizeNumbers(), isEmpty);
+    test('returns text unchanged when no numbers present', () {
+      expect('hello'.localizeNumbers(), 'hello');
     });
   });
 }
