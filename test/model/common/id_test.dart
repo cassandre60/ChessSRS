@@ -40,10 +40,7 @@ void main() {
 
     test('json round-trips for game id types', () {
       expect(GameId.fromJson('abcdefgh'), const GameId('abcdefgh'));
-      expect(
-        GameFullId.fromJson('abcdefghwxyz'),
-        const GameFullId('abcdefghwxyz'),
-      );
+      expect(GameFullId.fromJson('abcdefghwxyz'), const GameFullId('abcdefghwxyz'));
       expect(GameAnyId.fromJson('abcdefgh'), GameAnyId('abcdefgh'));
     });
   });
@@ -85,14 +82,8 @@ void main() {
 
     test('game id picks parse and reject invalid types', () {
       expect(pick('abcdefgh').asGameIdOrThrow(), const GameId('abcdefgh'));
-      expect(
-        pick('abcdefghwxyz').asGameFullIdOrThrow(),
-        const GameFullId('abcdefghwxyz'),
-      );
-      expect(
-        pick('abcdefghwxyz').asGameFullIdOrNull(),
-        const GameFullId('abcdefghwxyz'),
-      );
+      expect(pick('abcdefghwxyz').asGameFullIdOrThrow(), const GameFullId('abcdefghwxyz'));
+      expect(pick('abcdefghwxyz').asGameFullIdOrNull(), const GameFullId('abcdefghwxyz'));
       expect(pick(null).asGameFullIdOrNull(), isNull);
       expect(pick(1).asGameFullIdOrNull(), isNull);
       expect(() => pick(1).asGameIdOrThrow(), throwsA(isA<PickException>()));
@@ -100,22 +91,10 @@ void main() {
 
     test('other id picks parse expected string types', () {
       expect(pick('p1').asPuzzleIdOrThrow(), const PuzzleId('p1'));
-      expect(
-        pick('abcd1234').asChallengeIdOrThrow(),
-        const ChallengeId('abcd1234'),
-      );
-      expect(
-        pick('bt1').asBroadcastTournamentIdOrThrow(),
-        const BroadcastTournamentId('bt1'),
-      );
-      expect(
-        pick('br1').asBroadcastRoundIdOrThrow(),
-        const BroadcastRoundId('br1'),
-      );
-      expect(
-        pick('bg1').asBroadcastGameIdOrThrow(),
-        const BroadcastGameId('bg1'),
-      );
+      expect(pick('abcd1234').asChallengeIdOrThrow(), const ChallengeId('abcd1234'));
+      expect(pick('bt1').asBroadcastTournamentIdOrThrow(), const BroadcastTournamentId('bt1'));
+      expect(pick('br1').asBroadcastRoundIdOrThrow(), const BroadcastRoundId('br1'));
+      expect(pick('bg1').asBroadcastGameIdOrThrow(), const BroadcastGameId('bg1'));
       expect(pick('team').asTeamIdOrThrow(), const TeamId('team'));
       expect(pick('study').asStudyIdOrThrow(), const StudyId('study'));
       expect(pick('tour').asTournamentIdOrThrow(), const TournamentId('tour'));
@@ -127,10 +106,7 @@ void main() {
     test('asFideIdOrThrow requires a non-zero int', () {
       expect(pick(12345).asFideIdOrThrow(), const FideId(12345));
       expect(() => pick(0).asFideIdOrThrow(), throwsA(isA<PickException>()));
-      expect(
-        () => pick('123').asFideIdOrThrow(),
-        throwsA(isA<PickException>()),
-      );
+      expect(() => pick('123').asFideIdOrThrow(), throwsA(isA<PickException>()));
     });
   });
 }
