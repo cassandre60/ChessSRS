@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_srs/src/network/connectivity.dart';
@@ -23,6 +24,36 @@ final _deviceOfflineClient = MockClient((request) => throw const SocketException
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('isOnline', () {
+    test('returns true when any probe succeeds even if another fails first', () async {
+      final firstGate = Completer<void>();
+      final secondCompleter = Completer<http.Response>();
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        if (requests == 1) {
+          await firstGate.future;
+          throw const SocketException('offline');
+        }
+        return await secondCompleter.future;
+      });
+
+      final future = isOnline(client);
+      await pumpEventQueue();
+      // First probe fails while the second is still pending.
+      firstGate.complete();
+      await pumpEventQueue();
+      await pumpEventQueue();
+      await pumpEventQueue();
+      // Second probe succeeds later.
+      secondCompleter.complete(http.Response('', 200));
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      expect(await future, isTrue);
+    });
+  });
 
   group('isDeviceOnlineProvider', () {
     test('is true once the check succeeds', () async {
