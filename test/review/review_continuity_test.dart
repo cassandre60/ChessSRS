@@ -1035,11 +1035,12 @@ void main() {
       expect(afterA.nextPrompt?.decision.id, 'dec-2');
     });
 
-    // SPEC INV-022, INV-066. In dynamic repertoire mode, unlearned lapsed
-    // decisions on unchosen branches are dormant and must not be queued as due.
-    test('dynamicRepertoireMode excludes unlearned lapsed decisions on unchosen branches', () {
+    // SPEC INV-022, INV-066. In dynamic repertoire mode, never-reviewed
+    // (0 reps, 0 lapses) decisions on unchosen branches stay dormant, while
+    // reviewed-and-lapsed (0 reps, >=1 lapse) positions remain active.
+    test('dynamicRepertoireMode excludes unreviewed decisions on unchosen branches', () {
       final (study, chapter, decisions) = buildLine();
-      // dec-3 is a sideline card with 0 reps and 1 lapse, past nextDueAt.
+      // dec-3 is a sideline card with 0 reps and 0 lapses, past nextDueAt.
       final reviewStates = {
         'dec-1': ReviewState(
           decisionId: 'dec-1',
@@ -1055,7 +1056,7 @@ void main() {
           decisionId: 'dec-3',
           nextDueAt: baseTime.subtract(const Duration(hours: 2)),
           repetitionCount: 0,
-          lapseCount: 1,
+          lapseCount: 0,
         ),
       };
       final session = ReviewEngine(clock: clock).createSession(
@@ -1068,12 +1069,207 @@ void main() {
         continuity: ReviewContinuity.fullLine,
       );
 
-      // dec-3 is dormant (not unlocked and reps=0): only dec-1 and dec-2 are queued!
+      // dec-3 is dormant (not unlocked, reps=0, lapses=0): only dec-1 and dec-2 are queued!
       expect(session.initialDueCount, 2);
       expect(session.remainingDueCount, 2);
       expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-2');
       expect(session.submitMove(from: 'g1', to: 'f3').nextPrompt, isNull);
       expect(session.isComplete, isTrue);
     });
+
+    test(
+      'dynamicRepertoireMode fullLine does not skip a reviewed-and-lapsed mid-line decision before a learned descendant (INV-022, INV-066)',
+      () {
+        final (study, chapter, decisions) = buildLine();
+        // Exact reproduction of the live session skip: dec-2 was reviewed and
+        // lapsed (0 reps, 1 lapse, overdue) while dec-3 below it has reps=1.
+        final reviewStates = {
+          'dec-1': ReviewState(
+            decisionId: 'dec-1',
+            nextDueAt: baseTime.subtract(const Duration(hours: 3)),
+            repetitionCount: 1,
+          ),
+          'dec-2': ReviewState(
+            decisionId: 'dec-2',
+            firstReviewedAt: baseTime.subtract(const Duration(days: 5)),
+            lastReviewedAt: baseTime.subtract(const Duration(days: 2)),
+            nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+            repetitionCount: 0,
+            lapseCount: 1,
+          ),
+          'dec-3': ReviewState(
+            decisionId: 'dec-3',
+            nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+            repetitionCount: 1,
+          ),
+        };
+        final session = ReviewEngine(clock: clock).createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: decisions,
+          reviewStates: reviewStates,
+          dynamicRepertoireMode: true,
+          unlockedDecisionIds: const {},
+          continuity: ReviewContinuity.fullLine,
+        );
+
+        expect(session.initialDueCount, 3);
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+        // Must prompt dec-2 next — never break at dec-2 and teleport to dec-3.
+        final afterE4 = session.submitMove(from: 'e2', to: 'e4');
+        expect(afterE4.nextPrompt?.decision.id, 'dec-2');
+        final afterNf3 = session.submitMove(from: 'g1', to: 'f3');
+        expect(afterNf3.nextPrompt?.decision.id, 'dec-3');
+      },
+    );
+
+    test(
+      'dynamicRepertoireMode fullLine bridges an unreviewed mid-line step above a learned descendant within quota (INV-022, INV-068)',
+      () {
+        final (study, chapter, decisions) = buildLine();
+        final reviewStates = {
+          'dec-1': ReviewState(
+            decisionId: 'dec-1',
+            nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+            repetitionCount: 1,
+          ),
+          // dec-2 has no state row at all, yet dec-3 below it is learned & due.
+          'dec-3': ReviewState(
+            decisionId: 'dec-3',
+            nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+            repetitionCount: 1,
+          ),
+        };
+        final session = ReviewEngine(clock: clock).createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: decisions,
+          reviewStates: reviewStates,
+          dynamicRepertoireMode: true,
+          continuity: ReviewContinuity.fullLine,
+          remainingNewQuota: 5,
+        );
+
+        expect(session.currentPrompt?.decision.id, 'dec-1');
+        final afterE4 = session.submitMove(from: 'e2', to: 'e4');
+        expect(afterE4.nextPrompt?.decision.id, 'dec-2');
+        final afterNf3 = session.submitMove(from: 'g1', to: 'f3');
+        expect(afterNf3.nextPrompt?.decision.id, 'dec-3');
+
+        // Zero new-position allowance still enforces INV-068.
+        final capped = ReviewEngine(clock: clock).createSession(
+          studies: [study],
+          chapters: [chapter],
+          decisions: decisions,
+          reviewStates: reviewStates,
+          dynamicRepertoireMode: true,
+          continuity: ReviewContinuity.fullLine,
+          remainingNewQuota: 0,
+        );
+        final cappedAfterE4 = capped.submitMove(from: 'e2', to: 'e4');
+        expect(cappedAfterE4.nextPrompt?.decision.id, 'dec-3');
+      },
+    );
+
+    test(
+      'dynamicRepertoireMode adopts a transposed branch played during SRS review and walks it continuously (INV-065)',
+      () {
+        final (studyA, chapterA, decisionsA) = buildLine();
+        // Study B diverges at 2. Bc4 Nf6 3. d4 (completely unreviewed & unlocked).
+        const rootB = RepertoireNode(
+          id: 'node-b-root',
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          children: [
+            RepertoireNode(
+              id: 'node-b-e4',
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+              incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+              children: [
+                RepertoireNode(
+                  id: 'node-b-e5',
+                  fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
+                  fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',
+                  incomingMove: RepertoireMove(from: 'e7', to: 'e5', san: 'e5'),
+                  children: [
+                    RepertoireNode(
+                      id: 'node-b-bc4',
+                      fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2',
+                      fenKey: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq -',
+                      incomingMove: RepertoireMove(from: 'f1', to: 'c4', san: 'Bc4'),
+                      children: [
+                        RepertoireNode(
+                          id: 'node-b-nf6',
+                          fen: 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3',
+                          fenKey: 'rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq -',
+                          incomingMove: RepertoireMove(from: 'g8', to: 'f6', san: 'Nf6'),
+                          children: [
+                            RepertoireNode(
+                              id: 'node-b-d4',
+                              fen:
+                                  'rnbqkb1r/pppp1ppp/5n2/4p3/2BPP3/8/PPP2PPP/RNBQK1NR b KQkq d3 0 3',
+                              fenKey: 'rnbqkb1r/pppp1ppp/5n2/4p3/2BPP3/8/PPP2PPP/RNBQK1NR b KQkq -',
+                              incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+        final studyB = Study(id: 'study-b', title: 'Bishop Opening', createdAt: baseTime);
+        final chapterB = Chapter(
+          id: 'chapter-b',
+          studyId: 'study-b',
+          sourceOrder: 0,
+          title: 'Bishop Opening',
+          startingFen: rootB.fen,
+          root: rootB,
+          createdAt: baseTime,
+        );
+        const decB3 = RepertoireDecision(
+          id: 'dec-b3',
+          studyId: 'study-b',
+          chapterId: 'chapter-b',
+          nodeId: 'node-b-nf6',
+          expectedMoves: [RepertoireMove(from: 'd2', to: 'd4', san: 'd4')],
+        );
+
+        final session = ReviewEngine(clock: clock).createSession(
+          studies: [studyA, studyB],
+          chapters: [chapterA, chapterB],
+          decisions: [...decisionsA, decB3],
+          reviewStates: {
+            'dec-1': ReviewState(
+              decisionId: 'dec-1',
+              nextDueAt: baseTime.subtract(const Duration(hours: 2)),
+              repetitionCount: 1,
+            ),
+            'dec-2': ReviewState(
+              decisionId: 'dec-2',
+              nextDueAt: baseTime.subtract(const Duration(hours: 1)),
+              repetitionCount: 1,
+            ),
+          },
+          dynamicRepertoireMode: true,
+          continuity: ReviewContinuity.fullLine,
+          transposeScope: TransposeScope.inScope,
+          remainingNewQuota: 5,
+        );
+
+        expect(session.submitMove(from: 'e2', to: 'e4').nextPrompt?.decision.id, 'dec-2');
+        // Play 2. Bc4 (from unreviewed Study B) instead of 2. Nf3!
+        final transposed = session.submitMove(from: 'f1', to: 'c4');
+        expect(transposed.isCorrect, isTrue);
+        expect(transposed.adoptedDecisionIds, contains('dec-b3'));
+        expect(transposed.nextPrompt?.decision.id, 'dec-b3');
+        expect(session.unlockedDecisionIds, contains('dec-b3'));
+      },
+    );
   });
 }

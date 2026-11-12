@@ -71,7 +71,7 @@ class ReviewSession {
     this.remainingDailyQuota,
     this.remainingNewQuota,
     this.dynamicRepertoireMode = false,
-    this.unlockedDecisionIds = const {},
+    Set<String> unlockedDecisionIds = const {},
     this.countedToday = const {},
     this.nodeIndex = const {},
     this.freshIntroductionOrder,
@@ -79,6 +79,7 @@ class ReviewSession {
     Map<String, DateTime>? initialExposureThrottle,
     Random? random,
   }) : _random = random ?? Random(),
+       _initialUnlockedIds = unlockedDecisionIds,
        _studies = {for (final s in studies) s.id: s},
        _chapters = {for (final c in chapters) c.id: c},
        _reviewStates = Map<String, ReviewState>.from(reviewStates),
@@ -122,16 +123,8 @@ class ReviewSession {
         continue;
       }
       final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
-      // INV-068: a position with no review state has never been presented, so it
-      // is fresh rather than due. In dynamic repertoire mode, unreviewed positions
-      // are only introduced if explicitly unlocked.
       final status = dueStatusOf(state, now);
-      final isLearned = state != null && state.repetitionCount > 0;
-      final isUnlocked =
-          !dynamicRepertoireMode ||
-          isLearned ||
-          unlockedDecisionIds.contains(d.id) ||
-          unlockedDecisionIds.contains(d.canonicalId);
+      final isUnlocked = _isActiveInDynamicMode(d, state);
       final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
       if (mode == ReviewMode.practice || isDue || (status.isFresh && isUnlocked)) {
         // In multi-study scope, deduplicate shared canonical transpositions
@@ -349,7 +342,12 @@ class ReviewSession {
   /// Off-line-but-book moves accepted (INV-065); off keeps strict grading.
   final TransposeScope transposeScope;
   final bool dynamicRepertoireMode;
-  final Set<String> unlockedDecisionIds;
+  final Set<String> _initialUnlockedIds;
+  final Set<String> _sessionUnlockedIds = {};
+
+  Set<String> get unlockedDecisionIds => _sessionUnlockedIds.isEmpty
+      ? _initialUnlockedIds
+      : Set.unmodifiable({..._initialUnlockedIds, ..._sessionUnlockedIds});
 
   /// Canonical ids already counted toward today's quota before this session.
   final Set<String> countedToday;
@@ -539,12 +537,48 @@ class ReviewSession {
   bool wasFreshAtQueueTime(String canonicalId) => _freshAtQueueTime.contains(canonicalId);
 
   /// Canonical ids the new-position allowance admitted into this session (INV-068).
-  ///
-  /// The allowance decides how many never-presented positions the session may
-  /// introduce. The ones it held back are not queued, and a walk that reaches
-  /// one must not ask it either — otherwise the cap is bypassed by answering
-  /// the position above it.
   final Set<String> _admittedFreshIds = {};
+
+  ReviewState? _stateOf(RepertoireDecision d) =>
+      _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
+
+  static bool _hasHistory(ReviewState? s) =>
+      s != null && (s.repetitionCount > 0 || s.lapseCount > 0);
+
+  bool _isUnlocked(RepertoireDecision d) =>
+      _initialUnlockedIds.contains(d.id) ||
+      _initialUnlockedIds.contains(d.canonicalId) ||
+      _sessionUnlockedIds.contains(d.id) ||
+      _sessionUnlockedIds.contains(d.canonicalId);
+
+  bool _isActiveInDynamicMode(RepertoireDecision d, [ReviewState? s]) =>
+      !dynamicRepertoireMode || _hasHistory(s ?? _stateOf(d)) || _isUnlocked(d);
+
+  bool _hasActiveDescendant(RepertoireNode node, Map<String, bool> memo) =>
+      memo[node.id] ??= node.children.any((c) {
+        final d = _decisionForNode[c.id];
+        return (d != null && (_hasHistory(_stateOf(d)) || _isUnlocked(d))) ||
+            _hasActiveDescendant(c, memo);
+      });
+
+  List<String> _adoptBranch(RepertoireNode node, {required bool requireInactiveHead}) {
+    if (requireInactiveHead) {
+      final head = _firstDecisionInSubtree(node);
+      if (head == null || _isActiveInDynamicMode(head)) return const [];
+    }
+    final adopted = <String>[];
+    void walk(RepertoireNode n) {
+      final d = _decisionForNode[n.id];
+      if (d != null && !_isActiveInDynamicMode(d)) {
+        _sessionUnlockedIds.addAll([d.id, d.canonicalId]);
+        adopted.add(d.id);
+      }
+      n.children.forEach(walk);
+    }
+
+    walk(node);
+    return adopted;
+  }
 
   /// Whether [d] is a fresh position the day's allowance held back; practice is exempt (INV-068).
   bool _isHeldBackFresh(RepertoireDecision d) =>
@@ -556,17 +590,9 @@ class ReviewSession {
   ///
   /// A walk that reaches a fresh position while due work is queued stops there;
   /// only positions still in the queue count.
-  bool _hasQueuedDueWork(DateTime now) {
-    for (final d in _dueQueue) {
-      final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
-      if (dueStatusOf(state, now).isDue) return true;
-    }
-    for (final d in _unbufferedQueue) {
-      final state = _reviewStates[d.canonicalId] ?? _reviewStates[d.id];
-      if (dueStatusOf(state, now).isDue) return true;
-    }
-    return false;
-  }
+  bool _hasQueuedDueWork(DateTime now) =>
+      _dueQueue.any((d) => dueStatusOf(_stateOf(d), now).isDue) ||
+      _unbufferedQueue.any((d) => dueStatusOf(_stateOf(d), now).isDue);
 
   void _refillPrefetchBuffer() {
     if (prefetchBatchSize == null) {
@@ -651,6 +677,8 @@ class ReviewSession {
       pendingRetestIds: Set<String>.of(_pendingRetest),
       currentPrompt: _currentPrompt,
       exposureThrottle: _coordinator.snapshotExposureThrottle(),
+      sessionUnlockedIds: Set<String>.of(_sessionUnlockedIds),
+      admittedFreshIds: Set<String>.of(_admittedFreshIds),
     );
   }
 
@@ -678,6 +706,12 @@ class ReviewSession {
     _pendingRetest
       ..clear()
       ..addAll(checkpoint.pendingRetestIds);
+    _sessionUnlockedIds
+      ..clear()
+      ..addAll(checkpoint.sessionUnlockedIds);
+    _admittedFreshIds
+      ..clear()
+      ..addAll(checkpoint.admittedFreshIds);
     _currentPrompt = checkpoint.currentPrompt;
     _coordinator.restoreExposureThrottle(checkpoint.exposureThrottle);
   }
@@ -992,15 +1026,19 @@ class ReviewSession {
     // the session. Without the memo every level re-walks its entire subtree,
     // making one move cost O(depth x subtree) instead of O(tree) (INV-050).
     final dueCountMemo = <String, int>{};
+    final activeDescMemo = <String, bool>{};
     final autoPlayed = <AutoPlayedMove>[];
     final sideEffects = <ReviewState>[];
-    // Whether the session still holds due work (INV-068). Scanned once per
-    // walk and reused: the queue does not change while the walk runs, and the
-    // scan is O(queue), so re-reading it per step would cost O(steps x queue)
-    // on the move path (INV-050).
     bool? hasQueuedDueWorkCached;
     // A transposed acceptance traverses from the reached line instead.
     var activeNode = startNode ?? _findChildForMove(prompt.currentNode, expectedMatch);
+    final adopted =
+        (mode == ReviewMode.srs &&
+            dynamicRepertoireMode &&
+            activeNode != null &&
+            (startNode != null || (prompt.currentNode?.children.length ?? 0) > 1))
+        ? _adoptBranch(activeNode, requireInactiveHead: startNode == null)
+        : const <String>[];
 
     while (activeNode != null) {
       if (activeNode.children.isEmpty) {
@@ -1026,35 +1064,30 @@ class ReviewSession {
       if (nextDecision != null) {
         final decState = _reviewStates[nextDecision.canonicalId] ?? _reviewStates[nextDecision.id];
         final isDue = _isDecisionDue(nextDecision, decState, now);
-        final isLearned = decState != null && decState.repetitionCount > 0;
-        final isUnlocked =
-            !dynamicRepertoireMode ||
-            isLearned ||
-            unlockedDecisionIds.contains(nextDecision.id) ||
-            unlockedDecisionIds.contains(nextDecision.canonicalId);
+        final isUnlocked = _isActiveInDynamicMode(nextDecision, decState);
         final isQuotaExhausted =
             mode == ReviewMode.srs &&
             remainingDailyQuota != null &&
             _newlyCompletedToday >= remainingDailyQuota!;
-        // Full line quizzes every step in order, even when not yet due. The
-        // quota still caps prompted work — but it ends the walk instead of
-        // auto-playing the user's own moves past it. In dynamic mode, locked
-        // branches end the walk: unchosen moves must never be quizzed.
-        if (mode == ReviewMode.srs && dynamicRepertoireMode && !isUnlocked) break;
+        final hasActiveDesc =
+            !isUnlocked &&
+            mode == ReviewMode.srs &&
+            dynamicRepertoireMode &&
+            _hasActiveDescendant(opponentChild, activeDescMemo);
+        if (mode == ReviewMode.srs && dynamicRepertoireMode && !isUnlocked && !hasActiveDesc) break;
         if (isQuotaExhausted && continuity == ReviewContinuity.fullLine) break;
-        // INV-068: a position that was never presented is fresh, not due. The
-        // session introduces fresh positions under the day's new-position
-        // allowance, so a walk that reaches one asks it only if the allowance
-        // admitted it.
         final isFreshPosition = mode == ReviewMode.srs && dueStatusOf(decState, now).isFresh;
+        if (isFreshPosition &&
+            dynamicRepertoireMode &&
+            !_admittedFreshIds.contains(nextDecision.canonicalId) &&
+            (_sessionUnlockedIds.contains(nextDecision.id) ||
+                (continuity == ReviewContinuity.fullLine && hasActiveDesc)) &&
+            (remainingNewQuota == null || _admittedFreshIds.length < remainingNewQuota!)) {
+          _admittedFreshIds.add(nextDecision.canonicalId);
+        }
         final freshHeldBack =
             isFreshPosition && !_admittedFreshIds.contains(nextDecision.canonicalId);
-        // Fresh also waits for the due work: the session serves recall work
-        // before introductions. Two modes are exempt from that ordering, each
-        // because the user asked for the material explicitly: dynamic mode
-        // (an unlocked line is the user's own request) and full-line
-        // continuity (every line is played whole). The allowance cap still
-        // applies to both.
+        // Fresh also waits for due work unless dynamic mode or full-line continuity applies.
         final freshOvertakesDueWork =
             isFreshPosition &&
             !dynamicRepertoireMode &&
@@ -1085,6 +1118,7 @@ class ReviewSession {
             nextPrompt: _currentPrompt,
             sessionComplete: false,
             sideEffectStates: sideEffects,
+            adoptedDecisionIds: adopted,
           );
         }
       }
@@ -1167,6 +1201,7 @@ class ReviewSession {
       nextPrompt: _currentPrompt,
       sessionComplete: isComplete,
       sideEffectStates: sideEffects,
+      adoptedDecisionIds: adopted,
     );
   }
 
@@ -1321,11 +1356,7 @@ class ReviewSession {
       if (candidate == null) continue;
       if (mode == ReviewMode.srs && dynamicRepertoireMode) {
         final state = _reviewStates[candidate.canonicalId] ?? _reviewStates[candidate.id];
-        final unlocked =
-            unlockedDecisionIds.contains(candidate.id) ||
-            unlockedDecisionIds.contains(candidate.canonicalId);
-        final learned = state != null && state.repetitionCount > 0;
-        if (!unlocked && !learned) continue;
+        if (!_isActiveInDynamicMode(candidate, state)) continue;
       }
       if (candidate.id == target.id && candidate.canonicalId == target.canonicalId) {
         return null;
@@ -1669,11 +1700,8 @@ class ReviewSession {
 
   bool _isDecisionDue(RepertoireDecision d, ReviewState? state, DateTime now) {
     if (mode == ReviewMode.practice) return true;
-    final isLearned = state != null && state.repetitionCount > 0;
-    if (!dynamicRepertoireMode) return state == null || state.isDueAt(now);
-    return isLearned
-        ? state.isDueAt(now)
-        : (unlockedDecisionIds.contains(d.id) || unlockedDecisionIds.contains(d.canonicalId));
+    if (!_isActiveInDynamicMode(d, state)) return false;
+    return state == null || state.isDueAt(now);
   }
 
   RepertoireNode _selectWeighted(
@@ -1802,6 +1830,8 @@ class ReviewSessionCheckpoint {
     required this.pendingRetestIds,
     required this.currentPrompt,
     required this.exposureThrottle,
+    required this.sessionUnlockedIds,
+    required this.admittedFreshIds,
   });
 
   final Map<String, ReviewState> reviewStates;
@@ -1812,4 +1842,6 @@ class ReviewSessionCheckpoint {
   final Set<String> pendingRetestIds;
   final ReviewPrompt? currentPrompt;
   final Map<String, DateTime> exposureThrottle;
+  final Set<String> sessionUnlockedIds;
+  final Set<String> admittedFreshIds;
 }

@@ -2446,6 +2446,127 @@ void main() {
           await db.close();
         }
       });
+
+      test(
+        'dynamic repertoire mode persists adopted branch unlocks when playing an alternative repertoire line',
+        () async {
+          final db = await openAppDatabase(databaseFactoryFfi, dbPath);
+          final repo = SqliteStudyRepository(db);
+          final service = ReviewService(
+            repository: repo,
+            clock: clock,
+            dynamicRepertoireMode: true,
+            reviewContinuity: ReviewContinuity.fullLine,
+            transposeScope: TransposeScope.inScope,
+          );
+
+          try {
+            const studyA = Study(id: 's_a', title: 'Main');
+            const studyB = Study(id: 's_b', title: 'Alt');
+            await repo.saveStudy(studyA);
+            await repo.saveStudy(studyB);
+
+            const rootA = RepertoireNode(
+              id: 'na_root',
+              fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+              children: [
+                RepertoireNode(
+                  id: 'na_e4',
+                  fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
+                  fenKey: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -',
+                  incomingMove: RepertoireMove(from: 'e2', to: 'e4', san: 'e4'),
+                ),
+              ],
+            );
+            const rootB = RepertoireNode(
+              id: 'nb_root',
+              fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+              fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+              children: [
+                RepertoireNode(
+                  id: 'nb_d4',
+                  fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
+                  fenKey: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -',
+                  incomingMove: RepertoireMove(from: 'd2', to: 'd4', san: 'd4'),
+                  children: [
+                    RepertoireNode(
+                      id: 'nb_d5',
+                      fen: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2',
+                      fenKey: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq -',
+                      incomingMove: RepertoireMove(from: 'd7', to: 'd5', san: 'd5'),
+                      children: [
+                        RepertoireNode(
+                          id: 'nb_c4',
+                          fen: 'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq c3 0 2',
+                          fenKey: 'rnbqkbnr/ppp1pppp/8/3p4/2PP4/8/PP2PPPP/RNBQKBNR b KQkq -',
+                          incomingMove: RepertoireMove(from: 'c2', to: 'c4', san: 'c4'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            );
+            final chA = Chapter(
+              id: 'ca',
+              studyId: 's_a',
+              sourceOrder: 0,
+              title: 'A',
+              startingFen: rootA.fen,
+              root: rootA,
+              createdAt: now,
+            );
+            final chB = Chapter(
+              id: 'cb',
+              studyId: 's_b',
+              sourceOrder: 0,
+              title: 'B',
+              startingFen: rootB.fen,
+              root: rootB,
+              createdAt: now,
+            );
+            await repo.saveChapter(chA);
+            await repo.saveChapter(chB);
+
+            const decA = RepertoireDecision(
+              id: 'da1',
+              studyId: 's_a',
+              chapterId: 'ca',
+              nodeId: 'na_root',
+              expectedMoves: [RepertoireMove(from: 'e2', to: 'e4', san: 'e4')],
+            );
+            const decB = RepertoireDecision(
+              id: 'db2',
+              studyId: 's_b',
+              chapterId: 'cb',
+              nodeId: 'nb_d5',
+              expectedMoves: [RepertoireMove(from: 'c2', to: 'c4', san: 'c4')],
+            );
+            await repo.saveDecisions([decA, decB]);
+            await repo.saveReviewState(
+              ReviewState(
+                decisionId: 'da1',
+                repetitionCount: 0,
+                lapseCount: 1,
+                nextDueAt: now.subtract(const Duration(hours: 1)),
+              ),
+            );
+
+            // Reviewed-lapsed da1 is active and due in dynamic summary!
+            final summary = await service.getDueSummary(studies: [studyA, studyB]);
+            expect(summary.totalDueCount, 1);
+
+            await service.startSession(remainingNewQuota: 5);
+            final res = await service.submitMove(from: 'd2', to: 'd4');
+            expect(res.isCorrect, isTrue);
+            expect(res.nextPrompt?.decision.id, 'db2');
+            expect(await repo.getUnlockedDecisionIds(), contains('db2'));
+          } finally {
+            await db.close();
+          }
+        },
+      );
     });
   });
 }

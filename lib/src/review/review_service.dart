@@ -272,9 +272,10 @@ class _DueTally {
         reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
     final status = dueStatusOf(state, now);
     final isLearned = state != null && state.repetitionCount > 0;
+    final hasReviewHistory = state != null && (state.repetitionCount > 0 || state.lapseCount > 0);
     final isUnlocked =
         !dynamicRepertoireMode ||
-        isLearned ||
+        hasReviewHistory ||
         unlockedDecisionIds.contains(d.id) ||
         unlockedDecisionIds.contains(d.canonicalId);
     final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
@@ -878,6 +879,9 @@ class ReviewService {
 
       try {
         await repository.saveAnswerBatch(knowledgeStates: allKStates, event: result.event);
+        if (result.adoptedDecisionIds.isNotEmpty) {
+          await repository.unlockDecisions(result.adoptedDecisionIds);
+        }
       } catch (e, st) {
         // Persistence is atomic (single DB transaction). If it fails, undo the
         // in-memory answer so the session and the store remain consistent, then
@@ -913,20 +917,26 @@ class ReviewService {
     final checkpoint = session.checkpoint();
     final result = session.retryMove(from: from, to: to, promotion: promotion);
 
-    if (session.mode != ReviewMode.practice && result.sideEffectStates.isNotEmpty) {
+    if (session.mode != ReviewMode.practice &&
+        (result.sideEffectStates.isNotEmpty || result.adoptedDecisionIds.isNotEmpty)) {
       // Hoisted: the getter copies the throttle map, so calling it per element would copy it once
       // per side effect.
       final throttle = session.exposureThrottle;
       try {
-        await repository.saveAnswerBatch(
-          knowledgeStates: [
-            for (final sideState in result.sideEffectStates)
-              PositionKnowledgeState.fromReviewState(
-                sideState,
-                canonicalId: sideState.decisionId,
-              ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
-          ],
-        );
+        if (result.sideEffectStates.isNotEmpty) {
+          await repository.saveAnswerBatch(
+            knowledgeStates: [
+              for (final sideState in result.sideEffectStates)
+                PositionKnowledgeState.fromReviewState(
+                  sideState,
+                  canonicalId: sideState.decisionId,
+                ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
+            ],
+          );
+        }
+        if (result.adoptedDecisionIds.isNotEmpty) {
+          await repository.unlockDecisions(result.adoptedDecisionIds);
+        }
       } catch (e, st) {
         session.restoreCheckpoint(checkpoint);
         _logger.warning('Failed to persist retry side effects; session rolled back', e, st);
