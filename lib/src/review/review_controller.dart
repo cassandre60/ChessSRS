@@ -1342,8 +1342,16 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final session = currentState.session ?? _service.activeSession!;
     final nextPrompt = session.currentPrompt;
 
+    final alreadyAnimatedNextPrompt =
+        nextPrompt != null &&
+        opponentMoves.length == 1 &&
+        result.autoPlayedMoves.lastOrNull?.fenAfter == nextPrompt.fen &&
+        (nextPrompt.incomingMove == null ||
+            (opponentMoves.single.move.from == nextPrompt.incomingMove!.from &&
+                opponentMoves.single.move.to == nextPrompt.incomingMove!.to));
+
     final shouldAnimateBranchPreMove =
-        opponentMoves.isEmpty &&
+        !alreadyAnimatedNextPrompt &&
         nextPrompt != null &&
         nextPrompt.incomingMove != null &&
         nextPrompt.parentFen != null &&
@@ -1556,8 +1564,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         boardOrientation: nextOrientation,
         pendingUnlock: pendingUnlock,
         clearPendingUnlock: pendingUnlock == null,
-        lastMove: shouldAnimateBranchPreMove ? null : liveLastMove,
-        clearLastMove: shouldAnimateBranchPreMove,
+        lastMove: alreadyAnimatedNextPrompt ? liveLastMove : null,
+        clearLastMove: !alreadyAnimatedNextPrompt,
       ),
     );
 
