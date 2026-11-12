@@ -46,5 +46,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pressed, 1);
+    // ContextMenuAction.dismissOnPress defaults to true: the menu must close.
+    expect(find.text('Settings'), findsNothing);
+  });
+
+  testWidgets('defaults to a non-compact icon button', variant: kPlatformVariant, (tester) async {
+    final app = await makeTestProviderScopeApp(
+      tester,
+      home: PlatformScaffold(
+        appBar: PlatformAppBar(
+          title: const Text('Title'),
+          actions: [
+            ContextMenuIconButton(
+              icon: const Icon(Icons.more_horiz),
+              semanticsLabel: 'Menu',
+              actions: [
+                ContextMenuAction(icon: Icons.settings, label: 'Settings', onPressed: () {}),
+              ],
+            ),
+          ],
+        ),
+        body: const SizedBox.shrink(),
+      ),
+    );
+
+    await tester.pumpWidget(app);
+
+    final button = tester.widget<IconButton>(find.byType(IconButton));
+    expect(button.iconSize, isNull);
+    expect(button.style, isNull);
   });
 }
