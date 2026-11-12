@@ -212,9 +212,11 @@ colliding single-move lookup.
 ## C. Review engine and SRS (T1)
 
 ### INV-020 Correctness means matching the repertoire
-A played move is correct exactly when it matches a repertoire child of the
-prompt position (castling forms equivalent per INV-033); engine-optimality
-never judges, and opponent inaccuracies remain valid content.
+During review, the board position (4-field FEN) is the sole truth: a played
+move is correct when it matches a repertoire child of the prompt position or
+any in-scope decision at that `fenKey` (castling forms equivalent per INV-033),
+regardless of which PGN, study, chapter, or move order reached the board;
+engine-optimality never judges, and opponent inaccuracies remain valid content.
 - Oracle: correct/incorrect grading tests against repertoire trees.
 - Gates: review engine suite, controller suite.
 - Tier: T1. Covering: `test/review/review_engine_test.dart`,
@@ -340,18 +342,22 @@ of the same castling match each other in grading and tree lookup.
   `test/review/review_controller_test.dart`.
 
 ### INV-065 A repertoire move played out of line is accepted when its position is in scope
-A legal move that matches no expected continuation is still graded correct
-when the position it reaches exists in the active scope's repertoire tree;
-review continues from the transposed line. Out-of-scope targets and illegal
-moves stay incorrect, exactly as before. The `Transposed moves` setting
-narrows this to the same study, or off to strict expected-line grading.
+In review, the learner interacts with the board position (4-field FEN) rather
+than a fixed PGN move order: any move recorded at the prompt's `fenKey` across
+the active scope — or any legal move whose resulting position exists in the
+active scope's repertoire tree — is graded correct, review continues from the
+matched line, and in multi-study review all queued decisions at that `fenKey`
+are retired for the session. Out-of-scope targets and illegal moves stay
+incorrect, exactly as before. The `Transposed moves` setting narrows this to
+the same study, or off to strict expected-line grading.
 - Oracle: transposition acceptance tests in
   `test/review/review_transposition_test.dart`.
 - Gates: review engine suite, G05 traceability.
 - Tier: T1. Covering: `test/review/review_transposition_test.dart`.
 - History: 2026-10-03, owner-requested review-time transposition support
   (P-TRANSPOSE); memory sharing across transpositions already existed (R2),
-  grading did not.
+  grading did not; 2026-11-11, owner-elevated board-only truth principle
+  unifying all in-scope decisions at the same `fenKey`.
 
 ### INV-066 By-line review order presents the same due set in line order
 With `ReviewOrder.byLine`, consecutive prompts follow study, then chapter,
@@ -494,3 +500,4 @@ total. Practice mode is exempt and still surfaces fresh positions.
 | 2026-10-15 | INV-068 | Added: due requires a prior presentation; fresh is introduced under its own cap | (owner, on merge) |
 | 2026-10-16 | INV-006 | Amended: secrets are body-first with a redacted query-string fallback on the mobile-code endpoints; the guard is redaction at the `http_log` write, not "never a URL" (PR #94 → PR #123 + H4) | (owner, on approval) |
 | 2026-10-19 | INV-069 | Added: an upgrade leaves no unreachable review-state mirror (escape: audit F5, fixed by #239) | (owner, on approval) |
+| 2026-11-11 | INV-020, INV-065 | Amended: elevated board-only (FEN) truth principle — any move at the prompt's fenKey across active scope is accepted and retires all multi-study occurrences of that fenKey for the session | (owner, on approval) |

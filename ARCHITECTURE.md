@@ -69,9 +69,9 @@ in CLAUDE, verification in TEST_STRATEGY.
 5. The controller renders feedback and advances. Practice skips review-state
    and event writes. No network request participates in this loop.
 
-Review behavior (grading/transpositions, lapse lifecycle, fresh introduction,
-scopes, order, continuity and annotations) is specified in SPEC and PRODUCT,
-not a second state-machine contract here.
+Review behavior (board-only FEN truth, grading/transpositions, lapse lifecycle,
+fresh introduction, scopes, order, continuity and annotations) is specified in
+SPEC and PRODUCT, not a second state-machine contract here.
 
 ## 5. Identity & determinism
 
