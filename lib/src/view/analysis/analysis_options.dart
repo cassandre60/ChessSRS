@@ -96,23 +96,26 @@ AnalysisOptions analysisOptionsForReviewPosition({
   Position? posAfterHistory;
 
   if (moveHistory.isNotEmpty) {
-    try {
-      var pos = Position.setupPosition(Rule.chess, Setup.parseFen(rootFenCandidate));
-      var ok = true;
-      for (final san in moveHistory) {
-        final move = pos.parseSan(san);
-        if (move == null) {
-          ok = false;
+    for (final candidate in [rootFenCandidate, if (rootFenCandidate != kInitialFEN) kInitialFEN]) {
+      try {
+        var pos = Position.setupPosition(Rule.chess, Setup.parseFen(candidate));
+        var ok = true;
+        for (final san in moveHistory) {
+          final move = pos.parseSan(san);
+          if (move == null) {
+            ok = false;
+            break;
+          }
+          pos = pos.playUnchecked(move);
+        }
+        if (ok) {
+          effectiveRootFen = candidate;
+          validHistory = moveHistory;
+          posAfterHistory = pos;
           break;
         }
-        pos = pos.playUnchecked(move);
-      }
-      if (ok) {
-        effectiveRootFen = rootFenCandidate;
-        validHistory = moveHistory;
-        posAfterHistory = pos;
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   if (posAfterHistory == null) {
