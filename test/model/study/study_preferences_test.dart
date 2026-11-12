@@ -32,4 +32,29 @@ void main() {
       expect(StudyPrefs.defaults.reviewOrder, ReviewOrder.byLine);
     });
   });
+
+  group('StudyPrefs defaults (mutation pins)', () {
+    test('defaults carry the documented boolean values', () {
+      const d = StudyPrefs.defaults;
+      expect(d.showVariationArrows, isFalse);
+      expect(d.showEvaluationGauge, isTrue);
+      expect(d.showEngineLines, isTrue);
+      expect(d.showBestMoveArrow, isTrue);
+      expect(d.showAnnotations, isTrue);
+      expect(d.showPgnComments, isTrue);
+      expect(d.animateOpponentPreMove, isTrue);
+      expect(d.inlineNotation, isFalse);
+      expect(d.smallBoard, isFalse);
+      expect(d.srsDiagnostics, isFalse);
+      expect(d.showMoveHistory, isTrue);
+      expect(d.collapsibleScopeGroups, isTrue);
+      expect(d.dynamicRepertoireMode, isFalse);
+      expect(d.compactReviewHud, isFalse);
+    });
+
+    test('isDynamicRepertoireEnabled honours the global mode flag', () {
+      final prefs = StudyPrefs.defaults.copyWith(dynamicRepertoireMode: true);
+      expect(prefs.isDynamicRepertoireEnabled(), isTrue);
+    });
+  });
 }
