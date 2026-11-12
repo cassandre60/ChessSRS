@@ -1,4 +1,3 @@
-import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/game/game_socket_events.dart';
 import 'package:dartchess/dartchess.dart';
