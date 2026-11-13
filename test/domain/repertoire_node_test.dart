@@ -29,6 +29,7 @@ void main() {
       expect(root.nags, isEmpty);
       expect(root.children, isEmpty);
       expect(root.isLeaf, isTrue);
+      expect(root.childMoves, isEmpty);
     });
   });
 
@@ -84,6 +85,21 @@ void main() {
       // Same squares, different SAN/case should still match via RepertoireMove.matches.
       expect(updated.childForMove(const RepertoireMove(from: 'E2', to: 'E4')), same(e4Child));
       expect(updated.childForMove(const RepertoireMove(from: 'd2', to: 'd4')), isNull);
+    });
+
+    test('childForMove finds matching child including castling notation', () {
+      final root = RepertoireNode.root(fen: startFen, fenKey: startKey);
+      const castle = RepertoireMove(from: 'e1', to: 'g1', san: 'O-O');
+      final castleNode = RepertoireNode.child(
+        fen: 'rnbqk2r/pppp1ppp/5n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+        fenKey: 'rnbqk2r/pppp1ppp/5n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq -',
+        incomingMove: castle,
+      );
+      final tree = root.addChild(castleNode);
+
+      expect(tree.childForMove(const RepertoireMove(from: 'e1', to: 'g1')), same(castleNode));
+      expect(tree.childForMove(const RepertoireMove(from: 'e1', to: 'h1')), same(castleNode));
+      expect(tree.childForMove(const RepertoireMove(from: 'd2', to: 'd4')), isNull);
     });
 
     test('childMoves returns incoming moves in child order', () {
@@ -151,6 +167,14 @@ void main() {
       expect(a.hashCode, equals(b.hashCode));
       expect(a, isNot(equals(differentId)));
       expect(a, isNot(equals(differentKey)));
+    });
+  });
+
+  group('display', () {
+    test('toString includes id and fenKey', () {
+      const node = RepertoireNode(id: 'id-1', fen: startFen, fenKey: startKey);
+
+      expect(node.toString(), 'RepertoireNode(id: id-1, fenKey: $startKey)');
     });
   });
 }
