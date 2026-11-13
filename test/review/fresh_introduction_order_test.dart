@@ -43,22 +43,14 @@ void main() {
 
       expect(
         identical(
-          spreadFreshIntroductions(
-            one,
-            presentedByStudy: const {},
-            presentedByChapter: const {},
-          ),
+          spreadFreshIntroductions(one, presentedByStudy: const {}, presentedByChapter: const {}),
           one,
         ),
         isTrue,
       );
       expect(
         identical(
-          spreadFreshIntroductions(
-            two,
-            presentedByStudy: const {},
-            presentedByChapter: const {},
-          ),
+          spreadFreshIntroductions(two, presentedByStudy: const {}, presentedByChapter: const {}),
           two,
         ),
         isTrue,
@@ -153,14 +145,7 @@ void main() {
       final unseen = _decision(id: 'd6', studyId: 's4', chapterId: 'c4');
 
       final order = freshIntroductionOrderFor(
-        decisions: [
-          reviewedById,
-          reviewedByCanonical,
-          freshA,
-          freshB,
-          freshC,
-          unseen,
-        ],
+        decisions: [reviewedById, reviewedByCanonical, freshA, freshB, freshC, unseen],
         reviewStates: {'d1': _learned('d1'), 'canon-2': _learned('canon-2')},
       );
 
@@ -169,7 +154,8 @@ void main() {
       expect(
         result.map((d) => d.id).toList(),
         ['d4', 'd5', 'd3'],
-        reason: 'study s1 has 2 presented decisions so it is deprioritized behind never-presented s2/s3',
+        reason:
+            'study s1 has 2 presented decisions so it is deprioritized behind never-presented s2/s3',
       );
     });
   });
