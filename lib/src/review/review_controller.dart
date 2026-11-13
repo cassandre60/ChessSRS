@@ -1587,8 +1587,18 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final currentState = state.value;
     final prompt = currentState?.currentPrompt;
     if (currentState == null || prompt == null) return;
-    if (currentState.boardPosition?.fen != prompt.fen) {
-      state = AsyncData(currentState.copyWith(boardPosition: _parseFen(prompt.fen)));
+    if (prompt.parentFen != null && currentState.boardPosition?.fen == prompt.parentFen) {
+      final incoming = prompt.incomingMove;
+      final move = incoming != null
+          ? NormalMove(
+              from: Square.fromName(incoming.from),
+              to: Square.fromName(incoming.to),
+              promotion: incoming.promotion != null ? Role.fromChar(incoming.promotion!) : null,
+            )
+          : null;
+      state = AsyncData(
+        currentState.copyWith(boardPosition: _parseFen(prompt.fen), lastMove: move),
+      );
     }
   }
 
