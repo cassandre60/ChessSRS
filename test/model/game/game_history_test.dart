@@ -16,6 +16,7 @@ import 'package:chess_srs/src/model/game/game_status.dart';
 import 'package:chess_srs/src/model/game/game_storage.dart';
 import 'package:chess_srs/src/model/game/player.dart';
 import 'package:chess_srs/src/model/user/user.dart';
+import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +38,14 @@ class _SwitchableAuth extends AuthController {
 
   // ignore: avoid_setters_without_getters
   set user(AuthUser? user) => state = user;
+}
+
+class _FixedConnectivity extends ConnectivityChangesNotifier {
+  _FixedConnectivity(this._status);
+  final ConnectivityStatus _status;
+
+  @override
+  Future<ConnectivityStatus> build() async => _status;
 }
 
 const _alice = AuthUser(
@@ -182,6 +191,41 @@ void main() {
       expect(count, 42);
 
       verifyNever(() => storage.count(userId: any(named: 'userId')));
+    });
+
+    test('uses local storage count for a logged-in user when offline', () async {
+      // Pins L76: authUser != null must be ANDed with online && isServerUp.
+      // A logged-in user who is offline must fall back to local storage, not the
+      // account count (the server/account path is unreachable).
+      const accountUser = User(
+        id: UserId('alice'),
+        username: 'alice',
+        perfs: IMap.empty(),
+        count: UserGameCount(all: 42, bookmark: 0),
+      );
+
+      final storage = MockGameStorage();
+      when(() => storage.count(userId: any(named: 'userId'))).thenAnswer((_) async => 7);
+
+      final container = await makeContainer(
+        authUser: _alice,
+        overrides: {
+          connectivityChangesProvider: connectivityChangesProvider.overrideWith(
+            () => _FixedConnectivity((isOnline: false, appState: null)),
+          ),
+          accountProvider: accountProvider.overrideWith((ref) => accountUser),
+          gameStorageProvider: gameStorageProvider.overrideWith((ref) => storage),
+        },
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(userNumberOfGamesProvider(null), (_, _) {});
+      addTearDown(sub.close);
+
+      final count = await container.read(userNumberOfGamesProvider(null).future);
+      expect(count, 7);
+
+      verify(() => storage.count(userId: any(named: 'userId'))).called(1);
     });
   });
 }

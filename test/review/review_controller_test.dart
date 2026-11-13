@@ -1465,6 +1465,53 @@ void main() {
       );
     });
 
+    test(
+      'branch transition animates incoming opponent pre-move even after a trailing opponent reply on the previous line',
+      () async {
+        final container = createContainer();
+        final controller = container.read(reviewControllerProvider.notifier);
+
+        // Chapter 1 ends with a trailing opponent move (2. Nc3) after Black's reply (1... e6).
+        // Chapter 2 opens with a different opponent move (1. Nf3).
+        const pgn = '''
+[Event "QGD trailing opponent move"]
+1. d4 e6 2. Nc3 *
+
+[Event "Reti 1.Nf3"]
+1. Nf3 d5 *
+''';
+        await controller.importPgnText(
+          pgnText: pgn,
+          title: 'Black Repertoire',
+          repertoireSide: Side.black,
+        );
+
+        // Wait for Chapter 1's incoming pre-move (1. d4) to land.
+        await waitUntil(
+          () => container.read(reviewControllerProvider).value?.boardPosition?.turn == Side.black,
+        );
+
+        // Play 1... e6 without awaiting the full animation tail so we can observe the staged parentFen state.
+        final moveFuture = controller.onUserMove(const NormalMove(from: Square.e7, to: Square.e6));
+        await waitUntil(
+          () =>
+              container.read(reviewControllerProvider).value?.currentPrompt?.incomingMove?.san ==
+              'Nf3',
+        );
+
+        // Must stage Chapter 2's parentFen (White to move, before 1. Nf3) and clear Chapter 1's Nc3 highlight.
+        final stagedState = container.read(reviewControllerProvider).requireValue;
+        expect(stagedState.boardPosition?.turn, Side.white);
+        expect(stagedState.lastMove, isNull);
+
+        // Then animate Chapter 2's incoming 1. Nf3 onto the board.
+        await moveFuture;
+        final animatedState = container.read(reviewControllerProvider).requireValue;
+        expect(animatedState.boardPosition?.turn, Side.black);
+        expect(animatedState.lastMove, const NormalMove(from: Square.g1, to: Square.f3));
+      },
+    );
+
     test('acknowledgeLapse (skip after error) plays opponent pre-move on next prompt', () async {
       final container = createContainer();
       final controller = container.read(reviewControllerProvider.notifier);
