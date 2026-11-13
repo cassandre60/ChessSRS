@@ -112,4 +112,26 @@ void main() {
       expect(study.owner?.user.name, 'Bob');
     });
   });
+
+  group('studyChapterFeaturesFromJson', () {
+    test('defaults computer/explorer to false when keys are absent', () {
+      // Mutation pins: flipping either `?? false` default to `?? true` makes a
+      // chapter JSON without explicit feature keys silently enable the
+      // computer analysis/explorer features.
+      final features = studyChapterFeaturesFromJson(<String, Object?>{});
+
+      expect(features.computer, isFalse);
+      expect(features.explorer, isFalse);
+    });
+
+    test('defaults to false for null values and passes explicit values through', () {
+      final features = studyChapterFeaturesFromJson(<String, Object?>{
+        'computer': null,
+        'explorer': true,
+      });
+
+      expect(features.computer, isFalse);
+      expect(features.explorer, isTrue);
+    });
+  });
 }
