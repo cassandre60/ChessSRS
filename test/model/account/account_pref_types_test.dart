@@ -84,15 +84,9 @@ void main() {
 
   group('SubmitMove', () {
     test('combines choices as a bitmask and round-trips ints', () {
-      final submit = SubmitMove(const {
-        SubmitMoveChoice.correspondence,
-        SubmitMoveChoice.rapid,
-      });
+      final submit = SubmitMove(const {SubmitMoveChoice.correspondence, SubmitMoveChoice.rapid});
 
-      expect(
-        submit.value,
-        SubmitMoveChoice.correspondence.value | SubmitMoveChoice.rapid.value,
-      );
+      expect(submit.value, SubmitMoveChoice.correspondence.value | SubmitMoveChoice.rapid.value);
       expect(submit.toFormData, submit.value.toString());
       expect(submit.toJson(), submit.value);
       expect(submit.choices.contains(SubmitMoveChoice.correspondence), isTrue);
@@ -137,16 +131,11 @@ void main() {
       expect(defaultAccountPreferences.follow.value, isTrue);
       expect(defaultAccountPreferences.challenge, Challenge.registered);
       expect(defaultAccountPreferences.message, Message.always);
-      expect(defaultAccountPreferences.submitMove.choices, {
-        SubmitMoveChoice.correspondence,
-      });
+      expect(defaultAccountPreferences.submitMove.choices, {SubmitMoveChoice.correspondence});
     });
 
     test('fromJson falls back to defaults on malformed payloads', () {
-      expect(
-        AccountPrefState.fromJson({'zenMode': 'not-an-int'}),
-        defaultAccountPreferences,
-      );
+      expect(AccountPrefState.fromJson({'zenMode': 'not-an-int'}), defaultAccountPreferences);
     });
   });
 }
