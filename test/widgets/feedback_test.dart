@@ -1,8 +1,34 @@
+import 'package:chess_srs/l10n/l10n.dart';
+import 'package:chess_srs/src/network/socket.dart';
 import 'package:chess_srs/src/widgets/feedback.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
+
+class FakeSocketPingNotifier extends SocketPingNotifier {
+  FakeSocketPingNotifier(this.state, {required Uri? route}) : super(route);
+
+  @override
+  final SocketPingState state;
+
+  @override
+  SocketPingState build({Uri? route}) => state;
+}
+
+Widget pingTestApp(SocketPingState state, Widget child) {
+  return ProviderScope(
+    overrides: [
+      socketPingProvider.overrideWith2((Uri? uri) => FakeSocketPingNotifier(state, route: uri)),
+    ],
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    ),
+  );
+}
 
 void main() {
   group('LagIndicator', () {
@@ -73,6 +99,85 @@ void main() {
 
     test('throws assertion for lagRating above 4', () {
       expect(() => LagIndicator(lagRating: 5), throwsA(isA<AssertionError>()));
+    });
+  });
+
+  group('SocketPingRatingListTile', () {
+    testWidgets('shows the offline label and stays disabled while the socket has no lag', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        pingTestApp((
+          averageLag: Duration.zero,
+          rating: 0,
+          isActive: false,
+        ), const Scaffold(body: SocketPingRatingListTile())),
+      );
+
+      final tile = tester.widget<ListTile>(find.byType(ListTile));
+      expect(tile.enabled, isFalse);
+      expect(find.text('Offline'), findsOneWidget);
+    });
+
+    testWidgets('shows the ping lag and stays enabled while the socket has lag', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        pingTestApp((
+          averageLag: const Duration(milliseconds: 42),
+          rating: 1,
+          isActive: true,
+        ), const Scaffold(body: SocketPingRatingListTile())),
+      );
+
+      final tile = tester.widget<ListTile>(find.byType(ListTile));
+      expect(tile.enabled, isTrue);
+      expect(
+        find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == 'PING 42 ms'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('SocketPingRatingIcon', () {
+    testWidgets('popover shows the unknown marker while the socket has no lag', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        pingTestApp((
+          averageLag: Duration.zero,
+          rating: 0,
+          isActive: false,
+        ), const Scaffold(body: SocketPingRatingIcon())),
+      );
+
+      await tester.tap(find.byType(SocketPingRatingIcon));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == 'PING: ? ms'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('popover shows the measured lag while the socket has lag', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        pingTestApp((
+          averageLag: const Duration(milliseconds: 42),
+          rating: 1,
+          isActive: true,
+        ), const Scaffold(body: SocketPingRatingIcon())),
+      );
+
+      await tester.tap(find.byType(SocketPingRatingIcon));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == 'PING: 42 ms'),
+        findsOneWidget,
+      );
     });
   });
 
