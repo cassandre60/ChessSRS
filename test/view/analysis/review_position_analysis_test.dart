@@ -7,8 +7,34 @@ import 'package:chess_srs/src/model/common/uci.dart';
 import 'package:chess_srs/src/view/analysis/analysis_options.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 void main() {
+  test(
+    'analysisOptionsForReviewPosition surfaces an unparseable move history instead of swallowing it',
+    () {
+      final records = <LogRecord>[];
+      final subscription = Logger.root.onRecord.listen((record) {
+        if (record.loggerName == 'AnalysisOptions') records.add(record);
+      });
+      addTearDown(subscription.cancel);
+
+      final options = analysisOptionsForReviewPosition(
+        startingFen: 'not-a-valid-fen',
+        orientation: Side.white,
+        moveHistory: const ['e4'],
+      );
+
+      expect(options, isA<Pgn>());
+      expect(
+        records,
+        isNotEmpty,
+        reason:
+            'an unparseable starting position must surface the failure instead of being swallowed',
+      );
+    },
+  );
+
   test('analysisOptionsForReviewPosition includes move history so analysis is not blank', () {
     const fen = 'rnb1kbnr/ppp1pppp/8/q7/8/2N5/PPPP1PPP/R1BQKBNR w KQkq - 0 3';
     final options = analysisOptionsForReviewPosition(
