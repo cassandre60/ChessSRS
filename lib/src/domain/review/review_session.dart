@@ -767,7 +767,7 @@ class ReviewSession {
               continue;
             }
             if ((transposedStart != null && d.expectedMoves.any((m) => m.matches(expectedMatch))) ||
-                (isMultiStudyScope && d.fenKey != null && d.studyId != decision.studyId)) {
+                (isMultiStudyScope && d.fenKey != null)) {
               _completedDecisionIds.add(d.canonicalId);
               _dequeueDecision(d);
             }
@@ -983,7 +983,7 @@ class ReviewSession {
               continue;
             }
             if ((transposedStart != null && d.expectedMoves.any((m) => m.matches(expectedMatch))) ||
-                (isMultiStudyScope && d.fenKey != null && d.studyId != prompt.decision.studyId)) {
+                (isMultiStudyScope && d.fenKey != null)) {
               _completedDecisionIds.add(d.canonicalId);
               _dequeueDecision(d);
             }

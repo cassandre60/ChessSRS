@@ -1342,8 +1342,16 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final session = currentState.session ?? _service.activeSession!;
     final nextPrompt = session.currentPrompt;
 
+    final alreadyAnimatedNextPrompt =
+        nextPrompt != null &&
+        opponentMoves.length == 1 &&
+        result.autoPlayedMoves.lastOrNull?.fenAfter == nextPrompt.fen &&
+        (nextPrompt.incomingMove == null ||
+            (opponentMoves.single.move.from == nextPrompt.incomingMove!.from &&
+                opponentMoves.single.move.to == nextPrompt.incomingMove!.to));
+
     final shouldAnimateBranchPreMove =
-        opponentMoves.isEmpty &&
+        !alreadyAnimatedNextPrompt &&
         nextPrompt != null &&
         nextPrompt.incomingMove != null &&
         nextPrompt.parentFen != null &&
@@ -1556,8 +1564,8 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
         boardOrientation: nextOrientation,
         pendingUnlock: pendingUnlock,
         clearPendingUnlock: pendingUnlock == null,
-        lastMove: shouldAnimateBranchPreMove ? null : liveLastMove,
-        clearLastMove: shouldAnimateBranchPreMove,
+        lastMove: alreadyAnimatedNextPrompt ? liveLastMove : null,
+        clearLastMove: !alreadyAnimatedNextPrompt,
       ),
     );
 
@@ -1579,8 +1587,18 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
     final currentState = state.value;
     final prompt = currentState?.currentPrompt;
     if (currentState == null || prompt == null) return;
-    if (currentState.boardPosition?.fen != prompt.fen) {
-      state = AsyncData(currentState.copyWith(boardPosition: _parseFen(prompt.fen)));
+    if (prompt.parentFen != null && currentState.boardPosition?.fen == prompt.parentFen) {
+      final incoming = prompt.incomingMove;
+      final move = incoming != null
+          ? NormalMove(
+              from: Square.fromName(incoming.from),
+              to: Square.fromName(incoming.to),
+              promotion: incoming.promotion != null ? Role.fromChar(incoming.promotion!) : null,
+            )
+          : null;
+      state = AsyncData(
+        currentState.copyWith(boardPosition: _parseFen(prompt.fen), lastMove: move),
+      );
     }
   }
 
