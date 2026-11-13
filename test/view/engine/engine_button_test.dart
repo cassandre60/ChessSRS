@@ -109,4 +109,14 @@ void main() {
     // The popup lists the engine name in a Diagram row.
     expect(find.textContaining('Stockfish'), findsOneWidget);
   });
+
+  testWidgets('Cloud badge is not shown for local engine evaluation', (tester) async {
+    await makeEngineTestApp(tester, isCloudEvalEnabled: false, gameId: const GameId('xze7RH66'));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(kRequestEvalDebounceDelay + kEngineEvalEmissionThrottleDelay);
+
+    // Local eval depth is shown; CLOUD badge must remain hidden when eval is not CloudEval.
+    expect(find.widgetWithText(EngineButton, '16'), findsOne);
+    expect(find.text('CLOUD'), findsNothing);
+  });
 }
