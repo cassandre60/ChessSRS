@@ -7,11 +7,7 @@ void main() {
   group('Chapter.create', () {
     test('generates id and defaults', () {
       final before = DateTime.now();
-      final chapter = Chapter.create(
-        studyId: 'study-1',
-        sourceOrder: 2,
-        title: 'Main',
-      );
+      final chapter = Chapter.create(studyId: 'study-1', sourceOrder: 2, title: 'Main');
       final after = DateTime.now();
 
       expect(chapter.id, isNotEmpty);
@@ -24,9 +20,7 @@ void main() {
       expect(chapter.orientation, Side.white);
       expect(chapter.createdAt, isNotNull);
       expect(
-        chapter.createdAt!.isAfter(
-              before.subtract(const Duration(seconds: 1)),
-            ) &&
+        chapter.createdAt!.isAfter(before.subtract(const Duration(seconds: 1))) &&
             chapter.createdAt!.isBefore(after.add(const Duration(seconds: 1))),
         isTrue,
       );
@@ -61,12 +55,7 @@ void main() {
   group('root resolution', () {
     test('returns provided root without resolver', () {
       final root = RepertoireNode.root(fen: 'fen', fenKey: 'key');
-      final chapter = Chapter(
-        id: 'c1',
-        studyId: 's1',
-        sourceOrder: 0,
-        root: root,
-      );
+      final chapter = Chapter(id: 'c1', studyId: 's1', sourceOrder: 0, root: root);
 
       expect(chapter.root, same(root));
     });
@@ -150,12 +139,7 @@ void main() {
     test('new resolver replaces previous cached root', () {
       final oldRoot = RepertoireNode.root(fen: 'old', fenKey: 'old');
       final newRoot = RepertoireNode.root(fen: 'new', fenKey: 'new');
-      final chapter = Chapter(
-        id: 'c1',
-        studyId: 's1',
-        sourceOrder: 0,
-        root: oldRoot,
-      );
+      final chapter = Chapter(id: 'c1', studyId: 's1', sourceOrder: 0, root: oldRoot);
 
       var calls = 0;
       final copy = chapter.copyWith(
