@@ -50,10 +50,7 @@ void main() {
     );
 
     test('copyWith overrides only provided fields', () {
-      final copy = base.copyWith(
-        good: const Color(0xFFABCDEF),
-        primary: const Color(0xFF111111),
-      );
+      final copy = base.copyWith(good: const Color(0xFFABCDEF), primary: const Color(0xFF111111));
       expect(copy.cyan, base.cyan);
       expect(copy.brag, base.brag);
       expect(copy.good, const Color(0xFFABCDEF));
@@ -74,14 +71,11 @@ void main() {
       expect(copy.primary, base.primary);
     });
 
-    test(
-      'lerp returns same instance values when other is not LichessCustomColors',
-      () {
-        final result = base.lerp(null, 0.5);
-        expect(result.cyan, base.cyan);
-        expect(result.primary, base.primary);
-      },
-    );
+    test('lerp returns same instance values when other is not LichessCustomColors', () {
+      final result = base.lerp(null, 0.5);
+      expect(result.cyan, base.cyan);
+      expect(result.primary, base.primary);
+    });
 
     test('lerp interpolates colors when other is LichessCustomColors', () {
       const other = LichessCustomColors(
