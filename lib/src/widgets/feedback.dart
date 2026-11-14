@@ -27,11 +27,7 @@ class SocketPingRatingIcon extends ConsumerWidget {
 
     return SemanticIconButton(
       semanticsLabel: 'PING: ${ping.averageLag.inMilliseconds}ms',
-      icon: LagIndicator(
-        lagRating: ping.rating,
-        isActive: ping.isActive,
-        size: 24.0,
-      ),
+      icon: LagIndicator(lagRating: ping.rating, isActive: ping.isActive, size: 24.0),
       onPressed: () {
         showPopover(
           context: context,
@@ -40,10 +36,7 @@ class SocketPingRatingIcon extends ConsumerWidget {
               builder: (_, ref, _) {
                 final p = ref.watch(socketPingProvider(socketUri));
                 return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   child: Text.rich(
                     TextSpan(
                       text: 'PING: ',
@@ -56,9 +49,7 @@ class SocketPingRatingIcon extends ConsumerWidget {
                         ),
                         TextSpan(
                           text: ' ms',
-                          style: TextStyle(
-                            color: ColorScheme.of(context).onSurface,
-                          ),
+                          style: TextStyle(color: ColorScheme.of(context).onSurface),
                         ),
                       ],
                     ),
@@ -105,15 +96,11 @@ class SocketPingRatingListTile extends ConsumerWidget {
                   const TextSpan(text: ' ms'),
                 ],
               ),
-              style: TextStyle(
-                color: ColorScheme.of(context).onSurface.withValues(alpha: 0.7),
-              ),
+              style: TextStyle(color: ColorScheme.of(context).onSurface.withValues(alpha: 0.7)),
             )
           : Text(
               context.l10n.noNetwork,
-              style: TextStyle(
-                color: ColorScheme.of(context).onSurface.withValues(alpha: 0.7),
-              ),
+              style: TextStyle(color: ColorScheme.of(context).onSurface.withValues(alpha: 0.7)),
             ),
       enabled: ping.averageLag > Duration.zero,
       onTap: () {
@@ -125,12 +112,8 @@ class SocketPingRatingListTile extends ConsumerWidget {
 
 /// An indicator that shows the lag rating of the connection.
 class LagIndicator extends StatelessWidget {
-  const LagIndicator({
-    required this.lagRating,
-    this.isActive = true,
-    this.size = 20.0,
-    super.key,
-  }) : assert(lagRating >= 0 && lagRating <= 4);
+  const LagIndicator({required this.lagRating, this.isActive = true, this.size = 20.0, super.key})
+    : assert(lagRating >= 0 && lagRating <= 4);
 
   /// The lag rating from 0 to 4.
   final int lagRating;
@@ -197,19 +180,14 @@ class OfflineBanner extends ConsumerWidget {
           padding: Styles.horizontalBodyPadding,
           child: Row(
             children: [
-              Icon(
-                Icons.report_outlined,
-                color: theme.colorScheme.onTertiaryContainer,
-              ),
+              Icon(Icons.report_outlined, color: theme.colorScheme.onTertiaryContainer),
               const SizedBox(width: 5),
               Flexible(
                 child: Text(
                   'Network connectivity unavailable.',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.colorScheme.onTertiaryContainer,
-                  ),
+                  style: TextStyle(color: theme.colorScheme.onTertiaryContainer),
                 ),
               ),
             ],
@@ -262,15 +240,9 @@ class FullScreenRetryRequest extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            context.l10n.mobileSomethingWentWrong,
-            style: Styles.sectionTitle,
-          ),
+          Text(context.l10n.mobileSomethingWentWrong, style: Styles.sectionTitle),
           const SizedBox(height: 10),
-          FilledButton.tonal(
-            onPressed: onRetry,
-            child: Text(context.l10n.retry),
-          ),
+          FilledButton.tonal(onPressed: onRetry, child: Text(context.l10n.retry)),
         ],
       ),
     );
@@ -280,12 +252,7 @@ class FullScreenRetryRequest extends StatelessWidget {
 enum SnackBarType { error, info, success }
 
 class FeedbackTile extends StatelessWidget {
-  const FeedbackTile({
-    this.leading,
-    required this.title,
-    this.subtitle,
-    super.key,
-  });
+  const FeedbackTile({this.leading, required this.title, this.subtitle, super.key});
 
   final Widget? leading;
   final Widget title;
@@ -306,9 +273,7 @@ class FeedbackTile extends StatelessWidget {
             children: [
               DefaultTextStyle.merge(
                 style: TextStyle(
-                  fontSize: defaultFontSize != null
-                      ? defaultFontSize * 1.2
-                      : null,
+                  fontSize: defaultFontSize != null ? defaultFontSize * 1.2 : null,
                   fontWeight: FontWeight.bold,
                 ),
                 child: title,
@@ -330,11 +295,7 @@ class FeedbackTile extends StatelessWidget {
 ///
 /// [type] is accepted and deliberately not rendered: the design specifies one toast
 /// appearance, and gives errors a screen state instead. See [SrsToastTone].
-void showSnackBar(
-  BuildContext context,
-  String message, {
-  SnackBarType type = SnackBarType.info,
-}) {
+void showSnackBar(BuildContext context, String message, {SnackBarType type = SnackBarType.info}) {
   // Kept inside a try, as before: this is called from async gaps and from error paths where
   // the context may already be defunct, and a toast must never be the thing that throws.
   try {
