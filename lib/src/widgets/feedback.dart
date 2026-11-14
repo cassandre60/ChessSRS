@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/socket.dart';
@@ -5,7 +7,6 @@ import 'package:chess_srs/src/styles/styles.dart';
 import 'package:chess_srs/src/utils/l10n_context.dart';
 import 'package:chess_srs/src/widgets/buttons.dart';
 import 'package:chess_srs/src/widgets/popover.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:material_ui/material_ui.dart';
@@ -309,6 +310,6 @@ void showSnackBar(BuildContext context, String message, {SnackBarType type = Sna
       },
     );
   } catch (e, st) {
-    debugPrint('showSnackBar failed (type=$type): $e\n$st');
+    developer.log('showSnackBar failed (type=$type): $e', error: e, stackTrace: st);
   }
 }
