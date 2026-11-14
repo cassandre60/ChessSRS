@@ -5,6 +5,9 @@ import 'package:chess_srs/src/model/analysis/analysis_controller.dart';
 import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:dartchess/dartchess.dart' show Position, Rule, Setup, Side, kInitialFEN;
+import 'package:logging/logging.dart';
+
+final Logger _logger = Logger('AnalysisOptions');
 
 /// A minimal PGN carrying a single FEN, so the analysis screen opens on a known position.
 ///
@@ -114,7 +117,15 @@ AnalysisOptions analysisOptionsForReviewPosition({
           posAfterHistory = pos;
           break;
         }
-      } catch (_) {}
+      } catch (e, st) {
+        // An unparseable starting position must surface the failure; swallowing it
+        // silently would discard the reviewed move history without a trace.
+        _logger.warning(
+          'Unable to apply review move history from starting position "$candidate"',
+          e,
+          st,
+        );
+      }
     }
   }
 
