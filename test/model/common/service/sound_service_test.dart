@@ -2,7 +2,9 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/service/sound_service.dart';
 import 'package:chess_srs/src/model/settings/general_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 import '../../../binding.dart';
 import '../../../test_container.dart';
@@ -218,6 +220,48 @@ void main() {
       );
     },
   );
+
+  test('SoundService surfaces a diagnostic when the sound effect plugin fails to play', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    Logger.root.level = Level.ALL;
+    final records = <LogRecord>[];
+    final subscription = Logger.root.onRecord.listen(records.add);
+    addTearDown(subscription.cancel);
+
+    final container = await makeContainer(
+      overrides: {
+        generalPreferencesProvider: generalPreferencesProvider.overrideWith(
+          () => _FakeGeneralPreferencesNotifier(
+            GeneralPrefs.defaults.copyWith(isSoundEnabled: true, masterVolume: 1.0),
+          ),
+        ),
+        soundServiceProvider: soundServiceProvider.overrideWith(
+          (ref) => SoundService(ref, linuxPlayer: _RecordingLinuxPlayer()),
+        ),
+      },
+    );
+    final soundService = container.read(soundServiceProvider);
+
+    const channel = MethodChannel('org.lichess/sound_effect');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) {
+        throw PlatformException(code: 'sound_effect_test_unavailable');
+      },
+    );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+
+    await soundService.play(Sound.move);
+
+    expect(
+      records.any((record) => record.loggerName == 'SoundService' && record.level == Level.WARNING),
+      isTrue,
+      reason: 'a failed sound play must surface a SoundService warning diagnostic',
+    );
+  });
 
   test('SoundService.release releases the Linux backend', () async {
     final player = _RecordingLinuxPlayer();

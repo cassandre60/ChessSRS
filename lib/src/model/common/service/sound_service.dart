@@ -174,8 +174,14 @@ Future<void> _loadSound(SoundTheme theme, Sound sound, {LinuxSoundPlayer? linuxP
   } else {
     try {
       await _soundEffectPlugin.load(soundId, fullPath);
-    } on PlatformException catch (_) {
-    } on MissingPluginException catch (_) {}
+    } on PlatformException catch (e) {
+      _logger.warning('Failed to load sound $soundId from $fullPath:', e);
+    } on MissingPluginException catch (e) {
+      _logger.warning(
+        'Sound effect plugin unavailable while loading sound $soundId from $fullPath:',
+        e,
+      );
+    }
   }
 }
 
@@ -209,8 +215,11 @@ class SoundService {
       } else {
         try {
           await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
-        } on PlatformException catch (_) {
-        } on MissingPluginException catch (_) {}
+        } on PlatformException catch (e) {
+          _logger.warning('Sound effect plugin failed to initialize:', e);
+        } on MissingPluginException catch (e) {
+          _logger.warning('Sound effect plugin unavailable while initializing:', e);
+        }
       }
       await _loadAllSounds(theme);
     } catch (e, st) {
@@ -232,11 +241,13 @@ class SoundService {
     }
     try {
       await _soundEffectPlugin.play(sound.name, volume: finalVolume);
-    } on PlatformException catch (_) {
+    } on PlatformException catch (e) {
       // The sound plugin has no implementation on some platforms (e.g. Linux
       // desktop); sounds are optional feedback and must never crash the app.
-    } on MissingPluginException catch (_) {
+      _logger.warning('Failed to play sound ${sound.name} with volume $finalVolume:', e);
+    } on MissingPluginException catch (e) {
       // Same as above: missing plugin implementation for this platform.
+      _logger.warning('Sound effect plugin unavailable while playing sound ${sound.name}:', e);
     }
   }
 
@@ -257,8 +268,11 @@ class SoundService {
       try {
         await _soundEffectPlugin.release();
         await _soundEffectPlugin.initialize(maxStreams: _kMaxConcurrentStreams);
-      } on PlatformException catch (_) {
-      } on MissingPluginException catch (_) {}
+      } on PlatformException catch (e) {
+        _logger.warning('Sound effect plugin failed during theme change:', e);
+      } on MissingPluginException catch (e) {
+        _logger.warning('Sound effect plugin unavailable during theme change:', e);
+      }
     }
     await _loadSound(theme, Sound.move, linuxPlayer: _linuxPlayer);
     if (playSound) {
@@ -273,8 +287,11 @@ class SoundService {
     } else {
       try {
         await _soundEffectPlugin.release();
-      } on PlatformException catch (_) {
-      } on MissingPluginException catch (_) {}
+      } on PlatformException catch (e) {
+        _logger.warning('Sound effect plugin failed to release:', e);
+      } on MissingPluginException catch (e) {
+        _logger.warning('Sound effect plugin unavailable while releasing:', e);
+      }
     }
   }
 }
