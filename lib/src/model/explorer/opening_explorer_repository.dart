@@ -12,6 +12,7 @@ import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/utils/riverpod.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart';
 
@@ -50,7 +51,8 @@ class OpeningExplorer extends AsyncNotifier<({OpeningExplorerEntry entry, bool i
             since: prefs.masterDb.sinceYear,
           );
           return (entry: openingExplorer, isIndexing: false);
-        } catch (_) {
+        } catch (e) {
+          debugPrint('OpeningExplorer: master DB fetch failed, falling back to open DB: $e');
           final entry = await repository.getOpenDatabase(fen, variant: variant);
           return (entry: entry, isIndexing: false);
         }
@@ -64,7 +66,8 @@ class OpeningExplorer extends AsyncNotifier<({OpeningExplorerEntry entry, bool i
             since: prefs.lichessDb.since,
           );
           return (entry: openingExplorer, isIndexing: false);
-        } catch (_) {
+        } catch (e) {
+          debugPrint('OpeningExplorer: lichess DB fetch failed, falling back to open DB: $e');
           final entry = await repository.getOpenDatabase(fen, variant: variant);
           return (entry: entry, isIndexing: false);
         }
@@ -99,7 +102,8 @@ class OpeningExplorer extends AsyncNotifier<({OpeningExplorerEntry entry, bool i
                   ),
           );
           return null;
-        } catch (_) {
+        } catch (e) {
+          debugPrint('OpeningExplorer: player DB fetch failed, falling back to open DB: $e');
           final entry = await repository.getOpenDatabase(fen, variant: variant);
           return (entry: entry, isIndexing: false);
         }
@@ -141,7 +145,9 @@ class OpeningExplorerRepository {
         if (fullOpening != null) {
           opening = LightOpening(eco: fullOpening.eco, name: fullOpening.name);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('OpeningExplorer: fetchFromFen failed, continuing without opening info: $e');
+      }
     }
 
     final httpClient = defaultClient ?? client;
@@ -205,7 +211,9 @@ class OpeningExplorerRepository {
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('OpeningExplorer: chessdb.cn query failed, falling back to empty entry: $e');
+      }
     }
 
     return OpeningExplorerEntry(
