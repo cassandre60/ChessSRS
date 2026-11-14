@@ -11,7 +11,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseExecutor;
 
 /// Result of running [repairChapterOrientations].
 class ChapterOrientationRepairResult {
-  const ChapterOrientationRepairResult({required this.repaired, required this.unchanged});
+  const ChapterOrientationRepairResult({
+    required this.repaired,
+    required this.unchanged,
+  });
 
   /// Chapters whose orientation was inverted/corrected and decisions re-derived.
   final int repaired;
@@ -24,7 +27,9 @@ class ChapterOrientationRepairResult {
 /// study or chapter title explicitly indicates the intended perspective (INV-013),
 /// correcting chapters where an overly strict keyword check or custom starting FEN
 /// inverted the player perspective.
-Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecutor db) async {
+Future<ChapterOrientationRepairResult> repairChapterOrientations(
+  DatabaseExecutor db,
+) async {
   // Guarded on the tables existing, as v18/v20/v21 are: hand-built fixtures
   // (and only fixtures) can carry a version without the SRS tables.
   for (final table in const [kTableSrsChapter, kTableSrsStudy]) {
@@ -57,7 +62,9 @@ Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecuto
     final chapterTitle = (row['chapterTitle'] as String?)?.trim() ?? '';
     final startingFen = row['startingFen'] as String?;
     final orientationStr = row['orientation'] as String?;
-    final currentOrientation = orientationStr == 'black' ? Side.black : Side.white;
+    final currentOrientation = orientationStr == 'black'
+        ? Side.black
+        : Side.white;
     final treeJson = row['treeJson'] as String?;
 
     Side startTurn = Side.white;
@@ -105,7 +112,11 @@ Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecuto
           startSide: startTurn,
         );
 
-        await db.delete(kTableSrsDecision, where: 'chapterId = ?', whereArgs: [chapterId]);
+        await db.delete(
+          kTableSrsDecision,
+          where: 'chapterId = ?',
+          whereArgs: [chapterId],
+        );
 
         for (final d in newDecisions) {
           await db.insert(kTableSrsDecision, {
@@ -126,5 +137,8 @@ Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecuto
     repaired++;
   }
 
-  return ChapterOrientationRepairResult(repaired: repaired, unchanged: unchanged);
+  return ChapterOrientationRepairResult(
+    repaired: repaired,
+    unchanged: unchanged,
+  );
 }
