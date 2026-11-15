@@ -308,4 +308,26 @@ void main() {
       'johndoe@lichess.org',
     );
   });
+
+  group('mutation pins', () {
+    testWidgets('email step submit button expands to full width', (tester) async {
+      final app = await makeApp(tester, happyPath());
+      await tester.pumpWidget(app);
+
+      final button = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Send me a code'),
+      );
+      expect(button.expand, isTrue);
+    });
+
+    testWidgets('code step sign-in button expands to full width', (tester) async {
+      final app = await makeApp(tester, happyPath());
+      await tester.pumpWidget(app);
+
+      await submitEmail(tester);
+
+      final button = tester.widget<SrsPillButton>(find.widgetWithText(SrsPillButton, 'Sign in'));
+      expect(button.expand, isTrue);
+    });
+  });
 }
