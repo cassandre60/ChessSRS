@@ -12,10 +12,7 @@ void main() {
         MaterialApp(
           theme: ThemeData(platform: TargetPlatform.android),
           home: Scaffold(
-            body: PlatformDialogAction(
-              onPressed: () => pressed++,
-              child: const Text('OK'),
-            ),
+            body: PlatformDialogAction(onPressed: () => pressed++, child: const Text('OK')),
           ),
         ),
       );
@@ -30,9 +27,7 @@ void main() {
       expect(pressed, 1);
     });
 
-    testWidgets('builds a CupertinoDialogAction on iOS with flags', (
-      tester,
-    ) async {
+    testWidgets('builds a CupertinoDialogAction on iOS with flags', (tester) async {
       await tester.pumpWidget(
         CupertinoApp(
           theme: const CupertinoThemeData(brightness: Brightness.light),
@@ -57,9 +52,7 @@ void main() {
       expect(find.byType(CupertinoDialogAction), findsOneWidget);
       expect(find.byType(TextButton), findsNothing);
 
-      final action = tester.widget<CupertinoDialogAction>(
-        find.byType(CupertinoDialogAction),
-      );
+      final action = tester.widget<CupertinoDialogAction>(find.byType(CupertinoDialogAction));
       expect(action.isDefaultAction, isTrue);
       expect(action.isDestructiveAction, isTrue);
       expect(find.text('Delete'), findsOneWidget);
