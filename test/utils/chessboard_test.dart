@@ -5,20 +5,20 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('atomicExplosionSquares', () {
     test('returns null when move is null', () {
-      final position = Atomic.initial;
+      const position = Atomic.initial;
 
       expect(atomicExplosionSquares(position, null), isNull);
     });
 
     test('returns null for a non-atomic position', () {
-      final position = Chess.initial;
+      const position = Chess.initial;
       final move = Move.parse('e2e4');
 
       expect(atomicExplosionSquares(position, move), isNull);
     });
 
     test('returns null for a non-capture move in atomic', () {
-      final position = Atomic.initial;
+      const position = Atomic.initial;
       final move = Move.parse('g1f3');
 
       expect(atomicExplosionSquares(position, move), isNull);
