@@ -30,7 +30,9 @@ void main() {
       expect(pressed, 1);
     });
 
-    testWidgets('builds a CupertinoDialogAction on iOS with flags', (tester) async {
+    testWidgets('builds a CupertinoDialogAction on iOS with flags', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         CupertinoApp(
           theme: const CupertinoThemeData(brightness: Brightness.light),
