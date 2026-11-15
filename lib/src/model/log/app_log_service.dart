@@ -46,7 +46,10 @@ class AppLogService {
     if (kDebugMode) {
       Logger.root.level = Level.ALL;
     } else {
-      ref.listen(logPreferencesProvider.select((prefs) => prefs.level), (prev, next) {
+      ref.listen(logPreferencesProvider.select((prefs) => prefs.level), (
+        prev,
+        next,
+      ) {
         if (next != prev) {
           Logger.root.level = next;
         }
@@ -86,9 +89,25 @@ class AppLogService {
                 .read(appLogStorageProvider.future)
                 .then(
                   (storage) => storage.save(AppLogEntry.fromLogRecord(record)),
-                  onError: (_) {},
+                  onError: (Object error, StackTrace stackTrace) {
+                    developer.log(
+                      'Failed to persist log record',
+                      name: 'AppLogService',
+                      error: error,
+                      stackTrace: stackTrace,
+                      level: 900,
+                    );
+                  },
                 );
-          } catch (_) {}
+          } catch (error, stackTrace) {
+            developer.log(
+              'Failed to schedule log record persistence',
+              name: 'AppLogService',
+              error: error,
+              stackTrace: stackTrace,
+              level: 900,
+            );
+          }
         });
       }
     });
@@ -104,7 +123,9 @@ final class ProviderLogger extends ProviderObserver {
 
   @override
   void didAddProvider(ProviderObserverContext context, Object? value) {
-    _logger.finer('${context.provider.name ?? context.provider.runtimeType} initialized: $value');
+    _logger.finer(
+      '${context.provider.name ?? context.provider.runtimeType} initialized: $value',
+    );
   }
 
   /// Riverpod calls this whenever a provider's `onDispose` listeners run, which a rebuild does as
@@ -112,11 +133,17 @@ final class ProviderLogger extends ProviderObserver {
   /// a provider that merely recomputed logs this twice without going anywhere.
   @override
   void didDisposeProvider(ProviderObserverContext context) {
-    _logger.finer('${context.provider.name ?? context.provider.runtimeType} disposed or rebuilt');
+    _logger.finer(
+      '${context.provider.name ?? context.provider.runtimeType} disposed or rebuilt',
+    );
   }
 
   @override
-  void providerDidFail(ProviderObserverContext context, Object error, StackTrace stackTrace) {
+  void providerDidFail(
+    ProviderObserverContext context,
+    Object error,
+    StackTrace stackTrace,
+  ) {
     _logger.severe(
       '${context.provider.name ?? context.provider.runtimeType} error',
       error,
