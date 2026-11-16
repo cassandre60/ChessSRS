@@ -24,7 +24,9 @@ void main() {
     await subscription.cancel();
 
     expect(
-      records.any((r) => r.loggerName == 'Auth' && r.level == Level.WARNING && r.message == 'Sign-in failed'),
+      records.any(
+        (r) => r.loggerName == 'Auth' && r.level == Level.WARNING && r.message == 'Sign-in failed',
+      ),
       isTrue,
       reason: 'a sign-in failure must be recorded as a warning',
     );
