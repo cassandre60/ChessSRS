@@ -51,19 +51,16 @@ void main() {
       expect(restored, state);
     });
 
-    test(
-      'fromJson applies defaults for missing search time and engine pref',
-      () {
-        final state = EngineEvaluationPrefState.fromJson({
-          'isEnabled': true,
-          'numEvalLines': 1,
-          'numEngineCores': 2,
-        });
+    test('fromJson applies defaults for missing search time and engine pref', () {
+      final state = EngineEvaluationPrefState.fromJson({
+        'isEnabled': true,
+        'numEvalLines': 1,
+        'numEngineCores': 2,
+      });
 
-        expect(state.engineSearchTime, const Duration(seconds: 6));
-        expect(state.enginePref, ChessEnginePref.sfLight);
-      },
-    );
+      expect(state.engineSearchTime, const Duration(seconds: 6));
+      expect(state.enginePref, ChessEnginePref.sfLight);
+    });
 
     test('fromJson maps unknown engine pref to sfLight', () {
       final state = EngineEvaluationPrefState.fromJson({
@@ -80,22 +77,19 @@ void main() {
   });
 
   group('engine search time constants', () {
-    test(
-      'available times are ascending and end with max engine search time',
-      () {
-        expect(kAvailableEngineSearchTimes, isNotEmpty);
-        expect(kAvailableEngineSearchTimes.last, kMaxEngineSearchTime);
-        expect(kMaxEngineSearchTime, const Duration(hours: 1));
+    test('available times are ascending and end with max engine search time', () {
+      expect(kAvailableEngineSearchTimes, isNotEmpty);
+      expect(kAvailableEngineSearchTimes.last, kMaxEngineSearchTime);
+      expect(kMaxEngineSearchTime, const Duration(hours: 1));
 
-        for (var i = 1; i < kAvailableEngineSearchTimes.length; i++) {
-          expect(
-            kAvailableEngineSearchTimes[i] > kAvailableEngineSearchTimes[i - 1],
-            isTrue,
-            reason: 'search times must be strictly ascending',
-          );
-        }
-      },
-    );
+      for (var i = 1; i < kAvailableEngineSearchTimes.length; i++) {
+        expect(
+          kAvailableEngineSearchTimes[i] > kAvailableEngineSearchTimes[i - 1],
+          isTrue,
+          reason: 'search times must be strictly ascending',
+        );
+      }
+    });
 
     test('available times include default and documented presets', () {
       expect(kAvailableEngineSearchTimes, contains(const Duration(seconds: 2)));
@@ -103,10 +97,7 @@ void main() {
         kAvailableEngineSearchTimes,
         contains(EngineEvaluationPrefState.defaults.engineSearchTime),
       );
-      expect(
-        kAvailableEngineSearchTimes,
-        contains(const Duration(seconds: 30)),
-      );
+      expect(kAvailableEngineSearchTimes, contains(const Duration(seconds: 30)));
     });
   });
 
@@ -115,69 +106,40 @@ void main() {
       final container = await makeContainer();
       addTearDown(container.dispose);
 
-      final notifier = container.read(
-        engineEvaluationPreferencesProvider.notifier,
-      );
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
       await notifier.setNumEvalLines(0);
-      expect(
-        container.read(engineEvaluationPreferencesProvider).numEvalLines,
-        0,
-      );
+      expect(container.read(engineEvaluationPreferencesProvider).numEvalLines, 0);
       await notifier.setNumEvalLines(3);
-      expect(
-        container.read(engineEvaluationPreferencesProvider).numEvalLines,
-        3,
-      );
+      expect(container.read(engineEvaluationPreferencesProvider).numEvalLines, 3);
     });
 
     test('setNumEvalLines rejects out-of-range values', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);
 
-      final notifier = container.read(
-        engineEvaluationPreferencesProvider.notifier,
-      );
-      expect(
-        () => notifier.setNumEvalLines(-1),
-        throwsA(isA<AssertionError>()),
-      );
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      expect(() => notifier.setNumEvalLines(-1), throwsA(isA<AssertionError>()));
       expect(() => notifier.setNumEvalLines(4), throwsA(isA<AssertionError>()));
     });
 
-    test(
-      'setEngineCores accepts boundary values 1 and maxEngineCores',
-      () async {
-        final container = await makeContainer();
-        addTearDown(container.dispose);
+    test('setEngineCores accepts boundary values 1 and maxEngineCores', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
 
-        final notifier = container.read(
-          engineEvaluationPreferencesProvider.notifier,
-        );
-        await notifier.setEngineCores(1);
-        expect(
-          container.read(engineEvaluationPreferencesProvider).numEngineCores,
-          1,
-        );
-        await notifier.setEngineCores(maxEngineCores);
-        expect(
-          container.read(engineEvaluationPreferencesProvider).numEngineCores,
-          maxEngineCores,
-        );
-      },
-    );
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      await notifier.setEngineCores(1);
+      expect(container.read(engineEvaluationPreferencesProvider).numEngineCores, 1);
+      await notifier.setEngineCores(maxEngineCores);
+      expect(container.read(engineEvaluationPreferencesProvider).numEngineCores, maxEngineCores);
+    });
 
     test('setEngineCores rejects out-of-range values', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);
 
-      final notifier = container.read(
-        engineEvaluationPreferencesProvider.notifier,
-      );
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
       expect(() => notifier.setEngineCores(0), throwsA(isA<AssertionError>()));
-      expect(
-        () => notifier.setEngineCores(maxEngineCores + 1),
-        throwsA(isA<AssertionError>()),
-      );
+      expect(() => notifier.setEngineCores(maxEngineCores + 1), throwsA(isA<AssertionError>()));
     });
   });
 }
