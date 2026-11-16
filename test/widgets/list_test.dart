@@ -40,11 +40,7 @@ void main() {
 
     testWidgets('loading constructor shows placeholders', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ListSection.loading(itemsNumber: 2, header: true),
-          ),
-        ),
+        MaterialApp(home: Scaffold(body: ListSection.loading(itemsNumber: 2, header: true))),
       );
 
       expect(find.byType(ListSection), findsOneWidget);
