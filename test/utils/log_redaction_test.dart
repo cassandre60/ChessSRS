@@ -71,6 +71,12 @@ void main() {
 
       expect(identical(redactUriForLogging(uri), uri), isTrue);
     });
+
+    test('does not redact when path shares prefix but diverges before credential segment', () {
+      final uri = Uri.parse('https://lichess.org/mobile/register/other/device');
+
+      expect(identical(redactUriForLogging(uri), uri), isTrue);
+    });
   });
 
   group('redactLogText', () {
@@ -84,6 +90,12 @@ void main() {
       const text = 'POST https://lichess.org/login?token=secret&x=1 failed';
 
       expect(redactLogText(text), 'POST https://lichess.org/login?token=%2A%2A%2A&x=1 failed');
+    });
+
+    test('redacts credentials in uppercase-scheme URLs', () {
+      const text = 'POST HTTPS://lichess.org/login?token=secret';
+
+      expect(redactLogText(text), 'POST https://lichess.org/login?token=%2A%2A%2A');
     });
 
     test('preserves surrounding brackets and trailing punctuation', () {
