@@ -1,6 +1,9 @@
+import 'package:chess_srs/src/model/engine/engine_utils.dart';
 import 'package:chess_srs/src/model/engine/evaluation_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:multistockfish/multistockfish.dart';
+
+import '../../test_container.dart';
 
 void main() {
   group('ChessEnginePref', () {
@@ -95,6 +98,54 @@ void main() {
         contains(EngineEvaluationPrefState.defaults.engineSearchTime),
       );
       expect(kAvailableEngineSearchTimes, contains(const Duration(seconds: 30)));
+    });
+  });
+
+  group('EngineEvaluationPreferences notifier', () {
+    test('setNumEvalLines accepts boundary values 0 and 3', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      await notifier.setNumEvalLines(0);
+      expect(container.read(engineEvaluationPreferencesProvider).numEvalLines, 0);
+      await notifier.setNumEvalLines(3);
+      expect(container.read(engineEvaluationPreferencesProvider).numEvalLines, 3);
+    });
+
+    test('setNumEvalLines rejects out-of-range values', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      expect(() => notifier.setNumEvalLines(-1), throwsA(isA<AssertionError>()));
+      expect(() => notifier.setNumEvalLines(4), throwsA(isA<AssertionError>()));
+    });
+
+    test('setEngineCores accepts boundary values 1 and maxEngineCores', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      await notifier.setEngineCores(1);
+      expect(container.read(engineEvaluationPreferencesProvider).numEngineCores, 1);
+      await notifier.setEngineCores(maxEngineCores);
+      expect(
+        container.read(engineEvaluationPreferencesProvider).numEngineCores,
+        maxEngineCores,
+      );
+    });
+
+    test('setEngineCores rejects out-of-range values', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(engineEvaluationPreferencesProvider.notifier);
+      expect(() => notifier.setEngineCores(0), throwsA(isA<AssertionError>()));
+      expect(
+        () => notifier.setEngineCores(maxEngineCores + 1),
+        throwsA(isA<AssertionError>()),
+      );
     });
   });
 }
