@@ -840,5 +840,41 @@ void main() {
       expect(result.primaryState.decisionId, 'occurrence_2');
       expect(result.primaryState.repetitionCount, 4);
     });
+
+    test('exposureTimeFor returns O(1) lookup matching snapshotExposureThrottle', () {
+      // SPEC INV-050.
+      // SPEC INV-028.
+      const fen = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -';
+      repo.put(
+        'exposed_node',
+        ReviewState(
+          decisionId: 'exposed_node',
+          stability: 5.0 * 86400000,
+          difficulty: 5.0,
+          repetitionCount: 2,
+          lastReviewedAt: now.subtract(const Duration(days: 3)),
+          nextDueAt: now.add(const Duration(days: 2)),
+        ),
+      );
+
+      expect(coordinator.exposureTimeFor('exposed_node'), isNull);
+      expect(coordinator.exposureTimeFor('unexposed_node'), isNull);
+
+      const node = GraphNode(
+        decisionId: 'exposed_node',
+        fen4: fen,
+        expectedMoveUci: 'g1f3',
+        hasCanonicalIdentity: true,
+      );
+      final granted = coordinator.recordAutoTraversalExposure(node: node, now: now);
+      expect(granted, isNotNull);
+
+      expect(coordinator.exposureTimeFor('exposed_node'), equals(now));
+      expect(
+        coordinator.exposureTimeFor('exposed_node'),
+        equals(coordinator.snapshotExposureThrottle()['exposed_node']),
+      );
+      expect(coordinator.exposureTimeFor('unexposed_node'), isNull);
+    });
   });
 }

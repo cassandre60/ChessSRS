@@ -51,16 +51,6 @@ sealed class Player with _$Player {
       user?.name ??
       name ??
       (aiLevel != null ? l10n.aiNameLevelAiLevel('Stockfish', aiLevel.toString()) : l10n.anonymous);
-
-  Player setOnGame(bool onGame) {
-    final isOnGame = onGame || isAI;
-    return copyWith(onGame: isOnGame, isGone: isOnGame ? false : isGone);
-  }
-
-  Player setGone(bool isGone) {
-    final goneButNoAI = isGone && !isAI;
-    return copyWith(isGone: goneButNoAI, onGame: goneButNoAI ? false : onGame);
-  }
 }
 
 typedef PhaseAccuracies = ({int? opening, int? middlegame, int? endgame});

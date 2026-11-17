@@ -2808,5 +2808,80 @@ void main() {
         await db.close();
       }
     });
+
+    test(
+      'deleteChapter chunks large decision and canonical sets (>400) in bounded batches',
+      () async {
+        // SPEC INV-004.
+        // SPEC INV-051.
+        final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+        try {
+          final batch = db.batch();
+          createSrsTables(batch);
+          await batch.commit();
+
+          final recorder = _RecordingDatabase(db);
+          final repo = SqliteStudyRepository(recorder);
+          final study = Study.create(title: 'Chapter Bulk Delete Study');
+          final chDelete = Chapter.create(studyId: study.id, title: 'To Delete', sourceOrder: 0);
+          final chSurvive = Chapter.create(studyId: study.id, title: 'Survivor', sourceOrder: 1);
+          await repo.saveStudy(study);
+          await repo.saveChapters([chDelete, chSurvive]);
+
+          final decisions = List.generate(
+            450,
+            (i) => RepertoireDecision(
+              id: 'ch_dec_$i',
+              studyId: study.id,
+              chapterId: chDelete.id,
+              nodeId: 'ch_node_$i',
+              expectedMoves: const [RepertoireMove(from: 'e2', to: 'e4')],
+              canonicalStateId: 'ch_canon_$i',
+            ),
+          );
+          const sharedDecision = RepertoireDecision(
+            id: 'surviving_dec',
+            studyId: 'surviving_study',
+            chapterId: 'surviving_ch',
+            nodeId: 'surviving_node',
+            expectedMoves: [RepertoireMove(from: 'e2', to: 'e4')],
+            canonicalStateId: 'ch_canon_0',
+          );
+          await repo.saveDecisions([...decisions, sharedDecision]);
+          await repo.savePositionKnowledgeState(
+            const PositionKnowledgeState(canonicalId: 'ch_canon_0', repetitionCount: 2),
+          );
+          await repo.savePositionKnowledgeState(
+            const PositionKnowledgeState(canonicalId: 'ch_canon_1', repetitionCount: 1),
+          );
+
+          recorder.reset();
+          await repo.deleteChapter(chDelete.id);
+
+          expect(await repo.getChapter(chDelete.id), isNull);
+          expect(await repo.getDecisionsByChapter(chDelete.id), isEmpty);
+          // Surviving shared canonical state is preserved (INV-004), unshared is removed.
+          expect(await repo.getPositionKnowledgeState('ch_canon_0'), isNotNull);
+          expect(await repo.getPositionKnowledgeState('ch_canon_1'), isNull);
+
+          // Every delete must stay within the 400-variable bound (INV-051), and
+          // canonical cleanup must be chunked rather than issuing 3×450 = 1350
+          // single-row deletes.
+          expect(recorder.deleteArgs, isNotEmpty);
+          expect(
+            recorder.deleteArgs.where((count) => count > 400),
+            isEmpty,
+            reason: 'no delete in deleteChapter may bind more than 400 variables',
+          );
+          expect(
+            recorder.deleteArgs.length,
+            lessThanOrEqualTo(15),
+            reason: 'canonical cleanup must run in 400-item chunks rather than 3×N row deletes',
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
   });
 }
