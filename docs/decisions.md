@@ -276,4 +276,4 @@ Decision: User repertoire line adoption operates as a mutable overlay over immut
 
 Date: 2026-11-05
 Reason: Eliminates empty 0-due dead ends on newly imported studies, removes modal confirmation fatigue, and decouples immutable reference PGN studies from the player's personal active choices.
-Link: docs/tasks/FEAT-REP-43-dynamic-repertoire-branch-selection.md
+Link: PR #156 (`584b5c383`, `FEAT-REP-43` in `docs/tasks/README.md`)
