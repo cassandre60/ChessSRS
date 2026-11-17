@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:chess_srs/src/model/log/app_log_storage.dart';
 import 'package:chess_srs/src/model/settings/log_preferences.dart';
+import 'package:chess_srs/src/utils/log_redaction.dart';
 import 'package:chess_srs/src/utils/lru_list.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,28 +55,27 @@ class AppLogService {
     }
 
     Logger.root.onRecord.listen((record) {
+      final redacted = redactLogRecord(record);
       if (kDebugMode) {
         developer.log(
-          record.message,
-          time: record.time,
-          name: record.loggerName,
-          level: record.level.value,
-          error: record.error,
-          stackTrace: record.stackTrace,
+          redacted.message,
+          time: redacted.time,
+          name: redacted.loggerName,
+          level: redacted.level.value,
+          error: redacted.error,
+          stackTrace: redacted.stackTrace,
         );
 
-        if (_loggersToShowInTerminal.contains(record.loggerName) &&
-            record.level >= Level.FINE &&
+        if (_loggersToShowInTerminal.contains(redacted.loggerName) &&
+            redacted.level >= Level.FINE &&
             !Platform.environment.containsKey('FLUTTER_TEST')) {
           debugPrint(
-            '[${record.loggerName}] ${record.message}${record.error != null ? ' (${record.error})' : ''}',
+            '[${redacted.loggerName}] ${redacted.message}${redacted.error != null ? ' (${redacted.error})' : ''}',
           );
         }
-      } else {
-        // Redact credentials before persisting
       }
 
-      _logs.put(record);
+      _logs.put(redacted);
 
       // Persist to database asynchronously (fire-and-forget).
       // In tests, avoid asynchronous database writes for log records to prevent lock contention.
@@ -85,7 +85,7 @@ class AppLogService {
             ref
                 .read(appLogStorageProvider.future)
                 .then(
-                  (storage) => storage.save(AppLogEntry.fromLogRecord(record)),
+                  (storage) => storage.save(AppLogEntry.fromLogRecord(redacted)),
                   onError: (_) {},
                 );
           } catch (_) {}
@@ -97,6 +97,58 @@ class AppLogService {
   void clear() {
     _logs.clear();
   }
+}
+
+/// Returns [record] with credentials redacted from [LogRecord.message], [LogRecord.error], and
+/// [LogRecord.stackTrace] (SPEC INV-006).
+///
+/// Preserves the original [LogRecord] instance when no sensitive content is present.
+LogRecord redactLogRecord(LogRecord record) {
+  final redactedMessage = redactLogText(record.message);
+
+  Object? redactedError = record.error;
+  if (record.error != null) {
+    final errorText = record.error.toString();
+    final cleanedError = redactLogText(errorText);
+    if (cleanedError != errorText) {
+      redactedError = cleanedError;
+    }
+  }
+
+  StackTrace? redactedStackTrace = record.stackTrace;
+  if (record.stackTrace != null) {
+    final stackText = record.stackTrace.toString();
+    final cleanedStack = redactLogText(stackText);
+    if (cleanedStack != stackText) {
+      redactedStackTrace = StackTrace.fromString(cleanedStack);
+    }
+  }
+
+  Object? redactedObject = record.object;
+  if (record.object != null) {
+    final objectText = record.object.toString();
+    final cleanedObject = redactLogText(objectText);
+    if (cleanedObject != objectText) {
+      redactedObject = cleanedObject;
+    }
+  }
+
+  if (redactedMessage == record.message &&
+      identical(redactedError, record.error) &&
+      identical(redactedStackTrace, record.stackTrace) &&
+      identical(redactedObject, record.object)) {
+    return record;
+  }
+
+  return LogRecord(
+    record.level,
+    redactedMessage,
+    record.loggerName,
+    redactedError,
+    redactedStackTrace,
+    record.zone,
+    redactedObject,
+  );
 }
 
 final class ProviderLogger extends ProviderObserver {

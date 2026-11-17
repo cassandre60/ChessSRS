@@ -1,3 +1,5 @@
+// SPEC INV-006.
+
 import 'package:chess_srs/src/utils/log_redaction.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,6 +21,22 @@ void main() {
       expect(redacted.queryParameters['keep'], '1');
       expect(redacted.host, 'lichess.org');
       expect(redacted.path, '/auth');
+    });
+
+    test('redacts OAuth and PKCE query parameters', () {
+      final uri = Uri.parse(
+        'https://lichess.org/api/token?access_token=lip_tok1&refresh_token=ref_tok2'
+        '&id_token=id_tok3&code_verifier=pkce_ver4&client_secret=sec5&client_id=chess_srs',
+      );
+
+      final redacted = redactUriForLogging(uri);
+
+      expect(redacted.queryParameters['access_token'], kRedactedLogValue);
+      expect(redacted.queryParameters['refresh_token'], kRedactedLogValue);
+      expect(redacted.queryParameters['id_token'], kRedactedLogValue);
+      expect(redacted.queryParameters['code_verifier'], kRedactedLogValue);
+      expect(redacted.queryParameters['client_secret'], kRedactedLogValue);
+      expect(redacted.queryParameters['client_id'], 'chess_srs');
     });
 
     test('preserves repeated sensitive parameter cardinality', () {
@@ -114,6 +132,22 @@ void main() {
       const text = 'bad url https://[::1?token=secret in log';
 
       expect(redactLogText(text), 'bad url $kRedactedLogValue in log');
+    });
+
+    test('redacts Bearer tokens in headers and diagnostic prose', () {
+      const text = 'Authorization: Bearer lip_secret_token_123:hmac456, retrying';
+
+      expect(redactLogText(text), 'Authorization: Bearer $kRedactedLogValue, retrying');
+    });
+
+    test('redacts OAuth JSON credential fields', () {
+      const text =
+          'token response: {"access_token":"lip_abc123","refresh_token":"ref_xyz","token_type":"Bearer"}';
+
+      expect(
+        redactLogText(text),
+        'token response: {"access_token":"$kRedactedLogValue","refresh_token":"$kRedactedLogValue","token_type":"Bearer"}',
+      );
     });
   });
 }
