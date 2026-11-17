@@ -78,14 +78,26 @@ void main() {
         'D99': 'Grünfeld Defense',
         'E00': 'Catalan Opening',
         'E09': 'Catalan Opening',
+        'E10': "Queen's Indian Defense",
+        'E19': "Queen's Indian Defense",
         'E20': 'Nimzo-Indian Defense',
         'E59': 'Nimzo-Indian Defense',
         'E60': "King's Indian Defense",
         'E99': "King's Indian Defense",
+        'A00': 'Flank Opening',
+        'A03': 'Flank Opening',
+        'A04': 'Réti Opening',
+        'A09': 'Réti Opening',
         'A10': 'English Opening',
         'A39': 'English Opening',
         'A40': "Queen's Pawn Game",
         'A44': "Queen's Pawn Game",
+        'A45': "Queen's Pawn Game",
+        'A49': "Queen's Pawn Game",
+        'A50': 'Indian Defense',
+        'A55': 'Indian Defense',
+        'A56': 'Benoni Defense',
+        'A79': 'Benoni Defense',
         'A80': 'Dutch Defense',
         'A99': 'Dutch Defense',
       };
@@ -94,11 +106,35 @@ void main() {
       }
 
       // Out of bounds / invalid ECO codes
-      expect(ecoToOpeningFamily('A45'), isNull);
-      expect(ecoToOpeningFamily('A05'), isNull);
+      expect(ecoToOpeningFamily('F00'), isNull);
+      expect(ecoToOpeningFamily('A-1'), isNull);
       expect(ecoToOpeningFamily('B'), isNull);
       expect(ecoToOpeningFamily('B1'), isNull);
       expect(ecoToOpeningFamily('XYZ'), isNull);
+    });
+
+    test('all 500 standard ECO codes A00-E99 map to valid opening families (SPEC INV-067)', () {
+      for (final letter in const ['A', 'B', 'C', 'D', 'E']) {
+        for (var n = 0; n <= 99; n++) {
+          final code = '$letter${n.toString().padLeft(2, '0')}';
+          final family = ecoToOpeningFamily(code);
+          expect(family, isNotNull, reason: 'Expected ECO $code to map to a family');
+          expect(
+            mentionsOpeningButIsNotFamily(family!),
+            isFalse,
+            reason: '$code -> $family must not be rejected by repair migration',
+          );
+          // B00-B09 is the legacy combined label ('Scandinavian / Alekhine');
+          // every other ECO family satisfies isLikelyOpeningFamily directly.
+          if (letter != 'B' || n >= 10) {
+            expect(
+              isLikelyOpeningFamily(family),
+              isTrue,
+              reason: '$code -> $family must satisfy isLikelyOpeningFamily (INV-067)',
+            );
+          }
+        }
+      }
     });
 
     test('an unrecognised name is left alone rather than erased', () {
