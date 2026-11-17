@@ -7,7 +7,10 @@ import 'package:chess_srs/src/import/pgn_importer.dart';
 import 'package:chess_srs/src/persistence/json_adapters.dart';
 import 'package:chess_srs/src/persistence/srs_schema.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:logging/logging.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show DatabaseExecutor;
+
+final _logger = Logger('ChapterOrientationRepairMigration');
 
 /// Result of running [repairChapterOrientations].
 class ChapterOrientationRepairResult {
@@ -64,7 +67,13 @@ Future<ChapterOrientationRepairResult> repairChapterOrientations(DatabaseExecuto
     if (startingFen != null && startingFen.trim().isNotEmpty) {
       try {
         startTurn = Setup.parseFen(startingFen.trim()).turn;
-      } catch (_) {}
+      } catch (e, st) {
+        _logger.fine(
+          'Failed to parse starting FEN for chapter $chapterId (study $studyId); defaulting start turn to white.',
+          e,
+          st,
+        );
+      }
     }
 
     final headers = <String, String>{
