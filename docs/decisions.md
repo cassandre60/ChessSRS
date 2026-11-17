@@ -277,3 +277,21 @@ Decision: User repertoire line adoption operates as a mutable overlay over immut
 Date: 2026-11-05
 Reason: Eliminates empty 0-due dead ends on newly imported studies, removes modal confirmation fatigue, and decouples immutable reference PGN studies from the player's personal active choices.
 Link: PR #156 (`584b5c383`, `FEAT-REP-43` in `docs/tasks/README.md`)
+
+## D021 — Single SQLite database for local repertoire and SRS persistence
+
+Decision: Store all local repertoire containers (`srs_study`, `srs_chapter`, `srs_decision`, `srs_node`) and spaced-repetition state (`position_knowledge_state`, `srs_review_state`, `srs_review_event`, `srs_unlocked_decision`) in the application's single SQLite database (`lib/src/db/database.dart` and `lib/src/persistence/srs_schema.dart`) with `PRAGMA foreign_keys = ON` and WAL mode.
+
+Reason: SQLite provides ACID transactions for incremental per-move review writes (INV-001/002), cross-table foreign-key cascades and transposition-safe deletion checks (INV-004), deterministic schema migrations (INV-005/069), and zero-network local queries capable of meeting the <16 ms move response budget (INV-050) and bounded batch loading (INV-051).
+
+## D022 — SHA-1 canonical memory identity over trained side, 4-field FEN, and sorted accepted UCI set
+
+Decision: Compute shared question memory identity (`canonicalKeyForPosition` in `lib/src/domain/position_knowledge_state.dart`) as `sha1("<repertoireSide.name>|<fenKey>|<sorted uci>|<sorted uci>|...")`, where `fenKey` is the normalized 4-field FEN (piece placement, side to move, castling rights, en-passant square; halfmove/fullmove clocks stripped per INV-015).
+
+Reason: Two occurrences across chapters or studies represent the same recall question if and only if they train the same side from the same board position and expect the same complete set of repertoire replies (INV-016). Including the full sorted accepted-reply set keeps positions with different repertoire answers as independent questions with separate histories rather than colliding on a single-move lookup (INV-017), while including `repertoireSide` prevents White and Black repertoires from colliding (INV-030).
+
+## D023 — FSRS-4.5-style binary DSR scheduler wrapped by a graph-aware coordinator
+
+Decision: Implement `ChessFsrsScheduler` (`lib/src/domain/chess_fsrs_scheduler.dart`) using the three-component Difficulty-Stability-Retrievability (DSR) power-law forgetting curve ($R(t, S) = (1 + F \cdot t / S)^C$, $C = -0.5$, $F = 19/81$) with binary pass/fail grading (D015), and wrap any `Scheduler` implementation inside `GraphAwareReviewCoordinator` (`lib/src/domain/graph_aware_review_coordinator.dart`) for chess-tree propagation.
+
+Reason: Standard flashcard schedulers treat cards as independent atoms, whereas chess opening lines form directed acyclic move graphs where parent/child moves reinforce or destabilize one another. Wrapping the replaceable per-card `Scheduler` kernel (Simple, EaseScaling, or ChessFSRS) inside `GraphAwareReviewCoordinator` isolates bounded descendant lapse contagion (INV-027), daily-throttled auto-traversal exposure credit (INV-028), and confusable sibling difficulty coupling (INV-029) without coupling graph rules to a single scheduling formula (`ChessSRS Scheduling Architecture.md`).

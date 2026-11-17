@@ -42,6 +42,9 @@
    ./scripts/gates.sh t1
    ```
 
+6. **Troubleshooting:**
+   See [troubleshooting.md](troubleshooting.md) for solutions to post-pull `*.freezed.dart` compile errors, SQLite downgrade archive recovery, FVM/Linux native build issues, gate failures (`G03`–`G13`), and widget test overflow errors.
+
 ---
 
 ## Inherited Lichess Mobile Platform Setup Notes
