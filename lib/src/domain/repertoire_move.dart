@@ -4,15 +4,7 @@
 /// Repertoire move representations and metadata.
 library;
 
-/// A chess move in UCI notation stored in the domain layer.
-///
-/// This is a *domain* value — a thin named container for UCI coordinates.
-/// It is not a dartchess [Move]; the import pipeline converts dartchess moves
-/// into these after legal-move validation. The Review engine similarly converts
-/// user input to this type before matching against [RepertoireDecision.expectedMoves].
-///
-/// Position identity is by [from]/[to]/[promotion] only (no FEN context stored
-/// here). FEN context is on the parent [RepertoireNode].
+/// A chess move in UCI notation (`from`/`to`/`promotion`) stored in the domain layer.
 class RepertoireMove {
   const RepertoireMove({required this.from, required this.to, this.promotion, this.san});
 

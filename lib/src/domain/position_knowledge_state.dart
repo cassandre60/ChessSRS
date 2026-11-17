@@ -12,20 +12,12 @@ import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:meta/meta.dart';
 
-/// Computes the canonical identity key for a position + expected move memory item.
-///
-/// Formatted as: `sha1("$fenKey|$expectedMoveUci")` with castling UCI normalized
-/// via [RepertoireMove.normalizeUci] (SPEC INV-016, INV-033).
-String canonicalKey(String fenKey, String expectedMoveUci) {
-  final input = '$fenKey|${RepertoireMove.normalizeUci(expectedMoveUci)}';
-  return sha1.convert(utf8.encode(input)).toString();
-}
+/// Canonical SHA-1 identity for a position + single move (`sha1("$fenKey|$expectedMoveUci")`).
+String canonicalKey(String fenKey, String expectedMoveUci) =>
+    sha1.convert(utf8.encode('$fenKey|${RepertoireMove.normalizeUci(expectedMoveUci)}')).toString();
 
-/// Computes the canonical identity key for a position and its *complete* set of accepted
-/// continuations: `sha1("<repertoireSide>|<fenKey>|<sorted uci>|<sorted uci>|...")`.
-///
-/// Castling notations are normalized via [RepertoireMove.normalizeUci] and moves
-/// are sorted so reordered variations converge on one identity (SPEC INV-016, INV-017, INV-033).
+/// Canonical SHA-1 identity for a position and its complete accepted move set
+/// (`sha1("<repertoireSide>|<fenKey>|<sorted uci>|...")`, SPEC INV-016, INV-017, INV-033).
 String canonicalKeyForPosition(
   String fenKey,
   Iterable<String> acceptedMoveUcis, {
@@ -37,11 +29,7 @@ String canonicalKeyForPosition(
       .toString();
 }
 
-/// The single source of truth for long-term memory of a specific chess position and move.
-///
-/// Keyed by [canonicalId] = `sha1(<repertoireSide>|<fenKey>|<accepted moves>)`. Multiple
-/// [RepertoireDecision]s across different chapters and studies pointing to the same position,
-/// continuation, and trained side share this single state.
+/// Shared long-term SRS memory for a position and accepted continuation set (`canonicalId`).
 @immutable
 class PositionKnowledgeState {
   const PositionKnowledgeState({
