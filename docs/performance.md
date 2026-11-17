@@ -1,5 +1,11 @@
 # Performance Contract
 
+> **Authoritative Specification:** See the repo root [QUALITY.md §4](../QUALITY.md#4-performance-invariants),
+> [SPEC.md §E](../SPEC.md#e-performance-budgets-t2), and [TEST_STRATEGY.md §3](../TEST_STRATEGY.md#3-performance-evidence-and-limits).
+> For active profiling measurements and findings, see [performance-handoff.md](performance-handoff.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), this file is an early initial brief preserved
+> for historical context only.
+
 ## Primary requirement
 
 Review must feel instantaneous. Treat latency as a product correctness constraint, not cosmetic polish.
