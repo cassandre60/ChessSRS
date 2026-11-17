@@ -663,6 +663,10 @@ class ReviewSession {
   /// can persist the daily cap and reseed the next session. See review-2 C1.
   Map<String, DateTime> get exposureThrottle => _coordinator.snapshotExposureThrottle();
 
+  /// Returns the last auto-traversal exposure timestamp for [canonicalId] in O(1),
+  /// without copying the exposure throttle map on the move hot path (INV-050).
+  DateTime? exposureTimeFor(String canonicalId) => _coordinator.exposureTimeFor(canonicalId);
+
   /// Returns the chapter with [chapterId] if present in this session.
   Chapter? getChapter(String chapterId) => _chapters[chapterId];
 
