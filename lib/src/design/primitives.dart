@@ -387,9 +387,9 @@ class SrsSwitch extends StatelessWidget {
       semanticsToggled: value,
       radius: 13,
       builder: (_, _, _) => Container(
-        // Demo `.tog::before` expands the hit area to 44px tall.
-        width: 44,
-        height: 44,
+        // Demo `.tog::before` expands the hit area to the minimum touch target.
+        width: SrsLayout.minTouchTarget,
+        height: SrsLayout.minTouchTarget,
         alignment: Alignment.center,
         child: AnimatedContainer(
           duration: d,
@@ -636,9 +636,9 @@ class SrsRowRule extends StatelessWidget {
 // SrsAccentDots — accent colour picker
 // ---------------------------------------------------------------------------
 
-/// The touch target every accent dot carries: 44px, the minimum for an
-/// interactive control (04 §6).
-const double _kAccentDotTarget = 44;
+/// The touch target every accent dot carries: `SrsLayout.minTouchTarget`, the
+/// minimum for an interactive control (04 §6, INV-062).
+const double _kAccentDotTarget = SrsLayout.minTouchTarget;
 
 /// The gap between two accent dots, at the width the picker would like.
 const double _kAccentDotGap = 8;
