@@ -20,18 +20,25 @@ import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
 import 'package:chess_srs/src/domain/study.dart';
 
-/// Factory and configuration engine for [ReviewSession]s.
+/// Stateless factory and configuration entry point for [ReviewSession]s (SPEC INV-024, INV-041).
 class ReviewEngine {
+  /// Creates a [ReviewEngine] with an injectable [scheduler], [clock], and [random] source.
   const ReviewEngine({
     this.scheduler = const SimpleScheduler(),
     this.clock = const SystemClock(),
     this.random,
   });
 
+  /// The SRS scheduling kernel used to grade recall outcomes and compute due dates.
   final Scheduler scheduler;
+
+  /// The time source injected into created sessions for deterministic due checks.
   final Clock clock;
+
+  /// Optional seeded random number generator for `ReviewOrder.random` and branch selection.
   final Random? random;
 
+  /// Creates a new [ReviewSession] over the given repertoire entities and review states.
   ReviewSession createSession({
     required List<Study> studies,
     required List<Chapter> chapters,

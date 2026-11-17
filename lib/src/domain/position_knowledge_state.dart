@@ -6,6 +6,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
@@ -13,35 +14,24 @@ import 'package:meta/meta.dart';
 
 /// Computes the canonical identity key for a position + expected move memory item.
 ///
-/// Formatted as: sha1("$fenKey|$expectedMoveUci")
-/// Allows transpositions across different chapters and studies to converge on a single
-/// canonical [PositionKnowledgeState] memory item.
+/// Formatted as: `sha1("$fenKey|$expectedMoveUci")` with castling UCI normalized
+/// via [RepertoireMove.normalizeUci] (SPEC INV-016, INV-033).
 String canonicalKey(String fenKey, String expectedMoveUci) {
-  final input = '$fenKey|$expectedMoveUci';
+  final input = '$fenKey|${RepertoireMove.normalizeUci(expectedMoveUci)}';
   return sha1.convert(utf8.encode(input)).toString();
 }
 
 /// Computes the canonical identity key for a position and its *complete* set of accepted
-/// continuations.
+/// continuations: `sha1("<repertoireSide>|<fenKey>|<sorted uci>|<sorted uci>|...")`.
 ///
-/// Formatted as: `sha1("<repertoireSide>|<fenKey>|<sorted uci>|<sorted uci>|...")`.
-///
-/// A repertoire position is not identified by one representative move: it is identified by the
-/// whole question it asks the player ("from here, any of these is correct"). Two positions that
-/// share a FEN and a first move but offer different continuation sets are different questions and
-/// must not share SRS memory, so every accepted move participates in the key.
-///
-/// The moves are sorted, so two PGNs that spell the same repertoire with their branches in a
-/// different order converge on the same memory item rather than forking it.
-///
-/// Occurrence identity is deliberately *not* part of this key. [RepertoireDecision.id] is the
-/// per-occurrence identity; this is the shared position knowledge that transpositions converge on.
+/// Castling notations are normalized via [RepertoireMove.normalizeUci] and moves
+/// are sorted so reordered variations converge on one identity (SPEC INV-016, INV-017, INV-033).
 String canonicalKeyForPosition(
   String fenKey,
   Iterable<String> acceptedMoveUcis, {
   required Side repertoireSide,
 }) {
-  final sortedMoves = acceptedMoveUcis.toList()..sort();
+  final sortedMoves = acceptedMoveUcis.map(RepertoireMove.normalizeUci).toList()..sort();
   return sha1
       .convert(utf8.encode([repertoireSide.name, fenKey, ...sortedMoves].join('|')))
       .toString();

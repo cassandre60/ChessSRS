@@ -39,7 +39,9 @@ class RepertoireMove {
     'e8g8': 'e8h8',
   };
 
-  static String _normalizeUci(String moveUci) => _kingTakesRookCastles[moveUci] ?? moveUci;
+  /// Normalizes standard castling UCI (`e1g1`, `e1c1`, `e8g8`, `e8c8`) to
+  /// king-takes-rook notation (`e1h1`, `e1a1`, `e8h8`, `e8a8`) (SPEC INV-033).
+  static String normalizeUci(String moveUci) => _kingTakesRookCastles[moveUci] ?? moveUci;
 
   /// Returns true when [other] represents the same move (from/to/promotion),
   /// including equivalence between standard and king-takes-rook castling notations
@@ -51,7 +53,7 @@ class RepertoireMove {
     final f2 = other.from.toLowerCase();
     final t2 = other.to.toLowerCase();
     if (f1 == f2 && t1 == t2) return true;
-    return _normalizeUci('$f1$t1') == _normalizeUci('$f2$t2');
+    return normalizeUci('$f1$t1') == normalizeUci('$f2$t2');
   }
 
   RepertoireMove copyWith({String? from, String? to, String? promotion, String? san}) {
