@@ -1,5 +1,12 @@
 # Review Engine and SRS
 
+> **Authoritative Specification:** See the repo root [SPEC.md §C](../SPEC.md#c-review-engine-and-srs-t1),
+> [PRODUCT.md §§3–4](../PRODUCT.md#3-core-user-journeys), and
+> [ChessSRS Scheduling Architecture.md](../ChessSRS%20Scheduling%20Architecture.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), those documents own the exact behavioral
+> invariants and scheduling equations; this file is an early pre-implementation design note preserved
+> for historical context only.
+
 ## Purpose
 
 Turn repertoire content into an immediate active-recall loop.
