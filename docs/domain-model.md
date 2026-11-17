@@ -1,5 +1,11 @@
 # Domain Model
 
+> **Authoritative Specification:** See the repo root [ARCHITECTURE.md §§3–7](../ARCHITECTURE.md#3-components-and-entry-points)
+> and [SPEC.md](../SPEC.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), `ARCHITECTURE.md` and `SPEC.md` own the
+> live domain entities, canonical identity (`canonicalKeyForPosition`), and persistence schema; this file
+> is an early pre-implementation sketch preserved for historical context only.
+
 ## Core entities
 
 ### Study
