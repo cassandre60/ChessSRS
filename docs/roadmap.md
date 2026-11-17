@@ -1,5 +1,11 @@
 # Roadmap and Scope Boundaries
 
+> **Authoritative Specification:** See the repo root [MVP.md](../MVP.md) and
+> [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), `MVP.md` owns current included/deferred
+> beta scope and `IMPLEMENTATION_PLAN.md` owns delivery status and evidence; this file is an early
+> Phase 1–4 outline preserved for historical context only.
+
 ## Phase 1 — MVP
 
 - Flutter mobile + web
