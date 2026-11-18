@@ -25,7 +25,12 @@ class OpeningService {
 
   Future<FullOpening?> fetchFromFen(String fen) async {
     final db = await _db;
-    final epd = '${fen.split(' - ')[0]} -';
+    // The openings table is keyed by the position's EPD (first four FEN fields),
+    // en-passant target included when a legal capture exists. Splitting on
+    // " - " instead mangles any position whose castling field is "-" (it
+    // swallows the ep field) or whose ep field is a square, so use the shared
+    // helper.
+    final epd = fenToEpd(fen);
     final list = await db.query('openings', where: 'epd = ?', whereArgs: [epd], limit: 1);
     final first = list.firstOrNull;
 
