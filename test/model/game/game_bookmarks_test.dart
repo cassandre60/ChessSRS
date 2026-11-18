@@ -33,7 +33,8 @@ class _SwitchableAuth extends AuthController {
   @override
   AuthUser? build() => _user;
 
-  // ignore: avoid_setters_without_getters
+  AuthUser? get user => state;
+
   set user(AuthUser? user) => state = user;
 }
 
