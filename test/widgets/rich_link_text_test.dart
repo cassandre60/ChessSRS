@@ -144,6 +144,13 @@ void main() {
       expect(urls.single.url, 'https://example.com/path');
     });
 
+    test('detects email on a new line after plain text', () {
+      final result = linkify('Contact:\nfoo@bar.com', linkifiers: const [EmailLinkifier()]);
+      expect(result, hasLength(2));
+      expect(result[0], isA<TextElement>().having((e) => e.text, 'text', 'Contact:\n'));
+      expect(result[1], isA<EmailElement>().having((e) => e.emailAddress, 'email', 'foo@bar.com'));
+    });
+
     test('text with no links returns single TextElement', () {
       final result = linkify('plain text without any links');
       expect(result, hasLength(1));
@@ -157,6 +164,12 @@ void main() {
       );
       expect(result.any((e) => e is EmailElement), isTrue);
       expect(result.any((e) => e is UserTagElement), isFalse);
+    });
+
+    test('treats @ attached to a word boundary as plain text when no tag follows', () {
+      final result = linkify('a@b', linkifiers: const [UserTagLinkifier()]);
+      expect(result, hasLength(1));
+      expect(result[0], isA<TextElement>().having((e) => e.text, 'text', 'a@b'));
     });
 
     test('no linkifiers returns original text', () {
