@@ -1,7 +1,6 @@
 import 'package:chess_srs/src/model/account/account_repository.dart';
 import 'package:chess_srs/src/model/account/account_service.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
-import 'package:chess_srs/src/model/auth/auth_user.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,7 +48,7 @@ void main() {
     final events = <(GameId, bool)>[];
     final sub = service.bookmarkChanges.listen(events.add);
 
-    final id = GameId('12345678');
+    const id = GameId('12345678');
     await service.setGameBookmark(id, bookmark: true);
     await Future<void>.delayed(Duration.zero);
 
@@ -64,7 +63,7 @@ void main() {
     final events = <(GameId, bool)>[];
     final sub = service.bookmarkChanges.listen(events.add);
 
-    final id = GameId('12345678');
+    const id = GameId('12345678');
     await service.setGameBookmark(id, bookmark: false);
     await Future<void>.delayed(Duration.zero);
 
@@ -85,7 +84,7 @@ void main() {
     final events = <(GameId, bool)>[];
     final sub = service.bookmarkChanges.listen(events.add);
 
-    final id = GameId('12345678');
+    const id = GameId('12345678');
     await service.setGameBookmark(id, bookmark: true);
 
     verifyNever(() => repo.bookmark(any(), bookmark: any(named: 'bookmark')));
