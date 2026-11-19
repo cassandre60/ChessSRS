@@ -315,12 +315,17 @@ String? ecoToOpeningFamily(String eco) {
     if (number >= 0 && number <= 69) return "Queen's Gambit";
     if (number >= 70 && number <= 99) return 'Grünfeld Defense';
   } else if (letter == 'E') {
+    if (number >= 0 && number <= 9) return 'Catalan Opening';
+    if (number >= 10 && number <= 19) return "Queen's Indian Defense";
     if (number >= 20 && number <= 59) return 'Nimzo-Indian Defense';
     if (number >= 60 && number <= 99) return "King's Indian Defense";
-    if (number >= 0 && number <= 9) return 'Catalan Opening';
   } else if (letter == 'A') {
+    if (number >= 0 && number <= 3) return 'Flank Opening';
+    if (number >= 4 && number <= 9) return 'Réti Opening';
     if (number >= 10 && number <= 39) return 'English Opening';
-    if (number >= 40 && number <= 44) return "Queen's Pawn Game";
+    if (number >= 40 && number <= 49) return "Queen's Pawn Game";
+    if (number >= 50 && number <= 55) return 'Indian Defense';
+    if (number >= 56 && number <= 79) return 'Benoni Defense';
     if (number >= 80 && number <= 99) return 'Dutch Defense';
   }
   return null;

@@ -75,11 +75,12 @@ Future<String> computePgnHashAsync(String pgnText) {
   return Isolate.run(() => computePgnHash(pgnText));
 }
 
-void _appendPgnNodeMoves(PgnNode<PgnNodeData> node, StringBuffer buffer) {
+void _appendPgnNodeMoves(PgnNode<PgnNodeData> node, StringBuffer buffer, [int depth = 0]) {
+  if (depth >= kMaxPgnVariationDepth) return;
   for (final child in node.children) {
     buffer.write(child.data.san);
     buffer.write(',');
-    _appendPgnNodeMoves(child, buffer);
+    _appendPgnNodeMoves(child, buffer, depth + 1);
   }
 }
 
@@ -183,6 +184,13 @@ class ImportResult {
 /// holds the text by the time it can be measured, and UTF-8 only makes the real
 /// file larger than this bound, never smaller.
 const int kMaxPgnInputBytes = 10 * 1024 * 1024;
+
+/// Maximum ply depth imported along any single variation line (SPEC INV-011).
+///
+/// Opening repertoires rarely exceed 60–80 plies; capping tree construction at
+/// 512 plies quarantines pathologically deep PGN lines with a structured
+/// [ImportError] instead of risking a call-stack overflow.
+const int kMaxPgnVariationDepth = 512;
 
 /// PGN `Variant` tags that describe standard chess play.
 ///
@@ -653,12 +661,15 @@ RepertoireNode? _buildRoot(
 
 /// Counts the moves in the subtree rooted at [node], excluding [node] itself.
 ///
-/// Used to tell the user how much of a line is dropped along with an
-/// unparseable or illegal move, whose whole continuation is skipped.
+/// Iterative so an arbitrarily deep unparseable or depth-quarantined tail can
+/// be counted without recursing into it.
 int _countDescendantMoves(PgnNode<PgnNodeData> node) {
   var count = 0;
-  for (final child in node.children) {
-    count += 1 + _countDescendantMoves(child);
+  final stack = <PgnNode<PgnNodeData>>[...node.children];
+  while (stack.isNotEmpty) {
+    final current = stack.removeLast();
+    count++;
+    stack.addAll(current.children);
   }
   return count;
 }
@@ -676,6 +687,20 @@ RepertoireNode _buildChildren(
   for (final pgnChild in pgnNode.children) {
     final data = pgnChild.data;
     final san = data.san;
+
+    if (moveIndex >= kMaxPgnVariationDepth) {
+      final skipped = 1 + _countDescendantMoves(pgnChild);
+      errors.add(
+        ImportError(
+          chapterTitle: chapterTitle,
+          moveIndex: moveIndex,
+          message:
+              'Line exceeds maximum supported depth of $kMaxPgnVariationDepth plies at "$san". '
+              'Skipping $skipped remaining move(s) in this line.',
+        ),
+      );
+      continue;
+    }
 
     // Parse the SAN move against the current position.
     final Move? parsed;
