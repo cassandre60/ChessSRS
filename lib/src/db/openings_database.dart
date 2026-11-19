@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -26,7 +27,9 @@ Future<Database> _openDb(String path) async {
     // Make sure the parent directory exists
     try {
       await directory.create(recursive: true);
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to create openings database directory', error: e, stackTrace: st);
+    }
 
     // Delete existing previous if any
     await for (final file in directory.list()) {
