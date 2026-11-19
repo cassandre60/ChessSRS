@@ -206,6 +206,39 @@ void main() {
       });
     });
 
+    test('app resume triggers a connectivity check', () async {
+      var probes = 0;
+      final container = await makeContainer(
+        overrides: {
+          httpClientFactoryProvider: httpClientFactoryProvider.overrideWith(
+            (ref) => FakeHttpClientFactory(
+              () => MockClient((request) async {
+                if (request.url == internetCheckUris.first) probes++;
+                return http.Response('', 200);
+              }),
+            ),
+          ),
+        },
+      );
+      final binding = TestWidgetsFlutterBinding.instance;
+
+      fakeAsync((async) {
+        container.read(connectivityChangesProvider);
+        async.elapse(const Duration(seconds: 1));
+
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        async.elapse(const Duration(milliseconds: 100));
+        probes = 0;
+
+        binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        async.elapse(const Duration(milliseconds: 100));
+
+        expect(probes, greaterThan(0), reason: 'resume must run a connectivity probe');
+
+        async.flushTimers();
+      });
+    });
+
     test('a check that goes wrong on resume leaves the status as it is', () async {
       final connectivity = SwitchableConnectivity();
       final container = await makeContainer(
