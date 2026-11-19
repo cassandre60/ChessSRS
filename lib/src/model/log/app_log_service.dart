@@ -86,9 +86,25 @@ class AppLogService {
                 .read(appLogStorageProvider.future)
                 .then(
                   (storage) => storage.save(AppLogEntry.fromLogRecord(redacted)),
-                  onError: (_) {},
+                  onError: (Object error, StackTrace stackTrace) {
+                    developer.log(
+                      'Failed to persist log record',
+                      name: 'AppLogService',
+                      error: error,
+                      stackTrace: stackTrace,
+                      level: 900,
+                    );
+                  },
                 );
-          } catch (_) {}
+          } catch (error, stackTrace) {
+            developer.log(
+              'Failed to schedule log record persistence',
+              name: 'AppLogService',
+              error: error,
+              stackTrace: stackTrace,
+              level: 900,
+            );
+          }
         });
       }
     });
