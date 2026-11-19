@@ -1165,6 +1165,48 @@ fence adopters. Refactor change class.
    `test/network/connectivity_test.dart` 17/17, single-worker; post-commit
    `./scripts/gates.sh t1` before push. Not runtime-validated.
 
+## Queue-drain rollup batch 2026-11-19 — five green row PRs consolidated (#828; #768 landed mid-batch)
+
+Execution of the HANDOFF.md (#826) queue-drain plan: one rollup branch
+(`rollup/batch-20261119`, PR #828), one atomic commit per source PR,
+cherry-picked from CI-green source branches.
+
+1. **#768** `test(utils)`: pins two log_redaction survivors (URI
+   prefix-divergence before the credential segment; uppercase-scheme URLs).
+   Landed independently on main mid-batch (#827/#768 merged 2026-11-19);
+   the rebase skipped the rollup's duplicate by patch-id — no diff lost.
+2. **#766** `test(engine)`: evaluation_preferences survivor pins.
+3. **#765** `test(persistence)`: json_adapters non-growable pins for decoded
+   children/nags/expectedMoves.
+4. **#814** `fix(persistence)`: chapter orientation repair surfaces swallowed
+   starting-FEN parse failures instead of `catch (_) {}`.
+5. **#825** `fix(analysis)`: opening lookup keyed by the shared `fenToEpd`
+   (first four FEN fields) instead of a `' - '` split that mangles
+   castling-less and en-passant positions; new
+   `test/model/analysis/opening_service_test.dart` against an in-memory
+   database.
+6. **#720** `fix(log)`: app-log persistence failures surface via
+   `developer.log` (both microtask scheduling and `storage.save` legs).
+   Conflict-resolved against main's redaction change: the persisted record
+   stays redacted (INV-006); the commit is minimal vs main (18+/2-) after
+   dropping reformat-only hunks the cherry-pick carried from the source
+   branch's older base.
+
+Also this session: **#643 closed as superseded** — its
+fresh-introduction-ordering coverage already exists on main via #812
+(`test/review/fresh_introduction_order_test.dart`, INV-068).
+
+Evidence: all six source PRs CI-green at cherry-pick time; regenerated
+codegen in a fresh worktree (108 outputs); `dart format` clean on all seven
+touched files (pinned Flutter 3.47.7); `flutter analyze` clean; affected
+tests 60/60 single-worker (`log_redaction_test`,
+`evaluation_preferences_test`, `json_adapters_test`, `opening_service_test`,
+`chapter_orientation_repair_migration_test`, `app_log_redaction_test`);
+post-commit `./scripts/gates.sh t1` green (G05 45/45, G07 no protected
+paths, G08 no test-weakening, G10 ratchets ok with domain_loc 4230 under
+the 4250 ceiling, G13 vendored skills ok). Not runtime-validated (no device
+exercise; changes are logging-surfacing and DB-lookup behavior).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
