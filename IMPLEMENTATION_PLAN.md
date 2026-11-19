@@ -1207,6 +1207,36 @@ paths, G08 no test-weakening, G10 ratchets ok with domain_loc 4230 under
 the 4250 ceiling, G13 vendored skills ok). Not runtime-validated (no device
 exercise; changes are logging-surfacing and DB-lookup behavior).
 
+## Queue-drain batch 2 2026-11-19 — five swallowed-error fixes + three coverage rows (#829)
+
+Second rollup per the HANDOFF.md (#826) drain plan, one atomic commit per
+source PR, cherry-picked from CI-green source branches onto #828's merge
+(`f98c59063`):
+
+1. **#678** `fix(sound)`: sound effect plugin failures surface with
+   diagnostics; adds `sound_service_test.dart`.
+2. **#680** `fix(widgets)`: `showSnackBar` error path logs swallowed
+   exceptions (`feedback.dart`, includes the source branch's format/import
+   cleanups).
+3. **#704** `fix(explorer)`: opening explorer fallback errors are logged.
+4. **#721** `fix(db)`: openings database directory-creation failure logged.
+5. **#770** `fix(review)`: move feedback failures surface at three
+   `catch (_) {}` sites in the review controller.
+6. **#635** `test(engine)`: `engine_spec_test.dart`.
+7. **#637** `test(domain)`: `chapter_test.dart`.
+8. **#642** `test(analysis)`: `analysis_preferences_test.dart`.
+
+Evidence: all eight source PRs CI-green at cherry-pick time; each verified
+not superseded on `f98c59063` (swallow sites still present on main, new
+test files absent); per-file `git diff` hunk inspection confirmed
+functional-only changes (no reformat smuggle from old bases);
+`dart format` clean on all nine touched files (checked before the local
+crash below). Tests and analyze were **not** run locally — the batch-1
+method exceeded TEST_STRATEGY §2's local budget (one affected file, then
+stop) and froze the developer machine; see `docs/agent-history.md`.
+Verification of record is CI on the PR tip (full suite + gates). Not
+runtime-validated (logging-surfacing changes only).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
