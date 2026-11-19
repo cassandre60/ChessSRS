@@ -33,6 +33,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+export 'package:chess_srs/src/model/study/study_list_paginator.dart';
+
 part 'study_controller.freezed.dart';
 
 typedef StudyOptions = ({StudyId id, StudyChapterId? initialChapter});

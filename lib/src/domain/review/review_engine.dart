@@ -20,7 +20,7 @@ import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:chess_srs/src/domain/scheduler.dart';
 import 'package:chess_srs/src/domain/study.dart';
 
-/// Factory and configuration engine for [ReviewSession]s.
+/// Stateless factory and configuration entry point for [ReviewSession]s (SPEC INV-024, INV-041).
 class ReviewEngine {
   const ReviewEngine({
     this.scheduler = const SimpleScheduler(),
@@ -32,6 +32,7 @@ class ReviewEngine {
   final Clock clock;
   final Random? random;
 
+  /// Creates a new [ReviewSession] over the given repertoire entities and review states.
   ReviewSession createSession({
     required List<Study> studies,
     required List<Chapter> chapters,

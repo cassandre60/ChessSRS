@@ -7,3 +7,5 @@ hierarchy or override any contract.
 
 The [reconciliation report](documentation-reconciliation.md) records stale
 statements, evidence, dispositions and unresolved owner decisions.
+For common build, codegen, database migration, and gate issues, see the
+[troubleshooting guide](troubleshooting.md).

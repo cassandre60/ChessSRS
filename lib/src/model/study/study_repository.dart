@@ -6,7 +6,6 @@ import 'package:chess_srs/src/model/common/chess.dart';
 import 'package:chess_srs/src/model/common/id.dart';
 import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
-import 'package:chess_srs/src/model/study/study_list_paginator.dart';
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:collection/collection.dart';
@@ -14,6 +13,8 @@ import 'package:deep_pick/deep_pick.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart';
+
+typedef StudyList = ({IList<StudyPageItem> studies, int? nextPage});
 
 /// A provider for [StudyRepository].
 final studyRepositoryProvider = Provider<StudyRepository>((Ref ref) {
