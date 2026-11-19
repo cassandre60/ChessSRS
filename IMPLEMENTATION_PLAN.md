@@ -1265,6 +1265,33 @@ Flutter ran (CI-only per the 2026-11-19 machine-freeze rule in
 (full suite + gates). Not runtime-validated (test-only batch; no product
 code changed).
 
+## Queue-drain batch 4 2026-11-19 — eight additive coverage rows (#834)
+
+Fourth rollup per the HANDOFF.md (#826) drain plan, one atomic commit per
+source PR, cherry-picked from CI-green source branches onto #833's merge
+(`71c626327`). Test-file-only batch: 8 files, 568 insertions, 0 deletions,
+zero `lib/` changes:
+
+1. **#657** `test(model)`: pins `studyChapterFeaturesFromJson` defaults
+   (+22 additive to the existing `study_test.dart`; mutation audit of
+   study.dart).
+2. **#661** `test(widgets)`: pins the platform context-menu trailing-icon
+   survivor (+1 additive).
+3. **#663** `test(domain)`: `study_test.dart` (Study domain model).
+4. **#665** `test(persistence)`: `srs_schema_test.dart`.
+5. **#666** `test(user)`: `profile_test.dart` (Profile, SocialLink).
+6. **#668** `test(settings)`: `general_preferences_test.dart`.
+7. **#669** `test(analysis)`: `analysis_summary_test.dart` (header
+   parsing).
+8. **#672** `test(game)`: `game_filter_test.dart` (GameFilterState).
+
+Evidence: all eight source PRs CI-green at cherry-pick time; targets
+verified not superseded on `71c626327` (six files absent, #657/#661
+additive with 0 deletions); `git diff` inspection confirmed test-only
+additive changes, no reformat smuggle. No local Flutter (CI-only rule);
+verification of record is CI on the PR tip (full suite + gates). Not
+runtime-validated (test-only batch).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
