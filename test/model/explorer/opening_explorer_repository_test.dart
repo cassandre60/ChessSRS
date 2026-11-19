@@ -94,6 +94,23 @@ void main() {
       expect(result.topGames, isNotNull);
       expect(result.topGames!.length, 2);
     });
+
+    test('includes since query parameter when provided', () async {
+      const response = '{"white":0,"draws":0,"black":0,"moves":[],"topGames":[],"opening":null}';
+
+      final mockClient = MockClient((request) {
+        if (request.url.path == '/masters') {
+          expect(request.url.queryParameters['since'], '2010');
+          return mockResponse(response, 200);
+        }
+        return mockResponse('', 404);
+      });
+
+      final container = await lichessClientContainer(mockClient);
+      final repo = container.read(openingExplorerRepositoryProvider);
+
+      await repo.getMasterDatabase('fen', since: 2010);
+    });
   });
 
   group('OpeningExplorerRepository.getLichessDatabase', () {
@@ -142,6 +159,7 @@ void main() {
         if (request.url.path == '/lichess' &&
             request.url.queryParameters['ratings'] == '1000,1200') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
+          expect(request.url.queryParameters['speeds'], 'rapid');
           return mockResponse(response, 200);
         }
         return mockResponse('', 404);
@@ -212,6 +230,7 @@ void main() {
       final mockClient = MockClient((request) {
         if (request.url.path == '/player' && request.url.queryParameters['speeds'] == 'bullet') {
           expect(request.url.queryParameters['variant'], 'crazyhouse');
+          expect(request.url.queryParameters['modes'], 'rated');
           return mockResponse(response, 200);
         }
         return mockResponse('', 404);
