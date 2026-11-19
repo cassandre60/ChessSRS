@@ -1,6 +1,7 @@
 import 'package:chess_srs/src/network/http.dart';
 import 'package:chess_srs/src/utils/cache.dart';
 import 'package:chess_srs/src/utils/json.dart';
+import 'package:chess_srs/src/utils/riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -154,5 +155,30 @@ class Aggregator {
     _logger.warning('No aggregation found for URI: $uri');
 
     return await atomicClientCall();
+  }
+}
+
+extension AggregatorRefExtension on Ref {
+  /// Runs [fn] with the [Aggregator] and keeps the provider alive for [duration].
+  ///
+  /// This is primarily used for caching network requests in a [FutureProvider].
+  ///
+  /// If [fn] throws with a [ServerException], the provider is kept alive as we don't want to retry
+  /// server errors immediately.
+  Future<U> withAggregatorCacheFor<U>(
+    Future<U> Function(LichessClient, Aggregator) fn,
+    Duration duration,
+  ) async {
+    final link = cacheFor(duration);
+    final client = read(lichessClientProvider);
+    final aggregator = read(aggregatorProvider);
+    try {
+      return await fn(client, aggregator);
+    } on ServerException {
+      rethrow;
+    } on Exception {
+      link.close();
+      rethrow;
+    }
   }
 }

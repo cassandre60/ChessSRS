@@ -17,10 +17,15 @@ const kRedactedLogValue = '***';
 /// Add a name when a credential is put in a query string, not when an ordinary
 /// parameter is.
 const Set<String> kSensitiveQueryParameters = {
+  'access_token',
+  'client_secret',
   'code',
+  'code_verifier',
   'email',
+  'id_token',
   'otp',
   'password',
+  'refresh_token',
   'secret',
   'sessionid',
   'token',
@@ -99,39 +104,57 @@ final _logUriPattern = RegExp(
   caseSensitive: false,
 );
 final _afterUriWrapper = RegExp(r'^[,;:.!?]*$');
+final _bearerTokenPattern = RegExp(r'''(\bBearer\s+)([^\s,"'\])}>]+)''', caseSensitive: false);
+final _jsonSecretFieldPattern = RegExp(
+  r'''(["'](?:access_token|refresh_token|id_token|code_verifier|client_secret)["']\s*:\s*["'])([^"']+)(["'])''',
+  caseSensitive: false,
+);
 
-/// Redacts URLs embedded in messages, exception strings, and stack traces.
+/// Redacts URLs, bearer tokens, and OAuth credential fields embedded in messages, exception
+/// strings, and stack traces.
 ///
 /// The original text survives when no credentials are present. Brackets wrapping a URL remain
 /// diagnostic punctuation, not part of its final query value. A candidate that fails URI parsing
 /// is withheld rather than allowed to bypass redaction. This does not classify arbitrary prose.
-String redactLogText(String text) => text.replaceAllMapped(_logUriPattern, (match) {
-  final original = match.group(0)!;
-  final opening = match.group(1)!;
-  var uriText = original.substring(opening.length);
-  final closing = switch (opening) {
-    '(' => ')',
-    '[' => ']',
-    '{' => '}',
-    '"' => '"',
-    "'" => "'",
-    _ => '',
-  };
-  var suffix = '';
-  if (closing.isNotEmpty) {
-    final end = uriText.lastIndexOf(closing);
-    if (end >= 0 && _afterUriWrapper.hasMatch(uriText.substring(end + 1))) {
-      suffix = uriText.substring(end);
-      uriText = uriText.substring(0, end);
+String redactLogText(String text) {
+  final uriRedacted = text.replaceAllMapped(_logUriPattern, (match) {
+    final original = match.group(0)!;
+    final opening = match.group(1)!;
+    var uriText = original.substring(opening.length);
+    final closing = switch (opening) {
+      '(' => ')',
+      '[' => ']',
+      '{' => '}',
+      '"' => '"',
+      "'" => "'",
+      _ => '',
+    };
+    var suffix = '';
+    if (closing.isNotEmpty) {
+      final end = uriText.lastIndexOf(closing);
+      if (end >= 0 && _afterUriWrapper.hasMatch(uriText.substring(end + 1))) {
+        suffix = uriText.substring(end);
+        uriText = uriText.substring(0, end);
+      }
     }
-  }
 
-  try {
-    final uri = Uri.parse(uriText);
-    final redacted = redactUriForLogging(uri);
-    if (redacted == uri) return original;
-    return '$opening$redacted$suffix';
-  } on FormatException {
-    return '$opening$kRedactedLogValue$suffix';
-  }
-});
+    try {
+      final uri = Uri.parse(uriText);
+      final redacted = redactUriForLogging(uri);
+      if (redacted == uri) return original;
+      return '$opening$redacted$suffix';
+    } on FormatException {
+      return '$opening$kRedactedLogValue$suffix';
+    }
+  });
+
+  final bearerRedacted = uriRedacted.replaceAllMapped(
+    _bearerTokenPattern,
+    (match) => '${match.group(1)!}$kRedactedLogValue',
+  );
+
+  return bearerRedacted.replaceAllMapped(
+    _jsonSecretFieldPattern,
+    (match) => '${match.group(1)!}$kRedactedLogValue${match.group(3)!}',
+  );
+}

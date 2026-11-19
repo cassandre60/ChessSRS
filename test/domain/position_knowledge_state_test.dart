@@ -1,6 +1,6 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
-// SPEC coverage: INV-015, INV-016, INV-017.
+// SPEC coverage: INV-015, INV-016, INV-017, INV-033.
 
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:dartchess/dartchess.dart' show Side;
@@ -121,6 +121,35 @@ void main() {
             equals(canonicalKeyForPosition(elsewhereFEN, ['e2e4'], repertoireSide: Side.white)),
           ),
         );
+      });
+
+      test('normalizes standard and king-takes-rook castling UCI to the same canonical key', () {
+        // SPEC INV-016.
+        // SPEC INV-033.
+        const italianCastleFen = 'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq -';
+        const pairs = [('e1g1', 'e1h1'), ('e1c1', 'e1a1'), ('e8g8', 'e8h8'), ('e8c8', 'e8a8')];
+
+        for (final (standard, kingTakesRook) in pairs) {
+          expect(
+            canonicalKey(italianCastleFen, standard),
+            equals(canonicalKey(italianCastleFen, kingTakesRook)),
+            reason: 'canonicalKey must treat $standard and $kingTakesRook as the same move',
+          );
+          expect(
+            canonicalKeyForPosition(italianCastleFen, [
+              'd2d3',
+              standard,
+            ], repertoireSide: Side.white),
+            equals(
+              canonicalKeyForPosition(italianCastleFen, [
+                kingTakesRook,
+                'd2d3',
+              ], repertoireSide: Side.white),
+            ),
+            reason:
+                'canonicalKeyForPosition must converge on one identity for $standard and $kingTakesRook',
+          );
+        }
       });
     });
 

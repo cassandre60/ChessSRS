@@ -17,10 +17,32 @@ void main() {
       // crosses ("at or above"), 8191 does not. Regression for mutation
       // round MUTATION-10 — `>=` tightened to `>` survived the mapped suite
       // because the public helper is env-guarded under flutter_test.
+      expect(offloadsAt(-1), isFalse);
+      expect(offloadsAt(0), isFalse);
       expect(offloadsAt(8191), isFalse);
       expect(offloadsAt(8192), isTrue);
       expect(offloadsAt(8193), isTrue);
     });
+
+    test(
+      'hash and import async helpers agree with sync helpers above the 8192-byte threshold',
+      () async {
+        final paddedComment = 'a' * pgnOffloadThresholdBytes;
+        final largePgn =
+            '''
+[Event "Large Agreement Test"]
+
+1. e4 {$paddedComment} e5 2. Nf3 Nc6 *
+''';
+        expect(largePgn.length, greaterThanOrEqualTo(pgnOffloadThresholdBytes));
+        expect(await computePgnHashAsync(largePgn), computePgnHash(largePgn));
+
+        final asyncResult = await importPgnAsync(largePgn, studyTitle: 'Large Agreement');
+        final syncResult = importPgn(largePgn, studyTitle: 'Large Agreement');
+        expect(asyncResult.decisions.length, syncResult.decisions.length);
+        expect(asyncResult.study.pgnHash, syncResult.study.pgnHash);
+      },
+    );
 
     test('is always false in the test environment regardless of length', () {
       // FLUTTER_TEST is set under flutter_test, so the env guard dominates: even a
