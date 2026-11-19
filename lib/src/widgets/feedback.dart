@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/network/connectivity.dart';
 import 'package:chess_srs/src/network/socket.dart';
@@ -307,5 +309,7 @@ void showSnackBar(BuildContext context, String message, {SnackBarType type = Sna
         SnackBarType.info => SrsToastTone.info,
       },
     );
-  } catch (_) {}
+  } catch (e, st) {
+    developer.log('showSnackBar failed (type=$type): $e', error: e, stackTrace: st);
+  }
 }
