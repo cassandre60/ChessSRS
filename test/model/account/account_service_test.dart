@@ -31,8 +31,7 @@ void main() {
 
   setUp(() {
     repo = _MockAccountRepository();
-    when(() => repo.bookmark(any(), bookmark: any(named: 'bookmark')))
-        .thenAnswer((_) async {});
+    when(() => repo.bookmark(any(), bookmark: any(named: 'bookmark'))).thenAnswer((_) async {});
     container = ProviderContainer(
       overrides: [
         authControllerProvider.overrideWith(_SignedIn.new),
