@@ -186,6 +186,14 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: sudo apt-get -y install libsqlite3-0 libsqlite3-dev
 
+      - name: Restore pub cache
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
       - name: Install dependencies
         if: steps.scope.outputs.docs_only != 'true'
         run: flutter pub get
@@ -207,7 +215,7 @@ jobs:
             **/*.freezed.dart
             **/*.g.dart
             **/*.mocks.dart
-          key: codegen-${{ runner.os }}-${{ hashFiles('pubspec.yaml', 'pubspec.lock', 'build.yaml') }}
+          key: codegen-${{ runner.os }}-${{ hashFiles('.fvmrc', 'pubspec.yaml', 'pubspec.lock', 'build.yaml') }}
 
       - name: Code generation
         if: steps.scope.outputs.docs_only != 'true'
