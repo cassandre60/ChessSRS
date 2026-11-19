@@ -656,3 +656,14 @@ information: the review move sound (#93) was confirmed audible by the owner, and
   Verified by: the #293 round re-scoring nine survivors against the widened
   command, which killed four candidates the single-file command had reported as
   survivors (L503 twice, L504 once, L542 once).
+- [2026-11-19, GLM-5.3-Flash (OpenCode/ZCode)] Running local Flutter verification
+  beyond TEST_STRATEGY §2's budget froze the developer machine (hard freeze,
+  forced reboot, ~1 min uptime after). Violations: batched 6 then 8 affected
+  test files in one `flutter test` invocation (budget: the affected full file
+  once, then stop), full `flutter analyze` instead of targeted touched paths,
+  and adjacent covering test files (`review_controller_test.dart` et al.) the
+  budget excludes. Root cause: worked from AGENTS §3.1's one-line summary
+  instead of reading TEST_STRATEGY §2 in its normative home. Local Flutter
+  test/codegen/analyze is now CI-only for agent sessions; batch 2 (#829) took
+  that lane. Verified by: the crash itself (uptime reset mid-`flutter test`);
+  batch 1 (#828) shows the same deviation at smaller scale, CI-confirmed green.
