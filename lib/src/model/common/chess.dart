@@ -405,15 +405,6 @@ extension ChessExtension on Pick {
     }
     throw PickException.fromPick(this, "can't be casted to Variant");
   }
-
-  Variant? asVariantOrNull() {
-    if (value == null) return null;
-    try {
-      return asVariantOrThrow();
-    } catch (_) {
-      return null;
-    }
-  }
 }
 
 /// The canonical identity of a position, used to decide whether two positions are the same

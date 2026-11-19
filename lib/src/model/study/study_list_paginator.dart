@@ -1,10 +1,7 @@
-import 'package:chess_srs/src/model/study/study.dart';
 import 'package:chess_srs/src/model/study/study_filter.dart';
 import 'package:chess_srs/src/model/study/study_repository.dart';
-import 'package:fast_immutable_collections/fast_immutable_collections.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-typedef StudyList = ({IList<StudyPageItem> studies, int? nextPage});
 typedef StudyListNotifierParams = ({StudyCategory category, StudyListOrder order, String? search});
 
 /// A provider that gets a list of studies from the paginated API.
