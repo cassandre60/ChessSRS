@@ -1,10 +1,55 @@
 # Setting up the development environment
 
-> **ChessSRS Environment:** See the repo root [CLAUDE.md](../CLAUDE.md) and [AGENTS.md](../AGENTS.md)
-> for the active toolchain and operating instructions. This file contains inherited setup
-> instructions for mobile platforms.
+> **ChessSRS Environment:** See the repo root [CLAUDE.md](../CLAUDE.md), [AGENTS.md](../AGENTS.md),
+> and [TEST_STRATEGY.md](../TEST_STRATEGY.md) for the authoritative toolchain, worktree isolation, and
+> bounded local verification rules.
 
-The following instructions outline how to set up your development environment for starting development on Lichess mobile.
+## ChessSRS Quick Start (Linux & Android)
+
+1. **System Prerequisites (Ubuntu/Debian Linux Desktop Build):**
+   ```bash
+   sudo apt-get update && sudo apt-get install -y \
+     clang cmake ninja-build pkg-config \
+     libgtk-3-dev liblzma-dev libstdc++-12-dev \
+     libsqlite3-dev libmpv-dev mpv
+   ```
+
+2. **Flutter Toolchain (via FVM):**
+   ChessSRS pins its Flutter version in `.fvmrc`. Always prefix commands with `fvm`:
+   ```bash
+   fvm install
+   fvm flutter pub get
+   ```
+
+3. **Code Generation (Required on Fresh Checkout & After Every `git pull`):**
+   Generated files (`*.freezed.dart`, `*.g.dart`) are gitignored. Regenerate them after every pull:
+   ```bash
+   fvm dart run build_runner build --delete-conflicting-outputs
+   ```
+   Or use `./scripts/dev_run.sh -d linux` to run `pub get`, `build_runner`, and launch the app in one command.
+
+4. **Bounded Local Verification Loop (`TEST_STRATEGY.md §2`):**
+   Never run the full test suite or `watch` processes locally; CI runs the full suite. Locally, run only the single affected test file with `--concurrency=1`:
+   ```bash
+   fvm flutter test <affected_test_file> --concurrency=1
+   fvm dart format --output=none --set-exit-if-changed <touched_files>
+   fvm flutter analyze <touched_files>
+   ```
+
+5. **Post-Commit Fast Gates (`GATES.md`):**
+   After committing on an isolated task worktree branch (`git worktree add ../chesssrs-<slug> -b <branch> origin/main`), run:
+   ```bash
+   ./scripts/gates.sh t1
+   ```
+
+6. **Troubleshooting:**
+   See [troubleshooting.md](troubleshooting.md) for solutions to post-pull `*.freezed.dart` compile errors, SQLite downgrade archive recovery, FVM/Linux native build issues, gate failures (`G03`–`G13`), and widget test overflow errors.
+
+---
+
+## Inherited Lichess Mobile Platform Setup Notes
+
+The instructions below are inherited from upstream Lichess Mobile for mobile/server setup reference.
 
 If you get stuck during the installation process the most suitable place to seek help is the `#lichess-dev-onboarding` channel on Discord (https://discord.gg/lichess).
 
