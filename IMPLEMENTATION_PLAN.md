@@ -1315,6 +1315,29 @@ deletions); `git diff` inspection confirmed test-only additive changes.
 No local Flutter (CI-only rule); verification of record is CI on the PR
 tip (full suite + gates). Not runtime-validated (test-only batch).
 
+## Queue-drain batch 6 2026-11-19 — eight additive coverage rows (#836)
+
+Sixth rollup per the HANDOFF.md (#826) drain plan, one atomic commit per
+source PR, cherry-picked from CI-green source branches onto #835's merge.
+Test-file-only batch: 8 files, 498 insertions, 0 deletions, zero `lib/`
+changes:
+
+1. **#687** `test(styles)`: `lichess_colors_test.dart`.
+2. **#692** `test(design)`: `srs_move_arrow_test.dart`.
+3. **#694** `test(styles)`: `lichess_icons_test.dart`.
+4. **#697** `test(game)`: `exported_game_test.dart` (LightExportedGame).
+5. **#699** `test(persistence)`: `node_index_test.dart`.
+6. **#700** `test(domain)`: `ids_test.dart`.
+7. **#701** `test(view)`: create_study_chapter_bottom_sheet survivor pins
+   (+55 additive).
+8. **#702** `test(domain)`: `review_result_test.dart`.
+
+Evidence: all eight source PRs CI-green at cherry-pick time; targets
+verified not superseded (seven files absent, #701 additive with 0
+deletions); `git diff` inspection confirmed test-only additive changes.
+No local Flutter (CI-only rule); verification of record is CI on the PR
+tip (full suite + gates). Not runtime-validated (test-only batch).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any
