@@ -56,5 +56,43 @@ void main() {
       final prefs = StudyPrefs.defaults.copyWith(dynamicRepertoireMode: true);
       expect(prefs.isDynamicRepertoireEnabled(), isTrue);
     });
+
+    test('isDynamicRepertoireEnabled: per-study and per-opening IDs enable when global is off', () {
+      final prefs = StudyPrefs.defaults.copyWith(
+        dynamicRepertoireMode: false,
+        dynamicRepertoireStudyIds: {'study-a'},
+        dynamicRepertoireOpeningIds: {'sicilian'},
+      );
+
+      expect(prefs.isDynamicRepertoireEnabled(studyId: 'study-a'), isTrue);
+      expect(prefs.isDynamicRepertoireEnabled(studyId: 'other'), isFalse);
+      expect(prefs.isDynamicRepertoireEnabled(openingFamily: 'sicilian'), isTrue);
+      expect(prefs.isDynamicRepertoireEnabled(openingFamily: 'other'), isFalse);
+      expect(prefs.isDynamicRepertoireEnabled(), isFalse);
+      expect(prefs.isDynamicRepertoireEnabled(studyId: 'other', openingFamily: 'other'), isFalse);
+    });
+
+    test('isDynamicRepertoireEnabled: null id arguments do not match entries', () {
+      final prefs = StudyPrefs.defaults.copyWith(
+        dynamicRepertoireMode: false,
+        dynamicRepertoireStudyIds: {'study-a'},
+        dynamicRepertoireOpeningIds: {'sicilian'},
+      );
+
+      expect(prefs.isDynamicRepertoireEnabled(studyId: null), isFalse);
+      expect(prefs.isDynamicRepertoireEnabled(openingFamily: null), isFalse);
+    });
+  });
+
+  group('StudyPrefs migration pins', () {
+    test('does not synthesize transposeScope when legacy key is absent', () {
+      final json = Map<String, dynamic>.from(StudyPrefs.defaults.toJson());
+      json.remove('transposeScope');
+      json.remove('transposeAccept');
+
+      // Missing transposeScope with no legacy field must fall back to the
+      // fromJson default, not be forced by unrelated migration logic.
+      expect(StudyPrefs.fromJson(json).transposeScope, StudyPrefs.defaults.transposeScope);
+    });
   });
 }
