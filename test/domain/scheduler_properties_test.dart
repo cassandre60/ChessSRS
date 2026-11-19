@@ -161,5 +161,202 @@ void main() {
       final c = scheduler.schedule(previous: state, result: ReviewResult.correct, now: t2);
       expect(c.nextDueAt!.difference(t2), equals(a.nextDueAt!.difference(t)));
     });
+
+    test(
+      'INV-024/025/026 EaseScalingScheduler monotonic growth, cap, and lapse reset across random parameter spaces',
+      () {
+        // SPEC INV-024.
+        // SPEC INV-025.
+        // SPEC INV-026.
+        final rng = Random(202601);
+        for (var trial = 0; trial < 40; trial++) {
+          final firstHours = 6 + rng.nextInt(48);
+          final ease = 1.2 + rng.nextDouble() * 2.5;
+          final scaling = 1.1 + rng.nextDouble() * 2.0;
+          final maxDays = 10 + rng.nextInt(300);
+          final scheduler = EaseScalingScheduler(
+            firstInterval: Duration(hours: firstHours),
+            ease: ease,
+            scaling: scaling,
+            maximumInterval: Duration(days: maxDays),
+          );
+
+          var state = ReviewState.initial(decisionId: 'ease-$trial');
+          var now = baseTime.add(Duration(hours: trial));
+          Duration? prevInterval;
+
+          for (var step = 0; step < 10; step++) {
+            final next = scheduler.schedule(
+              previous: state,
+              result: ReviewResult.correct,
+              now: now,
+            );
+            final replay = scheduler.schedule(
+              previous: state,
+              result: ReviewResult.correct,
+              now: now,
+            );
+            expect(replay, equals(next), reason: 'INV-024 deterministic (trial $trial step $step)');
+
+            final interval = next.nextDueAt!.difference(now);
+            expect(interval.inMilliseconds, greaterThan(0));
+            expect(
+              interval.inMilliseconds,
+              lessThanOrEqualTo(scheduler.maximumInterval.inMilliseconds),
+              reason: 'INV-026 cap respected (trial $trial step $step)',
+            );
+            if (prevInterval != null) {
+              expect(
+                interval.inMilliseconds,
+                greaterThanOrEqualTo(prevInterval.inMilliseconds),
+                reason: 'INV-025 monotonic growth (trial $trial step $step)',
+              );
+            }
+            prevInterval = interval;
+            expect(next.repetitionCount, equals(state.repetitionCount + 1));
+            state = next;
+            now = next.nextDueAt!;
+          }
+
+          // Lapse resets repetitionCount to 0 and clamps retry interval to maximumInterval
+          final lapsed = scheduler.schedule(
+            previous: state,
+            result: ReviewResult.incorrect,
+            now: now,
+          );
+          expect(lapsed.repetitionCount, equals(0));
+          expect(lapsed.lapseCount, equals(state.lapseCount + 1));
+          final retryInterval = lapsed.nextDueAt!.difference(now);
+          expect(
+            retryInterval.inMilliseconds,
+            lessThanOrEqualTo(scheduler.maximumInterval.inMilliseconds),
+          );
+        }
+      },
+    );
+
+    test(
+      'INV-024/025/026 ChessFsrsScheduler targetRetention clamping, DSR bounds, and rapid re-review guard',
+      () {
+        // SPEC INV-024.
+        // SPEC INV-025.
+        // SPEC INV-026.
+        final rng = Random(202602);
+        const dayMs = 86400000;
+
+        // 1. Target retention clamping outside [0.70, 0.99]
+        const belowMin = ChessFsrsScheduler(targetRetention: 0.50);
+        const atMin = ChessFsrsScheduler(targetRetention: kMinTargetRetention);
+        const aboveMax = ChessFsrsScheduler(targetRetention: 1.05);
+        const atMax = ChessFsrsScheduler(targetRetention: kMaxTargetRetention);
+
+        final cold = ReviewState.initial(decisionId: 'clamp-check');
+        expect(
+          belowMin.schedule(previous: cold, result: ReviewResult.correct, now: baseTime),
+          equals(atMin.schedule(previous: cold, result: ReviewResult.correct, now: baseTime)),
+          reason: 'targetRetention < 0.70 must clamp to kMinTargetRetention',
+        );
+        expect(
+          aboveMax.schedule(previous: cold, result: ReviewResult.correct, now: baseTime),
+          equals(atMax.schedule(previous: cold, result: ReviewResult.correct, now: baseTime)),
+          reason: 'targetRetention > 0.99 must clamp to kMaxTargetRetention',
+        );
+
+        // 2. Random FSRS trajectories across varying target retentions
+        for (var trial = 0; trial < 50; trial++) {
+          final retention = 0.55 + rng.nextDouble() * 0.50; // spans [0.55, 1.05]
+          final maxDays = 60.0 + rng.nextInt(1000);
+          final scheduler = ChessFsrsScheduler(
+            targetRetention: retention,
+            maxIntervalDays: maxDays,
+          );
+
+          var state = ReviewState.initial(decisionId: 'fsrs-$trial');
+          var now = baseTime;
+
+          for (var step = 0; step < 12; step++) {
+            final isCorrect = step == 0 || rng.nextDouble() > 0.25;
+            final result = isCorrect ? ReviewResult.correct : ReviewResult.incorrect;
+            final next = scheduler.schedule(previous: state, result: result, now: now);
+            final replay = scheduler.schedule(previous: state, result: result, now: now);
+            expect(replay, equals(next), reason: 'INV-024 pure FSRS schedule');
+
+            // Difficulty bounded in [1.0, 10.0]
+            expect(next.difficulty, inInclusiveRange(1.0, 10.0));
+            // Stability bounded in [minStabilityDays, maxStabilityDays]
+            final stabilityDays = next.stability / dayMs;
+            expect(
+              stabilityDays,
+              inInclusiveRange(
+                scheduler.params.minStabilityDays - 1e-9,
+                scheduler.params.maxStabilityDays + 1e-9,
+              ),
+            );
+            // Interval bounded in [minIntervalDays, maxIntervalDays] (INV-026)
+            final intervalMs = next.nextDueAt!.difference(now).inMilliseconds;
+            expect(intervalMs, greaterThanOrEqualTo((scheduler.minIntervalDays * dayMs).round()));
+            expect(intervalMs, lessThanOrEqualTo((scheduler.maxIntervalDays * dayMs).round()));
+
+            if (isCorrect) {
+              expect(next.repetitionCount, equals(state.repetitionCount + 1));
+              expect(next.lapseCount, equals(state.lapseCount));
+            } else {
+              // ChessFSRS preserves repetitionCount and increments lapseCount
+              expect(next.repetitionCount, equals(state.repetitionCount));
+              expect(next.lapseCount, equals(state.lapseCount + 1));
+            }
+
+            state = next;
+            // Advance either rapidly (<1h) or normally (>=1d)
+            if (rng.nextInt(4) == 0) {
+              final rapidNow = now.add(Duration(minutes: 5 + rng.nextInt(40)));
+              final rapidRes = rng.nextBool() ? ReviewResult.correct : ReviewResult.incorrect;
+              final afterRapid = scheduler.schedule(
+                previous: state,
+                result: rapidRes,
+                now: rapidNow,
+              );
+              // Rapid re-review (<1h) freezes difficulty and applies sameDayGainFactor / sameDayLapseFactor
+              expect(
+                afterRapid.difficulty,
+                equals(state.difficulty),
+                reason: 'rapid re-review must freeze difficulty',
+              );
+              final expectedFactor = rapidRes == ReviewResult.correct
+                  ? scheduler.params.sameDayGainFactor
+                  : scheduler.params.sameDayLapseFactor;
+              final expectedStabilityDays = ((state.stability / dayMs) * expectedFactor).clamp(
+                scheduler.params.minStabilityDays,
+                scheduler.params.maxStabilityDays,
+              );
+              expect(afterRapid.stability / dayMs, closeTo(expectedStabilityDays, 1e-6));
+              state = afterRapid;
+              now = state.nextDueAt!;
+            } else {
+              now = state.nextDueAt!;
+            }
+          }
+        }
+
+        // 3. Higher target retention produces shorter or equal intervals for identical state
+        final learnedState = const ChessFsrsScheduler().schedule(
+          previous: cold,
+          result: ReviewResult.correct,
+          now: baseTime,
+        );
+        final reviewTime = baseTime.add(const Duration(days: 3));
+        final lowRetDue = const ChessFsrsScheduler(targetRetention: 0.75)
+            .schedule(previous: learnedState, result: ReviewResult.correct, now: reviewTime)
+            .nextDueAt!;
+        final highRetDue = const ChessFsrsScheduler(targetRetention: 0.95)
+            .schedule(previous: learnedState, result: ReviewResult.correct, now: reviewTime)
+            .nextDueAt!;
+        expect(
+          highRetDue.isBefore(lowRetDue) || highRetDue.isAtSameMomentAs(lowRetDue),
+          isTrue,
+          reason: 'higher target retention requires reviewing sooner',
+        );
+      },
+    );
   });
 }

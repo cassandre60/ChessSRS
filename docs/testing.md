@@ -1,5 +1,11 @@
 # Testing and Quality Gates
 
+> **Authoritative Specification:** See the repo root [TEST_STRATEGY.md](../TEST_STRATEGY.md),
+> [GATES.md](../GATES.md), and [SPEC.md](../SPEC.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), those root documents own verification
+> budgets, gate definitions, and per-invariant oracles; this file is an early initial brief preserved
+> for historical context only.
+
 ## Goal
 
 Prevent chess correctness bugs, import corruption, SRS regressions, and latency regressions.
