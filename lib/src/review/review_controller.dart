@@ -1327,7 +1327,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       );
       try {
         ref.read(moveFeedbackServiceProvider).moveFeedback();
-      } catch (_) {}
+      } catch (e, st) {
+        _logger.fine('move feedback failed', e, st);
+      }
       await Future<void>.delayed(kOpponentPostMoveDelay);
       if (!ref.mounted || generation != _generation) return;
     } else {
@@ -1786,7 +1788,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
       } else {
         service.moveFeedback(check: isCheck);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      _logger.fine('move feedback failed', e, st);
+    }
   }
 
   /// Acknowledges a lapse, clearing the expected move arrow and advancing.
@@ -1883,7 +1887,9 @@ class ReviewController extends AsyncNotifier<ReviewScreenState> {
 
     try {
       ref.read(moveFeedbackServiceProvider).moveFeedback();
-    } catch (_) {}
+    } catch (e, st) {
+      _logger.fine('move feedback failed', e, st);
+    }
 
     state = AsyncData(currentState.copyWith(boardPosition: targetPos, lastMove: normalMove));
   }
