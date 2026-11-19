@@ -10,13 +10,20 @@ import 'package:chess_srs/src/constants.dart';
 import 'package:chess_srs/src/model/auth/auth_controller.dart';
 import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/model/common/id.dart';
+import 'package:chess_srs/src/model/common/preloaded_data.dart';
+import 'package:chess_srs/src/model/log/http_log_storage.dart';
 import 'package:chess_srs/src/model/user/user.dart';
 import 'package:chess_srs/src/network/http.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:logging/logging.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:sqflite/sqflite.dart' show inMemoryDatabasePath;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show databaseFactoryFfi;
 
 import '../test_container.dart';
 import 'fake_http_client_factory.dart';
@@ -928,6 +935,89 @@ void main() {
       expect((await standard.get(Uri.parse('https://lichess.dev/thing'))).statusCode, 404);
     });
   });
+
+  group('the request-log wrapper under the test harness', () {
+    // The production factory wraps every client it builds in the request-log callbacks,
+    // and those callbacks are written to stand down while the tests run. These tests
+    // exercise the real factory -- not the fake every other test installs -- so a guard
+    // that stops standing down would be caught here writing into the log storage.
+    // The probe is a request to a closed local port: the socket failure is instant, and
+    // it is all the wrapper needs to be reached.
+
+    Future<(ProviderContainer, _RecordingHttpLogStorage)> harnessContainer() async {
+      // When the test binding is initialized (any earlier group in this file does it),
+      // it mocks every HTTP request with a canned 400 response. The probe below needs
+      // a real refusal from a closed port, so the mock is dropped first. Every other
+      // test here installs its own fake client, and this group is the last in the
+      // file, so nothing else in the suite observes the mock being gone.
+      HttpOverrides.global = null;
+
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      final storage = _RecordingHttpLogStorage(db);
+      final container = ProviderContainer(
+        overrides: [
+          preloadedDataProvider.overrideWith((ref) {
+            return (
+              sri: 'test-sri',
+              packageInfo: PackageInfo(
+                appName: 'chess_srs_test',
+                version: '0.0.0',
+                buildNumber: '0',
+                packageName: 'chess_srs_test',
+              ),
+              deviceInfo: BaseDeviceInfo({
+                'name': 'test',
+                'model': 'test',
+                'manufacturer': 'test',
+                'systemName': 'test',
+                'systemVersion': 'test',
+                'identifierForVendor': 'test',
+                'isPhysicalDevice': true,
+              }),
+              authUser: null,
+              engineMaxMemoryInMb: 256,
+              appDocumentsDirectory: null,
+              appSupportDirectory: null,
+            );
+          }),
+          httpLogStorageProvider.overrideWith((ref) {
+            ref.onDispose(db.close);
+            return storage;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+      return (container, storage);
+    }
+
+    test('a failed request writes no request row', () async {
+      // The request row is written before the request leaves; under the harness the
+      // callback must return before it touches the storage at all.
+      final (container, storage) = await harnessContainer();
+      final client = container.read(defaultClientProvider);
+
+      await expectLater(client.get(Uri.parse('http://127.0.0.1:1/x')), throwsA(anything));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(storage.saves, 0, reason: 'the request log must stay empty under the harness');
+    });
+
+    test('a failed request records no error', () async {
+      // The error update is written after the request fails; under the harness the
+      // callback must return before it touches the storage at all.
+      final (container, storage) = await harnessContainer();
+      final client = container.read(defaultClientProvider);
+
+      await expectLater(client.get(Uri.parse('http://127.0.0.1:1/x')), throwsA(anything));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        storage.errorUpdates,
+        0,
+        reason: 'a failed request must not reach the log storage under the harness',
+      );
+    });
+  });
 }
 
 class FakeClient extends http.BaseClient {
@@ -1022,5 +1112,36 @@ class _RequestlessClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     return http.StreamedResponse(Stream<List<int>>.value(utf8.encode('nope')), 404);
+  }
+}
+
+/// Counts the writes the request-log wrapper attempts, without touching the database.
+///
+/// Nothing in the suite should ever reach these methods through the real factory: the
+/// harness guard stands the callbacks down before they get here.
+class _RecordingHttpLogStorage extends HttpLogStorage {
+  _RecordingHttpLogStorage(super.db);
+
+  int saves = 0;
+  int responseUpdates = 0;
+  int errorUpdates = 0;
+
+  @override
+  Future<void> save(HttpLogEntry httpLog) async {
+    saves++;
+  }
+
+  @override
+  Future<void> updateWithResponse(
+    String httpLogId, {
+    required int responseCode,
+    required DateTime responseDateTime,
+  }) async {
+    responseUpdates++;
+  }
+
+  @override
+  Future<void> updateWithError(String httpLogId, {String? errorMessage}) async {
+    errorUpdates++;
   }
 }
