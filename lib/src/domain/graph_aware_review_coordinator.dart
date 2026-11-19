@@ -139,6 +139,13 @@ class GraphAwareReviewCoordinator {
     return repo.canonicalIdFor(node.fen4, node.expectedMoveUci) ?? node.decisionId;
   }
 
+  /// Returns the last auto-traversal exposure timestamp for [canonicalId], or
+  /// null if [canonicalId] has not been granted exposure credit.
+  ///
+  /// Single-key O(1) lookup for the move-persistence hot path (INV-050),
+  /// avoiding the full map clone of [snapshotExposureThrottle].
+  DateTime? exposureTimeFor(String canonicalId) => _lastExposedAt[canonicalId];
+
   /// Snapshot of the transient exposure-throttle bookkeeping.
   ///
   /// Used to roll back side effects of a review answer whose persistence

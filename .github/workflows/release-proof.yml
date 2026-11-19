@@ -57,6 +57,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Restore build_runner's asset graph
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            .dart_tool/build
+            **/*.freezed.dart
+            **/*.g.dart
+            **/*.mocks.dart
+          key: codegen-${{ runner.os }}-${{ hashFiles('.fvmrc', 'pubspec.yaml', 'pubspec.lock', 'build.yaml') }}
+
       - name: Code generation
         run: dart run build_runner build
 
