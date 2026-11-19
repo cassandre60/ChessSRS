@@ -3,6 +3,7 @@
 // SPEC INV-006.
 
 import 'package:chess_srs/src/db/database.dart';
+import 'package:chess_srs/src/model/log/app_log_service.dart';
 import 'package:chess_srs/src/model/log/app_log_storage.dart';
 import 'package:chess_srs/src/model/log/http_log_storage.dart';
 import 'package:chess_srs/src/network/http.dart';
@@ -370,6 +371,59 @@ void main() {
     expect(rows.last['message'], diagnosticMessage);
     expect(rows.last['error'], 'Bad state: $errorMessage');
     expect(rows.last['stackTrace'], stackText);
+  });
+
+  test(
+    'AppLogService redacts sensitive query parameters and bearer tokens in the in-memory LRU buffer',
+    () async {
+      final container = await makeContainer(
+        overrides: {databaseProvider: databaseProvider.overrideWith((ref) => db)},
+      );
+      final service = container.read(appLogServiceProvider)..start();
+
+      const email = 'inmem-secret@example.invalid';
+      const username = 'inmem-secret-user';
+      const code = 'INMEM9';
+      const bearerSecret = 'lip_inmem_bearer_secret_token';
+
+      final logger = Logger('InMemoryRedactionAudit');
+      logger.warning(
+        'POST https://lichess.org/auth/mobile-code/bearer?email=$email&username=$username&code=$code '
+        'with Authorization: Bearer $bearerSecret',
+        StateError('failed for https://lichess.org/api/token?access_token=$bearerSecret'),
+        StackTrace.fromString(
+          '#0 auth (https://lichess.org/oauth?code_verifier=pkce_secret_verifier)',
+        ),
+      );
+
+      final buffered = service.logs.where((r) => r.loggerName == 'InMemoryRedactionAudit').toList();
+      expect(buffered, hasLength(1));
+
+      final entry = buffered.single;
+      final combined = [
+        entry.message,
+        entry.error?.toString() ?? '',
+        entry.stackTrace?.toString() ?? '',
+      ].join('\n').toLowerCase();
+
+      for (final secret in [email, username, code, bearerSecret, 'pkce_secret_verifier']) {
+        expect(combined, isNot(contains(secret.toLowerCase())));
+      }
+      expect(entry.message, contains('https://lichess.org/auth/mobile-code/bearer'));
+      expect(entry.message, contains('Authorization: Bearer $kRedactedLogValue'));
+      expect(entry.error.toString(), contains('access_token=%2A%2A%2A'));
+      expect(entry.stackTrace.toString(), contains('code_verifier=%2A%2A%2A'));
+    },
+  );
+
+  test('redactLogRecord returns the identical LogRecord instance when nothing is sensitive', () {
+    final safeRecord = LogRecord(
+      Level.INFO,
+      'GET https://lichess.org/api/account?variant=standard -> 200',
+      'HttpClient',
+    );
+
+    expect(identical(redactLogRecord(safeRecord), safeRecord), isTrue);
   });
 }
 

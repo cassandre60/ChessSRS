@@ -262,15 +262,17 @@ class _AmbientFirstBoard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.srs;
-    final boardPrefs = ref.watch(boardPreferencesProvider);
+    final (pieceSet, brightness, hue) = ref.watch(
+      boardPreferencesProvider.select((p) => (p.pieceSet, p.brightness, p.hue)),
+    );
     final orientation = side ?? Side.white;
     const boardSize = 380.0;
 
     final chessboardSettings = StaticChessboardSettings(
-      pieceAssets: boardPrefs.pieceSet.assets,
+      pieceAssets: pieceSet.assets,
       colorScheme: srsBoardColorScheme(c),
-      brightness: boardPrefs.brightness,
-      hue: boardPrefs.hue,
+      brightness: brightness,
+      hue: hue,
       enableCoordinates: false,
     );
 
@@ -739,8 +741,14 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
   Widget build(BuildContext context) {
     final state = widget.state;
     final prompt = widget.prompt;
-    final boardPrefs = ref.watch(boardPreferencesProvider);
     final srsColors = SrsTheme.maybeOf(context);
+    final boardSettings = ref.watch(
+      boardPreferencesProvider.select(
+        (p) => p
+            .toBoardSettings(Variant.standard, srsColors: srsColors)
+            .copyWith(enableCoordinates: false),
+      ),
+    );
 
     final showComments = ref.watch(studyPreferencesProvider.select((p) => p.showPgnComments));
     final showAnnotations = ref.watch(studyPreferencesProvider.select((p) => p.showAnnotations));
@@ -864,9 +872,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
                     child: BoardWidget(
                       size: size,
                       orientation: state.boardOrientation,
-                      settings: boardPrefs
-                          .toBoardSettings(Variant.standard, srsColors: srsColors)
-                          .copyWith(enableCoordinates: false),
+                      settings: boardSettings,
                       controller: _controller!,
                       onMove: (move, {viaDragAndDrop}) {
                         ref.read(reviewControllerProvider.notifier).onUserMove(move);
@@ -924,7 +930,7 @@ class _ActiveReviewViewState extends ConsumerState<_ActiveReviewView> {
             }
             return SrsReviewSide(
               wide: wide,
-              lineFontSize: wide ? 28.0 : 24.0,
+              lineFontSize: SrsText.lineSize(wide: wide, wideWidth: appWidth),
               meta: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1298,39 +1304,54 @@ class _UnlockBranchBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final srsColors = SrsTheme.maybeOf(context);
-    return Padding(
+    final existingTheme = SrsTheme.maybeOf(context);
+    final c = existingTheme ?? SrsColors.light(kSrsDefaultAccent);
+    final banner = Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: srsColors?.surface ?? Colors.black12,
+          color: c.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: srsColors?.hairline ?? Colors.white24),
+          border: Border.all(color: c.hairline),
         ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 'New branch played: ${pending.moveSan}. Add to review queue?',
-                style: TextStyle(color: srsColors?.ink, fontSize: 13, fontWeight: FontWeight.w500),
+                style: TextStyle(color: c.ink, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             const SizedBox(width: 8),
-            TextButton(
+            SrsTextButton(
+              label: 'Add to SRS',
               onPressed: () => ref
                   .read(reviewControllerProvider.notifier)
                   .unlockBranch(pending.decisionId, pending.chapterId),
-              child: const Text('Add to SRS'),
             ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
+            SrsPressable(
               onPressed: () => ref.read(reviewControllerProvider.notifier).dismissUnlockPrompt(),
+              semanticLabel: 'Dismiss',
+              radius: 10,
+              builder: (_, hovered, _) => Container(
+                constraints: const BoxConstraints(
+                  minWidth: SrsLayout.minTouchTarget,
+                  minHeight: SrsLayout.minTouchTarget,
+                ),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: hovered ? c.hairlineSoft : const Color(0x00000000),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.close, size: 18, color: hovered ? c.ink : c.ink2),
+              ),
             ),
           ],
         ),
       ),
     );
+    return existingTheme != null ? banner : SrsTheme(colors: c, child: banner);
   }
 }
 
@@ -1356,15 +1377,16 @@ class DynamicFreezeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final srsColors = SrsTheme.maybeOf(context);
-    return Padding(
+    final existingTheme = SrsTheme.maybeOf(context);
+    final c = existingTheme ?? SrsColors.light(kSrsDefaultAccent);
+    final banner = Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: srsColors?.surface ?? Colors.black12,
+          color: c.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: srsColors?.hairline ?? Colors.white24),
+          border: Border.all(color: c.hairline),
         ),
         child: Row(
           children: [
@@ -1373,15 +1395,16 @@ class DynamicFreezeBanner extends StatelessWidget {
                 'Dynamic mode is on and no lines are unlocked, so only positions '
                 'you have already learned are scheduled. Turn it off to introduce '
                 'the rest of this library.',
-                style: TextStyle(color: srsColors?.ink, fontSize: 13, fontWeight: FontWeight.w500),
+                style: TextStyle(color: c.ink, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             const SizedBox(width: 8),
-            TextButton(onPressed: onTurnOff, child: const Text('Turn off')),
+            SrsTextButton(label: 'Turn off', onPressed: onTurnOff),
           ],
         ),
       ),
     );
+    return existingTheme != null ? banner : SrsTheme(colors: c, child: banner);
   }
 }
 
@@ -1427,7 +1450,7 @@ class _NoteSlot extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(comment, style: SrsText.note(c.ink)),
+          Text(comment, style: SrsText.note(c.ink, wide: wide)),
           const SizedBox(height: 10),
           Text(context.l10n.mobileReviewFromYourStudy, style: SrsText.noteSource(c.ink3)),
         ],
