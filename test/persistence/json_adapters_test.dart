@@ -153,6 +153,11 @@ void main() {
         expect(json['incomingMove'], isNull);
         final rawChildren = json['children'] as List<dynamic>;
         expect(rawChildren.length, 2);
+        expect(
+          () => rawChildren.add(rawChildren.first),
+          throwsUnsupportedError,
+          reason: 'serialized children must be non-growable',
+        );
 
         final firstChildJson = rawChildren[0] as Map<String, dynamic>;
         expect(firstChildJson['incomingMove'], isNotNull);
@@ -168,6 +173,11 @@ void main() {
         expect(decoded.comment, 'Starting position');
         expect(decoded.incomingMove, isNull);
         expect(decoded.children.length, 2);
+        expect(
+          () => decoded.children.add(decoded.children.first),
+          throwsUnsupportedError,
+          reason: 'decoded children must be non-growable',
+        );
 
         final c0 = decoded.children[0];
         expect(c0.id, 'node-e4');
@@ -199,6 +209,11 @@ void main() {
 
       final decoded = repertoireNodeFromJson(json);
       expect(decoded.nags, [1, 3, 42]);
+      expect(
+        () => decoded.nags.add(5),
+        throwsUnsupportedError,
+        reason: 'decoded nags must be non-growable',
+      );
     });
   });
 
@@ -235,6 +250,11 @@ void main() {
       expect(decodedMulti.length, 2);
       expect(decodedMulti[0].san, 'Nf3');
       expect(decodedMulti[1].san, 'd4');
+      expect(
+        () => decodedMulti.add(const RepertoireMove(from: 'e2', to: 'e4', san: 'e4')),
+        throwsUnsupportedError,
+        reason: 'decoded expected moves must be non-growable',
+      );
     });
 
     test('decodeExpectedMoves handles move with null SAN', () {
