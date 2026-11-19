@@ -1237,6 +1237,34 @@ stop) and froze the developer machine; see `docs/agent-history.md`.
 Verification of record is CI on the PR tip (full suite + gates). Not
 runtime-validated (logging-surfacing changes only).
 
+## Queue-drain batch 3 2026-11-19 — eight additive coverage rows (#833)
+
+Third rollup per the HANDOFF.md (#826) drain plan, one atomic commit per
+source PR, cherry-picked from CI-green source branches onto #829's merge
+(`4a07d5ab7`). All eight are test-file-only rows — the diff is 8 files,
+742 insertions, 0 deletions, zero `lib/` changes:
+
+1. **#644** `test(domain)`: `review_prompt_test.dart` (ReviewPrompt,
+   AutoPlayedMove).
+2. **#645** `test(account)`: `account_pref_types_test.dart`.
+3. **#649** `test(game)`: `player_test.dart` (Player, PlayerAnalysis).
+4. **#650** `test(model)`: `speed_test.dart` (Speed enum).
+5. **#651** `test(analysis)`: `analysis_player_test.dart`.
+6. **#655** `test(user)`: `countries_test.dart`.
+7. **#656** `test(domain)`: extends `repertoire_node_test.dart` additively
+   (+24) with castling-notation `childForMove` and `childMoves` cases,
+   preserving the coverage main already had.
+8. **#660** `test(auth)`: `bearer_test.dart` (bearer token signing).
+
+Evidence: all eight source PRs CI-green at cherry-pick time; each verified
+not superseded on `4a07d5ab7` (seven target files absent from main; #656's
+target exists and its pick applied additively with 0 deletions); per-file
+`git diff` inspection confirmed test-only additive changes. No local
+Flutter ran (CI-only per the 2026-11-19 machine-freeze rule in
+`docs/agent-history.md`); verification of record is CI on the PR tip
+(full suite + gates). Not runtime-validated (test-only batch; no product
+code changed).
+
 ## Recording rule
 
 Every completed task records what shipped, dated verification evidence and any

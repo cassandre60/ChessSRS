@@ -70,47 +70,9 @@ void main() {
       expect(player.fullName(l10n), 'Player');
     });
 
-    test('setOnGame marks human online and clears gone', () {
-      const player = Player(name: 'Human', isGone: true);
-      final updated = player.setOnGame(true);
-      expect(updated.onGame, isTrue);
-      expect(updated.isGone, isFalse);
-    });
-
-    test('setOnGame marks human offline but preserves gone', () {
-      const player = Player(name: 'Human', onGame: true, isGone: true);
-      final updated = player.setOnGame(false);
-      expect(updated.onGame, isFalse);
-      expect(updated.isGone, isTrue);
-    });
-
-    test('setOnGame keeps AI online and clears gone', () {
-      const player = Player(aiLevel: 2, isGone: true);
-      final updated = player.setOnGame(false);
-      expect(updated.onGame, isTrue);
-      expect(updated.isGone, isFalse);
-    });
-
-    test('setGone marks human gone and offline', () {
-      const player = Player(name: 'Human', onGame: true);
-      final updated = player.setGone(true);
-      expect(updated.isGone, isTrue);
-      expect(updated.onGame, isFalse);
-    });
-
-    test('setGone clears human gone state', () {
-      const player = Player(name: 'Human', isGone: true);
-      final updated = player.setGone(false);
-      expect(updated.isGone, isFalse);
-      expect(updated.onGame, isNull);
-    });
-
-    test('setGone never marks AI as gone or offline', () {
-      const player = Player(aiLevel: 1, onGame: true);
-      final updated = player.setGone(true);
-      expect(updated.isGone, isFalse);
-      expect(updated.onGame, isTrue);
-    });
+    // NOTE: the source PR's setOnGame/setGone cases were dropped — those
+    // methods were removed from Player by rollup #812's dead-code removal,
+    // so the coverage they asserted no longer exists to pin.
 
     test('JSON round-trip preserves fields', () {
       const player = Player(
