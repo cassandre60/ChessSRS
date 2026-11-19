@@ -890,18 +890,6 @@ class OfflineComputerGameController extends Notifier<OfflineComputerGameState> {
     }
   }
 
-  void goForward() {
-    if (state.canGoForward) {
-      state = state.copyWith(stepCursor: state.stepCursor + 1);
-    }
-  }
-
-  void goBack() {
-    if (state.canGoBack) {
-      state = state.copyWith(stepCursor: state.stepCursor - 1);
-    }
-  }
-
   /// Show or cycle through hints.
   ///
   /// Hints are precomputed when it's the player's turn (in casual or practice mode).

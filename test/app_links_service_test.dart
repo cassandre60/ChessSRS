@@ -590,6 +590,49 @@ void main() {
       expect(find.text('Cannot find user hikaru'), findsOneWidget);
     });
 
+    testWidgets('a /@/user/subroute link with more than 2 path segments resolves to null', (
+      WidgetTester tester,
+    ) async {
+      final uri = Uri.parse('https://lichess.org/@/thibault/following');
+      await triggerAppLink(tester, uri);
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.text('test link'));
+      final service = ProviderScope.containerOf(context).read(appLinksServiceProvider);
+      expect(await service.resolveAppLinkUri(context, uri), isNull);
+      expect(find.byType(UserScreen), findsNothing);
+    });
+
+    testWidgets('an ongoing non-imported game link resolves to null instead of AnalysisScreen', (
+      WidgetTester tester,
+    ) async {
+      final mockGameRepository = MockGameRepository();
+      final ongoingLobbyGame = generateExportedGames(count: 1).first.copyWith(
+        status: GameStatus.started,
+        source: GameSource.lobby,
+        black: const Player(),
+        white: const Player(),
+      );
+      when(
+        () => mockGameRepository.getGame(ongoingLobbyGame.id),
+      ).thenAnswer((_) async => ongoingLobbyGame);
+
+      final uri = Uri.parse('https://lichess.org/${ongoingLobbyGame.id.value}');
+      await triggerAppLink(
+        tester,
+        uri,
+        overrides: {
+          gameRepositoryProvider: gameRepositoryProvider.overrideWith((_) => mockGameRepository),
+        },
+      );
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.text('test link'));
+      final service = ProviderScope.containerOf(context).read(appLinksServiceProvider);
+      expect(await service.resolveAppLinkUri(context, uri), isNull);
+      expect(find.byType(AnalysisScreen), findsNothing);
+    });
+
     testWidgets('unsupported /tv/<channel> link does not navigate and resolves to null', (
       WidgetTester tester,
     ) async {
@@ -945,6 +988,65 @@ void main() {
 
       expect(find.byType(BoardEditorScreen), findsNothing);
       expect(launched, isEmpty);
+    });
+
+    testWidgets('a content:// link is skipped rather than resolved as a route', (tester) async {
+      final launched = mockUrlLauncher(tester);
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      links.add(Uri.parse('content://provider/editor'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(launched, isEmpty);
+    });
+
+    testWidgets('an open-web link accepts http:// and refuses missing or unparseable url params', (
+      tester,
+    ) async {
+      final launched = mockUrlLauncher(tester);
+      final (links, _) = await pumpDeepLinkApp(tester);
+
+      // Missing url param: ignored without launching.
+      links.add(Uri.parse('org.chesssrs.app://open-web'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launched, isEmpty);
+
+      // Unparseable url param: refused without launching.
+      links.add(Uri.parse('org.chesssrs.app://open-web?url=${Uri.encodeComponent('http://[::1')}'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launched, isEmpty);
+
+      // Plain http:// web url: allowed and launched.
+      links.add(
+        Uri.parse(
+          'org.chesssrs.app://open-web?url=${Uri.encodeComponent('http://lichess.org/faq')}',
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(launched, ['http://lichess.org/faq']);
+    });
+
+    testWidgets('does not treat a non-matching port on the lichess host as first-party', (
+      tester,
+    ) async {
+      final launched = mockUrlLauncher(tester);
+      await triggerLinkifyOpen(tester, 'https://$kLichessHost:8443/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsNothing);
+      expect(launched, ['https://$kLichessHost:8443/editor']);
+    });
+
+    testWidgets('routes a plain http:// first-party url to the in-app screen', (tester) async {
+      await triggerLinkifyOpen(tester, 'http://$kLichessHost/editor');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BoardEditorScreen), findsOneWidget);
     });
   });
 }
