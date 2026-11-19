@@ -1,5 +1,10 @@
 # Architecture
 
+> **Authoritative Specification:** See the repo root [ARCHITECTURE.md](../ARCHITECTURE.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), root `ARCHITECTURE.md` is the authoritative
+> home for module boundaries, data flow, persistence arrangement, and licensing; this file is an early
+> pre-reset sketch preserved for historical context only.
+
 ## Goal
 
 Build a local-first Flutter application whose critical Review path is fully local, deterministic, and fast. Keep the domain independent from UI, persistence, PGN syntax, and future network providers.
