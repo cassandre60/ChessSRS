@@ -281,6 +281,12 @@ void main() {
       await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid FEN'), findsOneWidget);
+
+      // An invalid position must not be submittable while the error is shown.
+      final pill = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Create chapter'),
+      );
+      expect(pill.onPressed, isNull);
     });
 
     testWidgets('FEN is re-validated when the variant changes', (tester) async {
@@ -392,11 +398,54 @@ void main() {
       await tester.pump();
       expect(find.textContaining('Invalid PGN'), findsOneWidget);
 
+      // An invalid PGN must not be submittable while the error is shown.
+      final invalidPill = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Create chapter'),
+      );
+      expect(invalidPill.onPressed, isNull);
+
       // a bare FEN header and no moves is a legitimate chapter: a starting position
       mockClipboard('[FEN "8/8/8/8/8/8/8/K6k w - - 0 1"]\n\n*');
       await tester.tap(find.text('Paste from clipboard'));
       await tester.pump();
       expect(find.textContaining('Invalid PGN'), findsNothing);
+    });
+
+    testWidgets('Empty chapter name disables submission', (tester) async {
+      final callback = OnChaptersCreatedCallback();
+
+      final app = await makeTestProviderScopeApp(
+        tester,
+        home: TestBottomSheetOpener(
+          builder: (_) => CreateStudyChapterBottomSheet(
+            params: CreateChapterOfExistingStudy(const StudyId('test-id')),
+            chapterNumber: 1,
+            onChaptersCreated: callback.call,
+          ),
+        ),
+        authUser: fakeAuthUser,
+      );
+
+      await tester.pumpWidget(app);
+
+      await TestBottomSheetOpener.openBottomSheet(tester);
+
+      // Clear the default chapter name.
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(CreateStudyChapterBottomSheet),
+              matching: find.byType(EditableText),
+            )
+            .first,
+        '   ',
+      );
+      await tester.pump();
+
+      final pill = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Create chapter'),
+      );
+      expect(pill.onPressed, isNull);
     });
 
     testWidgets('Chapter creation failure keeps the sheet open and shows an error', (tester) async {
@@ -457,6 +506,12 @@ void main() {
       // the sheet stays open so the user can retry, and the failure is reported
       expect(find.byType(CreateStudyChapterBottomSheet), findsOneWidget);
       expect(find.textContaining('Could not create chapter'), findsOneWidget);
+
+      // The request is no longer in flight, so the user can retry.
+      final retryPill = tester.widget<SrsPillButton>(
+        find.widgetWithText(SrsPillButton, 'Create chapter'),
+      );
+      expect(retryPill.onPressed, isNotNull);
       verifyZeroInteractions(callback);
     });
   });
