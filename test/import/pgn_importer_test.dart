@@ -1114,6 +1114,37 @@ void main() {
       // Only 1. e4 survives as a repertoire decision.
       expect(result.decisions.map((d) => d.expectedMoves.first.san), ['e4']);
     });
+
+    test('quarantines a variation line exceeding kMaxPgnVariationDepth (512 plies)', () {
+      // SPEC INV-011.
+      // Build a 520-ply PGN (260 full moves of shuffling knights) followed by a valid second chapter.
+      final buf = StringBuffer('[Event "Deep Line"]\n\n');
+      for (var fullMove = 1; fullMove <= 260; fullMove++) {
+        final odd = fullMove.isOdd;
+        final wMove = odd ? 'Nf3' : 'Ng1';
+        final bMove = odd ? 'Nf6' : 'Ng8';
+        buf.write('$fullMove. $wMove $bMove ');
+      }
+      buf.writeln('*\n\n[Event "Valid Second Chapter"]\n\n1. e4 e5 2. Nf3 *');
+
+      final result = importPgn(buf.toString());
+      expect(result.errors, hasLength(1));
+      expect(result.errors.single.chapterTitle, 'Deep Line');
+      expect(result.errors.single.moveIndex, kMaxPgnVariationDepth);
+      expect(
+        result.errors.single.message,
+        contains('exceeds maximum supported depth of $kMaxPgnVariationDepth plies'),
+      );
+      expect(result.errors.single.message, contains('Skipping 8 remaining move(s)'));
+      // Both chapters are imported; the first is truncated at 512 plies (256 White decisions)
+      // and the second chapter imports intact.
+      expect(result.chapters, hasLength(2));
+      expect(
+        result.decisions.where((d) => d.chapterId == result.chapters[0].id),
+        hasLength(kMaxPgnVariationDepth ~/ 2),
+      );
+      expect(result.decisions.where((d) => d.chapterId == result.chapters[1].id), hasLength(2));
+    });
   });
 
   // ---------------------------------------------------------------------------

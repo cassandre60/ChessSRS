@@ -1,6 +1,8 @@
 // Copyright (C) 2024 ChessSRS contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import 'dart:math';
+
 import 'package:chess_srs/src/domain/domain.dart';
 import 'package:chess_srs/src/persistence/persistence.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -281,6 +283,211 @@ void main() {
         () => decodeExpectedMoves('[{"other":"something_long_enough_to_be_35_chars"}]'),
         throwsA(isA<TypeError>()),
       );
+    });
+  });
+
+  group('property-based date parser and JSON adapter round-trips', () {
+    test('parseUtcIso matches DateTime.parse().toUtc() across 600 random ISO-8601 timestamps', () {
+      final rng = Random(20261117);
+      for (var i = 0; i < 600; i++) {
+        final year = 1970 + rng.nextInt(130);
+        final month = 1 + rng.nextInt(12);
+        final day = 1 + rng.nextInt(28);
+        final hour = rng.nextInt(24);
+        final minute = rng.nextInt(60);
+        final second = rng.nextInt(60);
+        final millis = rng.nextInt(1000);
+
+        String two(int n) => n.toString().padLeft(2, '0');
+        String three(int n) => n.toString().padLeft(3, '0');
+        final base =
+            '${year.toString().padLeft(4, '0')}-${two(month)}-${two(day)}'
+            'T${two(hour)}:${two(minute)}:${two(second)}';
+
+        final mode = i % 4;
+        final String iso;
+        if (mode == 0) {
+          // 20-char fast path: YYYY-MM-DDTHH:MM:SSZ
+          iso = '${base}Z';
+        } else if (mode == 1) {
+          // 24-char fast path: YYYY-MM-DDTHH:MM:SS.mmmZ
+          iso = '$base.${three(millis)}Z';
+        } else if (mode == 2) {
+          // 6-digit microsecond fallback path
+          final micros = rng.nextInt(1000);
+          iso = '$base.${three(millis)}${three(micros)}Z';
+        } else {
+          // Explicit timezone offset fallback path (+HH:MM / -HH:MM)
+          final sign = rng.nextBool() ? '+' : '-';
+          final offH = two(rng.nextInt(12));
+          final offM = rng.nextBool() ? '00' : '30';
+          iso = '$base.${three(millis)}$sign$offH:$offM';
+        }
+
+        final actual = parseUtcIso(iso);
+        final expected = DateTime.parse(iso).toUtc();
+        expect(actual.isUtc, isTrue, reason: 'trial $i ($iso) must be UTC');
+        expect(actual, equals(expected), reason: 'trial $i ($iso) mismatch');
+      }
+    });
+
+    test('encodeExpectedMoves / decodeExpectedMoves round-trips across 500 random move sets', () {
+      final rng = Random(774411);
+      const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+      const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
+      const promos = [null, null, null, 'q', 'r', 'b', 'n'];
+      const sanSamples = [
+        'e4',
+        'Nf3',
+        'Bxc6+',
+        'O-O',
+        'O-O-O',
+        'e8=Q#',
+        'Raxd1',
+        'Qh4+',
+        'cxd5',
+        null,
+        'move "quoted"',
+        r'move \slash',
+      ];
+
+      String randomSquare() => '${files[rng.nextInt(8)]}${ranks[rng.nextInt(8)]}';
+
+      for (var trial = 0; trial < 500; trial++) {
+        final count = trial < 250 ? 1 : (1 + rng.nextInt(5));
+        final moves = List.generate(count, (_) {
+          final from = randomSquare();
+          var to = randomSquare();
+          if (to == from) {
+            to = 'e4' == from ? 'd4' : 'e4';
+          }
+          final promo = promos[rng.nextInt(promos.length)];
+          final san = sanSamples[rng.nextInt(sanSamples.length)];
+          return RepertoireMove(from: from, to: to, promotion: promo, san: san);
+        });
+
+        final encoded = encodeExpectedMoves(moves);
+        final decoded = decodeExpectedMoves(encoded);
+
+        expect(decoded.length, equals(moves.length), reason: 'trial $trial length');
+        for (var j = 0; j < moves.length; j++) {
+          expect(decoded[j].from, equals(moves[j].from), reason: 'trial $trial move $j from');
+          expect(decoded[j].to, equals(moves[j].to), reason: 'trial $trial move $j to');
+          expect(
+            decoded[j].promotion,
+            equals(moves[j].promotion),
+            reason: 'trial $trial move $j promotion',
+          );
+          expect(decoded[j].san, equals(moves[j].san), reason: 'trial $trial move $j san');
+        }
+      }
+    });
+
+    test('reviewState and reviewEvent JSON adapters round-trip across 250 random states', () {
+      final rng = Random(991122);
+      final epoch = DateTime.utc(2025, 1, 1);
+
+      DateTime randomInstant() {
+        final ms = rng.nextInt(365 * 5 * 86400) * 1000 + rng.nextInt(1000);
+        final utc = epoch.add(Duration(milliseconds: ms));
+        return rng.nextBool() ? utc : utc.toLocal();
+      }
+
+      ReviewState randomState(String id) {
+        return ReviewState(
+          decisionId: id,
+          firstReviewedAt: rng.nextBool() ? randomInstant() : null,
+          lastReviewedAt: rng.nextBool() ? randomInstant() : null,
+          nextDueAt: rng.nextBool() ? randomInstant() : null,
+          repetitionCount: rng.nextInt(30),
+          lapseCount: rng.nextInt(15),
+          stability: rng.nextDouble() * 365 * 86400000,
+          difficulty: 1.0 + rng.nextDouble() * 9.0,
+        );
+      }
+
+      for (var i = 0; i < 250; i++) {
+        final s = randomState('dec-$i');
+        final json = reviewStateToJson(s);
+        final decoded = reviewStateFromJson(json);
+
+        expect(decoded.decisionId, equals(s.decisionId));
+        expect(decoded.firstReviewedAt, equals(s.firstReviewedAt?.toUtc()));
+        expect(decoded.lastReviewedAt, equals(s.lastReviewedAt?.toUtc()));
+        expect(decoded.nextDueAt, equals(s.nextDueAt?.toUtc()));
+        expect(decoded.repetitionCount, equals(s.repetitionCount));
+        expect(decoded.lapseCount, equals(s.lapseCount));
+        expect(decoded.stability, closeTo(s.stability, 1e-6));
+        expect(decoded.difficulty, closeTo(s.difficulty, 1e-6));
+
+        final ev = ReviewEvent(
+          decisionId: s.decisionId,
+          when: randomInstant(),
+          result: rng.nextBool() ? ReviewResult.correct : ReviewResult.incorrect,
+          oldState: s,
+          newState: randomState('dec-$i'),
+        );
+        final evJson = reviewEventToJson(ev);
+        final evDecoded = reviewEventFromJson(evJson);
+        expect(evDecoded.decisionId, equals(ev.decisionId));
+        expect(evDecoded.when, equals(ev.when.toUtc()));
+        expect(evDecoded.result, equals(ev.result));
+        expect(evDecoded.oldState.repetitionCount, equals(ev.oldState.repetitionCount));
+        expect(evDecoded.newState.repetitionCount, equals(ev.newState.repetitionCount));
+      }
+    });
+
+    test('INV-010: repertoireNodeToJson / repertoireNodeFromJson round-trips 100 random trees', () {
+      // SPEC INV-010.
+      final rng = Random(314159);
+      var idCounter = 0;
+
+      RepertoireNode buildRandomTree(int depth) {
+        final id = 'n-${idCounter++}';
+        final childCount = depth >= 3 ? 0 : rng.nextInt(4);
+        final hasComment = rng.nextBool();
+        final nagCount = rng.nextInt(4);
+        final nags = List.generate(nagCount, (_) => 1 + rng.nextInt(20));
+        return RepertoireNode(
+          id: id,
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 ${depth + 1}',
+          fenKey: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',
+          incomingMove: depth == 0
+              ? null
+              : RepertoireMove(
+                  from: 'e2',
+                  to: 'e4',
+                  promotion: rng.nextInt(5) == 0 ? 'q' : null,
+                  san: 'e4',
+                ),
+          comment: hasComment ? 'Comment at $id with "quotes" & symbols' : null,
+          nags: nags,
+          children: List.generate(childCount, (_) => buildRandomTree(depth + 1)),
+        );
+      }
+
+      void expectTreesEqual(RepertoireNode a, RepertoireNode b) {
+        expect(a.id, equals(b.id));
+        expect(a.fen, equals(b.fen));
+        expect(a.fenKey, equals(b.fenKey));
+        expect(a.comment, equals(b.comment));
+        expect(a.nags, equals(b.nags));
+        expect(a.incomingMove?.from, equals(b.incomingMove?.from));
+        expect(a.incomingMove?.to, equals(b.incomingMove?.to));
+        expect(a.incomingMove?.promotion, equals(b.incomingMove?.promotion));
+        expect(a.incomingMove?.san, equals(b.incomingMove?.san));
+        expect(a.children.length, equals(b.children.length));
+        for (var i = 0; i < a.children.length; i++) {
+          expectTreesEqual(a.children[i], b.children[i]);
+        }
+      }
+
+      for (var trial = 0; trial < 100; trial++) {
+        final root = buildRandomTree(0);
+        final json = repertoireNodeToJson(root);
+        final decoded = repertoireNodeFromJson(json);
+        expectTreesEqual(decoded, root);
+      }
     });
   });
 }
