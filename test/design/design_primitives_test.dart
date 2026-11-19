@@ -321,5 +321,53 @@ void main() {
         expect(box.right, lessThanOrEqualTo(inner.right));
       }
     });
+
+    testWidgets('accent dots and SrsSwitch meet the 48px SrsLayout.minTouchTarget token', (
+      tester,
+    ) async {
+      // SPEC INV-062.
+      await tester.pumpWidget(
+        _wrap(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SrsAccentDots(value: SrsAccent.ultramarine, onChanged: (_) {}),
+              SrsSwitch(value: false, semanticLabel: 'Sound', onChanged: (_) {}),
+            ],
+          ),
+        ),
+      );
+
+      final dotPressables = find.descendant(
+        of: find.byType(SrsAccentDots),
+        matching: find.byType(SrsPressable),
+      );
+      expect(dotPressables, findsNWidgets(4));
+      for (var i = 0; i < 4; i++) {
+        final box = tester.getRect(dotPressables.at(i));
+        expect(box.width, greaterThanOrEqualTo(SrsLayout.minTouchTarget));
+        expect(box.height, greaterThanOrEqualTo(SrsLayout.minTouchTarget));
+      }
+
+      final switchSize = tester.getSize(find.byType(SrsSwitch));
+      expect(switchSize.width, greaterThanOrEqualTo(SrsLayout.minTouchTarget));
+      expect(switchSize.height, greaterThanOrEqualTo(SrsLayout.minTouchTarget));
+    });
+  });
+
+  group('SrsText.note responsive token', () {
+    test('returns 16.5 on narrow and 19.0 on wide layouts', () {
+      final c = SrsColors.light(SrsAccent.ultramarine);
+      final narrow = SrsText.note(c.ink);
+      final wide = SrsText.note(c.ink, wide: true);
+
+      expect(narrow.fontFamily, SrsText.read);
+      expect(narrow.fontSize, 16.5);
+      expect(narrow.height, closeTo(19 / 16.5, 0.001));
+
+      expect(wide.fontFamily, SrsText.read);
+      expect(wide.fontSize, 19.0);
+      expect(wide.height, 1.6);
+    });
   });
 }

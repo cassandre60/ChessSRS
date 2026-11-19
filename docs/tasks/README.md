@@ -13,10 +13,20 @@ agent can pick up and execute top-to-bottom.
 
 | Brief | Status |
 |---|---|
+| [`mega-review-master-plan.md`](mega-review-master-plan.md) | **Active 2026-11-17** — 8-dimension mega-review synthesis, prioritized Wave 1–3 execution roadmap, and report index |
+| [`mega-review-architecture-audit.md`](mega-review-architecture-audit.md) | Completed 2026-11-17 — Architecture, layer boundaries, import cycles, dead code, and god-file decomposition |
+| [`mega-review-performance-analysis.md`](mega-review-performance-analysis.md) | Completed 2026-11-17 — Session start, 16 ms move path, SQLite queries, memory churn, and lazy loading |
+| [`mega-review-test-quality-audit.md`](mega-review-test-quality-audit.md) | Completed 2026-11-17 — Test coverage, assertion density, determinism, and property-test expansion |
+| [`mega-review-ux-design-audit.md`](mega-review-ux-design-audit.md) | Completed 2026-11-17 — Diagram design system, token compliance, touch targets, and accessibility |
+| [`mega-review-security-audit.md`](mega-review-security-audit.md) | Completed 2026-11-17 — Auth/OAuth, log redaction (INV-006), SQLite integrity, and input validation |
+| [`mega-review-devops-audit.md`](mega-review-devops-audit.md) | Completed 2026-11-17 — CI workflows, G01–G13 gates, caching, dependencies, and release automation |
+| [`mega-review-chess-srs-domain-audit.md`](mega-review-chess-srs-domain-audit.md) | Completed 2026-11-17 — FSRS-4.5 DSR math, graph contagion/exposure/coupling, and position identity |
+| [`mega-review-documentation-audit.md`](mega-review-documentation-audit.md) | Completed 2026-11-17 — 158-file documentation inventory, authority map check, and cleanup plan |
 | `REFACTOR-FIX-23-enum-values-not-dead.md` | Investigation complete — **0 dead enum values; all are actively persisted/used** |
 | `PERF-FIX-24-real-library-measurement.md` | Measured on 31k-decision real library — durable findings recorded |
 | `PERF-FIX-48-session-start-move-list-ceiling.md` | Closed 2026-10-24 — lazy expectedMoves refuted (~30 ms ceiling); path decision open as Q15 |
 | `PERF-FIX-49-session-start-fen-key.md` | **Landed 2026-10-25 (#424/#425)** — schema v21 stores the fen key on decision rows; whole-library start is tree-free (see IMPLEMENTATION_PLAN) |
+| `PERF-FIX-50-transposition-node-index.md` | **Landed 2026-10-25 (#427)** — schema v22 persists `srs_node` for cross-chapter `inScope` transposition lookup |
 
 ### Recently Landed Briefs (Swept)
 

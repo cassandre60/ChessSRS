@@ -401,8 +401,12 @@ abstract final class SrsText {
   static TextStyle answerMove(bool wide, Color c) =>
       _ui(wide ? 52 : 38, FontWeight.w600, c, em: -0.02, height: 1.1);
   static TextStyle answerHelp(bool wide, Color c) => _ui(wide ? 16 : 15, FontWeight.w400, c);
-  static TextStyle note(Color c) =>
-      TextStyle(fontFamily: read, fontSize: 16.5, height: 19 / 16.5, color: c);
+  static TextStyle note(Color c, {bool wide = false}) => TextStyle(
+    fontFamily: read,
+    fontSize: wide ? 19 : 16.5,
+    height: wide ? 1.6 : 19 / 16.5,
+    color: c,
+  );
   static TextStyle noteSource(Color c) => _ui(13, FontWeight.w400, c);
   static TextStyle title(Color c) => _ui(32, FontWeight.w400, c, em: -0.02, height: 1.15);
   static TextStyle display(double size, Color c) =>

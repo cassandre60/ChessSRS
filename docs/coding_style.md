@@ -1,5 +1,11 @@
 # Coding style
 
+> **Authoritative Specification:** See the repo root [CLAUDE.md](../CLAUDE.md) and
+> [CODING_STANDARDS.md](../CODING_STANDARDS.md).
+> Per [AGENTS.md §1](../AGENTS.md#1-authority-and-conflicts), `CLAUDE.md` is the authoritative home for
+> Dart, Riverpod, code-generation, and test-helper conventions; this file is inherited Lichess Mobile
+> guidance preserved for reference.
+
 ## Immutability
 
 Immutability is when all fields of an Object are final or late final. They are set exactly once upon construction.
