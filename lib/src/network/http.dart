@@ -9,10 +9,8 @@ import 'package:chess_srs/src/model/auth/bearer.dart';
 import 'package:chess_srs/src/model/common/preloaded_data.dart';
 import 'package:chess_srs/src/model/log/http_log_storage.dart';
 import 'package:chess_srs/src/model/user/user.dart';
-import 'package:chess_srs/src/network/aggregator.dart';
 import 'package:chess_srs/src/network/server_status.dart';
 import 'package:chess_srs/src/utils/log_redaction.dart';
-import 'package:chess_srs/src/utils/riverpod.dart';
 import 'package:cronet_http/cronet_http.dart';
 import 'package:cupertino_http/cupertino_http.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -964,47 +962,5 @@ extension ClientRefExtension on Ref {
   Future<T> withClient<T>(Future<T> Function(LichessClient) fn) async {
     final client = read(lichessClientProvider);
     return await fn(client);
-  }
-
-  /// Runs [fn] with a [LichessClient] and keeps the provider alive for [duration].
-  ///
-  /// This is primarily used for caching network requests in a [FutureProvider].
-  ///
-  /// If [fn] throws with a [ServerException], the provider is kept alive as we don't want to retry
-  /// server errors immediately.
-  Future<U> withClientCacheFor<U>(Future<U> Function(LichessClient) fn, Duration duration) async {
-    final link = cacheFor(duration);
-    final client = read(lichessClientProvider);
-    try {
-      return await fn(client);
-    } on ServerException {
-      rethrow;
-    } on Exception {
-      link.close();
-      rethrow;
-    }
-  }
-
-  /// Runs [fn] with the [Aggregator] and keeps the provider alive for [duration].
-  ///
-  /// This is primarily used for caching network requests in a [FutureProvider].
-  ///
-  /// If [fn] throws with a [ServerException], the provider is kept alive as we don't want to retry
-  /// server errors immediately.
-  Future<U> withAggregatorCacheFor<U>(
-    Future<U> Function(LichessClient, Aggregator) fn,
-    Duration duration,
-  ) async {
-    final link = cacheFor(duration);
-    final client = read(lichessClientProvider);
-    final aggregator = read(aggregatorProvider);
-    try {
-      return await fn(client, aggregator);
-    } on ServerException {
-      rethrow;
-    } on Exception {
-      link.close();
-      rethrow;
-    }
   }
 }

@@ -6,6 +6,7 @@
 // the banner is the only place that says so. Tested on its own because the
 // full review screen needs a live session and database to reach this branch.
 
+import 'package:chess_srs/src/design/design.dart';
 import 'package:chess_srs/src/view/review/review_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -30,6 +31,8 @@ void main() {
     expect(find.textContaining('no lines are unlocked'), findsOneWidget);
     expect(find.textContaining('only positions you have already learned'), findsOneWidget);
     expect(find.text('Turn off'), findsOneWidget);
+    expect(find.byType(SrsTextButton), findsOneWidget);
+    expect(find.byType(TextButton), findsNothing);
 
     await tester.tap(find.text('Turn off'));
     expect(turnOffRequests, 1, reason: 'the banner must offer the one-tap escape it promises');

@@ -6,52 +6,30 @@ library;
 
 import 'dart:convert';
 
+import 'package:chess_srs/src/domain/repertoire_move.dart';
 import 'package:chess_srs/src/domain/review_state.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:meta/meta.dart';
 
-/// Computes the canonical identity key for a position + expected move memory item.
-///
-/// Formatted as: sha1("$fenKey|$expectedMoveUci")
-/// Allows transpositions across different chapters and studies to converge on a single
-/// canonical [PositionKnowledgeState] memory item.
-String canonicalKey(String fenKey, String expectedMoveUci) {
-  final input = '$fenKey|$expectedMoveUci';
-  return sha1.convert(utf8.encode(input)).toString();
-}
+/// Canonical SHA-1 identity for a position + single move (`sha1("$fenKey|$expectedMoveUci")`).
+String canonicalKey(String fenKey, String expectedMoveUci) =>
+    sha1.convert(utf8.encode('$fenKey|${RepertoireMove.normalizeUci(expectedMoveUci)}')).toString();
 
-/// Computes the canonical identity key for a position and its *complete* set of accepted
-/// continuations.
-///
-/// Formatted as: `sha1("<repertoireSide>|<fenKey>|<sorted uci>|<sorted uci>|...")`.
-///
-/// A repertoire position is not identified by one representative move: it is identified by the
-/// whole question it asks the player ("from here, any of these is correct"). Two positions that
-/// share a FEN and a first move but offer different continuation sets are different questions and
-/// must not share SRS memory, so every accepted move participates in the key.
-///
-/// The moves are sorted, so two PGNs that spell the same repertoire with their branches in a
-/// different order converge on the same memory item rather than forking it.
-///
-/// Occurrence identity is deliberately *not* part of this key. [RepertoireDecision.id] is the
-/// per-occurrence identity; this is the shared position knowledge that transpositions converge on.
+/// Canonical SHA-1 identity for a position and its complete accepted move set
+/// (`sha1("<repertoireSide>|<fenKey>|<sorted uci>|...")`, SPEC INV-016, INV-017, INV-033).
 String canonicalKeyForPosition(
   String fenKey,
   Iterable<String> acceptedMoveUcis, {
   required Side repertoireSide,
 }) {
-  final sortedMoves = acceptedMoveUcis.toList()..sort();
+  final sortedMoves = acceptedMoveUcis.map(RepertoireMove.normalizeUci).toList()..sort();
   return sha1
       .convert(utf8.encode([repertoireSide.name, fenKey, ...sortedMoves].join('|')))
       .toString();
 }
 
-/// The single source of truth for long-term memory of a specific chess position and move.
-///
-/// Keyed by [canonicalId] = `sha1(<repertoireSide>|<fenKey>|<accepted moves>)`. Multiple
-/// [RepertoireDecision]s across different chapters and studies pointing to the same position,
-/// continuation, and trained side share this single state.
+/// Shared long-term SRS memory for a position and accepted continuation set (`canonicalId`).
 @immutable
 class PositionKnowledgeState {
   const PositionKnowledgeState({
