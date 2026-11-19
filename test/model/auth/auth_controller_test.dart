@@ -53,13 +53,21 @@ class _FakeAuthStorage extends AuthStorage {
 }
 
 class _FakeAuthRepository extends Fake implements AuthRepository {
-  _FakeAuthRepository({this.onCheckToken, this.onSignIn});
+  _FakeAuthRepository({
+    this.onCheckToken,
+    this.onSignIn,
+    this.onSignOut,
+    this.onSignInWithEmailCode,
+  });
 
   Future<bool> Function(AuthUser user)? onCheckToken;
   Future<AuthUser> Function()? onSignIn;
+  Future<void> Function(AuthUser? user)? onSignOut;
+  Future<AuthUser> Function(String username, String email, String code)? onSignInWithEmailCode;
 
   int checkTokenCalls = 0;
   AuthUser? signedOutUser;
+  (String, String)? requestedEmailLogin;
 
   @override
   Future<bool> checkToken(AuthUser authUser) {
@@ -73,12 +81,32 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
   @override
   Future<void> signOut([AuthUser? authUser]) async {
     signedOutUser = authUser;
+    if (onSignOut != null) {
+      await onSignOut!(authUser);
+    }
   }
 
   @override
   Future<AuthUser> signIn() {
     if (onSignIn != null) {
       return onSignIn!();
+    }
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> requestEmailLoginCode({required String username, required String email}) async {
+    requestedEmailLogin = (username, email);
+  }
+
+  @override
+  Future<AuthUser> signInWithEmailCode({
+    required String username,
+    required String email,
+    required String code,
+  }) {
+    if (onSignInWithEmailCode != null) {
+      return onSignInWithEmailCode!(username, email, code);
     }
     throw UnimplementedError();
   }
@@ -513,5 +541,96 @@ void main() {
       userA,
       reason: 'the invalid verdict predates the newer generation',
     );
+  });
+
+  test(
+    'requestEmailLoginCode and signInWithEmailCode forward parameters and emit AuthEvent.signIn',
+    () async {
+      final fakeStorage = _FakeAuthStorage();
+      (String, String, String)? receivedCodeArgs;
+      final fakeRepo = _FakeAuthRepository(
+        onSignInWithEmailCode: (username, email, code) async {
+          receivedCodeArgs = (username, email, code);
+          return userA;
+        },
+      );
+      final container = await makeContainer(
+        overrides: {
+          authStorageProvider: authStorageProvider.overrideWithValue(fakeStorage),
+          authRepositoryProvider: authRepositoryProvider.overrideWithValue(fakeRepo),
+        },
+      );
+      final sub = container.listen(authControllerProvider, (_, _) {});
+      addTearDown(sub.close);
+
+      final events = <AuthEvent>[];
+      final eventSub = authEventsStream.listen(events.add);
+      addTearDown(eventSub.cancel);
+
+      final controller = container.read(authControllerProvider.notifier);
+      await controller.requestEmailLoginCode(username: 'alice', email: 'alice@example.org');
+      expect(fakeRepo.requestedEmailLogin, ('alice', 'alice@example.org'));
+
+      await controller.signInWithEmailCode(
+        username: 'alice',
+        email: 'alice@example.org',
+        code: '123456',
+      );
+      await pumpEventQueue();
+
+      expect(receivedCodeArgs, ('alice', 'alice@example.org', '123456'));
+      expect(container.read(authControllerProvider), userA);
+      expect(fakeStorage.storedUser, userA);
+      expect(events, [AuthEvent.signIn]);
+    },
+  );
+
+  test('signOut clears local storage and state even when remote token revocation throws', () async {
+    final fakeStorage = _FakeAuthStorage()..storedUser = userA;
+    final fakeRepo = _FakeAuthRepository(
+      onSignOut: (_) async => throw Exception('network offline'),
+    );
+    final container = await makeContainer(
+      authUser: userA,
+      overrides: {
+        authStorageProvider: authStorageProvider.overrideWithValue(fakeStorage),
+        authRepositoryProvider: authRepositoryProvider.overrideWithValue(fakeRepo),
+      },
+    );
+    final sub = container.listen(authControllerProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    final events = <AuthEvent>[];
+    final eventSub = authEventsStream.listen(events.add);
+    addTearDown(eventSub.cancel);
+
+    final controller = container.read(authControllerProvider.notifier);
+    await controller.signOut();
+    await pumpEventQueue();
+
+    expect(container.read(authControllerProvider), isNull);
+    expect(fakeStorage.deleteCalls, 1);
+    expect(events, [AuthEvent.signOut]);
+  });
+
+  test('signOut and checkToken are no-ops when no user is signed in', () async {
+    final fakeStorage = _FakeAuthStorage();
+    final fakeRepo = _FakeAuthRepository();
+    final container = await makeContainer(
+      overrides: {
+        authStorageProvider: authStorageProvider.overrideWithValue(fakeStorage),
+        authRepositoryProvider: authRepositoryProvider.overrideWithValue(fakeRepo),
+      },
+    );
+    final sub = container.listen(authControllerProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    final controller = container.read(authControllerProvider.notifier);
+    await controller.signOut();
+    await controller.checkToken();
+
+    expect(fakeStorage.deleteCalls, 0);
+    expect(fakeRepo.checkTokenCalls, 0);
+    expect(fakeRepo.signedOutUser, isNull);
   });
 }

@@ -47,9 +47,6 @@ enum StockfishLevel {
 
   /// The default level for new games.
   static const defaultLevel = StockfishLevel.level4;
-
-  static StockfishLevel? fromLevel(int level) =>
-      level >= 1 && level <= values.length ? values[level - 1] : null;
 }
 
 /// The Maia networks the app can play against.
