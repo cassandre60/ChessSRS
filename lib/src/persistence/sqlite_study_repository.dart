@@ -428,18 +428,21 @@ class SqliteStudyRepository implements StudyRepository {
 
   @override
   Future<void> saveChapters(List<Chapter> chapters) async {
-    final batch = _db.batch();
-    for (final chapter in chapters) {
-      batch.insert(
-        kTableSrsChapter,
-        _chapterRow(chapter),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
-    for (final chapter in chapters) {
-      await _replaceChapterNodes(_db, chapter);
-    }
+    if (chapters.isEmpty) return;
+    await _db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final chapter in chapters) {
+        batch.insert(
+          kTableSrsChapter,
+          _chapterRow(chapter),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+      for (final chapter in chapters) {
+        await _replaceChapterNodes(txn, chapter);
+      }
+    });
   }
 
   @override
@@ -550,47 +553,62 @@ class SqliteStudyRepository implements StudyRepository {
       };
 
       if (decisionIds.isNotEmpty) {
+        const chunkSize = 400;
         // Rows keyed by the per-occurrence id belong to this chapter outright.
-        final occurrencePlaceholders = List.filled(decisionIds.length, '?').join(',');
-        await txn.delete(
-          kTableSrsReviewEvent,
-          where: 'decisionId IN ($occurrencePlaceholders)',
-          whereArgs: decisionIds,
-        );
-        await txn.delete(
-          kTableSrsReviewState,
-          where: 'decisionId IN ($occurrencePlaceholders)',
-          whereArgs: decisionIds,
-        );
+        // Chunked in 400-item batches (SPEC INV-051) so large chapters never
+        // issue unbounded IN (...) lists.
+        for (var i = 0; i < decisionIds.length; i += chunkSize) {
+          final chunk = decisionIds.sublist(
+            i,
+            i + chunkSize > decisionIds.length ? decisionIds.length : i + chunkSize,
+          );
+          final occurrencePlaceholders = List.filled(chunk.length, '?').join(',');
+          await txn.delete(
+            kTableSrsReviewEvent,
+            where: 'decisionId IN ($occurrencePlaceholders)',
+            whereArgs: chunk,
+          );
+          await txn.delete(
+            kTableSrsReviewState,
+            where: 'decisionId IN ($occurrencePlaceholders)',
+            whereArgs: chunk,
+          );
+        }
         await txn.delete(kTableSrsDecision, where: 'chapterId = ?', whereArgs: [id]);
 
         // Rows keyed by the canonical id describe the *position*, not the occurrence. Another
         // chapter reaching the same position still needs them, so they only go when this was the
-        // last decision referring to it.
-        for (final canonicalId in canonicalIds) {
-          // Still referenced by some other decision, so this position outlives the chapter.
+        // last decision referring to it. Batched in 400-item chunks (SPEC INV-004, INV-051)
+        // instead of 3×N individual DELETE statements.
+        final canonicalList = canonicalIds.toList(growable: false);
+        for (var i = 0; i < canonicalList.length; i += chunkSize) {
+          final chunk = canonicalList.sublist(
+            i,
+            i + chunkSize > canonicalList.length ? canonicalList.length : i + chunkSize,
+          );
+          final cPlaceholders = List.filled(chunk.length, '?').join(',');
           // NOT EXISTS (not NOT IN): index-using and NULL-safe without an IS NOT NULL
           // guard. Each guard correlates to its own target table.
           await txn.delete(
             kTablePositionKnowledgeState,
             where:
-                'canonicalId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'canonicalId IN ($cPlaceholders) AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
                 'WHERE canonicalStateId = $kTablePositionKnowledgeState.canonicalId)',
-            whereArgs: [canonicalId],
+            whereArgs: chunk,
           );
           await txn.delete(
             kTableSrsReviewState,
             where:
-                'decisionId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'decisionId IN ($cPlaceholders) AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
                 'WHERE canonicalStateId = $kTableSrsReviewState.decisionId)',
-            whereArgs: [canonicalId],
+            whereArgs: chunk,
           );
           await txn.delete(
             kTableSrsReviewEvent,
             where:
-                'decisionId = ? AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
+                'decisionId IN ($cPlaceholders) AND NOT EXISTS (SELECT 1 FROM $kTableSrsDecision '
                 'WHERE canonicalStateId = $kTableSrsReviewEvent.decisionId)',
-            whereArgs: [canonicalId],
+            whereArgs: chunk,
           );
         }
       }

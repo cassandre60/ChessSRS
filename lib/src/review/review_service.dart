@@ -268,78 +268,101 @@ class _DueTally {
     bool dynamicRepertoireMode = false,
     Set<String> unlockedDecisionIds = const {},
   }) {
-    final state =
-        reviewStates[d.canonicalId] ?? (d.canonicalId == d.id ? null : reviewStates[d.id]);
+    addDecision(
+      id: d.id,
+      studyId: d.studyId,
+      chapterId: d.chapterId,
+      canonicalId: d.canonicalId,
+      reviewStates: reviewStates,
+      now: now,
+      activeStudyIds: activeStudyIds,
+      scope: scope,
+      dynamicRepertoireMode: dynamicRepertoireMode,
+      unlockedDecisionIds: unlockedDecisionIds,
+    );
+  }
+
+  void addDecision({
+    required String id,
+    required String studyId,
+    required String chapterId,
+    required String canonicalId,
+    required Map<String, ReviewState> reviewStates,
+    required DateTime now,
+    required Set<String> activeStudyIds,
+    required ReviewScope scope,
+    bool dynamicRepertoireMode = false,
+    Set<String> unlockedDecisionIds = const {},
+  }) {
+    final state = reviewStates[canonicalId] ?? (canonicalId == id ? null : reviewStates[id]);
     final status = dueStatusOf(state, now);
     final isLearned = state != null && state.repetitionCount > 0;
     final hasReviewHistory = state != null && (state.repetitionCount > 0 || state.lapseCount > 0);
     final isUnlocked =
         !dynamicRepertoireMode ||
         hasReviewHistory ||
-        unlockedDecisionIds.contains(d.id) ||
-        unlockedDecisionIds.contains(d.canonicalId);
+        unlockedDecisionIds.contains(id) ||
+        unlockedDecisionIds.contains(canonicalId);
     final isDue = dynamicRepertoireMode ? (status.isDue && isUnlocked) : status.isDue;
     final isFresh = status.isFresh;
     final isQueueFresh = dynamicRepertoireMode ? (status.isFresh && isUnlocked) : status.isFresh;
 
-    if (studyTotals.containsKey(d.studyId)) {
-      studyTotals[d.studyId] = (studyTotals[d.studyId] ?? 0) + 1;
-      if (isLearned) {
-        studyLearned[d.studyId] = (studyLearned[d.studyId] ?? 0) + 1;
-      }
-      if (isFresh) {
-        studyFresh[d.studyId] = (studyFresh[d.studyId] ?? 0) + 1;
-      }
-    }
-
-    chapterTotals[d.chapterId] = (chapterTotals[d.chapterId] ?? 0) + 1;
+    chapterTotals[chapterId] = (chapterTotals[chapterId] ?? 0) + 1;
     if (isLearned) {
-      chapterLearned[d.chapterId] = (chapterLearned[d.chapterId] ?? 0) + 1;
+      chapterLearned[chapterId] = (chapterLearned[chapterId] ?? 0) + 1;
     }
     if (isFresh) {
-      chapterFresh[d.chapterId] = (chapterFresh[d.chapterId] ?? 0) + 1;
+      chapterFresh[chapterId] = (chapterFresh[chapterId] ?? 0) + 1;
     }
     if (isDue) {
-      chapterDue[d.chapterId] = (chapterDue[d.chapterId] ?? 0) + 1;
+      chapterDue[chapterId] = (chapterDue[chapterId] ?? 0) + 1;
     }
 
-    final opening = _trimmedOpenings[d.chapterId];
-    final isActiveStudy = activeStudyIds.contains(d.studyId);
-    final side = _chapterSides[d.chapterId] ?? Side.white;
+    final opening = _trimmedOpenings[chapterId];
+    final isActiveStudy = activeStudyIds.contains(studyId);
+    final side = _chapterSides[chapterId] ?? Side.white;
 
-    // Per-study figures partitioned by side (INV-030). Totals and learned
-    // cover every study like the study-wide maps do; due counts below cover
-    // every due decision the same way studyDueCounts does.
-    if (studyTotals.containsKey(d.studyId)) {
-      final totalsForStudy = studySideTotals.putIfAbsent(
-        d.studyId,
-        () => {Side.white: 0, Side.black: 0},
-      );
+    // Per-study figures and side partitions (INV-030) updated in a single lookup
+    // pass without allocating putIfAbsent closures on every decision.
+    final currentStudyTotal = studyTotals[studyId];
+    if (currentStudyTotal != null) {
+      studyTotals[studyId] = currentStudyTotal + 1;
+      final totalsForStudy =
+          studySideTotals[studyId] ?? (studySideTotals[studyId] = {Side.white: 0, Side.black: 0});
       totalsForStudy[side] = totalsForStudy[side]! + 1;
       if (isLearned) {
-        final learnedForStudy = studySideLearned.putIfAbsent(
-          d.studyId,
-          () => {Side.white: 0, Side.black: 0},
-        );
+        studyLearned[studyId] = (studyLearned[studyId] ?? 0) + 1;
+        final learnedForStudy =
+            studySideLearned[studyId] ??
+            (studySideLearned[studyId] = {Side.white: 0, Side.black: 0});
         learnedForStudy[side] = learnedForStudy[side]! + 1;
       }
       if (isFresh) {
-        final freshForStudy = studySideFresh.putIfAbsent(
-          d.studyId,
-          () => {Side.white: 0, Side.black: 0},
-        );
+        studyFresh[studyId] = (studyFresh[studyId] ?? 0) + 1;
+        final freshForStudy =
+            studySideFresh[studyId] ?? (studySideFresh[studyId] = {Side.white: 0, Side.black: 0});
         freshForStudy[side] = freshForStudy[side]! + 1;
+      }
+      if (isDue) {
+        studyDueCounts[studyId] = (studyDueCounts[studyId] ?? 0) + 1;
+        final dueForStudy =
+            studySideDue[studyId] ?? (studySideDue[studyId] = {Side.white: 0, Side.black: 0});
+        dueForStudy[side] = dueForStudy[side]! + 1;
       }
     }
 
     if (isActiveStudy && opening != null && opening.isNotEmpty) {
-      if (openingTotals.containsKey(opening)) {
-        openingTotals[opening] = (openingTotals[opening] ?? 0) + 1;
+      final currentOpeningTotal = openingTotals[opening];
+      if (currentOpeningTotal != null) {
+        openingTotals[opening] = currentOpeningTotal + 1;
         if (isLearned) {
           openingLearned[opening] = (openingLearned[opening] ?? 0) + 1;
         }
         if (isFresh) {
           openingFresh[opening] = (openingFresh[opening] ?? 0) + 1;
+        }
+        if (isDue) {
+          openingDueCounts[opening] = (openingDueCounts[opening] ?? 0) + 1;
         }
       }
     }
@@ -352,27 +375,14 @@ class _DueTally {
       if (isFresh) {
         sideFresh[side] = sideFresh[side]! + 1;
       }
-    }
-
-    if (studyDueCounts.containsKey(d.studyId) && isDue) {
-      studyDueCounts[d.studyId] = (studyDueCounts[d.studyId] ?? 0) + 1;
-      final dueForStudy = studySideDue.putIfAbsent(d.studyId, () => {Side.white: 0, Side.black: 0});
-      dueForStudy[side] = dueForStudy[side]! + 1;
-    }
-
-    if (isDue && isActiveStudy && opening != null && opening.isNotEmpty) {
-      if (openingDueCounts.containsKey(opening)) {
-        openingDueCounts[opening] = (openingDueCounts[opening] ?? 0) + 1;
+      if (isDue && sideAccountedCanonicalIds[side]!.add(canonicalId)) {
+        sideDueCounts[side] = sideDueCounts[side]! + 1;
       }
     }
 
-    if (isDue && isActiveStudy && sideAccountedCanonicalIds[side]!.add(d.canonicalId)) {
-      sideDueCounts[side] = sideDueCounts[side]! + 1;
-    }
-
     if (!scope.matches(
-      studyId: d.studyId,
-      chapterId: d.chapterId,
+      studyId: studyId,
+      chapterId: chapterId,
       openingFamily: opening,
       side: side,
     )) {
@@ -384,7 +394,7 @@ class _DueTally {
     // studies and chapters reach it.
     final dedupeByCanonical = scope.studyId == null && scope.chapterId == null;
     final countable =
-        !dedupeByCanonical || (isActiveStudy && accountedDueCanonicalIds.add(d.canonicalId));
+        !dedupeByCanonical || (isActiveStudy && accountedDueCanonicalIds.add(canonicalId));
 
     if (!countable) return;
     if (isDue) totalDueCount++;
@@ -625,8 +635,18 @@ class ReviewService {
     required Iterable<String> decisionIds,
     required Iterable<String> canonicalIds,
   }) async {
-    final distinctCanonical = canonicalIds.toSet().toList();
-    final allQueryIds = {...decisionIds, ...distinctCanonical}.toList();
+    final canonicalSet = <String>{};
+    final allQuerySet = <String>{};
+    for (final id in decisionIds) {
+      allQuerySet.add(id);
+    }
+    for (final cId in canonicalIds) {
+      if (canonicalSet.add(cId)) {
+        allQuerySet.add(cId);
+      }
+    }
+    final distinctCanonical = canonicalSet.toList(growable: false);
+    final allQueryIds = allQuerySet.toList(growable: false);
     final reviewStatesList = await repository.getReviewStatesByIds(allQueryIds);
     final reviewStates = {for (final s in reviewStatesList) s.decisionId: s};
     final kStates = await repository.getKnowledgeStatesByCanonicalIds(distinctCanonical);
@@ -856,14 +876,13 @@ class ReviewService {
 
     // Incremental persistence to canonical knowledge state and review event (SRS mode only)
     if (session.mode != ReviewMode.practice) {
-      // The throttle is authoritative for every id we are about to write: it was seeded from the
-      // store for all in-scope canonical ids, so a null here means "never exposed", not "unknown".
-      final throttle = session.exposureThrottle;
+      // Single-key O(1) lookup via session.exposureTimeFor instead of cloning
+      // the full exposureThrottle map on every move (INV-050).
       final canonicalId = currentDecision?.canonicalId ?? result.updatedState.decisionId;
       final kState = PositionKnowledgeState.fromReviewState(
         result.updatedState,
         canonicalId: canonicalId,
-      ).copyWith(lastExposedAt: throttle[canonicalId]);
+      ).copyWith(lastExposedAt: session.exposureTimeFor(canonicalId));
 
       final allKStates = <PositionKnowledgeState>[kState];
 
@@ -873,7 +892,7 @@ class ReviewService {
           PositionKnowledgeState.fromReviewState(
             sideState,
             canonicalId: sideState.decisionId,
-          ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
+          ).copyWith(lastExposedAt: session.exposureTimeFor(sideState.decisionId)),
         );
       }
 
@@ -919,9 +938,6 @@ class ReviewService {
 
     if (session.mode != ReviewMode.practice &&
         (result.sideEffectStates.isNotEmpty || result.adoptedDecisionIds.isNotEmpty)) {
-      // Hoisted: the getter copies the throttle map, so calling it per element would copy it once
-      // per side effect.
-      final throttle = session.exposureThrottle;
       try {
         if (result.sideEffectStates.isNotEmpty) {
           await repository.saveAnswerBatch(
@@ -930,7 +946,7 @@ class ReviewService {
                 PositionKnowledgeState.fromReviewState(
                   sideState,
                   canonicalId: sideState.decisionId,
-                ).copyWith(lastExposedAt: throttle[sideState.decisionId]),
+                ).copyWith(lastExposedAt: session.exposureTimeFor(sideState.decisionId)),
             ],
           );
         }
@@ -1025,18 +1041,22 @@ class ReviewService {
     // only their own rows.
     final wideScope = scope.chapterId == null && scope.studyId == null;
     final allDecisions = wideScope ? await repository.getAllDecisions() : null;
-    final List<TallyDecision> tallyDecisions = allDecisions != null
-        ? [
-            for (final d in allDecisions)
-              (id: d.id, studyId: d.studyId, chapterId: d.chapterId, canonicalId: d.canonicalId),
-          ]
-        : await repository.getTallyDecisions();
+    final List<TallyDecision>? tallyDecisions = allDecisions == null
+        ? await repository.getTallyDecisions()
+        : null;
+    final hasDecisions = allDecisions != null
+        ? allDecisions.isNotEmpty
+        : tallyDecisions!.isNotEmpty;
     final loadedData = await _loadReviewData(
-      decisionIds: tallyDecisions.map((d) => d.id),
-      canonicalIds: tallyDecisions.map((d) => d.canonicalId),
+      decisionIds: allDecisions != null
+          ? allDecisions.map((d) => d.id)
+          : tallyDecisions!.map((d) => d.id),
+      canonicalIds: allDecisions != null
+          ? allDecisions.map((d) => d.canonicalId)
+          : tallyDecisions!.map((d) => d.canonicalId),
     );
 
-    final unlockedIds = (tallyDecisions.isEmpty || !dynamicRepertoireMode)
+    final unlockedIds = (!hasDecisions || !dynamicRepertoireMode)
         ? const <String>{}
         : await repository.getUnlockedDecisionIds();
     final tally = _DueTally(
@@ -1045,18 +1065,35 @@ class ReviewService {
       chapterSides: chapterSides,
       chapterStudyIds: chapterStudyIds,
     );
-    for (final d in tallyDecisions) {
-      tally.add(
-        d,
-        reviewStates: loadedData.reviewStates,
-        now: now,
-        activeStudyIds: activeStudyIds,
-        chapterOpenings: chapterOpenings,
-        chapterSides: chapterSides,
-        scope: scope,
-        dynamicRepertoireMode: dynamicRepertoireMode,
-        unlockedDecisionIds: unlockedIds,
-      );
+    if (allDecisions != null) {
+      for (final d in allDecisions) {
+        tally.addDecision(
+          id: d.id,
+          studyId: d.studyId,
+          chapterId: d.chapterId,
+          canonicalId: d.canonicalId,
+          reviewStates: loadedData.reviewStates,
+          now: now,
+          activeStudyIds: activeStudyIds,
+          scope: scope,
+          dynamicRepertoireMode: dynamicRepertoireMode,
+          unlockedDecisionIds: unlockedIds,
+        );
+      }
+    } else {
+      for (final d in tallyDecisions!) {
+        tally.add(
+          d,
+          reviewStates: loadedData.reviewStates,
+          now: now,
+          activeStudyIds: activeStudyIds,
+          chapterOpenings: chapterOpenings,
+          chapterSides: chapterSides,
+          scope: scope,
+          dynamicRepertoireMode: dynamicRepertoireMode,
+          unlockedDecisionIds: unlockedIds,
+        );
+      }
     }
     final summary = tally.toSummary();
 
